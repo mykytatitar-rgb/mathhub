@@ -60,8 +60,16 @@
   Cloud.onChange = function (fn) { listeners.push(fn); };
 
   Cloud.status = function () {
+    /* Стан виводимо, а не читаємо зі змінної: вона могла лишитися 'off' від
+       самого запуску, якщо картку відмалювали раніше, ніж Cloud.start().
+       Саме через це в інтерфейсі писало «не налаштована» при робочій синхронізації. */
+    var s = state;
+    if (!Cloud.available()) s = 'off';
+    else if (!Cloud.signedIn()) s = 'signedout';
+    else if (s === 'off' || s === 'signedout') s = meta.rev ? 'idle' : 'syncing';
+
     return {
-      state: state,
+      state: s,
       detail: detail,
       rev: meta.rev,
       dirty: Cloud.available() ? (meta.dirty || locallyChanged()) : meta.dirty,
@@ -73,6 +81,24 @@
 
   Cloud.available = function () { return !!(cfg.url && cfg.anonKey); };
   Cloud.signedIn = function () { return !!(meta.session && meta.session.refresh_token); };
+
+  /** Адреса проєкту без кінцевої косої — потрібна сусідньому модулю картинок. */
+  Cloud.base = function () { return cfg.url.replace(/\/+$/, ''); };
+
+  /**
+   * Ідентифікатор користувача — з самого токена (поле sub), без запиту до сервера.
+   * Ним підписуються теки картинок, щоб правила доступу пускали лише до своїх.
+   */
+  Cloud.userId = function () {
+    if (!meta.session || !meta.session.access_token) return null;
+    try {
+      var part = meta.session.access_token.split('.')[1];
+      if (!part) return null;
+      var b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+      while (b64.length % 4) b64 += '=';
+      return JSON.parse(decodeURIComponent(escape(atob(b64)))).sub || null;
+    } catch (e) { return null; }
+  };
 
   /* ============================================================
      Дрібниці
@@ -126,14 +152,36 @@
     }
   }
 
+  /* Скільки взагалі записів у базі — щоб порівнювати «було» і «стало». */
+  function countRecords(dbObj) {
+    var n = 0;
+    ['students', 'lessons', 'boards', 'homeworks', 'payments', 'notes', 'materials']
+      .forEach(function (k) { if (Array.isArray(dbObj[k])) n += dbObj[k].length; });
+    return n;
+  }
+
   Cloud.backups = function () {
     try {
       return JSON.parse(localStorage.getItem(BACKUP) || '[]').map(function (b, i) {
-        var students = 0;
-        try { students = (JSON.parse(b.data).students || []).length; } catch (e) {}
-        return { i: i, at: b.at, reason: b.reason, students: students, bytes: b.data.length };
+        var students = 0, total = 0;
+        try {
+          var parsed = JSON.parse(b.data);
+          students = (parsed.students || []).length;
+          total = countRecords(parsed);
+        } catch (e) {}
+        return { i: i, at: b.at, reason: b.reason, students: students, total: total, bytes: b.data.length };
       });
     } catch (e) { return []; }
+  };
+
+  /**
+   * Копії, які варто показувати людині: лише ті, де записів БІЛЬШЕ, ніж зараз.
+   * Решта — шум: копія з нулем учнів нічого не врятує, а лише турбує.
+   */
+  Cloud.backupsWorthShowing = function () {
+    var now = 0;
+    try { now = countRecords(JSON.parse(localJSON())); } catch (e) {}
+    return Cloud.backups().filter(function (b) { return b.total > now; });
   };
 
   Cloud.restoreBackup = function (i) {
@@ -171,7 +219,10 @@
     opts = opts || {};
     var headers = opts.headers || {};
     headers['apikey'] = cfg.anonKey;
-    headers['Content-Type'] = 'application/json';
+    // для картинок тип задає викликач, а тіло — двійкове; JSON тут нав'язувати не можна
+    if (!headers['Content-Type'] && !(opts.body instanceof Blob)) {
+      headers['Content-Type'] = 'application/json';
+    }
     if (meta.session && meta.session.access_token) {
       headers['Authorization'] = 'Bearer ' + meta.session.access_token;
     }
@@ -190,6 +241,9 @@
       return refresh().then(function () { return authFetch(path, opts); });
     });
   }
+
+  /** Запит із авторизацією й автоматичним поновленням токена — для модуля картинок. */
+  Cloud.request = function (path, opts) { return api(path, opts); };
 
   function refresh() {
     if (!meta.session || !meta.session.refresh_token) {

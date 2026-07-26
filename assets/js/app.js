@@ -532,5 +532,14 @@
   App.render();
   applySidebar();
 
+  /* Рядок стану синхронізації оновлюємо на місці, без перемальовування сторінки:
+     інакше він застигає таким, яким був у момент рендеру. */
+  if (window.Cloud && window.Cloud.onChange) {
+    window.Cloud.onChange(function () {
+      var el = document.querySelector('[data-sync-state]');
+      if (el && V.syncStatusHtml) el.innerHTML = V.syncStatusHtml();
+    });
+  }
+
   window.App = App;
 })();

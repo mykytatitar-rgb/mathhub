@@ -31,7 +31,14 @@
         var store = t.objectStore(STORE);
         var out;
         try { out = fn(store); } catch (e) { reject(e); return; }
-        t.oncomplete = function () { resolve(out && out.result !== undefined ? out.result : out); };
+        /* Важливо саме 'result' in out, а не out.result !== undefined:
+           коли картинки немає, IndexedDB віддає запит із result === undefined,
+           і попередня перевірка повертала сам об'єкт запиту. Він правдивий,
+           тому програма вважала, що картинка є — через це не працювала
+           ні позначка «картинку втрачено», ні підвантаження з сервера. */
+        t.oncomplete = function () {
+          resolve(out && typeof out === 'object' && 'result' in out ? out.result : out);
+        };
         t.onerror = function () { reject(t.error); };
         t.onabort = function () { reject(t.error || new Error('Запис скасовано')); };
       });

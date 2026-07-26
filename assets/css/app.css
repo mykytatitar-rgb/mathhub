@@ -904,3 +904,17 @@ a { color: inherit; text-decoration: none; }
      щоб дата й кнопка не переносилися */
   .snap-row .muted { display: none; }
 }
+
+/* Службові подробиці синхронізації — складені, щоб не лізли на очі */
+.sync-more > summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--ink-2);
+  padding: 4px 0;
+  list-style: none;
+}
+.sync-more > summary::-webkit-details-marker { display: none; }
+.sync-more > summary::before { content: '▸ '; }
+.sync-more[open] > summary::before { content: '▾ '; }
+.sync-more > summary:hover { color: var(--blue-600); }

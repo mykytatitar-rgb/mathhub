@@ -171,3 +171,41 @@ revoke all on function public.trim_snapshots(uuid, int) from public, anon, authe
 revoke all on function public.state_archive()              from public, anon, authenticated;
 
 grant execute on function public.save_state(text, bigint, text) to authenticated;
+
+-- ============================================================
+-- Сховище картинок дошок
+-- ============================================================
+--
+-- Картинки не влазять у JSON-документ (він живе в localStorage з межею ~5 МБ),
+-- тому лежать окремо. Шлях до файлу: <id користувача>/<ключ картинки> —
+-- перший сегмент і є перепусткою: правила пускають лише до своєї теки.
+
+insert into storage.buckets (id, name, public)
+values ('boards', 'boards', false)
+on conflict (id) do nothing;
+
+drop policy if exists boards_read   on storage.objects;
+drop policy if exists boards_write  on storage.objects;
+drop policy if exists boards_update on storage.objects;
+drop policy if exists boards_delete on storage.objects;
+
+create policy boards_read on storage.objects
+  for select using (
+    bucket_id = 'boards' and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy boards_write on storage.objects
+  for insert with check (
+    bucket_id = 'boards' and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+-- потрібне для перезапису тим самим ключем (x-upsert)
+create policy boards_update on storage.objects
+  for update using (
+    bucket_id = 'boards' and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy boards_delete on storage.objects
+  for delete using (
+    bucket_id = 'boards' and (storage.foldername(name))[1] = auth.uid()::text
+  );

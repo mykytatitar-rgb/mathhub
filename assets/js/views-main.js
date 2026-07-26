@@ -560,18 +560,26 @@
 
     var st = Cl.status();
 
+    /* Свідомо мінімально. Синхронізація має бути невидимою: людина вносить дані
+       й працює, а не натискає кнопки й читає списки версій. Тому на видноті —
+       один рядок стану. Усе службове (історія, копії, вихід) складено в
+       «Подробиці» й потрібне лише коли щось пішло не так. */
     return '<div class="card">' + head +
-      '<div class="row" style="gap:8px;margin-bottom:4px" data-sync-state>' + V.syncStatusHtml() + '</div>' +
-      '<div class="field__hint">' + U.esc(st.email || '') + '</div>' +
+      '<div class="row" style="gap:8px" data-sync-state>' + V.syncStatusHtml() + '</div>' +
+      '<div class="field__hint">' + U.esc(st.email || '') + ' · зберігається саме, ' +
+      'нічого натискати не треба</div>' +
       V.syncBackups() +
-      '<div class="row row--wrap" style="gap:10px;margin-top:12px">' +
-        '<button class="btn btn--soft" data-act="sync-now">' + icon('refresh', 16) + 'Синхронізувати зараз</button>' +
-        '<button class="btn btn--ghost" data-act="sync-signout">Вийти</button>' +
-      '</div>' +
-      '<div class="field__hint mt-2">Усе зберігається саме. Якщо змінити щось на двох пристроях, ' +
-      'програма залишить новішу версію — питати не буде. Стару при цьому не викидає: вона ' +
-      'лишається в історії нижче.</div>' +
-      '<div class="mt-2" data-sync-snaps><div class="field__hint">Історія версій завантажується…</div></div>' +
+      '<details class="sync-more mt-2">' +
+        '<summary>Подробиці</summary>' +
+        '<div class="field__hint mt-2">Дані з усіх пристроїв тримаються однаковими. ' +
+        'Якщо змінити щось на двох пристроях одночасно, програма залишить новішу версію ' +
+        'і не питатиме — стару збереже в історії.</div>' +
+        '<div class="row row--wrap" style="gap:10px;margin-top:10px">' +
+          '<button class="btn btn--ghost btn--sm" data-act="sync-now">' + icon('refresh', 15) + 'Оновити зараз</button>' +
+          '<button class="btn btn--ghost btn--sm" data-act="sync-signout">Вийти</button>' +
+        '</div>' +
+        '<div class="mt-2" data-sync-snaps></div>' +
+      '</details>' +
       '</div>';
   };
 
@@ -580,8 +588,9 @@
    * Показуємо лише коли вони є — це аварійний вихід, а не щоденний інструмент.
    */
   V.syncBackups = function () {
-    if (!window.Cloud || !window.Cloud.backups) return '';
-    var list = window.Cloud.backups();
+    if (!window.Cloud || !window.Cloud.backupsWorthShowing) return '';
+    // тільки копії, у яких записів більше, ніж зараз — решта лише турбує
+    var list = window.Cloud.backupsWorthShowing();
     if (!list.length) return '';
     return '<div class="cal-notice" style="margin:12px 0;display:block">' +
       '<b>Якщо чогось не вистачає — поверніть звідси.</b> Програма взяла новішу версію ' +
@@ -590,7 +599,8 @@
       list.map(function (b) {
         return '<div class="snap-row">' +
           '<span class="small">' + U.esc(U.fmtDateTime(new Date(b.at))) + '</span>' +
-          '<span class="small muted">' + U.pl(b.students, 'учень', 'учні', 'учнів') + '</span>' +
+          '<span class="small muted">' + U.pl(b.students, 'учень', 'учні', 'учнів') +
+          ', ' + b.total + ' записів</span>' +
           '<button class="btn btn--ghost btn--sm spacer" data-act="sync-restore-local" ' +
           'data-arg="' + b.i + '">Повернути</button>' +
         '</div>';

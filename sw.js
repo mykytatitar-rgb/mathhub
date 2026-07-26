@@ -7,7 +7,7 @@
 
    Версію треба піднімати щоразу, коли змінюється склад файлів. */
 
-var VERSION = 'mathhub-v4';
+var VERSION = 'mathhub-v6';
 
 var SHELL = [
   './',
@@ -25,6 +25,7 @@ var SHELL = [
   './assets/js/forms.js',
   './assets/js/rates.js',
   './assets/js/imagestore.js',
+  './assets/js/cloudimages.js',
   './assets/js/shapefacts.js',
   './assets/js/constructions.js',
   './assets/js/board.js',

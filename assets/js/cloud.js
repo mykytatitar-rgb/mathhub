@@ -175,13 +175,28 @@
   };
 
   /**
-   * Копії, які варто показувати людині: лише ті, де записів БІЛЬШЕ, ніж зараз.
-   * Решта — шум: копія з нулем учнів нічого не врятує, а лише турбує.
+   * Копії, які варто показувати людині.
+   *
+   * Спершу тут була умова «записів більше, ніж зараз» — і вона підвела:
+   * демонстраційні дані затерли справжніх учнів, а їх було БІЛЬШЕ,
+   * тому копія зі справжніми даними виявилась схована саме тоді,
+   * коли була найпотрібніша.
+   *
+   * Тепер правило просте: показуємо будь-яку непорожню копію, вміст якої
+   * відрізняється від теперішнього. Зайвий рядок в інтерфейсі — дрібниця
+   * поряд із втраченими даними.
    */
   Cloud.backupsWorthShowing = function () {
-    var now = 0;
-    try { now = countRecords(JSON.parse(localJSON())); } catch (e) {}
-    return Cloud.backups().filter(function (b) { return b.total > now; });
+    var cur = '';
+    try { cur = localJSON(); } catch (e) {}
+    var curHash = hash(cur || '');
+    var raw;
+    try { raw = JSON.parse(localStorage.getItem(BACKUP) || '[]'); } catch (e) { raw = []; }
+    return Cloud.backups().filter(function (b, i) {
+      if (!b.total) return false;                       // порожня копія нічого не врятує
+      var data = raw[i] && raw[i].data;
+      return !data || hash(data) !== curHash;           // збігається з теперішнім — показувати нема сенсу
+    });
   };
 
   Cloud.restoreBackup = function (i) {

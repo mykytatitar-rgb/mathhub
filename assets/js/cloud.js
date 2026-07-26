@@ -22,7 +22,11 @@
   var DB_KEY = 'mathhub.db.v1';        // те саме сховище, що й у store.js
   var BACKUP = 'mathhub.before-sync';  // страховка перед прийняттям серверної версії
   var BACKUP_KEEP = 3;
-  var PUSH_DELAY = 4000;      // скільки чекати після останньої зміни перед відправкою
+  /* Затримки навмисно різні. Під час уроку дошку дивляться з іншого пристрою,
+     і кожна зайва секунда помітна — тому там усе прискорюється. Поза дошкою
+     поспішати нема куди, а рідші запити бережуть батарею й трафік. */
+  var PUSH_DELAY = 4000;      // звичайна пауза після останньої зміни
+  var PUSH_DELAY_BOARD = 900; // коли відкрита дошка
   var cfg = window.CLOUD_CONFIG || { url: '', anonKey: '' };
 
   /* ============================================================
@@ -585,7 +589,7 @@
       timer = null;
       if (state === 'conflict') return;   // не заважаємо, поки людина не вирішила
       Cloud.syncNow();
-    }, PUSH_DELAY);
+    }, boardOpen() ? PUSH_DELAY_BOARD : PUSH_DELAY);
   }
 
   function wrapSave() {
@@ -635,19 +639,33 @@
      Питаємо лише номер версії, тому запит крихітний. Повні дані тягнемо
      тільки коли номер справді змінився. У прихованій вкладці не питаємо
      взагалі: там нікому дивитися, а батарею економимо. */
-  var WATCH_MS = 12000;
+  var WATCH_MS = 12000;        // звичайний ритм
+  var WATCH_MS_BOARD = 2200;   // коли відкрита дошка — урок іде просто зараз
   var watchTimer = null;
 
+  /** Чи відкрита зараз дошка. Від цього залежить, наскільки квапитись. */
+  function boardOpen() {
+    try { return !!(window.V && window.V.boardMountedFor && window.V.boardMountedFor()); }
+    catch (e) { return false; }
+  }
+
+  /* Не setInterval, а ланцюжок setTimeout: так ритм можна міняти на льоту —
+     коли відкривають дошку, опитування само пришвидшується. */
   function startWatching() {
     if (watchTimer) return;
-    watchTimer = setInterval(function () {
-      if (document.visibilityState === 'hidden') return;
-      if (!Cloud.available() || !Cloud.signedIn() || !navigator.onLine) return;
-      if (state === 'syncing') return;
-      pullRev().then(function (rev) {
-        if (rev != null && rev > meta.rev) Cloud.syncNow();
-      });
-    }, WATCH_MS);
+    var tick = function () {
+      watchTimer = setTimeout(function () {
+        watchTimer = null;
+        var go = document.visibilityState !== 'hidden' &&
+                 Cloud.available() && Cloud.signedIn() && navigator.onLine &&
+                 state !== 'syncing';
+        if (!go) { tick(); return; }
+        pullRev().then(function (rev) {
+          if (rev != null && rev > meta.rev) Cloud.syncNow();
+        }).then(tick, tick);
+      }, boardOpen() ? WATCH_MS_BOARD : WATCH_MS);
+    };
+    tick();
   }
 
   Cloud.start = function () {

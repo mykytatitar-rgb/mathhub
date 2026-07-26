@@ -68,12 +68,22 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_last timestamptz;
 begin
   -- порожні й незмінені версії в історію не пишемо
   if old.data is not null and old.data <> new.data then
-    insert into public.snapshots (owner, rev, data, device)
-    values (old.owner, old.rev, old.data, old.device);
-    perform public.trim_snapshots(old.owner);
+    select max(created_at) into v_last from public.snapshots where owner = old.owner;
+
+    /* Під час уроку зміни йдуть щосекунди. Якби ми зберігали версію на кожну
+       з них, 50 збережених версій покривали б хвилину роботи замість кількох
+       тижнів — і як страховка вони були б марні. Тому не частіше ніж раз
+       на 5 хвилин. */
+    if v_last is null or v_last < now() - interval '5 minutes' then
+      insert into public.snapshots (owner, rev, data, device)
+      values (old.owner, old.rev, old.data, old.device);
+      perform public.trim_snapshots(old.owner);
+    end if;
   end if;
   new.updated_at := now();
   return new;

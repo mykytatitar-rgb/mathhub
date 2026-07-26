@@ -334,6 +334,36 @@
   V.boardMountedFor = function () { return cur ? cur.lessonId : null; };
   V.boardEngine = function () { return cur ? cur.engine : null; };
 
+  /**
+   * Перечитати відкриту дошку після того, як дані оновилися з сервера.
+   *
+   * Потрібно тому, що синхронізація замінює всю базу цілком, і об'єкт дошки,
+   * який тримає ця сторінка, після цього вказує на старі дані. Повне
+   * перемальовування сторінки теж спрацювало б, але скинуло б масштаб і
+   * повернуло на перший слайд — а саме так учень і дивиться урок.
+   *
+   * Повертає true, якщо дошку оновлено; false — якщо дошка не відкрита
+   * або зараз не час її чіпати.
+   */
+  V.boardReload = function () {
+    if (!cur) return false;
+
+    // не влазимо посеред штриха чи перетягування — інакше лінія обірветься
+    if (cur.engine.draft || cur.engine.band || cur.dirty) return false;
+
+    var fresh = S.getBoard(cur.lessonId);
+    if (!fresh || !fresh.slides || !fresh.slides.length) return false;
+
+    cur.board = fresh;
+    if (cur.index >= fresh.slides.length) cur.index = fresh.slides.length - 1;
+
+    cur.engine.setSlide(fresh.slides[cur.index], true);   // true — лишити масштаб і позицію
+    renderRail();
+    refreshEmpty();
+    updateSlideName();
+    return true;
+  };
+
   /* ============================================================
      Збереження
      ============================================================ */

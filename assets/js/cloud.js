@@ -345,6 +345,15 @@
      Читання з сервера
      ============================================================ */
 
+  /* Легка перевірка «чи там щось нове»: тягнемо лише номер версії, без даних.
+     Це кількасот байтів проти кількох сотень кілобайтів, тому можна питати часто. */
+  function pullRev() {
+    return api('/rest/v1/state?id=eq.main&select=rev')
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (rows) { return rows && rows[0] ? rows[0].rev : null; })
+      .catch(function () { return null; });
+  }
+
   function pull() {
     return api('/rest/v1/state?id=eq.main&select=rev,data,device,updated_at')
       .then(function (res) {
@@ -378,7 +387,15 @@
         meta.changedAt = null;         // локальних змін після прийняття немає
         saveMeta();
         setState('idle');              // інакше в картці назавжди залишалось «зберігаю…»
-        if (window.App && window.App.render) window.App.render();
+
+        /* Якщо відкрита дошка — оновлюємо саме її, зберігаючи масштаб і слайд.
+           Повне перемальовування скинуло б і те, й інше, а учень дивиться урок
+           саме з відкритої дошки. */
+        var handled = false;
+        try {
+          handled = !!(window.V && window.V.boardReload && window.V.boardReload());
+        } catch (e) { handled = false; }
+        if (!handled && window.App && window.App.render) window.App.render();
       });
   }
 
@@ -590,21 +607,54 @@
      Старт
      ============================================================ */
 
+  /* Стеження за змінами з інших пристроїв.
+
+     Без цього зміни з телефона з'являлися на комп'ютері лише після
+     перезавантаження сторінки — саме на це й скаржилися.
+
+     Питаємо лише номер версії, тому запит крихітний. Повні дані тягнемо
+     тільки коли номер справді змінився. У прихованій вкладці не питаємо
+     взагалі: там нікому дивитися, а батарею економимо. */
+  var WATCH_MS = 12000;
+  var watchTimer = null;
+
+  function startWatching() {
+    if (watchTimer) return;
+    watchTimer = setInterval(function () {
+      if (document.visibilityState === 'hidden') return;
+      if (!Cloud.available() || !Cloud.signedIn() || !navigator.onLine) return;
+      if (state === 'syncing') return;
+      pullRev().then(function (rev) {
+        if (rev != null && rev > meta.rev) Cloud.syncNow();
+      });
+    }, WATCH_MS);
+  }
+
   Cloud.start = function () {
     if (started) return;
     started = true;
+
+    /* Стеження й обробники вмикаємо ЗАВЖДИ, ще до перевірок.
+       Раніше вони стояли після виходів нижче — тому якщо на момент
+       завантаження вхід ще не був зроблений, зміни з інших пристроїв
+       не з'являлися до перезавантаження сторінки.
+       Самі обробники щоразу перевіряють умови, тож у вимкненому стані
+       вони нічого не роблять. */
+    startWatching();
+    window.addEventListener('online', function () { Cloud.syncNow(); });
+    window.addEventListener('offline', function () {
+      if (Cloud.available() && Cloud.signedIn()) setState('offline');
+    });
+    document.addEventListener('visibilitychange', function () {
+      if (!Cloud.available() || !Cloud.signedIn()) return;
+      if (document.visibilityState === 'hidden') Cloud.flush();
+      else Cloud.syncNow();
+    });
 
     if (!Cloud.available()) { setState('off'); return; }
     if (!Cloud.signedIn()) { setState('signedout'); return; }
 
     Cloud.syncNow();
-
-    window.addEventListener('online', function () { Cloud.syncNow(); });
-    window.addEventListener('offline', function () { setState('offline'); });
-    document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'hidden') Cloud.flush();
-      else Cloud.syncNow();
-    });
   };
 
   window.Cloud = Cloud;

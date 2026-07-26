@@ -7,7 +7,7 @@
 
    Версію треба піднімати щоразу, коли змінюється склад файлів. */
 
-var VERSION = 'mathhub-v6';
+var VERSION = 'mathhub-v7';
 
 var SHELL = [
   './',

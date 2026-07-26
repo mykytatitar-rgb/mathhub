@@ -1587,50 +1587,136 @@
     });
   }
 
+  /** Опублікувати урок і покласти посилання в буфер обміну. */
+  function publishShare(l, st, token, isUpdate) {
+    U.toast(isUpdate ? 'Оновлюю сторінку уроку…' : 'Готую сторінку для учня…');
+    return buildViewerHTML(cur.board, l, st).then(function (html) {
+      return window.Cloud.publishShare(token, html).then(function (url) {
+        cur.board.share = { token: token, at: new Date().toISOString() };
+        markDirty(); flushSave();
+        var kb = Math.max(1, Math.round(new Blob([html]).size / 1024));
+        // копіюємо одразу: людина щойно натиснула кнопку, отже дозвіл є
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(function () {
+            U.toast('Посилання скопійовано · ' + kb + ' КБ', 'ok');
+          }).catch(function () {
+            U.toast('Готово · ' + kb + ' КБ. Скопіюйте посилання з вікна', 'ok');
+          });
+        } else {
+          U.toast('Готово · ' + kb + ' КБ', 'ok');
+        }
+        return url;
+      });
+    }).catch(function (e) {
+      U.toast('Не вдалося опублікувати: ' + (e && e.message ? e.message : e), 'err');
+    });
+  }
+
   function shareDialog() {
     flushSave();
     var l = S.get('lessons', cur.lessonId);
     var st = l ? S.get('students', l.studentId) : null;
     var filled = cur.board.slides.filter(function (s) { return (s.items || []).length; }).length;
 
+    var canLink = !!(window.Cloud && Cloud.available() && Cloud.signedIn());
+    var share = cur.board.share || null;
+    var url = (canLink && share) ? Cloud.shareUrl(share.token) : '';
+
+    var facts =
+      '<div class="card card--flat" style="padding:14px 16px">' +
+        '<div class="row small" style="padding:5px 0"><span class="muted">Урок</span>' +
+        '<span class="spacer bold right">' + U.esc(l ? (l.topic || 'без теми') : '—') + '</span></div>' +
+        '<div class="row small" style="padding:5px 0"><span class="muted">Слайдів із записами</span>' +
+        '<span class="spacer bold">' + filled + ' з ' + cur.board.slides.length + '</span></div>' +
+      '</div>';
+
+    /* Синхронізації немає — лишається старий спосіб, файлом. */
+    if (!canLink) {
+      C.modal({
+        title: 'Надіслати дошку учню',
+        sub: st ? st.name : '',
+        body:
+          '<p style="line-height:1.65;color:var(--ink-2);margin:4px 0 16px">' +
+          'Програма збере <b>окремий HTML-файл</b> з усіма слайдами цього уроку — ' +
+          'надішліть його в Telegram чи поштою. Учень відкриє файл у будь-якому браузері, ' +
+          'зможе гортати слайди й наближати записи. Редагувати не зможе.' +
+          '<br><br>Щоб замість файлу давати посилання, увімкніть синхронізацію в Налаштуваннях.</p>' +
+          facts,
+        buttons: [
+          { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+          { label: 'Зібрати файл', kind: 'btn--primary', act: 'go', icon: 'download',
+            onClick: function () { downloadViewer(l, st); } }
+        ]
+      });
+      return;
+    }
+
+    /* Посилання вже створене — показуємо його, даємо оновити або відкликати. */
+    if (share && url) {
+      C.modal({
+        title: 'Посилання для учня',
+        sub: st ? st.name : '',
+        body:
+          '<p style="line-height:1.65;color:var(--ink-2);margin:4px 0 12px">' +
+          'Учень відкриє цю сторінку без жодного входу й побачить <b>тільки цей урок</b>. ' +
+          'До решти ваших даних доступу немає.</p>' +
+          '<input class="input" readonly value="' + U.esc(url) + '" ' +
+          'onclick="this.select()" style="font-size:12px">' +
+          '<div class="field__hint mt-2">Опубліковано ' +
+          U.esc(U.fmtDateTime(new Date(share.at))) + '. Якщо після цього ви щось домалювали — ' +
+          'натисніть «Оновити», інакше учень бачитиме стару версію.</div>' +
+          facts,
+        buttons: [
+          { label: 'Закрити', kind: 'btn--ghost', act: 'cancel' },
+          { label: 'Відкликати', kind: 'btn--danger', act: 'revoke',
+            onClick: function () {
+              window.Cloud.revokeShare(share.token).then(function () {
+                delete cur.board.share;
+                markDirty(); flushSave();
+                U.toast('Посилання більше не працює', 'ok');
+              }).catch(function (e) {
+                U.toast('Не вдалося відкликати: ' + (e && e.message ? e.message : e), 'err');
+              });
+            } },
+          { label: 'Оновити', kind: 'btn--primary', act: 'go', icon: 'refresh',
+            onClick: function () { publishShare(l, st, share.token, true); } }
+        ]
+      });
+      return;
+    }
+
+    /* Посилання ще немає. */
     C.modal({
       title: 'Надіслати дошку учню',
       sub: st ? st.name : '',
       body:
         '<p style="line-height:1.65;color:var(--ink-2);margin:4px 0 16px">' +
-        'Програма працює лише у вашому браузері й не має сервера, тому «доступ за посиланням» ' +
-        'зробити неможливо. Натомість вона збирає <b>окремий HTML-файл</b> з усіма слайдами цього ' +
-        'уроку — надішліть його в Telegram чи поштою. Учень відкриє файл у будь-якому браузері ' +
-        'і зможе гортати слайди, наближати й роздивлятися записи. Редагувати не зможе.</p>' +
-
-        '<div class="card card--flat" style="padding:14px 16px">' +
-          '<div class="row small" style="padding:5px 0"><span class="muted">Урок</span>' +
-          '<span class="spacer bold right">' + U.esc(l ? (l.topic || 'без теми') : '—') + '</span></div>' +
-          '<div class="row small" style="padding:5px 0"><span class="muted">Слайдів із записами</span>' +
-          '<span class="spacer bold">' + filled + ' з ' + cur.board.slides.length + '</span></div>' +
-          '<div class="row small" style="padding:5px 0"><span class="muted">Файл</span>' +
-          '<span class="spacer bold">' + U.esc(lessonSlug()) + '.html</span></div>' +
-        '</div>' +
-
-        '<div class="field__hint mt-2">Файл самодостатній: інтернет для перегляду не потрібен. ' +
-        'Це ж робить його зручним архівом — складіть такі файли в папку, і матимете історію занять ' +
-        'незалежно від того, що станеться з браузером.</div>',
+        'Створіть <b>посилання</b> — учень відкриє його в будь-якому браузері й побачить ' +
+        'тільки цей урок: слайди, теорію та домашнє завдання. Ні входу, ні паролів, ' +
+        'ні доступу до решти ваших даних.</p>' +
+        facts +
+        '<div class="field__hint mt-2">Код у посиланні випадковий, підібрати його неможливо. ' +
+        'Доступ можна відкликати будь-коли — тоді сторінка перестане відкриватися.</div>',
       buttons: [
         { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
-        { label: 'Зібрати файл', kind: 'btn--primary', act: 'go', icon: 'download',
-          onClick: function () {
-            var name = lessonSlug() + '.html';
-            U.toast('Збираю файл…');
-            buildViewerHTML(cur.board, l, st).then(function (html) {
-              var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-              download(name, blob);
-              U.toast('Файл готовий (' + Math.max(1, Math.round(blob.size / 1024)) +
-                ' КБ) — надішліть його учню', 'ok');
-            }).catch(function (e) {
-              U.toast('Не вдалося зібрати файл: ' + (e && e.message ? e.message : e), 'err');
-            });
-          } }
+        { label: 'Зібрати файл', kind: 'btn--ghost', act: 'file', icon: 'download',
+          onClick: function () { downloadViewer(l, st); } },
+        { label: 'Створити посилання', kind: 'btn--primary', act: 'go', icon: 'share',
+          onClick: function () { publishShare(l, st, window.Cloud.newShareToken(), false); } }
       ]
+    });
+  }
+
+  function downloadViewer(l, st) {
+    var name = lessonSlug() + '.html';
+    U.toast('Збираю файл…');
+    buildViewerHTML(cur.board, l, st).then(function (html) {
+      var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      download(name, blob);
+      U.toast('Файл готовий (' + Math.max(1, Math.round(blob.size / 1024)) +
+        ' КБ) — надішліть його учню', 'ok');
+    }).catch(function (e) {
+      U.toast('Не вдалося зібрати файл: ' + (e && e.message ? e.message : e), 'err');
     });
   }
 

@@ -219,3 +219,43 @@ create policy boards_delete on storage.objects
   for delete using (
     bucket_id = 'boards' and (storage.foldername(name))[1] = auth.uid()::text
   );
+
+-- ============================================================
+-- Опубліковані уроки для учнів
+-- ============================================================
+--
+-- Кошик навмисно публічний: учень відкриває посилання без жодного входу.
+-- Захист тримається на самій адресі — у ній випадковий код на 128 бітів,
+-- підібрати його неможливо. Відкликати доступ = видалити файл.
+--
+-- Класти й видаляти може лише власник, у свою теку. Шлях:
+--   <id репетитора>/<код>/index.html
+-- Учень бачить рівно один урок: це самодостатній HTML, у якому вже вшито
+-- слайди й картинки саме цього заняття. Доступу до бази він не отримує зовсім.
+
+insert into storage.buckets (id, name, public)
+values ('shares', 'shares', true)
+on conflict (id) do update set public = true;
+
+drop policy if exists shares_read   on storage.objects;
+drop policy if exists shares_write  on storage.objects;
+drop policy if exists shares_update on storage.objects;
+drop policy if exists shares_delete on storage.objects;
+
+create policy shares_read on storage.objects
+  for select using (bucket_id = 'shares');
+
+create policy shares_write on storage.objects
+  for insert with check (
+    bucket_id = 'shares' and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy shares_update on storage.objects
+  for update using (
+    bucket_id = 'shares' and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy shares_delete on storage.objects
+  for delete using (
+    bucket_id = 'shares' and (storage.foldername(name))[1] = auth.uid()::text
+  );

@@ -264,6 +264,58 @@
   /** Запит із авторизацією й автоматичним поновленням токена — для модуля картинок. */
   Cloud.request = function (path, opts) { return api(path, opts); };
 
+  /* ============================================================
+     Публікація уроку для учня
+     ============================================================
+     Учень отримує звичайне посилання на самодостатню сторінку — ту саму,
+     що досі надсилали файлом. Доступу до бази він не має взагалі:
+     у сторінці вже вшито слайди й картинки саме цього уроку.
+
+     Захист — у самій адресі: код на 128 випадкових бітів, підібрати
+     неможливо. Відкликати = видалити файл. */
+
+  Cloud.newShareToken = function () {
+    var bytes = new Uint8Array(16);
+    (window.crypto || window.msCrypto).getRandomValues(bytes);
+    var s = '';
+    for (var i = 0; i < bytes.length; i++) s += ('0' + bytes[i].toString(16)).slice(-2);
+    return s;
+  };
+
+  function sharePath(token) {
+    return '/storage/v1/object/shares/' + encodeURIComponent(Cloud.userId()) + '/' +
+           encodeURIComponent(token) + '/index.html';
+  }
+
+  Cloud.shareUrl = function (token) {
+    if (!Cloud.userId()) return '';
+    return Cloud.base() + '/storage/v1/object/public/shares/' +
+           encodeURIComponent(Cloud.userId()) + '/' + encodeURIComponent(token) + '/index.html';
+  };
+
+  Cloud.publishShare = function (token, html) {
+    if (!Cloud.available() || !Cloud.signedIn()) {
+      return Promise.reject(new Error('Спершу увімкніть синхронізацію в Налаштуваннях'));
+    }
+    var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    return api(sharePath(token), {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/html;charset=utf-8', 'x-upsert': 'true' },
+      body: blob
+    }).then(function (res) {
+      if (!res.ok && res.status !== 409) throw new Error('Сервер відповів ' + res.status);
+      return Cloud.shareUrl(token);
+    });
+  };
+
+  Cloud.revokeShare = function (token) {
+    if (!Cloud.available() || !Cloud.signedIn()) return Promise.resolve();
+    return api(sharePath(token), { method: 'DELETE' }).then(function (res) {
+      // 404 означає, що його вже немає — для нас це теж успіх
+      if (!res.ok && res.status !== 404) throw new Error('Сервер відповів ' + res.status);
+    });
+  };
+
   function refresh() {
     if (!meta.session || !meta.session.refresh_token) {
       return Promise.reject(new Error('Немає активного входу'));

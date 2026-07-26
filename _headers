@@ -1,0 +1,16 @@
+# Правила кешування для Cloudflare Pages / Netlify.
+# Сторінка й службові файли — завжди свіжі, код — з кешу, але з перевіркою.
+
+/index.html
+  Cache-Control: no-cache
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+
+/sw.js
+  Cache-Control: no-cache
+
+/manifest.webmanifest
+  Cache-Control: no-cache
+
+/assets/*
+  Cache-Control: public, max-age=0, must-revalidate

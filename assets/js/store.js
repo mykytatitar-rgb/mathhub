@@ -1,0 +1,959 @@
+/* Сховище: модель даних, localStorage, вибірки */
+(function () {
+  'use strict';
+
+  var KEY = 'mathhub.db.v1';
+  var U = window.U;
+
+  var S = {};
+
+  /* ============================================================
+     Довідники
+     ============================================================ */
+
+  S.COLORS = ['#1358F5', '#7A5AF8', '#17B26A', '#F79009', '#E5484D',
+              '#06AED4', '#DD2590', '#5C6C8A', '#8B5CF6', '#0E9F5B'];
+
+  S.LESSON_STATUS = {
+    planned:   { label: 'Заплановано', badge: 'badge',         slot: '' },
+    done:      { label: 'Проведено',   badge: 'badge--green',  slot: 'slot--done' },
+    moved:     { label: 'Перенесено',  badge: 'badge--violet', slot: 'slot--moved' },
+    cancelled: { label: 'Скасовано',   badge: 'badge--grey',   slot: 'slot--cancelled' },
+    missed:    { label: 'Пропуск',     badge: 'badge--red',    slot: 'slot--missed' }
+  };
+
+  /** Статуси, які не займають місце в розкладі й не йдуть у гроші. */
+  S.INACTIVE_STATUS = ['cancelled', 'moved'];
+
+  S.HW_STATUS = {
+    assigned:  { label: 'Задано',      badge: 'badge--amber' },
+    submitted: { label: 'Здано',       badge: 'badge--violet' },
+    checked:   { label: 'Перевірено',  badge: 'badge--green' },
+    skipped:   { label: 'Не виконано', badge: 'badge--red' }
+  };
+
+  S.TOPICS = [
+    'Числа і вирази',
+    'Рівняння і нерівності',
+    'Функції та графіки',
+    'Числові послідовності',
+    'Тригонометрія',
+    'Похідна та її застосування',
+    'Інтеграл і первісна',
+    'Планіметрія',
+    'Стереометрія',
+    'Координати і вектори',
+    'Комбінаторика, ймовірність, статистика',
+    'Текстові задачі та відсотки'
+  ];
+
+  /** Підказки для поля «Ціль». Користувач може вписати будь-що своє. */
+  S.GOALS = ['НМТ-2026', 'НМТ-2027', 'НМТ-2028', 'ДПА', 'Шкільна програма',
+             'Олімпіади', 'Вступ до вишу', 'Підготовка до SAT', 'Іспит IB / A-level',
+             'Наздогнати клас', 'Математика для себе'];
+
+  /** Стандартні цілі + усі власні, які вже трапляються в учнів. */
+  S.allGoals = function () {
+    var out = S.GOALS.slice();
+    (db ? db.students : []).forEach(function (s) {
+      if (s.goal && out.indexOf(s.goal) < 0) out.push(s.goal);
+    });
+    return out;
+  };
+
+  /* ============================================================
+     Стан
+     ============================================================ */
+
+  var db = null;
+
+  function blank() {
+    return {
+      version: 1,
+      tutor: { name: 'Микита', subject: 'Математика', defaultPrice: 500, defaultDuration: 60,
+               currency: 'UAH', meetUrl: '' },
+      students: [],
+      lessons: [],
+      homeworks: [],
+      payments: [],
+      progress: [],   // {id, studentId, topic, level 0..100, updatedAt}
+      materials: [],
+      notes: [],
+      boards: []      // {id, lessonId, slides:[{id,title,bg,items:[]}], updatedAt}
+    };
+  }
+
+  S.load = function () {
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (raw) {
+        db = JSON.parse(raw);
+        var b = blank();
+        Object.keys(b).forEach(function (k) { if (db[k] === undefined) db[k] = b[k]; });
+        return db;
+      }
+    } catch (e) {
+      console.warn('Не вдалося прочитати збережені дані:', e);
+    }
+    db = seed();
+    S.save();
+    return db;
+  };
+
+  S.save = function () {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(db));
+    } catch (e) {
+      U.toast('Не вдалося зберегти дані: ' + e.message, 'err');
+    }
+  };
+
+  S.db = function () { return db; };
+
+  S.reset = function () {
+    db = seed(); S.save();
+    if (window.ImgStore && window.ImgStore.available()) window.ImgStore.gc([]);
+  };
+
+  S.wipe = function () {
+    db = blank(); S.save();
+    if (window.ImgStore && window.ImgStore.available()) window.ImgStore.gc([]);
+  };
+
+  S.exportJSON = function () { return JSON.stringify(db, null, 2); };
+
+  S.importJSON = function (text) {
+    var parsed = JSON.parse(text);
+    if (!parsed || !Array.isArray(parsed.students)) throw new Error('Файл не схожий на резервну копію mathhub');
+    var b = blank();
+    Object.keys(b).forEach(function (k) { if (parsed[k] === undefined) parsed[k] = b[k]; });
+    db = parsed;
+    S.save();
+  };
+
+  /* ============================================================
+     CRUD
+     ============================================================ */
+
+  function coll(name) { return db[name]; }
+
+  S.get = function (name, id) {
+    var list = coll(name);
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    return null;
+  };
+
+  S.add = function (name, obj) {
+    obj.id = obj.id || U.uid(name.slice(0, 3));
+    obj.createdAt = obj.createdAt || new Date().toISOString();
+    coll(name).push(obj);
+    S.save();
+    return obj;
+  };
+
+  S.update = function (name, id, patch) {
+    var item = S.get(name, id);
+    if (!item) return null;
+    Object.keys(patch).forEach(function (k) { item[k] = patch[k]; });
+    item.updatedAt = new Date().toISOString();
+    S.save();
+    return item;
+  };
+
+  S.remove = function (name, id) {
+    var list = coll(name);
+    var i = list.findIndex(function (x) { return x.id === id; });
+    if (i >= 0) { list.splice(i, 1); S.save(); return true; }
+    return false;
+  };
+
+  /** Видалити учня разом з усім, що на нього зав'язано. */
+  S.removeStudent = function (id) {
+    var lessonIds = db.lessons.filter(function (l) { return l.studentId === id; })
+      .map(function (l) { return l.id; });
+    db.boards = db.boards.filter(function (b) { return lessonIds.indexOf(b.lessonId) < 0; });
+    ['lessons', 'homeworks', 'payments', 'progress', 'notes'].forEach(function (name) {
+      db[name] = db[name].filter(function (x) { return x.studentId !== id; });
+    });
+    db.students = db.students.filter(function (x) { return x.id !== id; });
+    S.save();
+    S.gcImages();
+  };
+
+  /* ============================================================
+     Вибірки
+     ============================================================ */
+
+  S.students = function () {
+    return U.sortBy(db.students.filter(function (s) { return !s.archived; }), function (s) { return s.name; });
+  };
+
+  S.archivedStudents = function () {
+    return db.students.filter(function (s) { return s.archived; });
+  };
+
+  S.lessonsOf = function (studentId) {
+    return U.sortBy(db.lessons.filter(function (l) { return l.studentId === studentId; }),
+      function (l) { return l.date; }, true);
+  };
+
+  S.homeworksOf = function (studentId) {
+    return U.sortBy(db.homeworks.filter(function (h) { return h.studentId === studentId; }),
+      function (h) { return h.dueDate; }, true);
+  };
+
+  S.paymentsOf = function (studentId) {
+    return U.sortBy(db.payments.filter(function (p) { return p.studentId === studentId; }),
+      function (p) { return p.date; }, true);
+  };
+
+  S.notesOf = function (studentId) {
+    return U.sortBy(db.notes.filter(function (n) { return n.studentId === studentId; }),
+      function (n) { return n.date; }, true);
+  };
+
+  S.progressOf = function (studentId) {
+    return db.progress.filter(function (p) { return p.studentId === studentId; });
+  };
+
+  S.progressLevel = function (studentId, topic) {
+    var p = db.progress.find(function (x) { return x.studentId === studentId && x.topic === topic; });
+    return p ? p.level : null;
+  };
+
+  S.setProgress = function (studentId, topic, level) {
+    var p = db.progress.find(function (x) { return x.studentId === studentId && x.topic === topic; });
+    if (p) { p.level = level; p.updatedAt = new Date().toISOString(); }
+    else { S.add('progress', { studentId: studentId, topic: topic, level: level }); }
+    S.save();
+  };
+
+  /** Уроки в діапазоні [from, to] включно, за днями. */
+  S.lessonsBetween = function (from, to) {
+    var a = U.ymd(from), b = U.ymd(to);
+    return U.sortBy(db.lessons.filter(function (l) {
+      var d = l.date.slice(0, 10);
+      return d >= a && d <= b;
+    }), function (l) { return l.date; });
+  };
+
+  S.lessonsOnDay = function (day) {
+    var d = U.ymd(day);
+    return U.sortBy(db.lessons.filter(function (l) { return l.date.slice(0, 10) === d; }),
+      function (l) { return l.date; });
+  };
+
+  S.upcoming = function (limit) {
+    var now = new Date();
+    var list = db.lessons.filter(function (l) {
+      return l.status === 'planned' && U.toDate(l.date) >= new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    });
+    list = U.sortBy(list, function (l) { return l.date; });
+    return limit ? list.slice(0, limit) : list;
+  };
+
+  /* ---------- Валюта ---------- */
+
+  /** Валюта конкретного учня; якщо не задана — валюта репетитора. */
+  S.curOf = function (studentId) {
+    var st = S.get('students', studentId);
+    return (st && st.currency) || (db.tutor && db.tutor.currency) || 'UAH';
+  };
+
+  S.lessonCur = function (lesson) { return lesson.currency || S.curOf(lesson.studentId); };
+  S.paymentCur = function (payment) { return payment.currency || S.curOf(payment.studentId); };
+
+  /** Перелік валют, які реально задіяні в активних учнів. */
+  S.currenciesInUse = function () {
+    var out = [];
+    S.students().forEach(function (s) {
+      var c = s.currency || 'UAH';
+      if (out.indexOf(c) < 0) out.push(c);
+    });
+    return out.length ? out : [(db.tutor && db.tutor.currency) || 'UAH'];
+  };
+
+  /**
+   * Змінити валюту учня. Суми НЕ конвертуються — записи лише перемічуються,
+   * щоб в одного учня ніколи не змішувалися дві валюти в балансі.
+   */
+  S.setStudentCurrency = function (studentId, code) {
+    var st = S.get('students', studentId);
+    if (!st) return false;
+    var changed = st.currency !== code;
+    st.currency = code;
+    db.lessons.forEach(function (l) { if (l.studentId === studentId) l.currency = code; });
+    db.payments.forEach(function (p) { if (p.studentId === studentId) p.currency = code; });
+    S.save();
+    return changed;
+  };
+
+  /** Згрупувати суми за валютами: {UAH: 12500, USD: 180}. */
+  function byCurrency(items, amountFn, curFn) {
+    var out = {};
+    items.forEach(function (x) {
+      var c = curFn(x);
+      out[c] = (out[c] || 0) + (Number(amountFn(x)) || 0);
+    });
+    return out;
+  }
+
+  /* ---------- Фінанси ---------- */
+
+  /** Баланс учня: сплачено мінус вартість проведених уроків. Мінус = борг. */
+  S.balance = function (studentId) {
+    var paid = U.sum(S.paymentsOf(studentId), function (p) { return p.amount; });
+    var used = U.sum(db.lessons.filter(function (l) {
+      return l.studentId === studentId && l.status === 'done';
+    }), function (l) { return l.price || 0; });
+    return paid - used;
+  };
+
+  /** Скільки оплачених уроків лишилось (за поточною ціною). */
+  S.lessonsLeft = function (studentId) {
+    var st = S.get('students', studentId);
+    var price = (st && st.price) || db.tutor.defaultPrice || 1;
+    return Math.floor(S.balance(studentId) / price);
+  };
+
+  /** Оплати за період. Якщо вказано code — лише в цій валюті. */
+  S.paymentsBetween = function (from, to, code) {
+    var a = U.ymd(from), b = U.ymd(to);
+    return db.payments.filter(function (p) {
+      var d = p.date.slice(0, 10);
+      if (d < a || d > b) return false;
+      return !code || S.paymentCur(p) === code;
+    });
+  };
+
+  /** Проведені уроки за період. Якщо вказано code — лише в цій валюті. */
+  S.doneLessonsBetween = function (from, to, code) {
+    var a = U.ymd(from), b = U.ymd(to);
+    return db.lessons.filter(function (l) {
+      var d = l.date.slice(0, 10);
+      if (l.status !== 'done' || d < a || d > b) return false;
+      return !code || S.lessonCur(l) === code;
+    });
+  };
+
+  S.incomeBetween = function (from, to, code) {
+    return U.sum(S.paymentsBetween(from, to, code), function (p) { return p.amount; });
+  };
+
+  /** Зароблено (проведені уроки) за період. */
+  S.earnedBetween = function (from, to, code) {
+    return U.sum(S.doneLessonsBetween(from, to, code), function (l) { return l.price || 0; });
+  };
+
+  /** Надходження за період у розрізі валют: {UAH: 12500, USD: 180}. */
+  S.incomeMap = function (from, to) {
+    return byCurrency(S.paymentsBetween(from, to), function (p) { return p.amount; }, S.paymentCur);
+  };
+
+  /** Нарахування за проведені уроки в розрізі валют. */
+  S.earnedMap = function (from, to) {
+    return byCurrency(S.doneLessonsBetween(from, to), function (l) { return l.price || 0; }, S.lessonCur);
+  };
+
+  /** Сумарні борги в розрізі валют (додатні числа). */
+  S.debtMap = function () {
+    var out = {};
+    S.students().forEach(function (s) {
+      var b = S.balance(s.id);
+      if (b < 0) {
+        var c = S.curOf(s.id);
+        out[c] = (out[c] || 0) + (-b);
+      }
+    });
+    return out;
+  };
+
+  /* ---------- Статистика учня ---------- */
+
+  S.studentStats = function (studentId) {
+    var lessons = S.lessonsOf(studentId);
+    var done = lessons.filter(function (l) { return l.status === 'done'; });
+    var hw = S.homeworksOf(studentId);
+    var checked = hw.filter(function (h) { return h.status === 'checked' && h.score != null; });
+    var scores = checked.map(function (h) { return h.score; });
+    var prog = S.progressOf(studentId);
+
+    return {
+      total: lessons.length,
+      done: done.length,
+      planned: lessons.filter(function (l) { return l.status === 'planned'; }).length,
+      missed: lessons.filter(function (l) { return l.status === 'missed'; }).length,
+      hwTotal: hw.length,
+      hwPending: hw.filter(function (h) { return h.status === 'assigned' || h.status === 'submitted'; }).length,
+      hwSkipped: hw.filter(function (h) { return h.status === 'skipped'; }).length,
+      avgScore: scores.length ? U.sum(scores) / scores.length : null,
+      scores: checked,
+      avgProgress: prog.length ? Math.round(U.sum(prog, function (p) { return p.level; }) / prog.length) : 0,
+      topicsCovered: prog.length,
+      lastLesson: done.length ? done[0] : null,
+      nextLesson: U.sortBy(lessons.filter(function (l) {
+        return l.status === 'planned' && U.toDate(l.date) >= U.today();
+      }), function (l) { return l.date; })[0] || null,
+      balance: S.balance(studentId)
+    };
+  };
+
+  /** Речі, що потребують уваги, по всій базі. */
+  S.attention = function () {
+    var out = [];
+    var today = U.today();
+
+    S.students().forEach(function (st) {
+      var bal = S.balance(st.id);
+      if (bal < 0) {
+        out.push({
+          kind: 'debt', studentId: st.id, priority: 1,
+          title: st.name, text: 'Борг ' + U.money(-bal, S.curOf(st.id))
+        });
+      }
+    });
+
+    db.homeworks.forEach(function (h) {
+      var st = S.get('students', h.studentId);
+      if (!st || st.archived) return;
+      if (h.status === 'submitted') {
+        out.push({
+          kind: 'check', studentId: h.studentId, priority: 2,
+          title: st.name, text: 'Здав ДЗ на перевірку: ' + h.title
+        });
+      } else if (h.status === 'assigned' && U.daysBetween(today, h.dueDate) < 0) {
+        out.push({
+          kind: 'overdue', studentId: h.studentId, priority: 1,
+          title: st.name, text: 'Прострочене ДЗ: ' + h.title
+        });
+      }
+    });
+
+    S.students().forEach(function (st) {
+      var last = S.lessonsOf(st.id).filter(function (l) { return l.status === 'done'; })[0];
+      if (last) {
+        var gap = U.daysBetween(last.date, today);
+        var hasNext = S.lessonsOf(st.id).some(function (l) {
+          return l.status === 'planned' && U.toDate(l.date) >= today;
+        });
+        if (gap > 14 && !hasNext) {
+          out.push({
+            kind: 'quiet', studentId: st.id, priority: 3,
+            title: st.name, text: 'Без уроків ' + U.pl(gap, 'день', 'дні', 'днів') + ', наступний не призначено'
+          });
+        }
+      }
+    });
+
+    return U.sortBy(out, function (x) { return x.priority; });
+  };
+
+  /* ============================================================
+     Дошки уроків
+     ============================================================ */
+
+  S.BOARD_BG = ['grid', 'dots', 'blank'];
+
+  S.newSlide = function (title) {
+    return { id: U.uid('sl'), title: title || '', bg: 'grid', items: [] };
+  };
+
+  /** Дошка уроку або null, якщо її ще не створювали. */
+  S.getBoard = function (lessonId) {
+    return db.boards.find(function (b) { return b.lessonId === lessonId; }) || null;
+  };
+
+  /** Дошка уроку; якщо немає — створюється з одним порожнім слайдом. */
+  S.ensureBoard = function (lessonId) {
+    var b = S.getBoard(lessonId);
+    if (b) {
+      if (!b.slides || !b.slides.length) b.slides = [S.newSlide()];
+      return b;
+    }
+    b = {
+      id: U.uid('brd'),
+      lessonId: lessonId,
+      slides: [S.newSlide()],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    db.boards.push(b);
+    S.save();
+    return b;
+  };
+
+  S.saveBoard = function (board) {
+    board.updatedAt = new Date().toISOString();
+    var i = db.boards.findIndex(function (b) { return b.id === board.id; });
+    if (i < 0) db.boards.push(board);
+    S.save();
+  };
+
+  /** Скільки слайдів і об'єктів на дошці уроку (для індикаторів у списках). */
+  S.boardStats = function (lessonId) {
+    var b = S.getBoard(lessonId);
+    if (!b) return null;
+    var items = 0;
+    b.slides.forEach(function (s) { items += (s.items || []).length; });
+    return { slides: b.slides.length, items: items, empty: items === 0, updatedAt: b.updatedAt };
+  };
+
+  /** Уроки учня, на яких є непорожня дошка — від найновіших. */
+  S.boardsOf = function (studentId) {
+    return S.lessonsOf(studentId).filter(function (l) {
+      var st = S.boardStats(l.id);
+      return st && !st.empty;
+    });
+  };
+
+  /** Усі непорожні дошки по всій базі. */
+  S.allBoards = function () {
+    return U.sortBy(db.boards.filter(function (b) {
+      return b.slides.some(function (s) { return (s.items || []).length; });
+    }), function (b) { return b.updatedAt; }, true);
+  };
+
+  /* ============================================================
+     Постійний розклад: уроки з шаблону створюються самі
+     ============================================================ */
+
+  var FILL_DAYS = 28;   // на скільки днів уперед тримаємо розклад заповненим
+
+  function slotIso(day, slot, weekStart) {
+    var d = U.addDays(weekStart, slot.day - 1);
+    return U.ymd(d) + 'T' + slot.time;
+  }
+
+  /** Чи вже є урок цього учня на таку саму дату й час. */
+  function hasLessonAt(studentId, iso) {
+    return db.lessons.some(function (l) {
+      return l.studentId === studentId && l.date === iso;
+    });
+  }
+
+  function createFromSlot(st, iso) {
+    return S.add('lessons', {
+      studentId: st.id, date: iso, duration: st.duration || 60,
+      price: st.price, currency: st.currency || 'UAH',
+      topic: '', status: 'planned', notes: '', fromTemplate: 1
+    });
+  }
+
+  /**
+   * Створити уроки за постійним розкладом одного учня — від дати `from`
+   * (за замовчуванням сьогодні) на `days` уперед. Дублікати пропускаються.
+   */
+  S.fillStudentTemplate = function (studentId, days, from) {
+    var st = S.get('students', studentId);
+    if (!st || !st.schedule || !st.schedule.length) return 0;
+    var start = from ? U.toDate(from) : U.today();
+    var end = U.addDays(start, days || FILL_DAYS);
+    var made = 0;
+
+    var weekStart = U.startOfWeek(start);
+    while (weekStart <= end) {
+      /* eslint-disable no-loop-func */
+      st.schedule.forEach(function (slot) {
+        var iso = slotIso(0, slot, weekStart);
+        var d = U.toDate(iso);
+        if (d < start || d > end) return;
+        if (hasLessonAt(st.id, iso)) return;
+        createFromSlot(st, iso);
+        made++;
+      });
+      weekStart = U.addDays(weekStart, 7);
+    }
+    return made;
+  };
+
+  /**
+   * Тримати розклад заповненим наперед. Заповнюємо лише той проміжок,
+   * якого ще не торкались (`tutor.filledUntil`) — тому видалені вручну
+   * уроки не з'являються знову.
+   */
+  S.autoFillTemplates = function () {
+    var today = U.today();
+    var horizon = U.addDays(today, FILL_DAYS);
+    var last = db.tutor.filledUntil ? U.toDate(db.tutor.filledUntil) : null;
+    var from = (last && last > today) ? U.addDays(last, 1) : today;
+    if (from > horizon) return 0;
+
+    var made = 0;
+    S.students().forEach(function (st) {
+      made += S.fillStudentTemplate(st.id, U.daysBetween(from, horizon), from);
+    });
+    db.tutor.filledUntil = U.ymd(horizon);
+    S.save();
+    return made;
+  };
+
+  /* ============================================================
+     Проведено й оплачено
+     ============================================================ */
+
+  /**
+   * Позначити урок оплаченим. Створюється звичайний платіж, прив'язаний
+   * до уроку, щоб баланс учня лишався правильним; зняття позначки його прибирає.
+   */
+  S.setLessonPaid = function (lessonId, paid) {
+    var l = S.get('lessons', lessonId);
+    if (!l) return false;
+    var existing = db.payments.filter(function (p) { return p.lessonId === lessonId; });
+
+    if (paid) {
+      l.paid = 1;
+      if (!existing.length) {
+        S.add('payments', {
+          studentId: l.studentId, lessonId: lessonId,
+          date: l.date.slice(0, 10), amount: l.price || 0,
+          currency: S.lessonCur(l), method: 'За урок',
+          note: 'Оплата за урок ' + U.fmtDate(l.date)
+        });
+      }
+    } else {
+      delete l.paid;
+      existing.forEach(function (p) { S.remove('payments', p.id); });
+    }
+    S.save();
+    return true;
+  };
+
+  /** Провести урок і одразу відмітити оплату. */
+  S.completeLesson = function (lessonId, paid) {
+    var l = S.get('lessons', lessonId);
+    if (!l) return false;
+    l.status = 'done';
+    S.save();
+    S.setLessonPaid(lessonId, paid !== false);
+    return true;
+  };
+
+  /** Зняти позначку «проведено» разом з оплатою. */
+  S.uncompleteLesson = function (lessonId) {
+    var l = S.get('lessons', lessonId);
+    if (!l) return false;
+    l.status = 'planned';
+    S.setLessonPaid(lessonId, false);
+    S.save();
+    return true;
+  };
+
+  /** Постійне посилання на зустріч: у учня власне, інакше спільне з налаштувань. */
+  S.meetUrlFor = function (studentId) {
+    var st = studentId ? S.get('students', studentId) : null;
+    return (st && st.meetUrl) || (db.tutor && db.tutor.meetUrl) || '';
+  };
+
+  /** Ключі всіх картинок — і з дошок, і з домашніх завдань. */
+  S.usedImageKeys = function () {
+    var keys = [];
+    function add(k) { if (k && keys.indexOf(k) < 0) keys.push(k); }
+    db.boards.forEach(function (b) {
+      (b.slides || []).forEach(function (s) {
+        (s.items || []).forEach(function (it) { if (it.t === 'i') add(it.k); });
+      });
+    });
+    db.homeworks.forEach(function (h) { (h.photos || []).forEach(add); });
+    return keys;
+  };
+
+  /** Прибрати з IndexedDB картинки, які вже нікому не потрібні. */
+  S.gcImages = function () {
+    if (!window.ImgStore || !window.ImgStore.available()) return Promise.resolve(0);
+    return window.ImgStore.gc(S.usedImageKeys());
+  };
+
+  /**
+   * Повна резервна копія: JSON бази + картинки в base64.
+   * Окремий асинхронний шлях, бо картинки лежать в IndexedDB.
+   */
+  S.exportBundle = function () {
+    var keys = S.usedImageKeys();
+    var images = {};
+    if (!keys.length || !window.ImgStore || !window.ImgStore.available()) {
+      return Promise.resolve(JSON.stringify(withImages(images), null, 2));
+    }
+    return Promise.all(keys.map(function (k) {
+      return window.ImgStore.get(k).then(function (blob) {
+        if (!blob) return null;
+        return window.ImgStore.toDataURL(blob).then(function (url) { images[k] = url; });
+      }).catch(function () { return null; });
+    })).then(function () {
+      return JSON.stringify(withImages(images), null, 2);
+    });
+  };
+
+  function withImages(images) {
+    var out = {};
+    Object.keys(db).forEach(function (k) { out[k] = db[k]; });
+    out._images = images;
+    return out;
+  }
+
+  /** Відновлення з повної копії: спершу картинки, потім сама база. */
+  S.importBundle = function (text) {
+    var parsed = JSON.parse(text);
+    if (!parsed || !Array.isArray(parsed.students)) {
+      return Promise.reject(new Error('Файл не схожий на резервну копію mathhub'));
+    }
+    var images = parsed._images || {};
+    delete parsed._images;
+
+    var keys = Object.keys(images);
+    var writeImages = (!keys.length || !window.ImgStore || !window.ImgStore.available())
+      ? Promise.resolve()
+      : Promise.all(keys.map(function (k) {
+          return window.ImgStore.fromDataURL(images[k]).then(function (blob) {
+            return window.ImgStore.put(k, blob);
+          }).catch(function () { return null; });
+        }));
+
+    return writeImages.then(function () {
+      S.importJSON(JSON.stringify(parsed));
+      return keys.length;
+    });
+  };
+
+  /** Видалити урок разом із його дошкою та прив'язаним платежем. */
+  S.removeLesson = function (lessonId) {
+    S.removeBoard(lessonId);
+    db.payments = db.payments.filter(function (p) { return p.lessonId !== lessonId; });
+    return S.remove('lessons', lessonId);
+  };
+
+  S.removeBoard = function (lessonId) {
+    var i = db.boards.findIndex(function (b) { return b.lessonId === lessonId; });
+    if (i >= 0) { db.boards.splice(i, 1); S.save(); S.gcImages(); return true; }
+    return false;
+  };
+
+  /* ============================================================
+     Демо-дані
+     ============================================================ */
+
+  function seed() {
+    var d = blank();
+    var today = U.today();
+
+    var people = [
+      { name: 'Крістіна Романюк', grade: '11 клас', goal: 'НМТ-2026', price: 550, color: '#1358F5',
+        days: [{ d: 2, t: '15:30' }, { d: 5, t: '19:30' }], phone: '+380 67 214 88 03',
+        parent: 'Оксана Романюк, +380 50 331 77 12', tg: '@kristina_r',
+        target: 'Мета — 185+ на НМТ, вступ на економіку в КНУ' },
+      { name: 'Артем Ковальчук', grade: '9 клас', goal: 'ДПА', price: 450, color: '#7A5AF8',
+        days: [{ d: 1, t: '17:00' }, { d: 4, t: '17:00' }], phone: '+380 63 902 41 55',
+        parent: 'Ігор Ковальчук, +380 67 118 20 44', tg: '@artem_kov',
+        target: 'Підтягнути алгебру до ДПА, головна проблема — дроби і рівняння' },
+      { name: 'Софія Мельник', grade: '11 клас', goal: 'НМТ-2026', price: 22, currency: 'USD', color: '#17B26A',
+        days: [{ d: 3, t: '18:00' }, { d: 6, t: '11:00' }], phone: '+380 95 774 12 09',
+        parent: '', tg: '@sofiiam',
+        target: 'Сильна учениця, ціль 195+. Робимо акцент на геометрії та параметрах.\nЖиве в Польщі, платить у доларах.' },
+      { name: 'Данило Шевченко', grade: '10 клас', goal: 'Шкільна програма', price: 450, color: '#F79009',
+        days: [{ d: 2, t: '18:00' }], phone: '+380 66 481 33 27',
+        parent: 'Наталія Шевченко, +380 96 220 55 18', tg: '',
+        target: 'Вирівняти оцінки за семестр, багато прогалин з 9 класу' },
+      { name: 'Марія Бондаренко', grade: '11 клас', goal: 'НМТ-2026', price: 550, color: '#DD2590',
+        days: [{ d: 1, t: '19:30' }, { d: 4, t: '19:30' }], phone: '+380 68 305 60 91',
+        parent: 'Леся Бондаренко, +380 63 447 90 26', tg: '@maria_b11',
+        target: 'Стартувала з нуля в лютому, прогрес хороший. Ціль 160+' },
+      { name: 'Олег Ткаченко', grade: '8 клас', goal: 'Обласна олімпіада, 1 місце', price: 20, currency: 'EUR',
+        color: '#06AED4', days: [{ d: 6, t: '13:00' }], phone: '+380 50 776 14 38',
+        parent: 'Андрій Ткаченко, +380 50 776 14 38', tg: '',
+        target: 'Готуємось до обласного етапу. Комбінаторика, теорія чисел, нерівності.\nРодина у Німеччині, розрахунок у євро.' }
+    ];
+
+    var lessonTopics = [
+      'Квадратні рівняння та теорема Вієта', 'Модуль: рівняння і нерівності',
+      'Показникові рівняння', 'Логарифми: властивості', 'Логарифмічні нерівності',
+      'Тригонометричні формули', 'Розв\'язування тригонометричних рівнянь',
+      'Похідна: правила диференціювання', 'Дослідження функції за допомогою похідної',
+      'Первісна та площа криволінійної трапеції', 'Прогресії: арифметична та геометрична',
+      'Трикутники: площі та подібність', 'Коло: вписані та центральні кути',
+      'Чотирикутники та їх властивості', 'Многогранники: призма і піраміда',
+      'Тіла обертання: циліндр, конус, куля', 'Вектори на площині',
+      'Комбінаторика: перестановки і сполучення', 'Ймовірність випадкової події',
+      'Текстові задачі на рух', 'Задачі на суміші та відсотки',
+      'Системи рівнянь', 'Параметри в квадратних рівняннях', 'Розбір пробного НМТ'
+    ];
+
+    var hwTitles = [
+      'Збірник Істер, §12 — №4.1–4.14', 'Картка «Логарифми», 10 задач',
+      'Тренажер НМТ: блок «Функції»', 'Геометрія: 8 задач на подібність',
+      'Демо-варіант НМТ 2024, частина 1', 'Картка «Тригонометрія», рівень B',
+      'Задачі на прогресії — №205–218', 'Параметри: 5 задач із зірочкою',
+      'Стереометрія: об\'єми, 6 задач', 'Відсотки і суміші — картка №7'
+    ];
+
+    var noteTexts = [
+      'Плутає знак при перенесенні через рівність — повторити на наступному уроці.',
+      'Дуже добре зайшов метод інтервалів, розв\'язує швидко і без підказок.',
+      'Батьки просили додати ще один урок на тиждень з травня.',
+      'Сильна тривожність перед контрольними. Даю більше легких задач на розігрів.',
+      'Не встигає робити ДЗ у будні через секцію — переносимо дедлайни на неділю.',
+      'Прорив у геометрії: сам довів теорему про висоти. Хвалити частіше.'
+    ];
+
+    // --- Учні ---
+    people.forEach(function (p, idx) {
+      var st = {
+        id: 'stu_' + (idx + 1),
+        name: p.name,
+        grade: p.grade,
+        goal: p.goal,
+        price: p.price,
+        currency: p.currency || 'UAH',
+        duration: 60,
+        color: p.color,
+        phone: p.phone,
+        parent: p.parent,
+        telegram: p.tg,
+        target: p.target,
+        schedule: p.days.map(function (x) { return { day: x.d, time: x.t }; }),
+        archived: false,
+        createdAt: new Date(today.getFullYear(), today.getMonth() - 5, 3).toISOString()
+      };
+      d.students.push(st);
+
+      // --- Уроки: 9 тижнів назад + 3 тижні вперед ---
+      var n = 0;
+      var tIdx = idx * 3;
+      for (var w = -9; w <= 3; w++) {
+        var weekStart = U.startOfWeek(U.addDays(today, w * 7));
+        p.days.forEach(function (slot) {
+          var date = U.addDays(weekStart, slot.d - 1); // d: 1=Пн … 7=Нд
+          var hh = slot.t.split(':');
+          date.setHours(+hh[0], +hh[1], 0, 0);
+          if (date < new Date(today.getFullYear(), today.getMonth() - 5, 1)) return;
+
+          var isPast = date < new Date();
+          var status = 'planned';
+          if (isPast) {
+            status = 'done';
+            if (n === 4) status = 'cancelled';
+            if (n === 11) status = 'missed';
+          }
+          var topic = lessonTopics[(tIdx + n) % lessonTopics.length];
+
+          var lesson = {
+            id: U.uid('les'),
+            studentId: st.id,
+            date: U.ymd(date) + 'T' + U.fmtTime(date),
+            duration: 60,
+            price: p.price,
+            currency: p.currency || 'UAH',
+            topic: topic,
+            status: status,
+            notes: status === 'done' && n % 3 === 0
+              ? 'Розібрали теорію, прорешали 6 задач. Слабке місце — оформлення розв\'язку.'
+              : '',
+            createdAt: date.toISOString()
+          };
+          d.lessons.push(lesson);
+
+          // --- ДЗ до частини проведених уроків ---
+          if (status === 'done' && n % 2 === 0) {
+            var due = U.addDays(date, 3);
+            var past = due < new Date();
+            var hwStatus = past ? 'checked' : 'assigned';
+            if (past && n % 7 === 0) hwStatus = 'skipped';
+            if (!past && n % 5 === 0) hwStatus = 'submitted';
+
+            d.homeworks.push({
+              id: U.uid('hw'),
+              studentId: st.id,
+              lessonId: lesson.id,
+              title: hwTitles[(idx + n) % hwTitles.length],
+              description: 'Основне — задачі 3, 7 і 9. Якщо не виходить — фотографуй спробу, розберемо разом.',
+              dueDate: U.ymd(due),
+              status: hwStatus,
+              score: hwStatus === 'checked' ? Math.min(12, 6 + ((idx + n) % 6) + Math.floor(n / 6)) : null,
+              feedback: hwStatus === 'checked' ? 'Добре, але в №7 загубив другий корінь.' : '',
+              createdAt: date.toISOString()
+            });
+          }
+          n++;
+        });
+      }
+
+      // --- Прогрес по темах ---
+      var covered = 5 + (idx % 5);
+      for (var t = 0; t < covered; t++) {
+        var base = p.goal === 'Олімпіади' ? 70 : p.goal === 'ДПА' ? 45 : 55;
+        d.progress.push({
+          id: U.uid('prg'),
+          studentId: st.id,
+          topic: S.TOPICS[t],
+          level: U.clamp(base + ((idx * 7 + t * 13) % 45) - 10, 15, 98),
+          updatedAt: new Date().toISOString()
+        });
+      }
+
+      // --- Оплати ---
+      var doneCount = d.lessons.filter(function (l) { return l.studentId === st.id && l.status === 'done'; }).length;
+      var owed = doneCount * p.price;
+      var chunks = Math.max(1, Math.round(owed / (p.price * 4)));
+      var paidTotal = 0;
+      for (var c = 0; c < chunks; c++) {
+        var pd = U.addDays(today, -((chunks - c) * 14) + 2);
+        var amount = p.price * 4;
+        d.payments.push({
+          id: U.uid('pay'),
+          studentId: st.id,
+          date: U.ymd(pd),
+          amount: amount,
+          currency: p.currency || 'UAH',
+          method: c % 3 === 0 ? 'Готівка' : 'Картка',
+          note: 'Пакет 4 уроки',
+          createdAt: pd.toISOString()
+        });
+        paidTotal += amount;
+      }
+      // У двох учнів навмисно лишаємо борг — щоб було видно, як це виглядає
+      if (idx === 1 || idx === 4) {
+        var last = d.payments.filter(function (x) { return x.studentId === st.id; }).pop();
+        if (last) {
+          d.payments.splice(d.payments.indexOf(last), 1);
+        }
+      }
+
+      // --- Нотатки ---
+      d.notes.push({
+        id: U.uid('note'),
+        studentId: st.id,
+        date: U.ymd(U.addDays(today, -(7 + idx * 3))),
+        text: noteTexts[idx % noteTexts.length],
+        createdAt: new Date().toISOString()
+      });
+    });
+
+    // --- Матеріали ---
+    var mats = [
+      { title: 'Офіційні демо-варіанти НМТ', type: 'link', url: 'https://testportal.gov.ua/', topic: 'Загальне',
+        note: 'Актуальні специфікації та зразки завдань від УЦОЯО' },
+      { title: 'Формули для НМТ — одна сторінка', type: 'file', url: '', topic: 'Загальне',
+        note: 'Роздруковую і даю кожному новому учню на перший урок' },
+      { title: 'GeoGebra — динамічна геометрія', type: 'link', url: 'https://www.geogebra.org/', topic: 'Планіметрія',
+        note: 'Показувати вписані кути та переріз піраміди' },
+      { title: 'Картки «Логарифми», рівні A/B/C', type: 'file', url: '', topic: 'Функції та графіки',
+        note: '3 рівні складності, по 12 задач' },
+      { title: 'Банк задач з параметрами', type: 'file', url: '', topic: 'Рівняння і нерівності',
+        note: 'Для сильних учнів, 40 задач з розв\'язками' },
+      { title: 'Desmos — графіки функцій', type: 'link', url: 'https://www.desmos.com/calculator', topic: 'Функції та графіки',
+        note: 'Найкраще для пояснення перетворень графіків' },
+      { title: 'Тренажер усного рахунку', type: 'link', url: '', topic: 'Числа і вирази',
+        note: '5 хвилин на початку кожного уроку з молодшими' },
+      { title: 'Стереометрія: перерізи многогранників', type: 'note', url: '', topic: 'Стереометрія',
+        note: 'Метод слідів + метод внутрішнього проєктування. Порядок пояснення: слід → точка → переріз' }
+    ];
+    mats.forEach(function (m) {
+      d.materials.push({
+        id: U.uid('mat'), title: m.title, type: m.type, url: m.url,
+        topic: m.topic, note: m.note, createdAt: new Date().toISOString()
+      });
+    });
+
+    return d;
+  }
+
+  window.S = S;
+})();

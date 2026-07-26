@@ -1,0 +1,727 @@
+/* Форми створення та редагування */
+(function () {
+  'use strict';
+
+  var U = window.U, S = window.S, C = window.C, icon = window.icon;
+  var F = {};
+
+  function refresh() { if (window.App) window.App.refresh(); }
+
+  function nowTimeRounded() {
+    var d = new Date();
+    d.setMinutes(d.getMinutes() > 30 ? 60 : 30, 0, 0);
+    return U.fmtTime(d);
+  }
+
+  /* ============================================================
+     Учень
+     ============================================================ */
+
+  F.student = function (id) {
+    var st = id ? S.get('students', id) : null;
+    var isNew = !st;
+    var data = st || {
+      name: '', grade: '11 клас', goal: 'НМТ-2026',
+      price: S.db().tutor.defaultPrice, currency: S.db().tutor.currency || 'UAH',
+      color: S.COLORS[S.db().students.length % S.COLORS.length],
+      phone: '', parent: '', telegram: '', target: '', meetUrl: '', schedule: []
+    };
+
+    var sched = {};
+    (data.schedule || []).forEach(function (s) { sched[s.day] = s.time; });
+
+    var swatches = S.COLORS.map(function (c) {
+      return '<button type="button" class="swatch' + (c === data.color ? ' is-active' : '') +
+        '" data-color="' + c + '" style="background:' + c + '"></button>';
+    }).join('');
+
+    var days = [1, 2, 3, 4, 5, 6, 7].map(function (d) {
+      var label = U.DAYS_SHORT[d % 7];
+      return '<div style="text-align:center">' +
+        '<div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px">' + label + '</div>' +
+        '<input class="input" type="time" data-day="' + d + '" value="' + (sched[d] || '') +
+        '" style="padding:8px 4px;text-align:center;font-size:12.5px">' +
+        '</div>';
+    }).join('');
+
+    var body =
+      C.field('Ім\'я та прізвище', C.input('name', data.name, 'placeholder="Напр. Крістіна Романюк" required')) +
+      '<div class="field-row">' +
+        C.field('Клас', C.select('grade', data.grade,
+          ['5 клас','6 клас','7 клас','8 клас','9 клас','10 клас','11 клас','Студент','Дорослий'])) +
+        C.field('Ціль',
+          C.input('goal', data.goal, 'list="goal-list" placeholder="Оберіть або впишіть свою"') +
+          '<datalist id="goal-list">' +
+          S.allGoals().map(function (g) { return '<option value="' + U.esc(g) + '">'; }).join('') +
+          '</datalist>',
+          'Можна вписати будь-що своє — напр. «Вступ до Politechnika Wrocławska».') +
+      '</div>' +
+      '<div class="field-row field-row--3">' +
+        C.field('Ціна за урок', C.input('price', data.price, 'type="number" min="0" step="any"')) +
+        C.field('Валюта', C.select('currency', data.currency || 'UAH',
+          U.CURRENCY_CODES.map(function (c) {
+            return { value: c, label: U.symbol(c) + '  ' + c };
+          }))) +
+        C.field('Тривалість, хв', C.input('duration', data.duration || 60, 'type="number" min="15" step="15"')) +
+      '</div>' +
+      C.field('Колір картки', '<div class="swatches" id="sw">' + swatches + '</div>') +
+      '<div class="field"><label class="field__label">Постійний розклад</label>' +
+        '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:7px">' + days + '</div>' +
+        '<div class="field__hint">Залиште порожнім, якщо в цей день уроку немає. ' +
+        'Уроки за цим розкладом створюються самі — одразу після збереження й далі ' +
+        'на чотири тижні вперед щоразу, коли ви відкриваєте програму.</div>' +
+      '</div>' +
+      '<div class="field-row">' +
+        C.field('Телефон учня', C.input('phone', data.phone, 'placeholder="+380 …"')) +
+        C.field('Telegram', C.input('telegram', data.telegram, 'placeholder="@nickname"')) +
+      '</div>' +
+      C.field('Батьки (контакт)', C.input('parent', data.parent, 'placeholder="Ім\'я, телефон"')) +
+      C.field('Посилання на зустріч', C.input('meetUrl', data.meetUrl, 'placeholder="https://meet.google.com/…"'),
+        'Якщо порожньо — використовується спільне посилання з «Налаштувань».') +
+      C.field('Ціль і нотатки про учня', C.textarea('target', data.target,
+        'placeholder="Напр. Мета — 185+ на НМТ. Слабкі місця: геометрія, параметри."'));
+
+    C.modal({
+      title: isNew ? 'Новий учень' : 'Редагувати учня',
+      sub: isNew ? 'Заповніть базове — решту можна додати пізніше' : data.name,
+      body: body,
+      buttons: [
+        !isNew ? { label: 'Видалити', kind: 'btn--danger', act: 'del', close: true, onClick: function () {
+          C.confirm('Видалити учня?',
+            'Разом з ним зникнуть усі уроки, домашні завдання, оплати та нотатки. Дію не можна скасувати.',
+            function () { S.removeStudent(id); U.toast('Учня видалено'); location.hash = '#/students'; refresh(); });
+        } } : null,
+        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+        { label: isNew ? 'Додати учня' : 'Зберегти', kind: 'btn--primary', act: 'save', icon: 'check',
+          onClick: function (root) {
+            var v = C.readForm(root);
+            if (!v.name) { U.toast('Вкажіть ім\'я учня', 'err'); return false; }
+            if (!v.goal) v.goal = 'Без конкретної цілі';
+            v.color = root.querySelector('.swatch.is-active').dataset.color;
+            v.schedule = U.$$('[data-day]', root)
+              .filter(function (el) { return el.value; })
+              .map(function (el) { return { day: +el.dataset.day, time: el.value }; });
+            var oldSchedule = JSON.stringify((data.schedule || []));
+            var newSchedule = JSON.stringify(v.schedule);
+
+            if (isNew) {
+              var created = S.add('students', v);
+              U.toast('Учня «' + created.name + '» додано', 'ok');
+              // одразу ставимо уроки за постійним розкладом — інакше він
+              // лишався б просто записом, а в календарі було б порожньо
+              var made = S.fillStudentTemplate(created.id);
+              if (made) U.toast('Створено ' + U.pl(made, 'урок', 'уроки', 'уроків') +
+                ' за постійним розкладом', 'ok');
+              location.hash = '#/student/' + created.id;
+            } else {
+              S.update('students', id, v);
+              // Валюту міняємо окремо: старі уроки й оплати перемічуються, але НЕ конвертуються
+              var changed = S.setStudentCurrency(id, v.currency);
+              U.toast(changed
+                ? 'Валюту змінено на ' + v.currency + '. Суми не перераховувались — перевірте їх.'
+                : 'Збережено', 'ok');
+              if (newSchedule !== oldSchedule && v.schedule.length) {
+                var n = S.fillStudentTemplate(id);
+                if (n) U.toast('Додано ' + U.pl(n, 'урок', 'уроки', 'уроків') +
+                  ' за новим розкладом', 'ok');
+              }
+            }
+            refresh();
+          } }
+      ].filter(Boolean),
+      onMount: function (root) {
+        U.onClick(root, '.swatch', function (el) {
+          U.$$('.swatch', root).forEach(function (x) { x.classList.remove('is-active'); });
+          el.classList.add('is-active');
+        });
+      }
+    });
+  };
+
+  /* ============================================================
+     Урок
+     ============================================================ */
+
+  F.lesson = function (id, preset) {
+    preset = preset || {};
+    var ls = id ? S.get('lessons', id) : null;
+    var isNew = !ls;
+    var stList = S.students();
+    if (!stList.length) { U.toast('Спочатку додайте учня', 'err'); return; }
+
+    var data = ls || {
+      studentId: preset.studentId || stList[0].id,
+      date: (preset.date || U.ymd(new Date())) + 'T' + (preset.time || nowTimeRounded()),
+      topic: '', status: 'planned', notes: '', duration: 60, price: null
+    };
+
+    var stud = S.get('students', data.studentId);
+    var lessonCur = data.currency || S.curOf(data.studentId);
+    var body =
+      (preset.lockStudent ? '' : C.field('Учень', C.studentSelect('studentId', data.studentId))) +
+      '<div class="field-row">' +
+        C.field('Дата', C.input('_date', data.date.slice(0, 10), 'type="date"')) +
+        C.field('Час', C.input('_time', data.date.slice(11, 16) || '15:00', 'type="time"')) +
+      '</div>' +
+      C.field('Тема уроку', C.input('topic', data.topic, 'placeholder="Напр. Логарифмічні нерівності" list="topic-list"') +
+        '<datalist id="topic-list">' + S.TOPICS.map(function (t) { return '<option value="' + U.esc(t) + '">'; }).join('') + '</datalist>') +
+      '<div class="field-row">' +
+        C.field('Статус', C.select('status', data.status, Object.keys(S.LESSON_STATUS).map(function (k) {
+          return { value: k, label: S.LESSON_STATUS[k].label };
+        }))) +
+        C.field('Вартість уроку',
+          '<div class="row" style="gap:8px">' +
+          C.input('price', data.price != null ? data.price : (stud ? stud.price : 500),
+            'type="number" min="0" step="any" style="flex:1"') +
+          '<span class="badge badge--grey" data-cur-tag style="height:42px;padding:0 13px;font-size:13px">' +
+          U.esc(U.symbol(lessonCur) + ' ' + lessonCur) + '</span></div>',
+          'Валюта береться з картки учня') +
+      '</div>' +
+      C.field('Конспект уроку', C.textarea('notes', data.notes,
+        'placeholder="Що розібрали, що не вийшло, на що звернути увагу наступного разу"'));
+
+    C.modal({
+      title: isNew ? 'Новий урок' : 'Редагувати урок',
+      sub: preset.lockStudent && stud ? stud.name : '',
+      body: body,
+      buttons: [
+        !isNew ? { label: 'Видалити', kind: 'btn--danger', act: 'del', onClick: function () {
+          var bst = S.boardStats(id);
+          C.confirm('Видалити урок?',
+            'Запис про урок буде вилучено назавжди.' +
+            (bst && !bst.empty ? ' Разом з ним зникне дошка з ' +
+              U.pl(bst.slides, 'слайдом', 'слайдами', 'слайдами') + ' записів.' : ''),
+            function () {
+              S.removeLesson(id);
+              U.toast('Урок видалено');
+              refresh();
+            });
+        } } : null,
+        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+        { label: isNew ? 'Додати урок' : 'Зберегти', kind: 'btn--primary', act: 'save', icon: 'check',
+          onClick: function (root) {
+            var v = C.readForm(root);
+            v.date = v._date + 'T' + (v._time || '00:00');
+            delete v._date; delete v._time;
+            if (preset.lockStudent) v.studentId = data.studentId;
+            v.currency = S.curOf(v.studentId);
+            if (isNew) { S.add('lessons', v); U.toast('Урок додано', 'ok'); }
+            else { S.update('lessons', id, v); U.toast('Збережено', 'ok'); }
+            refresh();
+          } }
+      ].filter(Boolean),
+      onMount: function (root) {
+        var sel = root.querySelector('[name=studentId]');
+        if (!sel) return;
+        sel.addEventListener('change', function () {
+          var s = S.get('students', sel.value);
+          if (!s) return;
+          var code = s.currency || 'UAH';
+          root.querySelector('[data-cur-tag]').textContent = U.symbol(code) + ' ' + code;
+          root.querySelector('[name=price]').value = s.price;
+        });
+      }
+    });
+  };
+
+  /** Швидкий перегляд уроку з дією «провести». */
+  F.lessonView = function (id) {
+    var ls = S.get('lessons', id);
+    if (!ls) return;
+    var st = S.get('students', ls.studentId);
+    var hw = S.db().homeworks.filter(function (h) { return h.lessonId === id; });
+
+    var body =
+      '<div class="row mb-2" style="gap:14px">' + C.avatar(st, 48) +
+      '<div><div style="font-weight:750;font-size:16px">' + U.esc(st ? st.name : '—') + '</div>' +
+      '<div class="small muted">' + U.esc(st ? st.grade + ' · ' + st.goal : '') + '</div></div>' +
+      '<div class="spacer row" style="gap:6px">' + C.lessonBadge(ls.status) +
+      (ls.paid ? C.badge('Оплачено', 'badge--green', 'wallet') : '') + '</div></div>' +
+
+      '<div class="card card--flat mb-2" style="padding:16px 18px">' +
+      '<div class="row" style="gap:10px;color:var(--muted);font-size:13px;font-weight:600">' +
+      icon('clock', 15) + U.fmtDateTime(ls.date) + ' · ' + U.fmtRelative(ls.date) +
+      '<span class="spacer">' + U.money(ls.price || 0, S.lessonCur(ls)) + '</span></div>' +
+      '<div style="font-size:17px;font-weight:750;margin-top:8px">' + U.esc(ls.topic || 'Тема не вказана') + '</div>' +
+      '</div>' +
+
+      (ls.notes ? '<div class="field"><label class="field__label">Конспект</label>' +
+        '<div class="pre-wrap small" style="background:var(--blue-50);padding:14px 16px;border-radius:12px">' +
+        U.esc(ls.notes) + '</div></div>' : '') +
+
+      (hw.length ? '<div class="field"><label class="field__label">Домашнє завдання</label>' +
+        hw.map(function (h) {
+          return '<div class="row" style="background:#FBFCFE;border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px">' +
+            '<div style="min-width:0"><div style="font-weight:650;font-size:14px">' + U.esc(h.title) + '</div>' +
+            '<div class="small muted" style="margin-top:3px">до ' + U.fmtDate(h.dueDate) +
+            (h.score != null ? ' · оцінка ' + h.score + '/12' : '') + '</div></div>' +
+            '<span class="spacer">' + C.hwBadge(h.status) + '</span></div>';
+        }).join('') + '</div>' : '');
+
+    C.modal({
+      title: 'Урок',
+      body: body,
+      buttons: [
+        S.meetUrlFor(ls.studentId)
+          ? { label: 'Приєднатися', kind: 'btn--ghost', act: 'meet', icon: 'present',
+              onClick: function () { window.open(S.meetUrlFor(ls.studentId), '_blank', 'noopener'); } }
+          : null,
+        { label: 'Редагувати', kind: 'btn--ghost', act: 'edit', icon: 'edit',
+          onClick: function () { setTimeout(function () { F.lesson(id); }, 60); } },
+        { label: 'Дошка', kind: 'btn--soft', act: 'board', icon: 'board',
+          onClick: function () { location.hash = '#/board/' + id; } },
+        ls.status === 'done'
+          ? { label: ls.paid ? 'Скасувати проведення' : 'Відмітити оплату',
+              kind: ls.paid ? 'btn--ghost' : 'btn--primary', act: 'paid',
+              icon: ls.paid ? 'undo' : 'wallet',
+              onClick: function () {
+                if (ls.paid) { S.uncompleteLesson(id); U.toast('Урок знову запланований'); }
+                else { S.setLessonPaid(id, true); U.toast('Оплату зараховано', 'ok'); }
+                refresh();
+              } }
+          : { label: 'Проведено й оплачено', kind: 'btn--primary', act: 'done', icon: 'check',
+              onClick: function () {
+                S.completeLesson(id, true);
+                U.toast('Проведено й оплачено · ' + U.money(ls.price || 0, S.lessonCur(ls)), 'ok');
+                refresh();
+              } }
+      ].filter(Boolean)
+    });
+  };
+
+  /* ============================================================
+     Смужка фото: спільна для ДЗ і матеріалів
+     ============================================================ */
+
+  function photoStripHtml() {
+    return '<div class="photo-strip" data-strip>' +
+      '<button type="button" class="photo-add" data-photo-add>' + icon('image', 18) +
+      '<span>Додати фото</span></button>' +
+      '<input type="file" accept="image/*" multiple hidden data-photo-input>' +
+      '</div>';
+  }
+
+  /**
+   * Оживити смужку фото. keys — масив ключів у ImgStore, змінюється на місці.
+   * Фото стискаються так само, як на дошці, і лежать в IndexedDB.
+   */
+  function mountPhotoStrip(root, keys) {
+    var strip = root.querySelector('[data-strip]');
+    var input = root.querySelector('[data-photo-input]');
+    if (!strip || !input) return;
+
+    function render() {
+      U.$$('.photo-thumb', strip).forEach(function (x) { x.remove(); });
+      keys.forEach(function (k) {
+        var el = document.createElement('div');
+        el.className = 'photo-thumb';
+        el.innerHTML = '<img alt="">' +
+          '<button type="button" class="photo-del" data-del="' + k + '" title="Прибрати">' +
+          icon('x', 13) + '</button>';
+        strip.insertBefore(el, strip.querySelector('.photo-add'));
+        if (window.ImgStore && window.ImgStore.available()) {
+          window.ImgStore.get(k).then(function (blob) {
+            if (blob) el.querySelector('img').src = URL.createObjectURL(blob);
+            else el.classList.add('is-missing');
+          }).catch(function () { el.classList.add('is-missing'); });
+        }
+      });
+    }
+
+    strip.addEventListener('click', function (e) {
+      var add = e.target.closest('[data-photo-add]');
+      if (add) { e.preventDefault(); input.click(); return; }
+      var del = e.target.closest('[data-del]');
+      if (del) {
+        e.preventDefault();
+        var i = keys.indexOf(del.dataset.del);
+        if (i >= 0) keys.splice(i, 1);
+        render();
+      }
+    });
+
+    input.addEventListener('change', function () {
+      var files = Array.prototype.slice.call(input.files || []);
+      input.value = '';
+      if (!files.length) return;
+      if (!window.ImgStore || !window.ImgStore.available()) {
+        U.toast('Браузер не дає зберігати фото', 'err');
+        return;
+      }
+      U.toast('Обробляю ' + U.pl(files.length, 'фото', 'фото', 'фото') + '…');
+      Promise.all(files.map(function (f) {
+        return window.ImgStore.ingest(f).then(function (m) { return m.key; })
+          .catch(function () { return null; });
+      })).then(function (added) {
+        var ok = added.filter(Boolean);
+        ok.forEach(function (k) { keys.push(k); });
+        render();
+        if (ok.length) U.toast('Додано ' + U.pl(ok.length, 'фото', 'фото', 'фото'), 'ok');
+        if (ok.length < files.length) U.toast('Частину файлів не вдалося прочитати', 'err');
+      });
+    });
+
+    // вставка скріншота прямо в діалог
+    root.addEventListener('paste', function (e) {
+      var items = e.clipboardData && e.clipboardData.items;
+      if (!items) return;
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].type && items[i].type.indexOf('image/') === 0) {
+          var f = items[i].getAsFile();
+          if (!f) continue;
+          e.preventDefault();
+          window.ImgStore.ingest(f).then(function (m) {
+            keys.push(m.key); render();
+            U.toast('Скріншот додано', 'ok');
+          }).catch(function () { U.toast('Не вдалося вставити скріншот', 'err'); });
+          return;
+        }
+      }
+    });
+
+    render();
+  }
+
+  /* ============================================================
+     Домашнє завдання
+     ============================================================ */
+
+  F.homework = function (id, preset) {
+    preset = preset || {};
+    var hw = id ? S.get('homeworks', id) : null;
+    var isNew = !hw;
+    var stList = S.students();
+    if (!stList.length) { U.toast('Спочатку додайте учня', 'err'); return; }
+
+    var data = hw || {
+      studentId: preset.studentId || stList[0].id,
+      lessonId: preset.lessonId || '',
+      title: '', description: '',
+      dueDate: U.ymd(U.addDays(new Date(), 3)),
+      status: 'assigned', score: null, feedback: '', photos: []
+    };
+    var photoKeys = (data.photos || []).slice();
+
+    var body =
+      (preset.lockStudent || !isNew ? '' : C.field('Учень', C.studentSelect('studentId', data.studentId))) +
+      C.field('Завдання', C.input('title', data.title, 'placeholder="Напр. Збірник Істер, §12 — №4.1–4.14"')) +
+      C.field('Опис / коментар', C.textarea('description', data.description,
+        'placeholder="На що звернути увагу, що робити якщо не виходить"')) +
+      C.field('Фото завдання', photoStripHtml(),
+        'Сфотографуйте картку чи вставте скріншот через Ctrl+V — стане в пригоді, коли завдання не з підручника.') +
+      '<div class="field-row">' +
+        C.field('Дедлайн', C.input('dueDate', data.dueDate, 'type="date"')) +
+        C.field('Статус', C.select('status', data.status, Object.keys(S.HW_STATUS).map(function (k) {
+          return { value: k, label: S.HW_STATUS[k].label };
+        }))) +
+      '</div>' +
+      '<div class="field-row">' +
+        C.field('Оцінка (0–12)', C.input('score', data.score, 'type="number" min="0" max="12" placeholder="—"')) +
+        '<div></div>' +
+      '</div>' +
+      C.field('Відгук для учня', C.textarea('feedback', data.feedback,
+        'placeholder="Що вийшло добре, де помилка"'));
+
+    C.modal({
+      title: isNew ? 'Нове домашнє завдання' : 'Домашнє завдання',
+      body: body,
+      buttons: [
+        !isNew ? { label: 'Видалити', kind: 'btn--danger', act: 'del', onClick: function () {
+          C.confirm('Видалити ДЗ?', 'Завдання буде вилучено назавжди.', function () {
+            S.remove('homeworks', id); U.toast('ДЗ видалено'); refresh();
+          });
+        } } : null,
+        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+        { label: isNew ? 'Задати' : 'Зберегти', kind: 'btn--primary', act: 'save', icon: 'check',
+          onClick: function (root) {
+            var v = C.readForm(root);
+            if (!v.title && !photoKeys.length) {
+              U.toast('Опишіть завдання або додайте фото', 'err'); return false;
+            }
+            if (!v.title) v.title = 'Завдання на фото';
+            if (v.score != null) v.score = U.clamp(v.score, 0, 12);
+            v.photos = photoKeys.slice();
+            if (isNew) {
+              v.studentId = preset.lockStudent ? data.studentId : (v.studentId || data.studentId);
+              v.lessonId = data.lessonId;
+              S.add('homeworks', v); U.toast('ДЗ задано', 'ok');
+            } else { S.update('homeworks', id, v); U.toast('Збережено', 'ok'); }
+            S.gcImages();
+            refresh();
+          } }
+      ].filter(Boolean),
+      onMount: function (root) { mountPhotoStrip(root, photoKeys); }
+    });
+  };
+
+  /* ============================================================
+     Оплата
+     ============================================================ */
+
+  F.payment = function (id, preset) {
+    preset = preset || {};
+    var p = id ? S.get('payments', id) : null;
+    var isNew = !p;
+    var stList = S.students();
+    if (!stList.length) { U.toast('Спочатку додайте учня', 'err'); return; }
+
+    var sid = p ? p.studentId : (preset.studentId || stList[0].id);
+    var st = S.get('students', sid);
+    var data = p || {
+      studentId: sid, date: U.ymd(new Date()),
+      amount: st ? st.price * 4 : 2000, method: 'Картка', note: 'Пакет 4 уроки'
+    };
+
+    var payCur = p ? S.paymentCur(p) : S.curOf(sid);
+
+    function quickHtml(student) {
+      var price = student ? student.price : 500;
+      var code = student ? (student.currency || 'UAH') : 'UAH';
+      return [1, 4, 8, 10].map(function (n) {
+        return '<button type="button" class="chip" data-pack="' + n + '">' +
+          n + ' × ' + U.money(price, code) + '</button>';
+      }).join('');
+    }
+
+    var body =
+      (preset.lockStudent ? '' : C.field('Учень', C.studentSelect('studentId', data.studentId))) +
+      C.field('Швидко', '<div class="row row--wrap" style="gap:8px" data-quick>' + quickHtml(st) + '</div>') +
+      '<div class="field-row">' +
+        C.field('Сума',
+          '<div class="row" style="gap:8px">' +
+          C.input('amount', data.amount, 'type="number" min="0" step="any" style="flex:1"') +
+          '<span class="badge badge--grey" data-cur-tag style="height:42px;padding:0 13px;font-size:13px">' +
+          U.esc(U.symbol(payCur) + ' ' + payCur) + '</span></div>') +
+        C.field('Дата', C.input('date', data.date, 'type="date"')) +
+      '</div>' +
+      '<div class="field-row">' +
+        C.field('Спосіб', C.select('method', data.method, ['Картка', 'Готівка', 'Переказ', 'Інше'])) +
+        C.field('Коментар', C.input('note', data.note, 'placeholder="Напр. пакет 4 уроки"')) +
+      '</div>' +
+      (st ? '<div class="card card--flat" style="padding:14px 16px">' +
+        '<div class="row small"><span class="muted">Баланс зараз</span>' +
+        '<span class="spacer bold" data-balance style="color:' + (S.balance(sid) < 0 ? 'var(--red)' : 'var(--green)') + '">' +
+        U.money(S.balance(sid), payCur) + '</span></div></div>' : '');
+
+    C.modal({
+      title: isNew ? 'Записати оплату' : 'Редагувати оплату',
+      sub: preset.lockStudent && st ? st.name : '',
+      body: body,
+      buttons: [
+        !isNew ? { label: 'Видалити', kind: 'btn--danger', act: 'del', onClick: function () {
+          C.confirm('Видалити оплату?', 'Запис зникне, баланс учня перерахується.', function () {
+            S.remove('payments', id); U.toast('Оплату видалено'); refresh();
+          });
+        } } : null,
+        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+        { label: isNew ? 'Записати' : 'Зберегти', kind: 'btn--primary', act: 'save', icon: 'check',
+          onClick: function (root) {
+            var v = C.readForm(root);
+            if (!v.amount) { U.toast('Вкажіть суму', 'err'); return false; }
+            if (preset.lockStudent) v.studentId = data.studentId;
+            v.currency = S.curOf(v.studentId);
+            if (isNew) { S.add('payments', v); U.toast('Оплату записано', 'ok'); }
+            else { S.update('payments', id, v); U.toast('Збережено', 'ok'); }
+            refresh();
+          } }
+      ].filter(Boolean),
+      onMount: function (root) {
+        var sel = root.querySelector('[name=studentId]');
+        var current = st;
+
+        function sync() {
+          var code = current ? (current.currency || 'UAH') : 'UAH';
+          root.querySelector('[data-cur-tag]').textContent = U.symbol(code) + ' ' + code;
+          root.querySelector('[data-quick]').innerHTML = quickHtml(current);
+          var bal = root.querySelector('[data-balance]');
+          if (bal && current) {
+            var b = S.balance(current.id);
+            bal.textContent = U.money(b, code);
+            bal.style.color = b < 0 ? 'var(--red)' : 'var(--green)';
+          }
+        }
+
+        if (sel) sel.addEventListener('change', function () {
+          current = S.get('students', sel.value);
+          sync();
+        });
+
+        U.onClick(root, '[data-pack]', function (el) {
+          var n = +el.dataset.pack;
+          root.querySelector('[name=amount]').value = n * (current ? current.price : 500);
+          root.querySelector('[name=note]').value = 'Пакет ' + U.pl(n, 'урок', 'уроки', 'уроків');
+        });
+      }
+    });
+  };
+
+  /* ============================================================
+     Нотатка
+     ============================================================ */
+
+  F.note = function (id, preset) {
+    preset = preset || {};
+    var n = id ? S.get('notes', id) : null;
+    var isNew = !n;
+    var data = n || { studentId: preset.studentId, date: U.ymd(new Date()), text: '' };
+
+    C.modal({
+      title: isNew ? 'Нова нотатка' : 'Нотатка',
+      body:
+        C.field('Дата', C.input('date', data.date, 'type="date"')) +
+        C.field('Текст', C.textarea('text', data.text,
+          'placeholder="Спостереження, домовленості з батьками, що працює а що ні" style="min-height:140px"')),
+      buttons: [
+        !isNew ? { label: 'Видалити', kind: 'btn--danger', act: 'del', onClick: function () {
+          S.remove('notes', id); U.toast('Нотатку видалено'); refresh();
+        } } : null,
+        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+        { label: 'Зберегти', kind: 'btn--primary', act: 'save', icon: 'check',
+          onClick: function (root) {
+            var v = C.readForm(root);
+            if (!v.text) { U.toast('Нотатка порожня', 'err'); return false; }
+            if (isNew) { v.studentId = data.studentId; S.add('notes', v); }
+            else S.update('notes', id, v);
+            U.toast('Збережено', 'ok'); refresh();
+          } }
+      ].filter(Boolean)
+    });
+  };
+
+  /* ============================================================
+     Матеріал
+     ============================================================ */
+
+  F.material = function (id) {
+    var m = id ? S.get('materials', id) : null;
+    var isNew = !m;
+    var data = m || { title: '', type: 'link', url: '', topic: 'Загальне', note: '' };
+
+    C.modal({
+      title: isNew ? 'Новий матеріал' : 'Матеріал',
+      body:
+        C.field('Назва', C.input('title', data.title, 'placeholder="Напр. Картки «Логарифми», рівні A/B/C"')) +
+        '<div class="field-row">' +
+          C.field('Тип', C.select('type', data.type, [
+            { value: 'link', label: 'Посилання' },
+            { value: 'file', label: 'Файл / роздруківка' },
+            { value: 'note', label: 'Методична нотатка' }
+          ])) +
+          C.field('Тема', C.select('topic', data.topic, ['Загальне'].concat(S.TOPICS))) +
+        '</div>' +
+        C.field('Посилання', C.input('url', data.url, 'placeholder="https://…"')) +
+        C.field('Опис', C.textarea('note', data.note, 'placeholder="Коли і кому давати, на що звертати увагу"')),
+      buttons: [
+        !isNew ? { label: 'Видалити', kind: 'btn--danger', act: 'del', onClick: function () {
+          S.remove('materials', id); U.toast('Матеріал видалено'); refresh();
+        } } : null,
+        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+        { label: 'Зберегти', kind: 'btn--primary', act: 'save', icon: 'check',
+          onClick: function (root) {
+            var v = C.readForm(root);
+            if (!v.title) { U.toast('Вкажіть назву', 'err'); return false; }
+            if (isNew) S.add('materials', v); else S.update('materials', id, v);
+            U.toast('Збережено', 'ok'); refresh();
+          } }
+      ].filter(Boolean)
+    });
+  };
+
+  /* ============================================================
+     Прогрес по темах
+     ============================================================ */
+
+  F.progress = function (studentId) {
+    var st = S.get('students', studentId);
+    var rows = S.TOPICS.map(function (t) {
+      var lvl = S.progressLevel(studentId, t);
+      return '<div style="padding:12px 0;border-bottom:1px solid var(--line)">' +
+        '<div class="row" style="gap:10px">' +
+        '<div style="flex:1;font-size:13.5px;font-weight:600">' + U.esc(t) + '</div>' +
+        '<output style="font-size:13px;font-weight:750;color:var(--blue-700);width:42px;text-align:right" ' +
+        'data-out="' + U.esc(t) + '">' + (lvl == null ? '—' : lvl + '%') + '</output>' +
+        '</div>' +
+        '<input type="range" min="0" max="100" step="5" value="' + (lvl == null ? 0 : lvl) + '" ' +
+        'data-topic="' + U.esc(t) + '" style="width:100%;margin-top:8px;accent-color:var(--blue-600);cursor:pointer">' +
+        '</div>';
+    }).join('');
+
+    C.modal({
+      title: 'Рівень засвоєння тем',
+      sub: st ? st.name : '',
+      wide: true,
+      body: '<div class="field__hint mb-2">Пересуньте повзунок для кожної теми, яку вже проходили. 0% — тему ще не чіпали.</div>' + rows,
+      buttons: [
+        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+        { label: 'Зберегти', kind: 'btn--primary', act: 'save', icon: 'check',
+          onClick: function (root) {
+            U.$$('[data-topic]', root).forEach(function (el) {
+              var v = +el.value;
+              var topic = el.dataset.topic;
+              var existing = S.progressLevel(studentId, topic);
+              if (v > 0 || existing != null) S.setProgress(studentId, topic, v);
+            });
+            U.toast('Прогрес оновлено', 'ok'); refresh();
+          } }
+      ],
+      onMount: function (root) {
+        U.$$('[data-topic]', root).forEach(function (el) {
+          el.addEventListener('input', function () {
+            var out = root.querySelector('[data-out="' + CSS.escape(el.dataset.topic) + '"]');
+            if (out) out.textContent = el.value + '%';
+          });
+        });
+      }
+    });
+  };
+
+  /* ============================================================
+     Згенерувати уроки на тиждень за постійним розкладом
+     ============================================================ */
+
+  F.generateWeek = function () {
+    var monday = U.startOfWeek(U.addDays(new Date(), 7));
+    var body =
+      C.field('Тиждень, що починається з', C.input('from', U.ymd(monday), 'type="date"')) +
+      C.field('Скільки тижнів', C.select('weeks', '1', ['1', '2', '3', '4'])) +
+      '<div class="field__hint">Уроки створяться для всіх учнів, у яких заповнений постійний розклад. Дублікати на ту саму дату й час пропускаються.</div>';
+
+    C.modal({
+      title: 'Створити уроки за розкладом',
+      body: body,
+      buttons: [
+        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+        { label: 'Створити', kind: 'btn--primary', act: 'go', icon: 'sparkles',
+          onClick: function (root) {
+            var v = C.readForm(root);
+            var start = U.startOfWeek(v.from);
+            var weeks = +v.weeks || 1;
+            var made = 0;
+
+            for (var w = 0; w < weeks; w++) {
+              S.students().forEach(function (st) {
+                (st.schedule || []).forEach(function (slot) {
+                  var d = U.addDays(start, (w * 7) + slot.day - 1);
+                  var iso = U.ymd(d) + 'T' + slot.time;
+                  var dup = S.db().lessons.some(function (l) {
+                    return l.studentId === st.id && l.date === iso;
+                  });
+                  if (dup) return;
+                  S.add('lessons', {
+                    studentId: st.id, date: iso, duration: st.duration || 60,
+                    price: st.price, currency: st.currency || 'UAH',
+                    topic: '', status: 'planned', notes: ''
+                  });
+                  made++;
+                });
+              });
+            }
+            U.toast(made ? 'Створено ' + U.pl(made, 'урок', 'уроки', 'уроків') : 'Нових уроків не з\'явилося', made ? 'ok' : null);
+            refresh();
+          } }
+      ]
+    });
+  };
+
+  window.F = F;
+})();

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mathhub — екосистема репетитора</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/app.css">
+<link rel="stylesheet" href="assets/css/board.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/icon.svg">
+<meta name="theme-color" content="#1358F5">
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main" id="main"></main>
+</div>
+
+<div class="modal-root" id="modal-root" hidden></div>
+<div class="toast-root" id="toast-root"></div>
+
+<script src="assets/js/icons.js"></script>
+<script src="assets/js/utils.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/cloudconfig.js"></script>
+<script src="assets/js/cloud.js"></script>
+<script src="assets/js/components.js"></script>
+<script src="assets/js/forms.js"></script>
+<script src="assets/js/rates.js"></script>
+<script src="assets/js/imagestore.js"></script>
+<script src="assets/js/shapefacts.js"></script>
+<script src="assets/js/constructions.js"></script>
+<script src="assets/js/board.js"></script>
+<script src="assets/js/views-main.js"></script>
+<script src="assets/js/views-schedule.js"></script>
+<script src="assets/js/views-student.js"></script>
+<script src="assets/js/views-board.js"></script>
+<script src="assets/js/app.js"></script>
+
+<script>
+/* Service worker вмикаємо лише на справжньому сайті (https).
+   На localhost і при відкритті файлу напряму він не реєструється —
+   інакше кеш заважав би бачити щойно внесені зміни. */
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function (e) {
+      console.warn('SW не зареєструвався:', e);
+    });
+  });
+}
+</script>
+</body>
+</html>

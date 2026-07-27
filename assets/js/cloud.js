@@ -287,10 +287,15 @@
            encodeURIComponent(token) + '/index.html';
   }
 
+  /* Посилання веде на НАШ сайт, а не прямо у сховище. Причина: Supabase
+     навмисно віддає будь-який HTML як звичайний текст, тому учень побачив би
+     вихідний код замість уроку. Сторінка share.html забирає той файл сама
+     й показує його. Код уроку — після #, щоб не потрапляв у журнали серверів. */
   Cloud.shareUrl = function (token) {
-    if (!Cloud.userId()) return '';
-    return Cloud.base() + '/storage/v1/object/public/shares/' +
-           encodeURIComponent(Cloud.userId()) + '/' + encodeURIComponent(token) + '/index.html';
+    var uid = Cloud.userId();
+    if (!uid) return '';
+    return location.origin + location.pathname.replace(/[^/]*$/, '') +
+           'share.html#' + uid + '/' + token;
   };
 
   Cloud.publishShare = function (token, html) {

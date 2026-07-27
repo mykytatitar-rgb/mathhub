@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Урок — mathhub</title>
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#1358F5">
+<meta name="robots" content="noindex,nofollow">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#F4F7FC;
+    font-family:Montserrat,"Segoe UI",system-ui,sans-serif;color:#0D2149}
+  #frame{position:fixed;inset:0;width:100%;height:100%;border:0;display:none}
+  .msg{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px}
+  .box{max-width:420px;text-align:center}
+  .box h1{font-size:19px;margin:0 0 10px}
+  .box p{font-size:14px;line-height:1.65;color:#5B6C8C;margin:0}
+  .spin{width:34px;height:34px;margin:0 auto 16px;border:3px solid #E8EEF8;
+    border-top-color:#1358F5;border-radius:50%;animation:r .8s linear infinite}
+  @keyframes r{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<!-- Урок показуємо в окремій рамці: сторінка уроку самодостатня й нічого
+     не знає про цю обгортку, тому її код ізольований від цієї сторінки. -->
+<iframe id="frame" title="Дошка уроку"></iframe>
+
+<div class="msg" id="msg">
+  <div class="box">
+    <div class="spin" id="spin"></div>
+    <h1 id="h">Відкриваю урок…</h1>
+    <p id="p">Хвилинку, завантажуються слайди.</p>
+  </div>
+</div>
+
+<script src="assets/js/cloudconfig.js"></script>
+<script>
+/* Навіщо ця сторінка взагалі потрібна.
+
+   Урок лежить у сховищі Supabase готовою HTML-сторінкою. Але Supabase
+   навмисно віддає будь-який HTML як звичайний текст — щоб їхнім сховищем
+   не користувалися для розміщення підроблених сторінок. Тому браузер учня
+   показував би вихідний код замість уроку.
+
+   Обхід простий: ми забираємо ту сторінку як текст самі й показуємо її
+   в рамці. Для учня це виглядає як звичайне відкриття посилання. */
+
+(function () {
+  'use strict';
+
+  var msg  = document.getElementById('msg');
+  var spin = document.getElementById('spin');
+  var h    = document.getElementById('h');
+  var p    = document.getElementById('p');
+
+  function fail(title, text) {
+    spin.style.display = 'none';
+    h.textContent = title;
+    p.textContent = text;
+  }
+
+  // Код уроку — у частині адреси після #, щоб він не потрапляв у журнали сервера.
+  var path = decodeURIComponent((location.hash || '').replace(/^#/, '')).trim();
+  var cfg = window.CLOUD_CONFIG || {};
+
+  if (!path || !/^[0-9a-f-]+\/[0-9a-f]+$/i.test(path)) {
+    fail('Посилання неповне', 'Схоже, адресу скопійовано не до кінця. Попросіть надіслати її ще раз.');
+    return;
+  }
+  if (!cfg.url) {
+    fail('Сторінку не налаштовано', 'Зверніться до репетитора.');
+    return;
+  }
+
+  var src = cfg.url.replace(/\/+$/, '') +
+            '/storage/v1/object/public/shares/' + path + '/index.html';
+
+  fetch(src)
+    .then(function (res) {
+      if (res.status === 404 || res.status === 400) {
+        throw new Error('revoked');
+      }
+      if (!res.ok) throw new Error('http ' + res.status);
+      return res.text();
+    })
+    .then(function (html) {
+      var frame = document.getElementById('frame');
+      frame.srcdoc = html;
+      frame.style.display = 'block';
+      msg.style.display = 'none';
+      var t = html.match(/<title>([^<]*)<\/title>/);
+      if (t) document.title = t[1];
+    })
+    .catch(function (e) {
+      if (e && e.message === 'revoked') {
+        fail('Урок більше не доступний', 'Репетитор закрив доступ за цим посиланням.');
+      } else {
+        fail('Не вдалося відкрити урок', 'Перевірте інтернет і спробуйте ще раз.');
+      }
+    });
+})();
+</script>
+</body>
+</html>

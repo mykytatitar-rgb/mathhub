@@ -317,6 +317,42 @@ drop policy if exists contrib_own on public.share_contributions;
 create policy shares_own on public.shares
   for select using (auth.uid() = owner);
 
+drop policy if exists shares_ins on public.shares;
+drop policy if exists shares_upd on public.shares;
+drop policy if exists shares_del on public.shares;
+
+create policy shares_ins on public.shares
+  for insert with check (auth.uid() = owner);
+
+create policy shares_upd on public.shares
+  for update using (auth.uid() = owner) with check (auth.uid() = owner);
+
+create policy shares_del on public.shares
+  for delete using (auth.uid() = owner);
+
+grant insert, update, delete on public.shares to authenticated;
+grant delete on public.share_contributions to authenticated;
+
+/* Номер версії піднімає сама база. Якби це робив клієнт, два пристрої
+   могли б поставити однаковий номер — і сторінка учня не помітила б зміни. */
+create or replace function public.shares_touch()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.data is distinct from old.data then
+    new.rev := old.rev + 1;
+    new.updated_at := now();
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists shares_touch_trg on public.shares;
+create trigger shares_touch_trg
+  before update on public.shares
+  for each row execute function public.shares_touch();
+
 create policy contrib_own on public.share_contributions
   for select using (
     exists (select 1 from public.shares s where s.token = share_contributions.token and s.owner = auth.uid())

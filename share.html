@@ -48,12 +48,17 @@
 (function () {
   'use strict';
 
-  /* Адреса сховища вписана прямо тут, а не взята з assets/js/cloudconfig.js.
+  /* Адреса й публічний ключ вписані прямо тут, а не взяті з assets/js/cloudconfig.js.
      Причина: уся тека assets закрита доступом Cloudflare — там код програми,
-     і відкривати її стороннім не можна. Виняток зроблено лише для цієї
-     сторінки, тому підвантажити звідти щось вона не може за задумом.
-     Це не секрет: адреса проєкту й так видима в кожному запиті. */
-  var STORAGE = 'https://kcxqienzhopnsqmykhqv.supabase.co';
+     і відкривати її стороннім не можна. Виняток зроблено лише для цієї сторінки.
+
+     Ключ безпечний: він призначений саме для браузера, а доступ до даних
+     вирішують правила в базі. Ця сторінка не читає жодної таблиці — лише
+     викликає функції, які самі перевіряють код уроку. */
+  var API = 'https://kcxqienzhopnsqmykhqv.supabase.co';
+  var KEY = 'sb_publishable_QnaXu7Prui_8orIhc7eWRA_82NAxUPc';
+
+  var WATCH_MS = 2000;   // як часто питати «чи є нове»
 
   var msg  = document.getElementById('msg');
   var spin = document.getElementById('spin');
@@ -69,30 +74,80 @@
   // Код уроку — у частині адреси після #, щоб він не потрапляв у журнали сервера.
   var path = decodeURIComponent((location.hash || '').replace(/^#/, '')).trim();
 
-  if (!path || !/^[0-9a-f-]+\/[0-9a-f]+$/i.test(path)) {
+  // важливий тут лише код уроку — 32 шістнадцяткові символи; що перед ним,
+  // нас не обходить, це тека репетитора
+  if (!path || !/^[^\s/]+\/[0-9a-f]{16,}$/i.test(path)) {
     fail('Посилання неповне', 'Схоже, адресу скопійовано не до кінця. Попросіть надіслати її ще раз.');
     return;
   }
 
-  var src = STORAGE.replace(/\/+$/, '') +
-            '/storage/v1/object/public/shares/' + path + '/index.html';
+  // код уроку — це <тека репетитора>/<код>, а самій базі потрібен лише код
+  var token = path.split('/').pop();
+  var frame = document.getElementById('frame');
+  var shownRev = -1;
+  var failures = 0;
 
-  fetch(src)
-    .then(function (res) {
-      if (res.status === 404 || res.status === 400) {
-        throw new Error('revoked');
-      }
-      if (!res.ok) throw new Error('http ' + res.status);
-      return res.text();
-    })
-    .then(function (html) {
-      var frame = document.getElementById('frame');
-      frame.srcdoc = html;
-      frame.style.display = 'block';
-      msg.style.display = 'none';
-      var t = html.match(/<title>([^<]*)<\/title>/);
-      if (t) document.title = t[1];
-    })
+  function rpc(name, body) {
+    return fetch(API + '/rest/v1/rpc/' + name, {
+      method: 'POST',
+      headers: { apikey: KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  }
+
+  /* Показуємо урок. Щоб гортання слайдів і масштаб не збивалися при кожному
+     оновленні, замінюємо вміст лише коли він справді змінився. */
+  function show(html, rev) {
+    if (rev === shownRev) return;
+    shownRev = rev;
+    frame.srcdoc = html;
+    frame.style.display = 'block';
+    msg.style.display = 'none';
+    var t = html.match(/<title>([^<]*)<\/title>/);
+    if (t) document.title = t[1];
+  }
+
+  function load() {
+    return rpc('share_read', { p_token: token })
+      .then(function (res) {
+        if (!res.ok) throw new Error('http ' + res.status);
+        return res.json();
+      })
+      .then(function (rows) {
+        var row = rows && rows[0];
+        if (!row || !row.data) throw new Error('revoked');
+        failures = 0;
+        show(row.data, row.rev);
+      });
+  }
+
+  /* Стежимо за змінами дешево: питаємо лише номер версії, а сам урок
+     тягнемо тільки коли він справді оновився. */
+  function watch() {
+    setTimeout(function () {
+      if (document.visibilityState === 'hidden') { watch(); return; }
+      rpc('share_rev', { p_token: token })
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(function (rev) {
+          // доступ відкликали — прибираємо урок з екрана, а не вдаємо, що все гаразд
+          if (rev == null) {
+            frame.style.display = 'none';
+            frame.srcdoc = '';
+            msg.style.display = '';
+            fail('Урок більше не доступний', 'Репетитор закрив доступ за цим посиланням.');
+            throw new Error('stop');
+          }
+          if (rev !== shownRev) return load();
+        })
+        .then(function () { watch(); }, function (e) {
+          // 'stop' — доступ закрито, більше не питаємо; решта — тимчасовий збій мережі
+          if (!e || e.message !== 'stop') watch();
+        });
+    }, WATCH_MS);
+  }
+
+  load()
+    .then(function () { watch(); })
     .catch(function (e) {
       if (e && e.message === 'revoked') {
         fail('Урок більше не доступний', 'Репетитор закрив доступ за цим посиланням.');

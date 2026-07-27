@@ -336,10 +336,8 @@
       var board = cur.board;
       var l = S.get('lessons', cur.lessonId);
       var st = l ? S.get('students', l.studentId) : null;
-      buildViewerHTML(board, l, st).then(function (html) {
-        return Cloud.publishShare(board.share.token, html);
-      }).catch(function (e) {
-        console.warn('Не вдалося оновити сторінку для учня при виході:', e && e.message);
+      publishLesson(board, l, st, board.share.token).catch(function (e) {
+        console.warn('Не вдалося оновити урок для учня при виході:', e && e.message);
       });
     }
 
@@ -398,9 +396,10 @@
      домалював слайд, а в нього досі старе. Покладатися на те, що репетитор
      не забуде натиснути «Оновити», не можна.
 
-     Перевидаємо не частіше ніж раз на хвилину: сторінка збирається разом
-     із картинками, і робити це на кожен штрих було б марною тратою мережі. */
-  var REPUBLISH_MS = 60000;
+     Пауза коротка: оновлюється лише сам урок (кілька кілобайтів), картинки
+     вже лежать на сервері й повторно не їдуть. Тому учень бачить написане
+     майже одразу, як на другому пристрої репетитора. */
+  var REPUBLISH_MS = 2500;
 
   function scheduleRepublish() {
     if (!cur || !cur.board.share) return;
@@ -414,12 +413,10 @@
       var lessonId = cur.lessonId;
       var l = S.get('lessons', lessonId);
       var st = l ? S.get('students', l.studentId) : null;
-      buildViewerHTML(cur.board, l, st).then(function (html) {
-        return Cloud.publishShare(cur.board.share.token, html);
-      }).then(function () {
+      publishLesson(cur.board, l, st, cur.board.share.token).then(function () {
         if (cur && cur.lessonId === lessonId) cur.republishedAt = Date.now();
       }).catch(function (e) {
-        console.warn('Не вдалося оновити сторінку для учня:', e && e.message);
+        console.warn('Не вдалося оновити урок для учня:', e && e.message);
       });
     }, wait);
   }
@@ -1637,24 +1634,22 @@
 
   /** Опублікувати урок і покласти посилання в буфер обміну. */
   function publishShare(l, st, token, isUpdate) {
-    U.toast(isUpdate ? 'Оновлюю сторінку уроку…' : 'Готую сторінку для учня…');
-    return buildViewerHTML(cur.board, l, st).then(function (html) {
-      return window.Cloud.publishShare(token, html).then(function (url) {
-        cur.board.share = { token: token, at: new Date().toISOString() };
-        markDirty(); flushSave();
-        var kb = Math.max(1, Math.round(new Blob([html]).size / 1024));
-        // копіюємо одразу: людина щойно натиснула кнопку, отже дозвіл є
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(url).then(function () {
-            U.toast('Посилання скопійовано · ' + kb + ' КБ', 'ok');
-          }).catch(function () {
-            U.toast('Готово · ' + kb + ' КБ. Скопіюйте посилання з вікна', 'ok');
-          });
-        } else {
-          U.toast('Готово · ' + kb + ' КБ', 'ok');
-        }
-        return url;
-      });
+    U.toast(isUpdate ? 'Оновлюю урок…' : 'Готую урок для учня…');
+    return publishLesson(cur.board, l, st, token).then(function (url) {
+      cur.board.share = { token: token, at: new Date().toISOString() };
+      cur.republishedAt = Date.now();
+      markDirty(); flushSave();
+      // копіюємо одразу: людина щойно натиснула кнопку, отже дозвіл є
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(function () {
+          U.toast('Посилання скопійовано', 'ok');
+        }).catch(function () {
+          U.toast('Готово. Скопіюйте посилання з вікна', 'ok');
+        });
+      } else {
+        U.toast('Готово', 'ok');
+      }
+      return url;
     }).catch(function (e) {
       U.toast('Не вдалося опублікувати: ' + (e && e.message ? e.message : e), 'err');
     });
@@ -1826,8 +1821,8 @@
     };
   }
 
-  function buildViewerHTML(board, lesson, student) {
-    // домашні завдання цього уроку теж їдуть у файл — разом із фото
+  /** Сам урок без картинок: слайди, теорія, домашні завдання. */
+  function buildPayload(board, lesson, student) {
     var hw = lesson ? S.db().homeworks.filter(function (h) { return h.lessonId === lesson.id; }) : [];
 
     var payload = {
@@ -1837,6 +1832,7 @@
       notes: lesson ? (lesson.notes || '') : '',
       homework: hw.map(function (h) {
         return {
+          id: h.id,
           title: h.title || '', desc: h.description || '',
           due: h.dueDate ? U.fmtDate(h.dueDate) : '',
           score: h.score != null ? h.score : null,
@@ -1858,13 +1854,46 @@
       h.photos.forEach(function (k) { if (keys.indexOf(k) < 0) keys.push(k); });
     });
 
-    return Promise.all(keys.map(function (k) {
+    return { payload: payload, keys: keys };
+  }
+
+  /** Файл для надсилання: картинки вшиваються всередину, щоб працювало без мережі. */
+  function buildViewerHTML(board, lesson, student) {
+    var built = buildPayload(board, lesson, student);
+    return Promise.all(built.keys.map(function (k) {
       return window.ImgStore.get(k).then(function (blob) {
         if (!blob) return null;
-        return window.ImgStore.toDataURL(blob).then(function (url) { payload.images[k] = url; });
+        return window.ImgStore.toDataURL(blob).then(function (url) { built.payload.images[k] = url; });
       }).catch(function () { return null; });
     })).then(function () {
-      return renderViewerHTML(payload);
+      return renderViewerHTML(built.payload);
+    });
+  }
+
+  /**
+   * Урок для посилання.
+   *
+   * Сторінка та сама, що й у файлі, але картинки в неї не вшиваються:
+   * вони вивантажуються окремо й один раз, а в сторінці лишаються самі адреси.
+   * Через це сторінка важить кілька кілобайтів замість сотень — і саме тому
+   * її можна оновлювати кожні пару секунд, щоб учень бачив урок наживо.
+   */
+  function publishLesson(board, lesson, student, token) {
+    var built = buildPayload(board, lesson, student);
+    return Promise.all(built.keys.map(function (k) {
+      return window.ImgStore.get(k).then(function (blob) {
+        if (!blob) return null;
+        return window.Cloud.publishShareImage(token, k, blob).then(function (url) {
+          built.payload.images[k] = url;
+        });
+      }).catch(function () { return null; });   // одна невдала картинка не має валити публікацію
+    })).then(function () {
+      return window.Cloud.publishShareData(
+        token,
+        lesson ? lesson.id : '',
+        (lesson && lesson.topic) || 'Урок',
+        renderViewerHTML(built.payload)
+      );
     });
   }
 

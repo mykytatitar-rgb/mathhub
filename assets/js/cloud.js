@@ -301,26 +301,96 @@
            'share#' + uid + '/' + token;
   };
 
-  Cloud.publishShare = function (token, html) {
+  /* Картинки вивантажуємо ОДИН раз на посилання, а сам урок оновлюємо
+     маленьким JSON. Якби картинки їхали разом з уроком щоразу, часте
+     оновлення коштувало б сотні кілобайтів на кожен штрих. */
+  var IMGMAP = 'mathhub.sharedimgs';
+
+  function sentImages() {
+    try { return JSON.parse(localStorage.getItem(IMGMAP) || '{}'); } catch (e) { return {}; }
+  }
+  function rememberImage(token, key) {
+    var m = sentImages();
+    if (!m[token]) m[token] = {};
+    m[token][key] = true;
+    try { localStorage.setItem(IMGMAP, JSON.stringify(m)); } catch (e) {}
+  }
+
+  Cloud.shareImageUrl = function (token, key) {
+    return Cloud.base() + '/storage/v1/object/public/shares/' +
+           encodeURIComponent(Cloud.userId()) + '/' + encodeURIComponent(token) +
+           '/img/' + encodeURIComponent(key);
+  };
+
+  /** Вивантажити картинку уроку, якщо її там ще немає. Повертає адресу. */
+  Cloud.publishShareImage = function (token, key, blob) {
+    var url = Cloud.shareImageUrl(token, key);
+    var m = sentImages();
+    if (m[token] && m[token][key]) return Promise.resolve(url);
+    return api('/storage/v1/object/shares/' + encodeURIComponent(Cloud.userId()) + '/' +
+               encodeURIComponent(token) + '/img/' + encodeURIComponent(key), {
+      method: 'POST',
+      headers: { 'Content-Type': blob.type || 'application/octet-stream', 'x-upsert': 'true' },
+      body: blob
+    }).then(function (res) {
+      if (!res.ok && res.status !== 409) throw new Error('Картинка не завантажилась (' + res.status + ')');
+      rememberImage(token, key);
+      return url;
+    });
+  };
+
+  /** Оновити сам урок. Це маленький запит, тому його можна робити часто. */
+  Cloud.publishShareData = function (token, lessonId, title, dataJson, canWrite) {
     if (!Cloud.available() || !Cloud.signedIn()) {
       return Promise.reject(new Error('Спершу увімкніть синхронізацію в Налаштуваннях'));
     }
-    var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    return api(sharePath(token), {
+    var row = {
+      token: token,
+      owner: Cloud.userId(),
+      lesson_id: lessonId,
+      title: title || '',
+      data: dataJson,
+      revoked: false
+    };
+    if (canWrite != null) row.can_write = !!canWrite;
+
+    return api('/rest/v1/shares?on_conflict=token', {
       method: 'POST',
-      headers: { 'Content-Type': 'text/html;charset=utf-8', 'x-upsert': 'true' },
-      body: blob
+      headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(row)
     }).then(function (res) {
-      if (!res.ok && res.status !== 409) throw new Error('Сервер відповів ' + res.status);
+      if (!res.ok) throw new Error('Сервер відповів ' + res.status);
       return Cloud.shareUrl(token);
     });
   };
 
   Cloud.revokeShare = function (token) {
     if (!Cloud.available() || !Cloud.signedIn()) return Promise.resolve();
-    return api(sharePath(token), { method: 'DELETE' }).then(function (res) {
-      // 404 означає, що його вже немає — для нас це теж успіх
-      if (!res.ok && res.status !== 404) throw new Error('Сервер відповів ' + res.status);
+    // рядок зникає разом із внесками учня; картинки прибираємо окремо
+    return api('/rest/v1/shares?token=eq.' + encodeURIComponent(token), { method: 'DELETE' })
+      .then(function (res) {
+        if (!res.ok && res.status !== 404) throw new Error('Сервер відповів ' + res.status);
+        var m = sentImages();
+        delete m[token];
+        try { localStorage.setItem(IMGMAP, JSON.stringify(m)); } catch (e) {}
+      });
+  };
+
+  /** Записи, які учень зробив на дошці або надіслав як домашнє. */
+  Cloud.shareContributions = function (token) {
+    if (!Cloud.signedIn()) return Promise.resolve([]);
+    return api('/rest/v1/share_contributions?token=eq.' + encodeURIComponent(token) +
+               '&merged=eq.false&select=id,kind,payload,created_at&order=id')
+      .then(function (res) { return res.ok ? res.json() : []; })
+      .catch(function () { return []; });
+  };
+
+  Cloud.markContributionsMerged = function (ids) {
+    if (!ids || !ids.length || !Cloud.signedIn()) return Promise.resolve();
+    return api('/rest/v1/share_contributions?id=in.(' + ids.join(',') + ')', {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ merged: true })
     });
   };
 

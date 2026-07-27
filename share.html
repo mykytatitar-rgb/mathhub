@@ -174,12 +174,99 @@
     });
   }
 
+  /* ---------- Фото розв'язань ----------
+
+     Телефонне фото — це 3–5 МБ, і надсилати його як є нерозумно: учень чекав би
+     хвилину на кожне. Тому зменшуємо до 1800 пікселів по довшій стороні
+     й перекодовуємо — з кількох мегабайтів виходять десятки кілобайтів,
+     а розв'язання лишається читабельним. Так само робить і сама програма. */
+  var MAX_SIDE = 1800;
+
+  function shrink(file) {
+    return new Promise(function (resolve, reject) {
+      if (!file || !/^image\//.test(file.type)) { reject(new Error('не картинка')); return; }
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        var w = img.naturalWidth, h = img.naturalHeight;
+        if (!w || !h) { URL.revokeObjectURL(url); reject(new Error('порожнє')); return; }
+        var k = Math.min(1, MAX_SIDE / Math.max(w, h));
+        var cv = document.createElement('canvas');
+        cv.width = Math.max(1, Math.round(w * k));
+        cv.height = Math.max(1, Math.round(h * k));
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        URL.revokeObjectURL(url);
+        var type = 'image/webp';
+        cv.toBlob(function (blob) {
+          if (!blob) { reject(new Error('не стиснулось')); return; }
+          // якщо стиснення не допомогло — краще надіслати оригінал
+          resolve(blob.size < file.size ? blob : file);
+        }, type, 0.85);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('не прочиталось')); };
+      img.src = url;
+    });
+  }
+
+  function newKey() {
+    return 'img_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  function uploadPhoto(blob) {
+    var key = newKey();
+    var path = '/storage/v1/object/uploads/' + encodeURIComponent(token) + '/' + key;
+    return fetch(API + path, {
+      method: 'POST',
+      headers: { apikey: KEY, 'Content-Type': blob.type || 'application/octet-stream' },
+      body: blob
+    }).then(function (res) {
+      if (!res.ok) throw new Error('http ' + res.status);
+      return { key: key, url: API + '/storage/v1/object/public/uploads/' + encodeURIComponent(token) + '/' + key };
+    });
+  }
+
+  function sendHomework(hwId, files) {
+    var done = [];
+    var chain = Promise.resolve();
+    files.slice(0, 10).forEach(function (f) {          // більше десяти за раз не приймаємо
+      chain = chain.then(function () {
+        return shrink(f).then(uploadPhoto).then(function (r) { done.push(r); })
+          .catch(function () { /* одне невдале фото не має валити решту */ });
+      });
+    });
+    return chain.then(function () {
+      if (!done.length) throw new Error('нічого не завантажилось');
+      return rpc('share_contribute', {
+        p_token: token,
+        p_kind: 'homework',
+        p_payload: JSON.stringify({ hw: hwId, photos: done })
+      }).then(function (res) {
+        if (!res.ok) throw new Error('http ' + res.status);
+        return done.map(function (d) { return d.url; });
+      });
+    });
+  }
+
   window.addEventListener('message', function (e) {
     var d = e.data;
-    if (!d || (d.mathhub !== 'ink' && d.mathhub !== 'ink-undo')) return;
-    pending.push(d);
-    // трохи чекаємо: за урок штрихів багато, і слати кожен окремо — марно
-    setTimeout(flushInk, 400);
+    if (!d) return;
+
+    if (d.mathhub === 'ink' || d.mathhub === 'ink-undo') {
+      pending.push(d);
+      // трохи чекаємо: за урок штрихів багато, і слати кожен окремо — марно
+      setTimeout(flushInk, 400);
+      return;
+    }
+
+    if (d.mathhub === 'hw') {
+      sendHomework(d.hw, [].slice.call(d.files || []))
+        .then(function (urls) {
+          frame.contentWindow.postMessage({ mathhub: 'hw-done', hw: d.hw, urls: urls }, '*');
+        })
+        .catch(function () {
+          frame.contentWindow.postMessage({ mathhub: 'hw-done', hw: d.hw, error: true }, '*');
+        });
+    }
   });
 
   load()

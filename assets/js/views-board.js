@@ -433,7 +433,9 @@
   var PULL_MS = 3000;
 
   function mergeContributions(rows) {
-    if (!cur || !rows || !rows.length) return false;
+    // повертаємо ту саму форму, що й у звичайному разі: інакше виклик
+    // res.ids нижче падав, і внески ніколи не позначалися опрацьованими
+    if (!cur || !rows || !rows.length) return { changed: false, ids: [] };
     var changed = false;
     var ids = [];
 
@@ -466,17 +468,61 @@
       });
     });
 
-    if (ids.length) window.Cloud.markContributionsMerged(ids);
-    return changed;
+    return { changed: changed, ids: ids };
+  }
+
+  /**
+   * Фото розв'язань від учня. Забираємо файл до себе й кладемо в те саме
+   * сховище картинок, що й решту — тоді вони поводяться як звичайні фото
+   * завдання: видно в програмі, їдуть у резервну копію й синхронізуються.
+   */
+  function mergeHomework(rows) {
+    var jobs = [];
+    var touched = 0;
+
+    rows.forEach(function (row) {
+      var m;
+      try { m = JSON.parse(row.payload); } catch (e) { return; }
+      if (!m || !m.hw || !m.photos) return;
+
+      var hw = S.get('homeworks', m.hw);
+      if (!hw) return;
+      if (!hw.photos) hw.photos = [];
+
+      m.photos.forEach(function (p) {
+        if (!p || !p.key || !p.url) return;
+        if (hw.photos.indexOf(p.key) > -1) return;      // уже забрали
+        jobs.push(
+          fetch(p.url).then(function (res) {
+            if (!res.ok) throw new Error('http ' + res.status);
+            return res.blob();
+          }).then(function (blob) {
+            return window.ImgStore.put(p.key, blob);
+          }).then(function () {
+            if (hw.photos.indexOf(p.key) < 0) { hw.photos.push(p.key); touched++; }
+          }).catch(function (e) {
+            console.warn('Фото від учня не забралося:', e && e.message);
+          })
+        );
+      });
+    });
+
+    return Promise.all(jobs).then(function () { return touched; });
   }
 
   function pullContributions() {
     if (!cur || !cur.board.share) return;
     if (!(window.Cloud && Cloud.available() && Cloud.signedIn())) return;
     var lessonId = cur.lessonId;
+
     window.Cloud.shareContributions(cur.board.share.token).then(function (rows) {
-      if (!cur || cur.lessonId !== lessonId) return;
-      if (mergeContributions(rows)) {
+      if (!cur || cur.lessonId !== lessonId || !rows || !rows.length) return;
+
+      var ink = rows.filter(function (r) { return r.kind === 'ink'; });
+      var hw  = rows.filter(function (r) { return r.kind === 'homework'; });
+
+      var res = mergeContributions(ink);
+      if (res.changed) {
         markDirty();
         flushSave();
         cur.engine.setSlide(cur.board.slides[cur.index], true);
@@ -484,6 +530,19 @@
         refreshEmpty();
         U.toast('Учень щось написав на дошці', 'ok');
       }
+
+      return mergeHomework(hw).then(function (n) {
+        if (n) {
+          S.save();
+          U.toast('Учень надіслав ' + U.pl(n, 'фото', 'фото', 'фото') + ' розв\'язання', 'ok');
+        }
+        var ids = res.ids.concat(hw.map(function (r) { return r.id; }));
+        if (ids.length) window.Cloud.markContributionsMerged(ids);
+      });
+    }).catch(function (e) {
+      // без цього будь-яка помилка тут гинула тихо — саме так і сховалася
+      // помилка з невідміченими внесками
+      console.warn('Не вдалося забрати те, що надіслав учень:', e && e.message);
     });
   }
 
@@ -2005,6 +2064,12 @@
 '.hw .shots a{display:block;width:96px;height:96px;border:1.5px solid #E8EEF8;border-radius:10px;overflow:hidden}\n' +
 '.hw .shots img{width:100%;height:100%;object-fit:cover;display:block}\n' +
 '.btn.on{background:#1358F5;border-color:#1358F5;color:#fff}\n' +
+'.addshot{display:inline-block;margin-top:9px;cursor:pointer}\n' +
+'.addshot input{display:none}\n' +
+'.addshot span{display:inline-block;border:1.5px dashed #8FB4FF;border-radius:999px;padding:8px 15px;font-size:12.5px;font-weight:650;color:#0B4ED6;background:#F7FAFF}\n' +
+'.addshot span:hover{background:#F0F5FF}\n' +
+'.addshot.busy span{opacity:.55;border-style:solid}\n' +
+'.shots a.mine{border-color:#8FB4FF}\n' +
 'canvas.pen{cursor:crosshair}\n' +
 '.saved{position:absolute;right:16px;bottom:16px;background:rgba(255,255,255,.95);border:1px solid #E8EEF8;border-radius:999px;padding:6px 14px;font-size:12.5px;font-weight:650;color:#7E90AE;opacity:0;transition:opacity .2s}\n' +
 '.saved.show{opacity:1}\n' +
@@ -2041,11 +2106,17 @@
         (h.score != null ? ' · оцінка ' + h.score + '/12' : '') + '</div>' +
         (h.desc ? '<div class="desc">' + U.esc(h.desc) + '</div>' : '') +
         (h.feedback ? '<div class="meta" style="margin-top:6px">Відгук: ' + U.esc(h.feedback) + '</div>' : '') +
-        (h.photos.length
-          ? '<div class="shots">' + h.photos.map(function (k) {
-              return '<a href="#" data-shot="' + U.esc(k) + '" target="_blank" rel="noopener">' +
-                '<img alt="Фото завдання"></a>';
-            }).join('') + '</div>'
+        '<div class="shots" data-shots="' + U.esc(h.id || '') + '">' +
+          h.photos.map(function (k) {
+            return '<a href="#" data-shot="' + U.esc(k) + '" target="_blank" rel="noopener">' +
+              '<img alt="Фото завдання"></a>';
+          }).join('') +
+        '</div>' +
+        (payload.canWrite
+          ? '<label class="addshot">' +
+              '<input type="file" accept="image/*" multiple data-hw="' + U.esc(h.id || '') + '">' +
+              '<span>+ Додати фото розв\'язання</span>' +
+            '</label>'
           : '') +
         '</div>\n';
     }).join('') + '  </div>\n'
@@ -2181,6 +2252,23 @@ VIEWER_SCRIPT +
 '[].forEach.call(document.querySelectorAll("[data-shot]"),function(a){',
 'var u=DATA.images[a.getAttribute("data-shot")];',
 'if(u){a.querySelector("img").src=u;a.href=u;}});',
+// фото рішень: самі файли віддаємо назовні, бо ця сторінка не знає ні адреси
+// бази, ні ключа — вивантаженням займається сторінка, що нас показує
+'[].forEach.call(document.querySelectorAll("input[data-hw]"),function(inp){',
+'inp.onchange=function(){var fs=[].slice.call(inp.files||[]);if(!fs.length)return;',
+'var lab=inp.parentNode;lab.className="addshot busy";',
+'lab.querySelector("span").textContent="Надсилаю "+fs.length+"…";',
+'say({mathhub:"hw",hw:inp.getAttribute("data-hw"),files:fs});inp.value="";};});',
+// сторінка-обгортка звітує, чим усе скінчилося
+'window.addEventListener("message",function(e){var d=e.data;if(!d||d.mathhub!=="hw-done")return;',
+'var inp=document.querySelector(\'input[data-hw="\'+d.hw+\'"]\');if(!inp)return;',
+'var lab=inp.parentNode;lab.className="addshot";',
+'lab.querySelector("span").textContent=d.error?"Не вдалося — спробуйте ще":"+ Додати фото розв\'язання";',
+'if(d.error)return;',
+'var box=document.querySelector(\'[data-shots="\'+d.hw+\'"]\');',
+'(d.urls||[]).forEach(function(u){var a=document.createElement("a");a.className="mine";a.href=u;',
+'a.target="_blank";a.rel="noopener";a.innerHTML=\'<img alt="Фото розв\\\'язання">\';',
+'a.querySelector("img").src=u;if(box)box.appendChild(a);});});',
 'resize();go(0);',
 '})();'
   ].join('\n');

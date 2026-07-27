@@ -294,8 +294,11 @@
   Cloud.shareUrl = function (token) {
     var uid = Cloud.userId();
     if (!uid) return '';
+    /* Адреса без .html навмисно: Cloudflare Pages сам перенаправляє
+       /share.html на /share, і зайвий перескок збивав би правило доступу,
+       яке дозволяє учневі відкрити саме цю сторінку. */
     return location.origin + location.pathname.replace(/[^/]*$/, '') +
-           'share.html#' + uid + '/' + token;
+           'share#' + uid + '/' + token;
   };
 
   Cloud.publishShare = function (token, html) {

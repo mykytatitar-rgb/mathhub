@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Урок — mathhub</title>
-<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#1358F5">
 <meta name="robots" content="noindex,nofollow">
 <style>
@@ -35,7 +34,6 @@
   </div>
 </div>
 
-<script src="assets/js/cloudconfig.js"></script>
 <script>
 /* Навіщо ця сторінка взагалі потрібна.
 
@@ -50,6 +48,13 @@
 (function () {
   'use strict';
 
+  /* Адреса сховища вписана прямо тут, а не взята з assets/js/cloudconfig.js.
+     Причина: уся тека assets закрита доступом Cloudflare — там код програми,
+     і відкривати її стороннім не можна. Виняток зроблено лише для цієї
+     сторінки, тому підвантажити звідти щось вона не може за задумом.
+     Це не секрет: адреса проєкту й так видима в кожному запиті. */
+  var STORAGE = 'https://kcxqienzhopnsqmykhqv.supabase.co';
+
   var msg  = document.getElementById('msg');
   var spin = document.getElementById('spin');
   var h    = document.getElementById('h');
@@ -63,18 +68,13 @@
 
   // Код уроку — у частині адреси після #, щоб він не потрапляв у журнали сервера.
   var path = decodeURIComponent((location.hash || '').replace(/^#/, '')).trim();
-  var cfg = window.CLOUD_CONFIG || {};
 
   if (!path || !/^[0-9a-f-]+\/[0-9a-f]+$/i.test(path)) {
     fail('Посилання неповне', 'Схоже, адресу скопійовано не до кінця. Попросіть надіслати її ще раз.');
     return;
   }
-  if (!cfg.url) {
-    fail('Сторінку не налаштовано', 'Зверніться до репетитора.');
-    return;
-  }
 
-  var src = cfg.url.replace(/\/+$/, '') +
+  var src = STORAGE.replace(/\/+$/, '') +
             '/storage/v1/object/public/shares/' + path + '/index.html';
 
   fetch(src)

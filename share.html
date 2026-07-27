@@ -110,6 +110,9 @@
   function load() {
     return rpc('share_read', { p_token: token })
       .then(function (res) {
+        // 404 — функції ще немає в базі: репетитор не доналаштував.
+        // Казати учневі «перевірте інтернет» у цьому разі — збивати з пантелику.
+        if (res.status === 404) throw new Error('setup');
         if (!res.ok) throw new Error('http ' + res.status);
         return res.json();
       })
@@ -146,11 +149,46 @@
     }, WATCH_MS);
   }
 
+  /* Написане учнем приходить із самої сторінки уроку (вона в рамці),
+     а відправляємо його звідси — рамка не знає ні адреси бази, ні ключа.
+
+     Внески лежать в окремій таблиці й не заважають репетиторові зберігати
+     свою базу: інакше його наступне збереження просто затерло б їх. */
+  var pending = [];
+  var sending = false;
+
+  function flushInk() {
+    if (sending || !pending.length) return;
+    sending = true;
+    var batch = pending.splice(0, pending.length);
+    rpc('share_contribute', {
+      p_token: token,
+      p_kind: 'ink',
+      p_payload: JSON.stringify(batch)
+    }).catch(function () {
+      // не дійшло — повертаємо в чергу, спробуємо разом із наступним штрихом
+      pending = batch.concat(pending);
+    }).then(function () {
+      sending = false;
+      if (pending.length) setTimeout(flushInk, 600);
+    });
+  }
+
+  window.addEventListener('message', function (e) {
+    var d = e.data;
+    if (!d || (d.mathhub !== 'ink' && d.mathhub !== 'ink-undo')) return;
+    pending.push(d);
+    // трохи чекаємо: за урок штрихів багато, і слати кожен окремо — марно
+    setTimeout(flushInk, 400);
+  });
+
   load()
     .then(function () { watch(); })
     .catch(function (e) {
       if (e && e.message === 'revoked') {
         fail('Урок більше не доступний', 'Репетитор закрив доступ за цим посиланням.');
+      } else if (e && e.message === 'setup') {
+        fail('Урок ще не готовий', 'Зверніться до репетитора — він має завершити налаштування.');
       } else {
         fail('Не вдалося відкрити урок', 'Перевірте інтернет і спробуйте ще раз.');
       }

@@ -161,6 +161,9 @@
 
     engine.setSlide(board.slides[0]);
     engine.applyCursor();
+
+    // поки дошка відкрита — забираємо те, що пише учень за посиланням
+    cur.pullTimer = setInterval(pullContributions, PULL_MS);
     applyRail();
     renderRail();
     renderOpts();
@@ -327,6 +330,7 @@
     }
     if (cur.saveTimer) clearTimeout(cur.saveTimer);
     if (cur.thumbTimer) clearTimeout(cur.thumbTimer);
+    if (cur.pullTimer) clearInterval(cur.pullTimer);
 
     /* Виходимо з дошки — урок скінчився. Якщо на нього видано посилання,
        оновлюємо його негайно, не чекаючи хвилинної паузи: саме тепер
@@ -419,6 +423,68 @@
         console.warn('Не вдалося оновити урок для учня:', e && e.message);
       });
     }, wait);
+  }
+
+  /* Забираємо написане учнем і вливаємо в дошку.
+
+     Внески лежать в окремій таблиці саме тому, що база репетитора їде на
+     сервер одним документом цілком: якби записи учня були в тому ж документі,
+     наступне збереження репетитора просто затерло б їх. */
+  var PULL_MS = 3000;
+
+  function mergeContributions(rows) {
+    if (!cur || !rows || !rows.length) return false;
+    var changed = false;
+    var ids = [];
+
+    rows.forEach(function (row) {
+      ids.push(row.id);
+      var msgs;
+      try { msgs = JSON.parse(row.payload); } catch (e) { return; }
+      if (!Array.isArray(msgs)) msgs = [msgs];
+
+      msgs.forEach(function (m) {
+        if (m.mathhub === 'ink' && m.item) {
+          var s = cur.board.slides[m.slide];
+          if (!s) return;
+          if (!s.items) s.items = [];
+          // позначаємо чиє це — щоб на дошці було видно, що писав учень
+          var it = m.item;
+          it.by = 'student';
+          if (!s.items.some(function (x) { return x.id === it.id; })) {
+            s.items.push(it);
+            changed = true;
+          }
+        } else if (m.mathhub === 'ink-undo' && m.id) {
+          cur.board.slides.forEach(function (s) {
+            if (!s.items) return;
+            var before = s.items.length;
+            s.items = s.items.filter(function (x) { return x.id !== m.id; });
+            if (s.items.length !== before) changed = true;
+          });
+        }
+      });
+    });
+
+    if (ids.length) window.Cloud.markContributionsMerged(ids);
+    return changed;
+  }
+
+  function pullContributions() {
+    if (!cur || !cur.board.share) return;
+    if (!(window.Cloud && Cloud.available() && Cloud.signedIn())) return;
+    var lessonId = cur.lessonId;
+    window.Cloud.shareContributions(cur.board.share.token).then(function (rows) {
+      if (!cur || cur.lessonId !== lessonId) return;
+      if (mergeContributions(rows)) {
+        markDirty();
+        flushSave();
+        cur.engine.setSlide(cur.board.slides[cur.index], true);
+        renderRail();
+        refreshEmpty();
+        U.toast('Учень щось написав на дошці', 'ok');
+      }
+    });
   }
 
   function flushSave() {
@@ -1880,6 +1946,8 @@
    */
   function publishLesson(board, lesson, student, token) {
     var built = buildPayload(board, lesson, student);
+    // учневі дозволено писати, якщо репетитор не вимкнув це для цього уроку
+    built.payload.canWrite = !(board.share && board.share.readOnly);
     return Promise.all(built.keys.map(function (k) {
       return window.ImgStore.get(k).then(function (blob) {
         if (!blob) return null;
@@ -1936,6 +2004,10 @@
 '.hw .shots{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}\n' +
 '.hw .shots a{display:block;width:96px;height:96px;border:1.5px solid #E8EEF8;border-radius:10px;overflow:hidden}\n' +
 '.hw .shots img{width:100%;height:100%;object-fit:cover;display:block}\n' +
+'.btn.on{background:#1358F5;border-color:#1358F5;color:#fff}\n' +
+'canvas.pen{cursor:crosshair}\n' +
+'.saved{position:absolute;right:16px;bottom:16px;background:rgba(255,255,255,.95);border:1px solid #E8EEF8;border-radius:999px;padding:6px 14px;font-size:12.5px;font-weight:650;color:#7E90AE;opacity:0;transition:opacity .2s}\n' +
+'.saved.show{opacity:1}\n' +
 '@media(max-width:640px){.top{padding:10px 12px}.sp{width:100%;justify-content:space-between}}\n' +
 '</style></head><body>\n' +
 '<div class="wrap">\n' +
@@ -1943,6 +2015,10 @@
 '    <div><div class="ttl">' + U.esc(payload.title) + '</div>\n' +
 '    <div class="sub">' + U.esc([payload.student, payload.date].filter(Boolean).join(' · ')) + '</div></div>\n' +
 '    <div class="sp">\n' +
+(payload.canWrite
+  ? '      <button class="btn pen" id="pen" title="Писати на дошці">✎ Писати</button>\n' +
+    '      <button class="btn" id="undo" title="Прибрати останнє" disabled>↶</button>\n'
+  : '') +
 '      <button class="btn" id="prev">← Назад</button>\n' +
 '      <span class="pos" id="pos"></span>\n' +
 '      <button class="btn" id="next">Далі →</button>\n' +
@@ -1951,6 +2027,7 @@
 '  <div class="body">\n' +
 '    <canvas id="c"></canvas>\n' +
 '    <div class="name" id="nm"></div>\n' +
+'    <div class="saved" id="sv">Надіслано репетитору</div>\n' +
 '    <div class="zoom"><button id="zo">−</button><span class="zv" id="zv">100%</span>' +
 '<button id="zi">+</button><button id="zf" title="Вмістити" style="font-size:13px">⤢</button></div>\n' +
 '  </div>\n' +
@@ -1985,6 +2062,14 @@ VIEWER_SCRIPT +
 'var cv=document.getElementById("c"),ctx=cv.getContext("2d");',
 'var idx=0,scale=1,cam={x:0,y:0},W=0,H=0,dpr=1;',
 'var IMGS={};',
+// MY — написане учнем, ще не влите репетитором; cur — штрих, який малюється зараз
+'var MY={},penOn=false,cur=null,mine=[];',
+'var PENC="#E11D48",PENW=3;',
+'function seq(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}',
+'function toWorld(sx,sy){return[sx/scale+cam.x,sy/scale+cam.y];}',
+'function say(o){try{parent.postMessage(o,"*")}catch(e){}}',
+'function flash(){var s=document.getElementById("sv");if(!s)return;s.className="saved show";',
+'setTimeout(function(){s.className="saved"},1400);}',
 'Object.keys(DATA.images||{}).forEach(function(k){var im=new Image();im.onload=function(){draw();};im.src=DATA.images[k];IMGS[k]=im;});',
 'function bounds(it){var xs=[],ys=[],i;',
 'if(it.t==="p"){for(i=0;i<it.d.length;i+=2){xs.push(it.d[i]);ys.push(it.d[i+1]);}}',
@@ -2023,7 +2108,11 @@ VIEWER_SCRIPT +
 'for(y=oy;y<H;y+=st){ctx.moveTo(0,Math.round(y)+.5);ctx.lineTo(W,Math.round(y)+.5);}ctx.stroke();}',
 'function draw(){var s=DATA.slides[idx];ctx.setTransform(dpr,0,0,dpr,0,0);bg(s.bg);',
 'ctx.save();ctx.scale(scale,scale);ctx.translate(-cam.x,-cam.y);',
-'(s.items||[]).forEach(function(it){drawItem(ctx,it)});ctx.restore();',
+'(s.items||[]).forEach(function(it){drawItem(ctx,it)});',
+// написане учнем малюємо поверх — воно ще не встигло дійти до репетитора
+'(MY[idx]||[]).forEach(function(it){drawItem(ctx,it)});',
+'if(cur&&cur.d.length>=4)drawItem(ctx,cur);',
+'ctx.restore();',
 'document.getElementById("zv").textContent=Math.round(scale*100)+"%";}',
 'function resize(){var r=cv.getBoundingClientRect();dpr=window.devicePixelRatio||1;W=r.width;H=r.height;',
 'cv.width=Math.max(1,Math.round(W*dpr));cv.height=Math.max(1,Math.round(H*dpr));draw();}',
@@ -2052,17 +2141,36 @@ VIEWER_SCRIPT +
 'zoomAt(Math.pow(0.999,e.deltaY*(e.ctrlKey?2.4:1)),e.clientX-r.left,e.clientY-r.top);},{passive:false});',
 'var pan=null,pts={},pinch=null;',
 'cv.addEventListener("pointerdown",function(e){try{cv.setPointerCapture(e.pointerId)}catch(x){}var r=cv.getBoundingClientRect();',
+// олівець увімкнено — починаємо штрих замість руху по полотну
+'if(penOn){e.preventDefault();var w0=toWorld(e.clientX-r.left,e.clientY-r.top);',
+'cur={t:"p",c:PENC,w:PENW,d:[w0[0],w0[1]],id:seq()};return;}',
 'pts[e.pointerId]={x:e.clientX-r.left,y:e.clientY-r.top};',
 'if(Object.keys(pts).length===2){var k=Object.keys(pts),a=pts[k[0]],b2=pts[k[1]];',
 'pan=null;pinch={d:Math.hypot(a.x-b2.x,a.y-b2.y)};return;}',
 'pan={sx:e.clientX-r.left,sy:e.clientY-r.top,cx:cam.x,cy:cam.y};cv.className="drag";});',
 'cv.addEventListener("pointermove",function(e){var r=cv.getBoundingClientRect();var p={x:e.clientX-r.left,y:e.clientY-r.top};',
+'if(cur){var wp=toWorld(p.x,p.y);var n=cur.d.length;',
+// не пишемо точку, поки палець не зрушив помітно — інакше лінія «мохната»
+'if(n<2||Math.hypot(wp[0]-cur.d[n-2],wp[1]-cur.d[n-1])>1.2/scale){cur.d.push(wp[0],wp[1]);draw();}return;}',
 'if(pts[e.pointerId])pts[e.pointerId]=p;var k=Object.keys(pts);',
 'if(k.length===2&&pinch){var a=pts[k[0]],b2=pts[k[1]],d=Math.hypot(a.x-b2.x,a.y-b2.y);',
 'if(pinch.d>0)zoomAt(d/pinch.d,(a.x+b2.x)/2,(a.y+b2.y)/2);pinch.d=d;return;}',
 'if(!pan)return;cam.x=pan.cx-(p.x-pan.sx)/scale;cam.y=pan.cy-(p.y-pan.sy)/scale;draw();});',
-'function up(e){delete pts[e.pointerId];if(Object.keys(pts).length<2)pinch=null;pan=null;cv.className="";}',
+'function up(e){',
+'if(cur){var it=cur;cur=null;',
+'if(it.d.length>=4){if(!MY[idx])MY[idx]=[];MY[idx].push(it);mine.push({s:idx,id:it.id});',
+'say({mathhub:"ink",slide:idx,item:it});flash();',
+'document.getElementById("undo").disabled=false;}',
+'draw();return;}',
+'delete pts[e.pointerId];if(Object.keys(pts).length<2)pinch=null;pan=null;cv.className=penOn?"pen":"";}',
 'cv.addEventListener("pointerup",up);cv.addEventListener("pointercancel",up);',
+// кнопки олівця
+'var penB=document.getElementById("pen"),undoB=document.getElementById("undo");',
+'if(penB){penB.onclick=function(){penOn=!penOn;penB.className="btn pen"+(penOn?" on":"");',
+'cv.className=penOn?"pen":"";};}',
+'if(undoB){undoB.onclick=function(){if(!mine.length)return;var last=mine.pop();',
+'MY[last.s]=(MY[last.s]||[]).filter(function(x){return x.id!==last.id});',
+'say({mathhub:"ink-undo",id:last.id});undoB.disabled=!mine.length;draw();};}',
 'window.addEventListener("keydown",function(e){',
 'if(e.key==="ArrowRight"||e.key==="PageDown"||e.key===" "){e.preventDefault();go(idx+1);}',
 'else if(e.key==="ArrowLeft"||e.key==="PageUp"){e.preventDefault();go(idx-1);}',

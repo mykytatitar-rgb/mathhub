@@ -327,6 +327,22 @@
     }
     if (cur.saveTimer) clearTimeout(cur.saveTimer);
     if (cur.thumbTimer) clearTimeout(cur.thumbTimer);
+
+    /* Виходимо з дошки — урок скінчився. Якщо на нього видано посилання,
+       оновлюємо його негайно, не чекаючи хвилинної паузи: саме тепер
+       учень і піде дивитися. */
+    if (cur.republishTimer) { clearTimeout(cur.republishTimer); cur.republishTimer = null; }
+    if (cur.board.share && window.Cloud && Cloud.available() && Cloud.signedIn()) {
+      var board = cur.board;
+      var l = S.get('lessons', cur.lessonId);
+      var st = l ? S.get('students', l.studentId) : null;
+      buildViewerHTML(board, l, st).then(function (html) {
+        return Cloud.publishShare(board.share.token, html);
+      }).catch(function (e) {
+        console.warn('Не вдалося оновити сторінку для учня при виході:', e && e.message);
+      });
+    }
+
     cur.engine.destroy();
     cur = null;
   };
@@ -377,12 +393,44 @@
     cur.saveTimer = setTimeout(flushSave, 700);
   }
 
+  /* Якщо на урок уже видано посилання, воно має показувати те, що є зараз.
+     Інакше учень бачить знімок того моменту, коли посилання створили —
+     домалював слайд, а в нього досі старе. Покладатися на те, що репетитор
+     не забуде натиснути «Оновити», не можна.
+
+     Перевидаємо не частіше ніж раз на хвилину: сторінка збирається разом
+     із картинками, і робити це на кожен штрих було б марною тратою мережі. */
+  var REPUBLISH_MS = 60000;
+
+  function scheduleRepublish() {
+    if (!cur || !cur.board.share) return;
+    if (!(window.Cloud && Cloud.available() && Cloud.signedIn())) return;
+    if (cur.republishTimer) return;                 // одне заплановане перевидання за раз
+
+    var wait = Math.max(0, REPUBLISH_MS - (Date.now() - (cur.republishedAt || 0)));
+    cur.republishTimer = setTimeout(function () {
+      cur.republishTimer = null;
+      if (!cur || !cur.board.share) return;
+      var lessonId = cur.lessonId;
+      var l = S.get('lessons', lessonId);
+      var st = l ? S.get('students', l.studentId) : null;
+      buildViewerHTML(cur.board, l, st).then(function (html) {
+        return Cloud.publishShare(cur.board.share.token, html);
+      }).then(function () {
+        if (cur && cur.lessonId === lessonId) cur.republishedAt = Date.now();
+      }).catch(function (e) {
+        console.warn('Не вдалося оновити сторінку для учня:', e && e.message);
+      });
+    }, wait);
+  }
+
   function flushSave() {
     if (!cur || !cur.dirty) return;
     if (cur.saveTimer) { clearTimeout(cur.saveTimer); cur.saveTimer = null; }
     try {
       S.saveBoard(cur.board);
       cur.dirty = false;
+      scheduleRepublish();
       var el = document.querySelector('[data-saved]');
       if (el) { el.classList.remove('is-dirty'); el.innerHTML = icon('check', 15) + 'Збережено'; }
     } catch (e) {
@@ -1662,9 +1710,9 @@
           'До решти ваших даних доступу немає.</p>' +
           '<input class="input" readonly value="' + U.esc(url) + '" ' +
           'onclick="this.select()" style="font-size:12px">' +
-          '<div class="field__hint mt-2">Опубліковано ' +
-          U.esc(U.fmtDateTime(new Date(share.at))) + '. Якщо після цього ви щось домалювали — ' +
-          'натисніть «Оновити», інакше учень бачитиме стару версію.</div>' +
+          '<div class="field__hint mt-2">Сторінка оновлюється сама: під час роботи — ' +
+          'приблизно раз на хвилину, і одразу коли ви виходите з дошки. ' +
+          'Кнопка «Оновити» потрібна лише якщо хочете не чекати.</div>' +
           facts,
         buttons: [
           { label: 'Закрити', kind: 'btn--ghost', act: 'cancel' },

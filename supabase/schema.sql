@@ -259,3 +259,175 @@ create policy shares_delete on storage.objects
   for delete using (
     bucket_id = 'shares' and (storage.foldername(name))[1] = auth.uid()::text
   );
+
+-- ============================================================
+-- Жива дошка для учня: читання, письмо, домашні завдання
+-- ============================================================
+--
+-- Досі учень отримував знімок уроку — готову сторінку у сховищі. Через це
+-- він не бачив змін одразу й не міг нічого написати: зв'язку з базою не було.
+--
+-- Тепер зв'язок є, але суворо обмежений. Учень не звертається до таблиць
+-- напряму: усе йде через три функції нижче, і кожна перевіряє код доступу.
+-- Знати код — це право на ОДИН урок, і ні на що більше.
+
+create table if not exists public.shares (
+  token      text        primary key,
+  owner      uuid        not null references auth.users (id) on delete cascade,
+  lesson_id  text        not null,
+  title      text,
+  can_write  boolean     not null default true,   -- чи дозволено учневі писати
+  revoked    boolean     not null default false,
+  data       text,                                -- поточний вигляд уроку для учня
+  rev        bigint      not null default 0,       -- щоб учень тягнув дані лише коли є зміни
+  updated_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists shares_owner_idx on public.shares (owner);
+
+/* Написане учнем лежить ОКРЕМО від документа репетитора.
+   Це принципово: база репетитора зберігається одним документом цілком,
+   тому будь-яке його збереження затерло б записи учня, якби вони лежали там.
+   Репетитор забирає ці внески й вливає їх у дошку в себе. */
+create table if not exists public.share_contributions (
+  id         bigserial   primary key,
+  token      text        not null references public.shares (token) on delete cascade,
+  kind       text        not null,   -- 'ink' — записи на дошці, 'homework' — фото рішень
+  payload    text        not null,   -- JSON
+  merged     boolean     not null default false,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists contrib_token_idx on public.share_contributions (token, id);
+
+alter table public.shares              enable row level security;
+alter table public.share_contributions enable row level security;
+
+-- Прямого доступу до таблиць немає ні в кого, крім власника: учень працює
+-- лише через функції, які самі перевіряють код.
+grant select on public.shares              to authenticated;
+grant select on public.share_contributions to authenticated;
+revoke all on public.shares              from anon;
+revoke all on public.share_contributions from anon;
+
+drop policy if exists shares_own  on public.shares;
+drop policy if exists contrib_own on public.share_contributions;
+
+create policy shares_own on public.shares
+  for select using (auth.uid() = owner);
+
+create policy contrib_own on public.share_contributions
+  for select using (
+    exists (select 1 from public.shares s where s.token = share_contributions.token and s.owner = auth.uid())
+  );
+
+-- ------------------------------------------------------------
+-- Що може учень
+-- ------------------------------------------------------------
+
+/* Прочитати урок. Повертає і номер версії — щоб сторінка учня могла питати
+   «чи є нове» дешево, не тягнучи весь урок щоразу. */
+create or replace function public.share_read(p_token text)
+returns table (data text, rev bigint, can_write boolean, updated_at timestamptz)
+language sql
+security definer
+set search_path = public
+as $$
+  select s.data, s.rev, s.can_write, s.updated_at
+  from public.shares s
+  where s.token = p_token and not s.revoked;
+$$;
+
+/* Тільки номер версії — для частого опитування. */
+create or replace function public.share_rev(p_token text)
+returns bigint
+language sql
+security definer
+set search_path = public
+as $$
+  select s.rev from public.shares s where s.token = p_token and not s.revoked;
+$$;
+
+/* Записати внесок учня: штрихи на дошці або фото домашнього.
+   Розмір обмежений навмисно — щоб посиланням не можна було завалити базу. */
+create or replace function public.share_contribute(p_token text, p_kind text, p_payload text)
+returns bigint
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id bigint;
+  v_ok boolean;
+begin
+  if p_kind not in ('ink', 'homework') then
+    raise exception 'Невідомий тип внеску';
+  end if;
+  if length(p_payload) > 400000 then
+    raise exception 'Завеликий внесок';
+  end if;
+
+  select (not revoked) and can_write into v_ok from public.shares where token = p_token;
+  if v_ok is not true then
+    raise exception 'Доступ закрито';
+  end if;
+
+  -- захист від завалювання: не більше 500 внесків на одне посилання
+  if (select count(*) from public.share_contributions where token = p_token) >= 500 then
+    raise exception 'Забагато записів за цим посиланням';
+  end if;
+
+  insert into public.share_contributions (token, kind, payload)
+  values (p_token, p_kind, p_payload)
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+revoke all on function public.share_read(text)                     from public;
+revoke all on function public.share_rev(text)                      from public;
+revoke all on function public.share_contribute(text, text, text)   from public;
+
+grant execute on function public.share_read(text)                   to anon, authenticated;
+grant execute on function public.share_rev(text)                    to anon, authenticated;
+grant execute on function public.share_contribute(text, text, text) to anon, authenticated;
+
+-- ------------------------------------------------------------
+-- Фото рішень від учня
+-- ------------------------------------------------------------
+--
+-- Учень кладе файли лише в теку, названу його ж кодом доступу, і лише поки
+-- код чинний. Перевіряє це база, а не сторінка — підмінити не вийде.
+
+insert into storage.buckets (id, name, public)
+values ('uploads', 'uploads', true)
+on conflict (id) do update set public = true;
+
+drop policy if exists uploads_read   on storage.objects;
+drop policy if exists uploads_write  on storage.objects;
+drop policy if exists uploads_delete on storage.objects;
+
+create policy uploads_read on storage.objects
+  for select using (bucket_id = 'uploads');
+
+create policy uploads_write on storage.objects
+  for insert with check (
+    bucket_id = 'uploads'
+    and exists (
+      select 1 from public.shares s
+      where s.token = (storage.foldername(name))[1]
+        and not s.revoked and s.can_write
+    )
+  );
+
+-- прибирати може лише репетитор, якому належить це посилання
+create policy uploads_delete on storage.objects
+  for delete using (
+    bucket_id = 'uploads'
+    and exists (
+      select 1 from public.shares s
+      where s.token = (storage.foldername(name))[1] and s.owner = auth.uid()
+    )
+  );

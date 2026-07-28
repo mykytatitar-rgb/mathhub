@@ -188,11 +188,12 @@
        немає, бо завдання дають саме на уроці, а не «взагалі». */
     var hwHtml = hw.map(function (h) {
       var overdue = h.status === 'assigned' && U.daysBetween(U.today(), h.dueDate) < 0;
+      var sol = (h.solutions || []).length;
       return '<button class="les-hw__r" data-act="hw-edit" data-arg="' + h.id + '">' +
         '<span class="les-hw__t">' + U.esc(h.title) + '</span>' +
-        '<span class="small muted">до ' + U.esc(U.fmtDate(h.dueDate)) +
-        ((h.photos && h.photos.length)
-          ? ' · ' + U.pl(h.photos.length, 'фото', 'фото', 'фото') : '') + '</span>' +
+        '<span class="small muted">до ' + U.esc(U.fmtDate(h.dueDate)) + '</span>' +
+        // головне тут — чи надіслав учень розвʼязання, а не скільки фото в завданні
+        (sol ? '<span class="sol-chip">' + icon('image', 12) + sol + '</span>' : '') +
         '<span class="spacer">' + C.hwBadge(overdue ? 'skipped' : h.status) + '</span>' +
       '</button>';
     }).join('');

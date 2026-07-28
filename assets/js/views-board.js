@@ -491,11 +491,17 @@
 
       var hw = S.get('homeworks', m.hw);
       if (!hw) return;
-      if (!hw.photos) hw.photos = [];
+      /* Розвʼязання учня лежать ОКРЕМО від фото завдання. Раніше вони падали
+         в один список, і відрізнити «що я задав» від «що учень надіслав»
+         було неможливо — на вигляд просто набір картинок. */
+      if (!hw.solutions) hw.solutions = [];
+      var has = function (k) {
+        return hw.solutions.some(function (s) { return s.key === k; });
+      };
 
       m.photos.forEach(function (p) {
         if (!p || !p.key || !p.url) return;
-        if (hw.photos.indexOf(p.key) > -1) return;      // уже забрали
+        if (has(p.key)) return;                          // уже забрали
         jobs.push(
           fetch(p.url).then(function (res) {
             if (!res.ok) throw new Error('http ' + res.status);
@@ -503,7 +509,11 @@
           }).then(function (blob) {
             return window.ImgStore.put(p.key, blob);
           }).then(function () {
-            if (hw.photos.indexOf(p.key) < 0) { hw.photos.push(p.key); touched++; }
+            if (has(p.key)) return;
+            hw.solutions.push({ key: p.key, at: row.created_at || new Date().toISOString() });
+            // надіслав — отже здано; репетитор одразу бачить це в списку
+            if (hw.status === 'assigned') hw.status = 'submitted';
+            touched++;
           }).catch(function (e) {
             console.warn('Фото від учня не забралося:', e && e.message);
           })
@@ -1806,8 +1816,9 @@
               '<div class="hw-row__t">' + U.esc(h.title) + '</div>' +
               '<div class="small muted" style="margin-top:3px">до ' + U.esc(U.fmtDate(h.dueDate)) +
               (h.lessonId !== cur.lessonId ? ' · з іншого уроку' : '') +
-              ((h.photos && h.photos.length)
-                ? ' · ' + U.pl(h.photos.length, 'фото', 'фото', 'фото') : '') +
+              ((h.solutions || []).length
+                ? ' · учень надіслав ' + U.pl(h.solutions.length, 'фото', 'фото', 'фото')
+                : ' · ще не надіслав') +
               '</div>' +
             '</div>' +
             '<span class="spacer">' + C.hwBadge(overdue ? 'skipped' : h.status) + '</span>' +
@@ -2106,7 +2117,9 @@
           title: h.title || '', desc: h.description || '',
           due: h.dueDate ? U.fmtDate(h.dueDate) : '',
           feedback: h.feedback || '',
-          photos: (h.photos || []).slice()
+          photos: (h.photos || []).slice(),
+          // те, що учень уже надіслав — щоб він бачив, за що можна не хвилюватися
+          sent: (h.solutions || []).length
         };
       }),
       images: {},
@@ -2260,6 +2273,7 @@
 '.wd i{display:block;background:#33456B;border-radius:99px}\n' +
 '@media(max-width:640px){.tools{left:8px;padding:4px}.tl{width:34px;height:34px;font-size:15px}.opts{left:52px;padding:7px}}\n' +
 '.tin{position:absolute;z-index:4;min-width:170px;min-height:34px;border:2px solid #1358F5;border-radius:8px;padding:5px 8px;font-family:Montserrat,"Segoe UI",system-ui,sans-serif;font-weight:500;line-height:1.25;background:rgba(255,255,255,.97);outline:none;resize:none;overflow:hidden}\n' +
+'.sent{color:#16A34A;font-weight:700}\n' +
 '.mats{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}\n' +
 '.matf{display:inline-block;border:1.5px solid #E8EEF8;border-radius:10px;padding:8px 14px;font-size:12.5px;font-weight:650;color:#0B4ED6;text-decoration:none;background:#fff}\n' +
 '.matf:hover{background:#F0F5FF;border-color:#8FB4FF}\n' +
@@ -2328,7 +2342,8 @@
   ? '  <div class="extra"><h3>Домашнє завдання</h3>\n' + payload.homework.map(function (h) {
       return '    <div class="hw"><b>' + U.esc(h.title) + '</b>' +
         '<div class="meta">' +
-        (h.due ? 'до ' + U.esc(h.due) : '') + '</div>' +
+        (h.due ? 'до ' + U.esc(h.due) : '') +
+        (h.sent ? ' · <span class="sent">надіслано ' + h.sent + '</span>' : '') + '</div>' +
         (h.desc ? '<div class="desc">' + U.esc(h.desc) + '</div>' : '') +
         (h.feedback ? '<div class="meta" style="margin-top:6px">Відгук: ' + U.esc(h.feedback) + '</div>' : '') +
         '<div class="shots" data-shots="' + U.esc(h.id || '') + '">' +

@@ -698,7 +698,11 @@
         (s.items || []).forEach(function (it) { if (it.t === 'i') add(it.k); });
       });
     });
-    db.homeworks.forEach(function (h) { (h.photos || []).forEach(add); });
+    db.homeworks.forEach(function (h) {
+      (h.photos || []).forEach(add);
+      // розвʼязання від учня лежать окремо, але в тому самому сховищі
+      (h.solutions || []).forEach(function (s) { add(s && s.key); });
+    });
     /* Вкладення матеріалів лежать у тому самому сховищі. Якщо їх тут не
        врахувати, прибирання невикористаних файлів мовчки їх видалить. */
     db.materials.forEach(function (m) {

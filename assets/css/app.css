@@ -964,6 +964,31 @@ a { color: inherit; text-decoration: none; }
    Домашні завдання просто з уроку
    ============================================================ */
 
+/* Розв'язання від учня — окремо від фото завдання, щоб не змішувалися */
+.sol-n {
+  display: inline-block; margin-left: 6px;
+  background: var(--green, #16a34a); color: #fff;
+  border-radius: 999px; padding: 1px 8px;
+  font-size: 11px; font-weight: 750; letter-spacing: 0;
+}
+.sol-empty {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 14px; border: 1.5px dashed var(--line, #e6eaf0);
+  border-radius: 12px; color: var(--muted, #7e90ae); font-size: 13px;
+}
+.sol-when {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  background: rgba(13, 33, 73, .72); color: #fff;
+  font-size: 10.5px; font-weight: 650; text-align: center;
+  padding: 2px 0;
+}
+.sol-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  background: var(--green-bg, #e8f8ee); color: var(--green, #16a34a);
+  border-radius: 999px; padding: 2px 8px;
+  font-size: 11.5px; font-weight: 750;
+}
+
 /* Урок і його завдання — один блок: окремої вкладки «Домашка» немає */
 .les-wrap {
   border: 1.5px solid var(--line, #e6eaf0);

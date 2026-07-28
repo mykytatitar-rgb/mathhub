@@ -420,9 +420,25 @@
       lessonId: preset.lessonId || '',
       title: '', description: '',
       dueDate: U.ymd(U.addDays(new Date(), 3)),
-      status: 'assigned', feedback: '', photos: []
+      status: 'assigned', feedback: '', photos: [], solutions: []
     };
     var photoKeys = (data.photos || []).slice();
+    var solutions = (data.solutions || []).slice();
+
+    /* Надіслане учнем показуємо окремо від фото завдання. Раніше все лежало
+       в одному списку, і зрозуміти, де твоє, а де його, було неможливо. */
+    /* Підпис збираємо вручну: C.field екранує його, тому значок із кількістю
+       через нього вивівся б звичайним текстом. */
+    var solutionsField = solutions.length
+      ? '<div class="field">' +
+          '<label class="field__label">Розв\'язання від учня' +
+          '<span class="sol-n">' + solutions.length + '</span></label>' +
+          '<div class="photo-strip photo-strip--view" data-sol></div>' +
+          '<div class="field__hint">Натисніть на фото, щоб відкрити на весь екран. ' +
+          'Хрестик прибирає його.</div>' +
+        '</div>'
+      : (isNew ? '' : '<div class="field"><label class="field__label">Розв\'язання від учня</label>' +
+          '<div class="sol-empty">' + icon('clock', 15) + 'Учень ще не надіслав</div></div>');
 
     var body =
       (preset.lockStudent || !isNew ? '' : C.field('Учень', C.studentSelect('studentId', data.studentId))) +
@@ -431,6 +447,7 @@
         'placeholder="На що звернути увагу, що робити якщо не виходить"')) +
       C.field('Фото завдання', photoStripHtml(),
         'Сфотографуйте картку чи вставте скріншот через Ctrl+V — стане в пригоді, коли завдання не з підручника.') +
+      solutionsField +
       '<div class="field-row">' +
         C.field('Дедлайн', C.input('dueDate', data.dueDate, 'type="date"')) +
         C.field('Статус', C.select('status', data.status, Object.keys(S.HW_STATUS).map(function (k) {
@@ -458,6 +475,7 @@
             }
             if (!v.title) v.title = 'Завдання на фото';
             v.photos = photoKeys.slice();
+            v.solutions = solutions.slice();
             if (isNew) {
               v.studentId = preset.lockStudent ? data.studentId : (v.studentId || data.studentId);
               v.lessonId = data.lessonId;
@@ -468,9 +486,57 @@
             done();
           } }
       ].filter(Boolean),
-      onMount: function (root) { mountPhotoStrip(root, photoKeys); }
+      onMount: function (root) {
+        mountPhotoStrip(root, photoKeys);
+        mountSolutions(root, solutions);
+      }
     });
   };
+
+  /** Розв'язання від учня: показати, відкрити на весь екран, прибрати. */
+  function mountSolutions(root, solutions) {
+    var box = root.querySelector('[data-sol]');
+    if (!box) return;
+
+    function render() {
+      box.innerHTML = '';
+      solutions.forEach(function (s) {
+        var el = document.createElement('div');
+        el.className = 'photo-thumb';
+        el.innerHTML = '<img alt="Розв\'язання">' +
+          '<span class="sol-when">' + U.esc(U.fmtDate(s.at)) + '</span>' +
+          '<button type="button" class="photo-del" data-soldel="' + U.esc(s.key) +
+          '" title="Прибрати">' + icon('x', 13) + '</button>';
+        box.appendChild(el);
+        if (window.ImgStore && window.ImgStore.available()) {
+          window.ImgStore.get(s.key).then(function (blob) {
+            if (!blob) { el.classList.add('is-missing'); return; }
+            var url = URL.createObjectURL(blob);
+            el.querySelector('img').src = url;
+            el.dataset.full = url;
+          }).catch(function () { el.classList.add('is-missing'); });
+        }
+      });
+    }
+
+    box.addEventListener('click', function (e) {
+      var del = e.target.closest('[data-soldel]');
+      if (del) {
+        e.preventDefault();
+        var k = del.dataset.soldel;
+        for (var i = 0; i < solutions.length; i++) {
+          if (solutions[i].key === k) { solutions.splice(i, 1); break; }
+        }
+        render();
+        return;
+      }
+      // клік по самій картинці — відкрити у новій вкладці, щоб роздивитися
+      var thumb = e.target.closest('.photo-thumb');
+      if (thumb && thumb.dataset.full) window.open(thumb.dataset.full, '_blank', 'noopener');
+    });
+
+    render();
+  }
 
   /* ============================================================
      Оплата

@@ -30,8 +30,14 @@
     var sched = {};
     (data.schedule || []).forEach(function (s) { sched[s.day] = s.time; });
 
+    /* Якщо колір учня не з нашого набору (старий запис, інша версія програми),
+       треба все одно щось виділити. Інакше жоден кружечок не активний —
+       і збереження падало на спробі прочитати колір із неіснуючого елемента,
+       через що не зберігалося взагалі нічого. */
+    var activeColor = S.COLORS.indexOf(data.color) > -1 ? data.color : S.COLORS[0];
+
     var swatches = S.COLORS.map(function (c) {
-      return '<button type="button" class="swatch' + (c === data.color ? ' is-active' : '') +
+      return '<button type="button" class="swatch' + (c === activeColor ? ' is-active' : '') +
         '" data-color="' + c + '" style="background:' + c + '"></button>';
     }).join('');
 
@@ -97,7 +103,11 @@
             var v = C.readForm(root);
             if (!v.name) { U.toast('Вкажіть ім\'я учня', 'err'); return false; }
             if (!v.goal) v.goal = 'Без конкретної цілі';
-            v.color = root.querySelector('.swatch.is-active').dataset.color;
+            /* Другий запобіжник: якщо активного кружечка чомусь немає,
+               беремо колишній колір, а не падаємо. Одна помилка тут зупиняла
+               збереження цілком — не зберігалися ні розклад, ні решта полів. */
+            var swatch = root.querySelector('.swatch.is-active') || root.querySelector('.swatch');
+            v.color = swatch ? swatch.dataset.color : (data.color || S.COLORS[0]);
             v.schedule = U.$$('[data-day]', root)
               .filter(function (el) { return el.value; })
               .map(function (el) { return { day: +el.dataset.day, time: el.value }; });

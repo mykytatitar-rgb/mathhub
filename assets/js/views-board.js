@@ -1948,7 +1948,18 @@
 
   /** Сам урок без картинок: слайди, теорія, домашні завдання. */
   function buildPayload(board, lesson, student) {
-    var hw = lesson ? S.db().homeworks.filter(function (h) { return h.lessonId === lesson.id; }) : [];
+    /* Показуємо учневі не лише завдання цього уроку, а й усі його незакриті.
+       Причина: завдання, задане з картки учня, не привʼязане до жодного уроку —
+       і раніше учень не побачив би його ніде взагалі. */
+    var hw = [];
+    if (lesson) {
+      var sid = lesson.studentId;
+      hw = S.db().homeworks.filter(function (h) {
+        if (h.lessonId === lesson.id) return true;                 // завдання саме цього уроку
+        if (h.studentId !== sid) return false;                     // чуже — ніколи
+        return h.status === 'assigned' || h.status === 'submitted'; // ще в роботі
+      });
+    }
 
     var payload = {
       title: lesson ? (lesson.topic || 'Урок') : 'Урок',

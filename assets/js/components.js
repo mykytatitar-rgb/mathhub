@@ -167,7 +167,7 @@
         U.pl(bst.slides, 'слайд', 'слайди', 'слайдів') + '</span>');
     }
 
-    return '<div class="lesson-row" data-lesson="' + lesson.id + '">' +
+    var row = '<div class="lesson-row" data-lesson="' + lesson.id + '">' +
       '<div class="lesson-row__num">' + (num != null ? num : icon('book', 24)) + '</div>' +
       '<div class="lesson-row__body">' +
       '<div class="lesson-row__date">' + icon('clock', 14) + U.fmtDateTime(lesson.date) +
@@ -181,6 +181,28 @@
       '<button class="btn btn--soft" data-act="lesson-open" data-arg="' + lesson.id + '">' +
       'Деталі' + icon('chevronR', 16) + '</button>' +
       '</div>';
+
+    if (!opts.withHw) return row;
+
+    /* Домашнє завдання показуємо просто в уроці: окремої вкладки для нього
+       немає, бо завдання дають саме на уроці, а не «взагалі». */
+    var hwHtml = hw.map(function (h) {
+      var overdue = h.status === 'assigned' && U.daysBetween(U.today(), h.dueDate) < 0;
+      return '<button class="les-hw__r" data-act="hw-edit" data-arg="' + h.id + '">' +
+        '<span class="les-hw__t">' + U.esc(h.title) + '</span>' +
+        '<span class="small muted">до ' + U.esc(U.fmtDate(h.dueDate)) +
+        ((h.photos && h.photos.length)
+          ? ' · ' + U.pl(h.photos.length, 'фото', 'фото', 'фото') : '') + '</span>' +
+        '<span class="spacer">' + C.hwBadge(overdue ? 'skipped' : h.status) + '</span>' +
+      '</button>';
+    }).join('');
+
+    return '<div class="les-wrap">' + row +
+      '<div class="les-hw">' + hwHtml +
+        '<button class="les-hw__add" data-act="hw-add-lesson" data-arg="' + lesson.id + '">' +
+        icon('plus', 14) + (hw.length ? 'Ще завдання' : 'Задати домашнє') + '</button>' +
+      '</div>' +
+    '</div>';
   };
 
   /* ============================================================

@@ -5,10 +5,11 @@
   var U = window.U, S = window.S, C = window.C, icon = window.icon;
   var V = window.V;
 
+  /* Окремої вкладки «Домашка» немає навмисно: завдання дають на уроці,
+     тому вони й живуть усередині уроку — і в списку, і на дошці. */
   var TABS = [
     { id: 'overview', label: 'Огляд' },
     { id: 'lessons',  label: 'Уроки' },
-    { id: 'homework', label: 'Домашка' },
     { id: 'progress', label: 'Прогрес' },
     { id: 'payments', label: 'Оплати' },
     { id: 'notes',    label: 'Нотатки' }
@@ -24,13 +25,14 @@
     }
 
     tab = tab || 'overview';
+    // стара адреса вкладки «Домашка» ще може бути в закладках або історії
+    if (tab === 'homework') tab = 'lessons';
     var stat = S.studentStats(id);
     var next = stat.nextLesson;
     var cur = S.curOf(id);
 
     var counts = {
       lessons: stat.total,
-      homework: stat.hwTotal,
       progress: stat.topicsCovered,
       payments: S.paymentsOf(id).length,
       notes: S.notesOf(id).length
@@ -43,7 +45,7 @@
     }).join('');
 
     var bodies = {
-      overview: overview, lessons: lessons, homework: homework,
+      overview: overview, lessons: lessons,
       progress: progress, payments: payments, notes: notes
     };
     var body = (bodies[tab] || overview)(st, stat);
@@ -70,7 +72,7 @@
           (next ? U.fmtDateTime(next.date) + ' · ' + U.fmtRelative(next.date) : 'не запланований') +
           '</div></div><span class="quick__arrow">' + icon('chevronR', 18) + '</span></button>' +
 
-        '<button class="quick" data-act="tab" data-arg="homework">' +
+        '<button class="quick" data-act="tab" data-arg="lessons">' +
           '<div class="quick__icon" style="background:var(--violet-bg);color:var(--violet)">' + icon('checklist', 21) + '</div>' +
           '<div style="min-width:0"><div class="quick__title">Домашка' +
           (stat.hwPending ? '<span class="quick__badge" style="background:var(--violet)">' + stat.hwPending + '</span>' : '') +
@@ -249,7 +251,7 @@
     return (future.length ? '<h3 class="card-title mb-2">Заплановані</h3>' +
       '<div class="stack mb-3">' +
       U.sortBy(future, function (l) { return l.date; }).map(function (l) {
-        return C.lessonRow(l, numberOf[l.id]);
+        return C.lessonRow(l, numberOf[l.id], { withHw: true });
       }).join('') + '</div>' : '') +
 
       '<div class="row mb-2"><h3 class="card-title">Історія</h3>' +
@@ -257,66 +259,10 @@
       icon('plus', 15) + 'Додати урок</button></div>' +
 
       '<div class="stack">' +
-      past.map(function (l) { return C.lessonRow(l, numberOf[l.id]); }).join('') +
+      past.map(function (l) { return C.lessonRow(l, numberOf[l.id], { withHw: true }); }).join('') +
       '</div>';
   }
 
-  /* ============================================================
-     Домашні завдання
-     ============================================================ */
-
-  function homework(st, stat) {
-    var all = S.homeworksOf(st.id);
-
-    if (!all.length) {
-      return '<div class="card">' + C.empty('checklist', 'Домашніх завдань ще не було',
-        'Задайте перше — і зможете відстежувати, що здано, а що ні.',
-        '<button class="btn btn--primary" data-act="hw-add" data-arg="' + st.id + '">' +
-        icon('plus', 16) + 'Задати ДЗ</button>') + '</div>';
-    }
-
-    var cards = all.map(function (h) {
-      var overdue = h.status === 'assigned' && U.daysBetween(U.today(), h.dueDate) < 0;
-      var lesson = h.lessonId ? S.get('lessons', h.lessonId) : null;
-      return '<div class="card" style="padding:18px 22px">' +
-        '<div class="row" style="gap:12px;align-items:flex-start">' +
-          '<div style="flex:1;min-width:0">' +
-            '<div style="font-weight:700;font-size:15.5px;line-height:1.35">' + U.esc(h.title) + '</div>' +
-            '<div class="row small muted" style="gap:8px;margin-top:6px;flex-wrap:wrap">' +
-              '<span>' + icon('clock', 13) + ' до ' + U.fmtDate(h.dueDate) + '</span>' +
-              (overdue ? '<span style="color:var(--red);font-weight:700">прострочено на ' +
-                U.pl(-U.daysBetween(U.today(), h.dueDate), 'день', 'дні', 'днів') + '</span>' : '') +
-              (lesson ? '<span>· з уроку ' + U.fmtDate(lesson.date) + '</span>' : '') +
-            '</div>' +
-          '</div>' +
-          '<div style="text-align:right">' +
-            '<div>' + C.hwBadge(overdue ? 'skipped' : h.status) + '</div>' +
-          '</div>' +
-          '<button class="icon-btn" data-act="hw-edit" data-arg="' + h.id + '">' + icon('edit', 16) + '</button>' +
-        '</div>' +
-        (h.description ? '<div class="small pre-wrap mt-2" style="color:var(--ink-2);background:var(--blue-50);' +
-          'padding:12px 14px;border-radius:12px">' + U.esc(h.description) + '</div>' : '') +
-        ((h.photos && h.photos.length)
-          ? '<div class="photo-strip photo-strip--view mt-2" data-hw-photos="' +
-            U.esc(h.photos.join(',')) + '"></div>' : '') +
-        (h.feedback ? '<div class="small mt-2" style="color:var(--muted)">' + icon('info', 13) + ' ' +
-          U.esc(h.feedback) + '</div>' : '') +
-        '</div>';
-    }).join('');
-
-    return '<div class="grid grid--4 mb-3">' +
-        C.stat('Усього завдань', all.length, '', 'checklist') +
-        C.stat('Перевірено', stat.hwChecked, 'уже розібрали', 'check', 'green') +
-        C.stat('В роботі', stat.hwPending, 'ще не перевірено', 'clock', 'violet') +
-        C.stat('Не виконано', stat.hwSkipped, stat.hwSkipped ? 'варто нагадати' : 'усе здано', 'alert',
-          stat.hwSkipped ? 'red' : 'green') +
-      '</div>' +
-
-      '<div class="row mb-2"><h3 class="card-title">Завдання</h3>' +
-      '<button class="btn btn--soft btn--sm spacer" data-act="hw-add" data-arg="' + st.id + '">' +
-      icon('plus', 15) + 'Задати ДЗ</button></div>' +
-      '<div class="stack">' + cards + '</div>';
-  }
 
   /* ============================================================
      Прогрес

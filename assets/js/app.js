@@ -263,6 +263,12 @@
 
     'hw-add': function (arg) { F.homework(null, { studentId: arg, lockStudent: true }); },
     'hw-edit': function (arg) { F.homework(arg); },
+    /* Завдання просто з уроку: учень і урок уже відомі, тому питати їх не треба. */
+    'hw-add-lesson': function (lessonId) {
+      var l = S.get('lessons', lessonId);
+      if (!l) return;
+      F.homework(null, { studentId: l.studentId, lessonId: lessonId, lockStudent: true });
+    },
 
     'pay-add': function (arg) { F.payment(null, arg ? { studentId: arg, lockStudent: true } : {}); },
     'pay-edit': function (arg) { F.payment(arg); },

@@ -95,11 +95,24 @@
     });
   }
 
-  /* Показуємо урок. Щоб гортання слайдів і масштаб не збивалися при кожному
-     оновленні, замінюємо вміст лише коли він справді змінився. */
+  /* Де саме учень зараз дивиться. Сама сторінка уроку повідомляє це нам,
+     а ми повертаємо назад після оновлення — інакше кожна зміна від репетитора
+     викидала б учня на початок першого слайда. */
+  var view = null;
+
+  /* Показуємо урок. Замінюємо вміст лише коли він справді змінився,
+     і вшиваємо збережене місце, щоб перемальовування було незамітним. */
   function show(html, rev) {
     if (rev === shownRev) return;
     shownRev = rev;
+
+    if (view) {
+      // вставляємо перед закриттям тіла, щоб сторінка прочитала це до першого малювання
+      var inject = '<script>window.__VIEW=' + JSON.stringify(view) + ';<\/script>';
+      var at = html.lastIndexOf('</body>');
+      html = at > -1 ? html.slice(0, at) + inject + html.slice(at) : html + inject;
+    }
+
     frame.srcdoc = html;
     frame.style.display = 'block';
     msg.style.display = 'none';
@@ -250,6 +263,12 @@
   window.addEventListener('message', function (e) {
     var d = e.data;
     if (!d) return;
+
+    // сторінка уроку каже, де учень зараз дивиться — запам'ятовуємо для оновлення
+    if (d.mathhub === 'view') {
+      view = { idx: d.idx, scale: d.scale, cam: d.cam };
+      return;
+    }
 
     if (d.mathhub === 'ink' || d.mathhub === 'ink-undo') {
       pending.push(d);

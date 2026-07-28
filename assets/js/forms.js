@@ -120,10 +120,17 @@
               U.toast(changed
                 ? 'Валюту змінено на ' + v.currency + '. Суми не перераховувались — перевірте їх.'
                 : 'Збережено', 'ok');
-              if (newSchedule !== oldSchedule && v.schedule.length) {
-                var n = S.fillStudentTemplate(id);
-                if (n) U.toast('Додано ' + U.pl(n, 'урок', 'уроки', 'уроків') +
-                  ' за новим розкладом', 'ok');
+              if (newSchedule !== oldSchedule) {
+                /* Спершу прибираємо майбутні уроки за старим розкладом, і лише
+                   потім створюємо нові. Без прибирання зміна розкладу лише
+                   додавала дні, а старі лишались — і виглядало так, ніби
+                   нічого не збереглося. */
+                var gone = S.pruneStudentTemplate(id);
+                var n = v.schedule.length ? S.fillStudentTemplate(id) : 0;
+                var parts = [];
+                if (n) parts.push('додано ' + U.pl(n, 'урок', 'уроки', 'уроків'));
+                if (gone) parts.push('прибрано ' + U.pl(gone, 'старий', 'старі', 'старих'));
+                if (parts.length) U.toast('Розклад оновлено: ' + parts.join(', '), 'ok');
               }
             }
             refresh();

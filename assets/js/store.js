@@ -574,6 +574,47 @@
   };
 
   /**
+   * Прибрати майбутні уроки, що лишилися від попереднього постійного розкладу.
+   *
+   * Без цього зміна розкладу лише ДОДАВАЛА нові дні, а старі лишалися в
+   * календарі — і виглядало так, ніби зміна не збереглася.
+   *
+   * Чіпаємо тільки те, що напевно створене шаблоном і ще нічого не значить:
+   * майбутнє, зі статусом «заплановано», без оплати, домашнього й записів
+   * на дошці. Усе інше — робота, її видаляти не можна.
+   */
+  S.pruneStudentTemplate = function (studentId) {
+    var st = S.get('students', studentId);
+    if (!st) return 0;
+
+    var now = new Date();
+    var slots = {};
+    (st.schedule || []).forEach(function (s) { slots[s.day + '@' + s.time] = true; });
+
+    var doomed = db.lessons.filter(function (l) {
+      if (l.studentId !== studentId) return false;
+      if (!l.fromTemplate) return false;                 // створене вручну — не чіпаємо
+      if (l.status !== 'planned') return false;          // проведене, скасоване, перенесене
+      var d = U.toDate(l.date);
+      if (!(d > now)) return false;                      // минуле лишається як історія
+
+      var wd = d.getDay() === 0 ? 7 : d.getDay();
+      var hhmm = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+      if (slots[wd + '@' + hhmm]) return false;          // цей день і час досі в розкладі
+
+      if (db.payments.some(function (p) { return p.lessonId === l.id; })) return false;
+      if (db.homeworks.some(function (h) { return h.lessonId === l.id; })) return false;
+      var b = db.boards.filter(function (x) { return x.lessonId === l.id; })[0];
+      if (b && (b.slides || []).some(function (s) { return (s.items || []).length; })) return false;
+
+      return true;
+    });
+
+    doomed.forEach(function (l) { S.removeLesson(l.id); });
+    return doomed.length;
+  };
+
+  /**
    * Тримати розклад заповненим наперед. Заповнюємо лише той проміжок,
    * якого ще не торкались (`tutor.filledUntil`) — тому видалені вручну
    * уроки не з'являються знову.

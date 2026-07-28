@@ -2139,6 +2139,14 @@ VIEWER_SCRIPT +
 'function seq(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}',
 'function toWorld(sx,sy){return[sx/scale+cam.x,sy/scale+cam.y];}',
 'function say(o){try{parent.postMessage(o,"*")}catch(e){}}',
+/* Де саме учень зараз дивиться. Сторінка-обгортка це запам'ятовує й повертає
+   після оновлення уроку — інакше кожна зміна від репетитора викидала б учня
+   на початок першого слайда. Повідомляємо із затримкою, бо рух і масштаб
+   змінюються десятки разів на секунду. */
+'var keepT=null;',
+'function keep(){if(keepT)clearTimeout(keepT);',
+'keepT=setTimeout(function(){keepT=null;',
+'say({mathhub:"view",idx:idx,scale:scale,cam:{x:cam.x,y:cam.y}});},250);}',
 'function flash(){var s=document.getElementById("sv");if(!s)return;s.className="saved show";',
 'setTimeout(function(){s.className="saved"},1400);}',
 'Object.keys(DATA.images||{}).forEach(function(k){var im=new Image();im.onload=function(){draw();};im.src=DATA.images[k];IMGS[k]=im;});',
@@ -2190,14 +2198,15 @@ VIEWER_SCRIPT +
 'function fit(){var s=DATA.slides[idx],b=null;(s.items||[]).forEach(function(it){var ib=bounds(it);if(!ib)return;',
 'if(!b){b={x1:ib.x1,y1:ib.y1,x2:ib.x2,y2:ib.y2};return;}b.x1=Math.min(b.x1,ib.x1);b.y1=Math.min(b.y1,ib.y1);b.x2=Math.max(b.x2,ib.x2);b.y2=Math.max(b.y2,ib.y2);});',
 'if(!b){scale=1;cam={x:-W/2,y:-H/2};draw();return;}var p=60,w=Math.max(1,b.x2-b.x1),h=Math.max(1,b.y2-b.y1);',
-'scale=Math.max(0.1,Math.min(2,Math.min((W-p*2)/w,(H-p*2)/h)));',
+'scale=Math.max(MINS,Math.min(2,Math.min((W-p*2)/w,(H-p*2)/h)));',
 'cam.x=(b.x1+b.x2)/2-W/(2*scale);cam.y=(b.y1+b.y2)/2-H/(2*scale);draw();}',
-'function go(i){if(i<0||i>=DATA.slides.length)return;idx=i;',
+'function go(i,noFit){if(i<0||i>=DATA.slides.length)return;idx=i;',
 'document.getElementById("pos").textContent=(idx+1)+" / "+DATA.slides.length;',
 'document.getElementById("nm").textContent=DATA.slides[idx].title||("Слайд "+(idx+1));',
 'document.getElementById("prev").disabled=idx===0;',
 'document.getElementById("next").disabled=idx===DATA.slides.length-1;',
-'[].forEach.call(document.querySelectorAll(".sc"),function(b,n){b.className="sc"+(n===idx?" on":"")});fit();}',
+'[].forEach.call(document.querySelectorAll(".sc"),function(b,n){b.className="sc"+(n===idx?" on":"")});',
+'if(noFit){draw();}else{fit();}keep();}',
 'var rail=document.getElementById("rail");',
 'DATA.slides.forEach(function(s,i){var b=document.createElement("button");b.className="sc";',
 'b.textContent=(i+1)+". "+(s.title||"Слайд "+(i+1));b.onclick=function(){go(i)};rail.appendChild(b);});',
@@ -2206,8 +2215,10 @@ VIEWER_SCRIPT +
 'document.getElementById("zi").onclick=function(){zoomAt(1.25,W/2,H/2)};',
 'document.getElementById("zo").onclick=function(){zoomAt(1/1.25,W/2,H/2)};',
 'document.getElementById("zf").onclick=fit;',
-'function zoomAt(f,sx,sy){var wx=sx/scale+cam.x,wy=sy/scale+cam.y;scale=Math.max(0.1,Math.min(8,scale*f));',
-'cam.x=wx-sx/scale;cam.y=wy-sy/scale;draw();}',
+// межі ті самі, що й на дошці репетитора — інакше учень не може роздивитися так само
+'var MINS=0.02,MAXS=32;',
+'function zoomAt(f,sx,sy){var wx=sx/scale+cam.x,wy=sy/scale+cam.y;scale=Math.max(MINS,Math.min(MAXS,scale*f));',
+'cam.x=wx-sx/scale;cam.y=wy-sy/scale;draw();keep();}',
 'cv.addEventListener("wheel",function(e){e.preventDefault();var r=cv.getBoundingClientRect();',
 'zoomAt(Math.pow(0.999,e.deltaY*(e.ctrlKey?2.4:1)),e.clientX-r.left,e.clientY-r.top);},{passive:false});',
 'var pan=null,pts={},pinch=null;',
@@ -2226,7 +2237,7 @@ VIEWER_SCRIPT +
 'if(pts[e.pointerId])pts[e.pointerId]=p;var k=Object.keys(pts);',
 'if(k.length===2&&pinch){var a=pts[k[0]],b2=pts[k[1]],d=Math.hypot(a.x-b2.x,a.y-b2.y);',
 'if(pinch.d>0)zoomAt(d/pinch.d,(a.x+b2.x)/2,(a.y+b2.y)/2);pinch.d=d;return;}',
-'if(!pan)return;cam.x=pan.cx-(p.x-pan.sx)/scale;cam.y=pan.cy-(p.y-pan.sy)/scale;draw();});',
+'if(!pan)return;cam.x=pan.cx-(p.x-pan.sx)/scale;cam.y=pan.cy-(p.y-pan.sy)/scale;draw();keep();});',
 'function up(e){',
 'if(cur){var it=cur;cur=null;',
 'if(it.d.length>=4){if(!MY[idx])MY[idx]=[];MY[idx].push(it);mine.push({s:idx,id:it.id});',
@@ -2269,7 +2280,15 @@ VIEWER_SCRIPT +
 '(d.urls||[]).forEach(function(u){var a=document.createElement("a");a.className="mine";a.href=u;',
 'a.target="_blank";a.rel="noopener";a.innerHTML=\'<img alt="Фото розв\\\'язання">\';',
 'a.querySelector("img").src=u;if(box)box.appendChild(a);});});',
-'resize();go(0);',
+'resize();',
+/* Якщо обгортка передала, де учень був до оновлення — повертаємось туди,
+   а не на початок. Слайд обмежуємо: репетитор міг його видалити. */
+'var V0=window.__VIEW;',
+'if(V0&&DATA.slides.length){var i0=Math.max(0,Math.min(V0.idx|0,DATA.slides.length-1));',
+'go(i0,true);',
+'if(V0.scale)scale=Math.max(MINS,Math.min(MAXS,V0.scale));',
+'if(V0.cam)cam={x:V0.cam.x,y:V0.cam.y};',
+'draw();}else{go(0);}',
 '})();'
   ].join('\n');
 

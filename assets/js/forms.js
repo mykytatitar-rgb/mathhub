@@ -610,10 +610,102 @@
      Матеріал
      ============================================================ */
 
+  function fileSize(n) {
+    if (!n) return '';
+    return n < 1024 ? n + ' Б'
+         : n < 1048576 ? Math.round(n / 1024) + ' КБ'
+         : (n / 1048576).toFixed(1) + ' МБ';
+  }
+
+  function fileStripHtml() {
+    return '<div class="file-strip" data-fstrip>' +
+      '<button type="button" class="btn btn--ghost btn--sm" data-file-add>' +
+      icon('upload', 15) + 'Додати файл</button>' +
+      '<input type="file" multiple hidden data-file-input>' +
+      '</div>';
+  }
+
+  /**
+   * Вкладення матеріалу. files — масив {key,name,size,type}, змінюється на місці.
+   * Файли лежать у тому самому сховищі, що й картинки дошки: там на порядки
+   * більше місця, ніж у звичайному сховищі браузера.
+   */
+  function mountFileStrip(root, files) {
+    var strip = root.querySelector('[data-fstrip]');
+    var input = root.querySelector('[data-file-input]');
+    if (!strip || !input) return;
+
+    function render() {
+      U.$$('.file-row', strip).forEach(function (x) { x.remove(); });
+      files.forEach(function (f) {
+        var el = document.createElement('div');
+        el.className = 'file-row';
+        el.innerHTML = '<span class="file-row__i">' + icon('file', 16) + '</span>' +
+          '<span class="file-row__n">' + U.esc(f.name || 'файл') + '</span>' +
+          '<span class="small muted">' + fileSize(f.size) + '</span>' +
+          '<button type="button" class="icon-btn spacer" data-fdel="' + U.esc(f.key) +
+          '" title="Прибрати">' + icon('x', 15) + '</button>';
+        strip.insertBefore(el, strip.querySelector('[data-file-add]'));
+      });
+    }
+
+    strip.addEventListener('click', function (e) {
+      var add = e.target.closest('[data-file-add]');
+      if (add) { e.preventDefault(); input.click(); return; }
+      var del = e.target.closest('[data-fdel]');
+      if (del) {
+        e.preventDefault();
+        var k = del.dataset.fdel;
+        for (var i = 0; i < files.length; i++) {
+          if (files[i].key === k) { files.splice(i, 1); break; }
+        }
+        render();
+      }
+    });
+
+    input.addEventListener('change', function () {
+      var picked = Array.prototype.slice.call(input.files || []);
+      input.value = '';
+      if (!picked.length) return;
+      if (!window.ImgStore || !window.ImgStore.available()) {
+        U.toast('Браузер не дає зберігати файли', 'err'); return;
+      }
+      // великі файли не приймаємо: сховище браузера не безмежне
+      var tooBig = picked.filter(function (f) { return f.size > 25 * 1048576; });
+      if (tooBig.length) {
+        U.toast('Файл більший за 25 МБ не поміститься: ' + tooBig[0].name, 'err');
+        picked = picked.filter(function (f) { return f.size <= 25 * 1048576; });
+        if (!picked.length) return;
+      }
+      U.toast('Зберігаю ' + U.pl(picked.length, 'файл', 'файли', 'файлів') + '…');
+      Promise.all(picked.map(function (f) {
+        var key = 'file_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        return window.ImgStore.put(key, f)
+          .then(function () { return { key: key, name: f.name, size: f.size, type: f.type }; })
+          .catch(function () { return null; });
+      })).then(function (added) {
+        var okFiles = added.filter(Boolean);
+        okFiles.forEach(function (f) { files.push(f); });
+        render();
+        if (okFiles.length) U.toast('Додано ' + U.pl(okFiles.length, 'файл', 'файли', 'файлів'), 'ok');
+        if (okFiles.length < picked.length) U.toast('Частину файлів не вдалося зберегти', 'err');
+      });
+    });
+
+    render();
+  }
+
   F.material = function (id) {
     var m = id ? S.get('materials', id) : null;
     var isNew = !m;
-    var data = m || { title: '', type: 'link', url: '', topic: 'Загальне', note: '' };
+    var data = m || { title: '', type: 'link', url: '', topic: 'Загальне', note: '', files: [] };
+    var files = (data.files || []).slice();
+
+    // підтеми беремо з уже наявних, щоб не плодити майже однакові назви
+    var known = [];
+    S.db().materials.forEach(function (x) { if (x.topic && known.indexOf(x.topic) < 0) known.push(x.topic); });
+    S.TOPICS.forEach(function (t) { if (known.indexOf(t) < 0) known.push(t); });
+    if (known.indexOf('Загальне') < 0) known.unshift('Загальне');
 
     C.modal({
       title: isNew ? 'Новий матеріал' : 'Матеріал',
@@ -625,23 +717,32 @@
             { value: 'file', label: 'Файл / роздруківка' },
             { value: 'note', label: 'Методична нотатка' }
           ])) +
-          C.field('Тема', C.select('topic', data.topic, ['Загальне'].concat(S.TOPICS))) +
+          C.field('Підтема', C.input('topic', data.topic, 'list="mat-topics" placeholder="Напр. Тригонометрія"') +
+            '<datalist id="mat-topics">' +
+            known.map(function (t) { return '<option value="' + U.esc(t) + '">'; }).join('') +
+            '</datalist>') +
         '</div>' +
+        C.field('Файли', fileStripHtml(),
+          'PDF, документи, картинки — усе, що роздаєте учням. До 25 МБ на файл.') +
         C.field('Посилання', C.input('url', data.url, 'placeholder="https://…"')) +
         C.field('Опис', C.textarea('note', data.note, 'placeholder="Коли і кому давати, на що звертати увагу"')),
       buttons: [
         !isNew ? { label: 'Видалити', kind: 'btn--danger', act: 'del', onClick: function () {
-          S.remove('materials', id); U.toast('Матеріал видалено'); refresh();
+          S.remove('materials', id); S.gcImages(); U.toast('Матеріал видалено'); refresh();
         } } : null,
         { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
         { label: 'Зберегти', kind: 'btn--primary', act: 'save', icon: 'check',
           onClick: function (root) {
             var v = C.readForm(root);
             if (!v.title) { U.toast('Вкажіть назву', 'err'); return false; }
+            if (!v.topic) v.topic = 'Загальне';
+            v.files = files.slice();
             if (isNew) S.add('materials', v); else S.update('materials', id, v);
+            S.gcImages();
             U.toast('Збережено', 'ok'); refresh();
           } }
-      ].filter(Boolean)
+      ].filter(Boolean),
+      onMount: function (root) { mountFileStrip(root, files); }
     });
   };
 

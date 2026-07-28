@@ -906,6 +906,43 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* ============================================================
+   Матеріали: підтеми та вкладені файли
+   ============================================================ */
+
+.mat-group { margin-bottom: 26px; }
+.mat-group:last-child { margin-bottom: 0; }
+.mat-group__h {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 13px; font-weight: 750; letter-spacing: .4px;
+  text-transform: uppercase; color: var(--muted, #7e90ae);
+  margin-bottom: 12px;
+}
+.mat-group__n {
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0;
+  background: var(--blue-50, #f0f5ff); color: var(--blue-700, #0b4ed6);
+  border-radius: 999px; padding: 2px 8px;
+}
+
+.file-strip { display: flex; flex-direction: column; gap: 7px; align-items: flex-start; }
+.file-list { display: flex; flex-direction: column; gap: 6px; }
+.file-row {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 8px 11px;
+  border: 1.5px solid var(--line, #e6eaf0); border-radius: 10px;
+  background: #fff; font: inherit; font-size: 13px; text-align: left;
+  cursor: pointer; color: var(--ink, #0d2149);
+}
+.file-row:hover { border-color: var(--blue-300, #8fb4ff); background: var(--blue-50, #f0f5ff); }
+.file-row__i { color: var(--blue-600, #1358f5); display: flex; flex: 0 0 auto; }
+.file-row__n {
+  font-weight: 600; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.file-row__d { color: var(--muted, #7e90ae); display: flex; flex: 0 0 auto; }
+.file-strip .file-row { cursor: default; }
+.file-strip .file-row:hover { border-color: var(--line, #e6eaf0); background: #fff; }
+
+/* ============================================================
    Домашні завдання просто з уроку
    ============================================================ */
 

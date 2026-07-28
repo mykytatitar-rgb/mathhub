@@ -378,6 +378,29 @@
       });
     },
 
+    /* Файл матеріалу лежить у сховищі браузера, тому «завантажити» —
+       це дістати його звідти й віддати браузеру як звичайний файл. */
+    'mat-file': function (key) {
+      if (!window.ImgStore || !window.ImgStore.available()) {
+        U.toast('Сховище файлів недоступне', 'err'); return;
+      }
+      var meta = null;
+      S.db().materials.forEach(function (m) {
+        (m.files || []).forEach(function (f) { if (f.key === key) meta = f; });
+      });
+      window.ImgStore.get(key).then(function (blob) {
+        if (!blob) { U.toast('Файл не знайдено — можливо, його прибрали', 'err'); return; }
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = (meta && meta.name) || 'файл';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      }).catch(function (e) {
+        U.toast('Не вдалося відкрити файл: ' + (e && e.message ? e.message : e), 'err');
+      });
+    },
+
     'sync-signup': function () {
       var root = document.getElementById('sync-form');
       if (!root || !window.Cloud) return;

@@ -460,23 +460,63 @@
     var typeIcon = { link: 'link', file: 'file', note: 'note' };
     var typeLabel = { link: 'Посилання', file: 'Файл', note: 'Нотатка' };
 
-    var cards = list.length ? list.map(function (m) {
+    function fileSize(n) {
+      if (!n) return '';
+      return n < 1024 ? n + ' Б'
+           : n < 1048576 ? Math.round(n / 1024) + ' КБ'
+           : (n / 1048576).toFixed(1) + ' МБ';
+    }
+
+    function card(m) {
+      var files = m.files || [];
       return '<div class="card" style="display:flex;flex-direction:column;gap:12px">' +
         '<div class="row" style="gap:12px;align-items:flex-start">' +
           '<div class="quick__icon" style="width:38px;height:38px">' + icon(typeIcon[m.type] || 'file', 19) + '</div>' +
           '<div style="flex:1;min-width:0">' +
             '<div style="font-weight:700;font-size:15px;line-height:1.35">' + U.esc(m.title) + '</div>' +
-            '<div class="small muted" style="margin-top:3px">' + U.esc(typeLabel[m.type] || '') + ' · ' + U.esc(m.topic) + '</div>' +
+            '<div class="small muted" style="margin-top:3px">' + U.esc(typeLabel[m.type] || '') +
+            (files.length ? ' · ' + U.pl(files.length, 'файл', 'файли', 'файлів') : '') + '</div>' +
           '</div>' +
           '<button class="icon-btn" data-act="mat-edit" data-arg="' + m.id + '">' + icon('edit', 16) + '</button>' +
         '</div>' +
         (m.note ? '<div class="small muted pre-wrap" style="line-height:1.55">' + U.esc(m.note) + '</div>' : '') +
+        (files.length
+          ? '<div class="file-list">' + files.map(function (f) {
+              return '<button class="file-row" data-act="mat-file" data-arg="' + U.esc(f.key) + '">' +
+                '<span class="file-row__i">' + icon('file', 15) + '</span>' +
+                '<span class="file-row__n">' + U.esc(f.name || 'файл') + '</span>' +
+                '<span class="small muted spacer">' + fileSize(f.size) + '</span>' +
+                '<span class="file-row__d">' + icon('download', 15) + '</span>' +
+              '</button>';
+            }).join('') + '</div>'
+          : '') +
         (m.url ? '<a class="btn btn--soft btn--sm" href="' + U.esc(m.url) + '" target="_blank" rel="noopener" ' +
           'style="align-self:flex-start">' + icon('link', 15) + 'Відкрити</a>' : '') +
         '</div>';
-    }).join('') : C.empty('folder', 'Бібліотека порожня',
-        'Складіть сюди посилання, картки й методичні нотатки, щоб не шукати їх щоразу.',
-        '<button class="btn btn--primary" data-act="mat-add">' + icon('plus', 16) + 'Додати матеріал</button>');
+    }
+
+    /* Групуємо за підтемами: бібліотека швидко росте, і суцільна сітка
+       перестає читатися вже на двох десятках карток. */
+    var groups = [];
+    list.forEach(function (m) {
+      var t = m.topic || 'Загальне';
+      var g = groups.filter(function (x) { return x.topic === t; })[0];
+      if (!g) { g = { topic: t, items: [] }; groups.push(g); }
+      g.items.push(m);
+    });
+    groups.sort(function (a, b) { return a.topic.localeCompare(b.topic, 'uk'); });
+
+    var cards = list.length
+      ? groups.map(function (g) {
+          return '<div class="mat-group">' +
+            '<div class="mat-group__h">' + U.esc(g.topic) +
+            '<span class="mat-group__n">' + g.items.length + '</span></div>' +
+            '<div class="grid grid--auto">' + g.items.map(card).join('') + '</div>' +
+          '</div>';
+        }).join('')
+      : C.empty('folder', 'Бібліотека порожня',
+          'Складіть сюди посилання, файли й методичні нотатки, щоб не шукати їх щоразу.',
+          '<button class="btn btn--primary" data-act="mat-add">' + icon('plus', 16) + 'Додати матеріал</button>');
 
     return C.hero({
       short: true,
@@ -487,7 +527,7 @@
 
     '<div class="page">' +
       '<div class="row row--wrap mb-3" style="gap:9px">' + chips + '</div>' +
-      '<div class="grid grid--auto">' + cards + '</div>' +
+      cards +
     '</div>';
   };
 

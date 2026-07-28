@@ -699,6 +699,11 @@
       });
     });
     db.homeworks.forEach(function (h) { (h.photos || []).forEach(add); });
+    /* Вкладення матеріалів лежать у тому самому сховищі. Якщо їх тут не
+       врахувати, прибирання невикористаних файлів мовчки їх видалить. */
+    db.materials.forEach(function (m) {
+      (m.files || []).forEach(function (f) { add(f && f.key); });
+    });
     return keys;
   };
 

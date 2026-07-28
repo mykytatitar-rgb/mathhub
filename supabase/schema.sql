@@ -448,14 +448,30 @@ drop policy if exists uploads_delete on storage.objects;
 create policy uploads_read on storage.objects
   for select using (bucket_id = 'uploads');
 
+/* Перевірку виносимо в окрему функцію, бо саме правило виконується з правами
+   того, хто вантажить, — тобто учня. Прямого доступу до таблиці посилань
+   у нього немає й не повинно бути, тому підзапит до неї падав із
+   «permission denied for table shares». Функція працює з правами власника
+   і повертає лише «так/ні», нічого не розкриваючи. */
+create or replace function public.share_can_write(p_token text)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.shares s
+    where s.token = p_token and not s.revoked and s.can_write
+  );
+$$;
+
+revoke all on function public.share_can_write(text) from public;
+grant execute on function public.share_can_write(text) to anon, authenticated;
+
 create policy uploads_write on storage.objects
   for insert with check (
     bucket_id = 'uploads'
-    and exists (
-      select 1 from public.shares s
-      where s.token = (storage.foldername(name))[1]
-        and not s.revoked and s.can_write
-    )
+    and public.share_can_write((storage.foldername(name))[1])
   );
 
 -- прибирати може лише репетитор, якому належить це посилання

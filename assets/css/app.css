@@ -905,6 +905,26 @@ a { color: inherit; text-decoration: none; }
   .snap-row .muted { display: none; }
 }
 
+/* ============================================================
+   Домашні завдання просто з уроку
+   ============================================================ */
+
+.hw-list {
+  border: 1px solid var(--line, #e6eaf0);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.hw-list:empty { display: none; }
+.hw-row {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 11px 14px;
+  border: 0; border-bottom: 1px solid var(--line, #e6eaf0);
+  background: #fff; font: inherit; cursor: pointer; text-align: left;
+}
+.hw-row:last-child { border-bottom: 0; }
+.hw-row:hover { background: var(--blue-50, #f0f5ff); }
+.hw-row__t { font-weight: 650; font-size: 14px; line-height: 1.3; }
+
 /* Службові подробиці синхронізації — складені, щоб не лізли на очі */
 .sync-more > summary {
   cursor: pointer;

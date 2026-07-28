@@ -402,8 +402,14 @@
      Домашнє завдання
      ============================================================ */
 
-  F.homework = function (id, preset) {
+  /**
+   * @param onDone — викликається після збереження чи видалення. Потрібен дошці:
+   *   вона не перемальовується цілком, тому має сама оновити лічильник
+   *   і перевидати урок для учня.
+   */
+  F.homework = function (id, preset, onDone) {
     preset = preset || {};
+    var done = function () { if (onDone) { try { onDone(); } catch (e) {} } };
     var hw = id ? S.get('homeworks', id) : null;
     var isNew = !hw;
     var stList = S.students();
@@ -440,7 +446,7 @@
       buttons: [
         !isNew ? { label: 'Видалити', kind: 'btn--danger', act: 'del', onClick: function () {
           C.confirm('Видалити ДЗ?', 'Завдання буде вилучено назавжди.', function () {
-            S.remove('homeworks', id); U.toast('ДЗ видалено'); refresh();
+            S.remove('homeworks', id); U.toast('ДЗ видалено'); refresh(); done();
           });
         } } : null,
         { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
@@ -459,6 +465,7 @@
             } else { S.update('homeworks', id, v); U.toast('Збережено', 'ok'); }
             S.gcImages();
             refresh();
+            done();
           } }
       ].filter(Boolean),
       onMount: function (root) { mountPhotoStrip(root, photoKeys); }

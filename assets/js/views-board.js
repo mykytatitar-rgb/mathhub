@@ -72,6 +72,8 @@
             icon('edit', 15) + '<span data-slide-name>Слайд</span></button>' +
           '<button class="btn btn--ghost btn--sm" data-act="board-bg" title="Фон слайда">' +
             icon('grid', 15) + 'Фон</button>' +
+          '<button class="btn btn--ghost btn--sm" data-act="board-hw" title="Домашнє завдання цього уроку">' +
+            icon('checklist', 15) + 'ДЗ<span data-hw-count></span></button>' +
           '<button class="btn btn--ghost btn--sm" data-act="board-png">' + icon('image', 15) + 'PNG</button>' +
           '<button class="btn btn--primary btn--sm" data-act="board-share">' +
             icon('share', 15) + 'Надіслати учню</button>' +
@@ -161,6 +163,8 @@
 
     engine.setSlide(board.slides[0]);
     engine.applyCursor();
+
+    updateHwCount();
 
     // поки дошка відкрита — забираємо те, що пише учень за посиланням
     cur.pullTimer = setInterval(pullContributions, PULL_MS);
@@ -534,6 +538,7 @@
       return mergeHomework(hw).then(function (n) {
         if (n) {
           S.save();
+          updateHwCount();
           U.toast('Учень надіслав ' + U.pl(n, 'фото', 'фото', 'фото') + ' розв\'язання', 'ok');
         }
         var ids = res.ids.concat(hw.map(function (r) { return r.id; }));
@@ -1266,6 +1271,10 @@
     'board-rename': function () { renameSlide(); },
     'board-bg': function () { changeBg(); },
     'board-png': function () { exportPNG(); },
+    'board-hw': function () { homeworkDialog(); },
+    'board-hw-edit': function (hwId) {
+      F.homework(hwId, {}, function () { afterHomeworkChange(); homeworkDialog(); });
+    },
     'board-share': function () { shareDialog(); }
   };
 
@@ -1754,6 +1763,86 @@
         download(lessonSlug() + '-слайд-' + n + '.png', blob);
         U.toast('Зображення збережено', 'ok');
       }, 'image/png');
+    });
+  }
+
+  /* ------------------------------------------------------------
+     Домашнє завдання просто з уроку
+
+     Раніше по нього треба було виходити з дошки в окрему вкладку учня.
+     Але завдання дають саме на уроці — тож логічніше, щоб воно було тут.
+     ------------------------------------------------------------ */
+
+  /** Завдання, що стосуються цього уроку: його власні плюс незакриті цього учня. */
+  function lessonHomework() {
+    if (!cur) return [];
+    var l = S.get('lessons', cur.lessonId);
+    if (!l) return [];
+    return S.db().homeworks.filter(function (h) {
+      if (h.lessonId === l.id) return true;
+      if (h.studentId !== l.studentId) return false;
+      return h.status === 'assigned' || h.status === 'submitted';
+    });
+  }
+
+  function updateHwCount() {
+    var el = document.querySelector('[data-hw-count]');
+    if (!el) return;
+    var n = lessonHomework().length;
+    el.textContent = n ? ' ' + n : '';
+  }
+
+  function homeworkDialog() {
+    flushSave();
+    var l = S.get('lessons', cur.lessonId);
+    var st = l ? S.get('students', l.studentId) : null;
+    var list = lessonHomework();
+
+    var rows = list.length
+      ? list.map(function (h) {
+          var overdue = h.status === 'assigned' && U.daysBetween(U.today(), h.dueDate) < 0;
+          return '<button class="hw-row" data-act="board-hw-edit" data-arg="' + h.id + '">' +
+            '<div style="min-width:0;text-align:left">' +
+              '<div class="hw-row__t">' + U.esc(h.title) + '</div>' +
+              '<div class="small muted" style="margin-top:3px">до ' + U.esc(U.fmtDate(h.dueDate)) +
+              (h.lessonId !== cur.lessonId ? ' · з іншого уроку' : '') +
+              ((h.photos && h.photos.length)
+                ? ' · ' + U.pl(h.photos.length, 'фото', 'фото', 'фото') : '') +
+              '</div>' +
+            '</div>' +
+            '<span class="spacer">' + C.hwBadge(overdue ? 'skipped' : h.status) + '</span>' +
+          '</button>';
+        }).join('')
+      : '<div class="field__hint">Для цього уроку завдань ще немає.</div>';
+
+    C.modal({
+      title: 'Домашнє завдання',
+      sub: (st ? st.name : '') + (l ? ' · урок ' + U.fmtDate(l.date) : ''),
+      body:
+        '<div class="hw-list">' + rows + '</div>' +
+        '<div class="field__hint mt-2">Учень бачить ці завдання на сторінці уроку й може ' +
+        'надіслати фото розв\'язання до кожного окремо.</div>',
+      buttons: [
+        { label: 'Закрити', kind: 'btn--ghost', act: 'cancel' },
+        { label: 'Задати ДЗ', kind: 'btn--primary', act: 'add', icon: 'plus',
+          onClick: function () {
+            F.homework(null, { studentId: l ? l.studentId : '', lessonId: cur.lessonId, lockStudent: true },
+              function () { afterHomeworkChange(); });
+          } }
+      ]
+    });
+  }
+
+  /* Після зміни завдань оновлюємо лічильник і, якщо урок опубліковано,
+     одразу перевидаємо — інакше учень побачив би старий список. */
+  function afterHomeworkChange() {
+    updateHwCount();
+    if (!cur || !cur.board.share) return;
+    if (!(window.Cloud && Cloud.available() && Cloud.signedIn())) return;
+    var l = S.get('lessons', cur.lessonId);
+    var st = l ? S.get('students', l.studentId) : null;
+    publishLesson(cur.board, l, st, cur.board.share.token).catch(function (e) {
+      console.warn('Не вдалося оновити урок для учня:', e && e.message);
     });
   }
 

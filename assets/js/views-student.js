@@ -65,20 +65,17 @@
 
     '<div class="page page--overlap">' +
       '<div class="quick-row mb-3">' +
+        /* Окремої картки «Домашка» тут немає навмисно: завдання живуть в уроках,
+           тому те, що чекає на перевірку, показуємо просто в картці уроку. */
         '<button class="quick" data-act="tab" data-arg="lessons">' +
           '<div class="quick__icon">' + icon('calendar', 21) + '</div>' +
-          '<div style="min-width:0"><div class="quick__title">Наступний урок</div>' +
+          '<div style="min-width:0"><div class="quick__title">Наступний урок' +
+          (stat.hwPending ? '<span class="quick__badge" style="background:var(--violet)">' +
+            stat.hwPending + '</span>' : '') +
+          '</div>' +
           '<div class="small muted truncate" style="margin-top:2px">' +
           (next ? U.fmtDateTime(next.date) + ' · ' + U.fmtRelative(next.date) : 'не запланований') +
-          '</div></div><span class="quick__arrow">' + icon('chevronR', 18) + '</span></button>' +
-
-        '<button class="quick" data-act="tab" data-arg="lessons">' +
-          '<div class="quick__icon" style="background:var(--violet-bg);color:var(--violet)">' + icon('checklist', 21) + '</div>' +
-          '<div style="min-width:0"><div class="quick__title">Домашка' +
-          (stat.hwPending ? '<span class="quick__badge" style="background:var(--violet)">' + stat.hwPending + '</span>' : '') +
-          '</div><div class="small muted truncate" style="margin-top:2px">' +
-          (stat.hwPending ? U.pl(stat.hwPending, 'завдання чекає', 'завдання чекають', 'завдань чекають') +
-            ' на перевірку' : 'усе перевірено') +
+          (stat.hwPending ? ' · ' + U.pl(stat.hwPending, 'домашнє чекає', 'домашні чекають', 'домашніх чекають') : '') +
           '</div></div><span class="quick__arrow">' + icon('chevronR', 18) + '</span></button>' +
 
         '<button class="quick" data-act="tab" data-arg="payments">' +

@@ -2245,6 +2245,21 @@
 '.addshot input{display:none}\n' +
 '.addshot span{display:inline-block;border:1.5px dashed #8FB4FF;border-radius:999px;padding:8px 15px;font-size:12.5px;font-weight:650;color:#0B4ED6;background:#F7FAFF}\n' +
 '.addshot span:hover{background:#F0F5FF}\n' +
+'.tools{position:absolute;left:14px;top:50%;transform:translateY(-50%);background:#fff;border-radius:16px;box-shadow:0 6px 24px rgba(13,33,73,.13);padding:6px;display:flex;flex-direction:column;gap:3px;z-index:3}\n' +
+'.tl{width:40px;height:40px;border:0;background:none;border-radius:11px;cursor:pointer;font-size:17px;line-height:1;color:#33456B;display:flex;align-items:center;justify-content:center}\n' +
+'.tl:hover{background:#F0F5FF;color:#0B4ED6}\n' +
+'.tl.on{background:#1358F5;color:#fff}\n' +
+'.opts{position:absolute;left:66px;top:50%;transform:translateY(-50%);background:#fff;border-radius:14px;box-shadow:0 6px 24px rgba(13,33,73,.13);padding:9px;display:flex;flex-direction:column;gap:9px;z-index:3}\n' +
+'.opts.hide{display:none}\n' +
+'.opts__row{display:flex;flex-direction:column;gap:5px;align-items:center}\n' +
+'.sw{width:26px;height:26px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}\n' +
+'.sw.on{border-color:#0D2149}\n' +
+'.wd{width:30px;height:26px;border:0;background:none;cursor:pointer;border-radius:8px;display:flex;align-items:center;justify-content:center}\n' +
+'.wd:hover{background:#F0F5FF}\n' +
+'.wd.on{background:#F0F5FF}\n' +
+'.wd i{display:block;background:#33456B;border-radius:99px}\n' +
+'@media(max-width:640px){.tools{left:8px;padding:4px}.tl{width:34px;height:34px;font-size:15px}.opts{left:52px;padding:7px}}\n' +
+'.tin{position:absolute;z-index:4;min-width:170px;min-height:34px;border:2px solid #1358F5;border-radius:8px;padding:5px 8px;font-family:Montserrat,"Segoe UI",system-ui,sans-serif;font-weight:500;line-height:1.25;background:rgba(255,255,255,.97);outline:none;resize:none;overflow:hidden}\n' +
 '.mats{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}\n' +
 '.matf{display:inline-block;border:1.5px solid #E8EEF8;border-radius:10px;padding:8px 14px;font-size:12.5px;font-weight:650;color:#0B4ED6;text-decoration:none;background:#fff}\n' +
 '.matf:hover{background:#F0F5FF;border-color:#8FB4FF}\n' +
@@ -2261,8 +2276,8 @@
 '    <div class="sub">' + U.esc([payload.student, payload.date].filter(Boolean).join(' · ')) + '</div></div>\n' +
 '    <div class="sp">\n' +
 (payload.canWrite
-  ? '      <button class="btn pen" id="pen" title="Писати на дошці">✎ Писати</button>\n' +
-    '      <button class="btn" id="undo" title="Прибрати останнє" disabled>↶</button>\n'
+  ? '      <button class="btn" id="undo" title="Скасувати (Ctrl+Z)" disabled>↶</button>\n' +
+    '      <button class="btn" id="redo" title="Повернути (Ctrl+Y)" disabled>↷</button>\n'
   : '') +
 '      <button class="btn" id="prev">← Назад</button>\n' +
 '      <span class="pos" id="pos"></span>\n' +
@@ -2273,6 +2288,22 @@
 '    <canvas id="c"></canvas>\n' +
 '    <div class="name" id="nm"></div>\n' +
 '    <div class="saved" id="sv">Надіслано репетитору</div>\n' +
+(payload.canWrite
+  ? '    <div class="tools" id="tools">\n' +
+    '      <button class="tl" data-tool="hand" title="Рух по полотну">✋</button>\n' +
+    '      <button class="tl on" data-tool="pen" title="Олівець">✎</button>\n' +
+    '      <button class="tl" data-tool="erase" title="Гумка — стирає ваші записи">◻</button>\n' +
+    '      <button class="tl" data-tool="text" title="Текст">T</button>\n' +
+    '      <button class="tl" data-tool="line" title="Лінія">╱</button>\n' +
+    '      <button class="tl" data-tool="arrow" title="Стрілка">→</button>\n' +
+    '      <button class="tl" data-tool="rect" title="Прямокутник">▭</button>\n' +
+    '      <button class="tl" data-tool="ell" title="Коло">◯</button>\n' +
+    '    </div>\n' +
+    '    <div class="opts" id="opts">\n' +
+    '      <div class="opts__row" id="cols"></div>\n' +
+    '      <div class="opts__row" id="wids"></div>\n' +
+    '    </div>\n'
+  : '') +
 '    <div class="zoom"><button id="zo">−</button><span class="zv" id="zv">100%</span>' +
 '<button id="zi">+</button><button id="zf" title="Вмістити" style="font-size:13px">⤢</button></div>\n' +
 '  </div>\n' +
@@ -2328,8 +2359,9 @@ VIEWER_SCRIPT +
 'var idx=0,scale=1,cam={x:0,y:0},W=0,H=0,dpr=1;',
 'var IMGS={};',
 // MY — написане учнем, ще не влите репетитором; cur — штрих, який малюється зараз
-'var MY={},penOn=false,cur=null,mine=[];',
-'var PENC="#E11D48",PENW=3;',
+'var MY={},cur=null,mine=[],erasing=false;',
+'var tool="pen",PENC="#E11D48",PENW=3;',
+'var CANW=!!DATA.canWrite;',
 'function seq(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}',
 'function toWorld(sx,sy){return[sx/scale+cam.x,sy/scale+cam.y];}',
 'function say(o){try{parent.postMessage(o,"*")}catch(e){}}',
@@ -2384,7 +2416,7 @@ VIEWER_SCRIPT +
 '(s.items||[]).forEach(function(it){drawItem(ctx,it)});',
 // написане учнем малюємо поверх — воно ще не встигло дійти до репетитора
 '(MY[idx]||[]).forEach(function(it){drawItem(ctx,it)});',
-'if(cur&&cur.d.length>=4)drawItem(ctx,cur);',
+'if(cur&&(cur.t!=="p"||cur.d.length>=4))drawItem(ctx,cur);',
 'ctx.restore();',
 'document.getElementById("zv").textContent=Math.round(scale*100)+"%";}',
 'function resize(){var r=cv.getBoundingClientRect();dpr=window.devicePixelRatio||1;W=r.width;H=r.height;',
@@ -2416,38 +2448,116 @@ VIEWER_SCRIPT +
 'cv.addEventListener("wheel",function(e){e.preventDefault();var r=cv.getBoundingClientRect();',
 'zoomAt(Math.pow(0.999,e.deltaY*(e.ctrlKey?2.4:1)),e.clientX-r.left,e.clientY-r.top);},{passive:false});',
 'var pan=null,pts={},pinch=null;',
+
+/* Інструменти ті самі, що й у репетитора: олівець, гумка, текст, лінія,
+   стрілка, прямокутник, коло — з вибором кольору й товщини. Формати записів
+   збігаються з дошкою, тому написане учнем виглядає в репетитора так само. */
+'var COLS=["#0D2149","#1358F5","#E11D48","#16A34A","#F59E0B","#7C3AED"];',
+'var WIDS=[2,3,5,9,14];',
+'var undone=[];',
+
+'function setTool(t){tool=t;',
+'[].forEach.call(document.querySelectorAll(".tl"),function(b){b.className="tl"+(b.dataset.tool===t?" on":"")});',
+'var o=document.getElementById("opts");if(o)o.className="opts"+(t==="hand"||t==="erase"?" hide":"");',
+'cv.className=(t==="hand")?"":"pen";}',
+
+'function paintOpts(){var cw=document.getElementById("cols"),ww=document.getElementById("wids");',
+'if(!cw)return;',
+'cw.innerHTML=COLS.map(function(c){return \'<button class="sw\'+(c===PENC?" on":"")+\'" data-c="\'+c+\'" style="background:\'+c+\'"></button>\';}).join("");',
+'ww.innerHTML=WIDS.map(function(w){var d=Math.min(16,4+w);',
+'return \'<button class="wd\'+(w===PENW?" on":"")+\'" data-w="\'+w+\'"><i style="width:\'+d+\'px;height:\'+Math.max(2,w)+\'px"></i></button>\';}).join("");}',
+
+'function pushMine(it){if(!MY[idx])MY[idx]=[];MY[idx].push(it);mine.push({s:idx,id:it.id});undone=[];',
+'say({mathhub:"ink",slide:idx,item:it});flash();syncUndo();draw();}',
+'function syncUndo(){var u=document.getElementById("undo"),r=document.getElementById("redo");',
+'if(u)u.disabled=!mine.length;if(r)r.disabled=!undone.length;}',
+
+'function eraseAt(wx,wy){var list=MY[idx]||[];var hit=null;var tol=12/scale;',
+'for(var i=list.length-1;i>=0;i--){var b=bounds(list[i]);if(!b)continue;',
+'if(wx>=b.x1-tol&&wx<=b.x2+tol&&wy>=b.y1-tol&&wy<=b.y2+tol){hit=list[i];break;}}',
+'if(!hit)return;MY[idx]=list.filter(function(x){return x.id!==hit.id});',
+'mine=mine.filter(function(m){return m.id!==hit.id});',
+'say({mathhub:"ink-undo",id:hit.id});syncUndo();draw();}',
+
 'cv.addEventListener("pointerdown",function(e){try{cv.setPointerCapture(e.pointerId)}catch(x){}var r=cv.getBoundingClientRect();',
-// олівець увімкнено — починаємо штрих замість руху по полотну
-'if(penOn){e.preventDefault();var w0=toWorld(e.clientX-r.left,e.clientY-r.top);',
-'cur={t:"p",c:PENC,w:PENW,d:[w0[0],w0[1]],id:seq()};return;}',
-'pts[e.pointerId]={x:e.clientX-r.left,y:e.clientY-r.top};',
+'var sx=e.clientX-r.left,sy=e.clientY-r.top;var w0=toWorld(sx,sy);',
+'if(CANW&&tool!=="hand"&&e.button!==2){e.preventDefault();',
+'if(tool==="erase"){erasing=true;eraseAt(w0[0],w0[1]);return;}',
+'if(tool==="text"){placeText(sx,sy,w0);return;}',
+'if(tool==="pen"){cur={t:"p",c:PENC,w:PENW,d:[w0[0],w0[1]],id:seq()};return;}',
+'cur={t:(tool==="line"?"l":tool==="arrow"?"a":tool==="rect"?"r":"e"),c:PENC,w:PENW,',
+'a:[w0[0],w0[1],w0[0],w0[1]],id:seq()};return;}',
+'pts[e.pointerId]={x:sx,y:sy};',
 'if(Object.keys(pts).length===2){var k=Object.keys(pts),a=pts[k[0]],b2=pts[k[1]];',
 'pan=null;pinch={d:Math.hypot(a.x-b2.x,a.y-b2.y)};return;}',
-'pan={sx:e.clientX-r.left,sy:e.clientY-r.top,cx:cam.x,cy:cam.y};cv.className="drag";});',
+'pan={sx:sx,sy:sy,cx:cam.x,cy:cam.y};cv.className="drag";});',
+
 'cv.addEventListener("pointermove",function(e){var r=cv.getBoundingClientRect();var p={x:e.clientX-r.left,y:e.clientY-r.top};',
-'if(cur){var wp=toWorld(p.x,p.y);var n=cur.d.length;',
+'if(erasing){var we=toWorld(p.x,p.y);eraseAt(we[0],we[1]);return;}',
+'if(cur){var wp=toWorld(p.x,p.y);',
+'if(cur.t==="p"){var n=cur.d.length;',
 // не пишемо точку, поки палець не зрушив помітно — інакше лінія «мохната»
 'if(n<2||Math.hypot(wp[0]-cur.d[n-2],wp[1]-cur.d[n-1])>1.2/scale){cur.d.push(wp[0],wp[1]);draw();}return;}',
+'cur.a[2]=wp[0];cur.a[3]=wp[1];',
+// з Shift фігура виходить правильною: квадрат і коло замість витягнутих
+'if(e.shiftKey&&(cur.t==="r"||cur.t==="e")){var dx=wp[0]-cur.a[0],dy=wp[1]-cur.a[1];',
+'var m=Math.max(Math.abs(dx),Math.abs(dy));cur.a[2]=cur.a[0]+(dx<0?-m:m);cur.a[3]=cur.a[1]+(dy<0?-m:m);}',
+'draw();return;}',
 'if(pts[e.pointerId])pts[e.pointerId]=p;var k=Object.keys(pts);',
 'if(k.length===2&&pinch){var a=pts[k[0]],b2=pts[k[1]],d=Math.hypot(a.x-b2.x,a.y-b2.y);',
 'if(pinch.d>0)zoomAt(d/pinch.d,(a.x+b2.x)/2,(a.y+b2.y)/2);pinch.d=d;return;}',
 'if(!pan)return;cam.x=pan.cx-(p.x-pan.sx)/scale;cam.y=pan.cy-(p.y-pan.sy)/scale;draw();keep();});',
+
 'function up(e){',
+'if(erasing){erasing=false;return;}',
 'if(cur){var it=cur;cur=null;',
-'if(it.d.length>=4){if(!MY[idx])MY[idx]=[];MY[idx].push(it);mine.push({s:idx,id:it.id});',
-'say({mathhub:"ink",slide:idx,item:it});flash();',
-'document.getElementById("undo").disabled=false;}',
-'draw();return;}',
-'delete pts[e.pointerId];if(Object.keys(pts).length<2)pinch=null;pan=null;cv.className=penOn?"pen":"";}',
+'var okItem=(it.t==="p")?it.d.length>=4:(Math.hypot(it.a[2]-it.a[0],it.a[3]-it.a[1])>3/scale);',
+'if(okItem)pushMine(it);else draw();return;}',
+'delete pts[e.pointerId];if(Object.keys(pts).length<2)pinch=null;pan=null;',
+'cv.className=(CANW&&tool!=="hand")?"pen":"";}',
 'cv.addEventListener("pointerup",up);cv.addEventListener("pointercancel",up);',
-// кнопки олівця
-'var penB=document.getElementById("pen"),undoB=document.getElementById("undo");',
-'if(penB){penB.onclick=function(){penOn=!penOn;penB.className="btn pen"+(penOn?" on":"");',
-'cv.className=penOn?"pen":"";};}',
-'if(undoB){undoB.onclick=function(){if(!mine.length)return;var last=mine.pop();',
-'MY[last.s]=(MY[last.s]||[]).filter(function(x){return x.id!==last.id});',
-'say({mathhub:"ink-undo",id:last.id});undoB.disabled=!mine.length;draw();};}',
+
+/* Текст пишемо прямо на полотні: поле зʼявляється там, де клікнули,
+   і зникає, щойно людина клацнула повз. */
+'function placeText(sx,sy,w0){var ta=document.createElement("textarea");',
+'ta.className="tin";ta.style.left=sx+"px";ta.style.top=(sy-12)+"px";',
+'ta.style.fontSize=Math.max(11,Math.round(24*scale))+"px";ta.style.color=PENC;',
+'document.querySelector(".body").appendChild(ta);',
+'setTimeout(function(){ta.focus();},30);',
+'var done=false;',
+'function finish(){if(done)return;done=true;var v=ta.value.trim();ta.remove();',
+'if(v)pushMine({t:"x",c:PENC,s:24,p:[w0[0],w0[1]],v:v,id:seq()});}',
+'ta.addEventListener("blur",finish);',
+'ta.addEventListener("keydown",function(ev){if(ev.key==="Escape"){ta.value="";finish();}',
+'if(ev.key==="Enter"&&(ev.ctrlKey||ev.metaKey))finish();});}',
+
+'var undoB=document.getElementById("undo"),redoB=document.getElementById("redo");',
+'function doUndo(){if(!mine.length)return;var last=mine.pop();',
+'var arr=MY[last.s]||[];var it=arr.filter(function(x){return x.id===last.id;})[0];',
+'MY[last.s]=arr.filter(function(x){return x.id!==last.id});',
+'if(it)undone.push({s:last.s,item:it});',
+'say({mathhub:"ink-undo",id:last.id});syncUndo();draw();}',
+'function doRedo(){if(!undone.length)return;var back=undone.pop();',
+'if(!MY[back.s])MY[back.s]=[];MY[back.s].push(back.item);',
+'mine.push({s:back.s,id:back.item.id});',
+'say({mathhub:"ink",slide:back.s,item:back.item});syncUndo();draw();}',
+'if(undoB)undoB.onclick=doUndo;',
+'if(redoB)redoB.onclick=doRedo;',
+
+'[].forEach.call(document.querySelectorAll(".tl"),function(b){',
+'b.onclick=function(){setTool(b.dataset.tool);};});',
+'var optsEl=document.getElementById("opts");',
+'if(optsEl)optsEl.addEventListener("click",function(e){',
+'var c=e.target.closest("[data-c]");if(c){PENC=c.dataset.c;paintOpts();return;}',
+'var w=e.target.closest("[data-w]");if(w){PENW=+w.dataset.w;paintOpts();}});',
+'if(CANW){paintOpts();setTool("pen");}',
 'window.addEventListener("keydown",function(e){',
+'if(e.target&&e.target.tagName==="TEXTAREA")return;',   // поки пишуть текст — гарячі клавіші мовчать
+'var mod=e.ctrlKey||e.metaKey;',
+'if(mod&&e.key.toLowerCase()==="z"&&!e.shiftKey){e.preventDefault();doUndo();return;}',
+'if(mod&&(e.key.toLowerCase()==="y"||(e.key.toLowerCase()==="z"&&e.shiftKey))){e.preventDefault();doRedo();return;}',
+'if(CANW&&!mod){var m={p:"pen",e:"erase",t:"text",l:"line",a:"arrow",r:"rect",o:"ell",h:"hand"}[e.key.toLowerCase()];',
+'if(m){e.preventDefault();setTool(m);return;}}',
 'if(e.key==="ArrowRight"||e.key==="PageDown"||e.key===" "){e.preventDefault();go(idx+1);}',
 'else if(e.key==="ArrowLeft"||e.key==="PageUp"){e.preventDefault();go(idx-1);}',
 'else if(e.key==="+"||e.key==="="){zoomAt(1.25,W/2,H/2);}',

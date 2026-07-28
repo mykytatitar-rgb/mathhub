@@ -270,8 +270,7 @@
         hw.map(function (h) {
           return '<div class="row" style="background:#FBFCFE;border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px">' +
             '<div style="min-width:0"><div style="font-weight:650;font-size:14px">' + U.esc(h.title) + '</div>' +
-            '<div class="small muted" style="margin-top:3px">до ' + U.fmtDate(h.dueDate) +
-            (h.score != null ? ' · оцінка ' + h.score + '/12' : '') + '</div></div>' +
+            '<div class="small muted" style="margin-top:3px">до ' + U.fmtDate(h.dueDate) + '</div></div>' +
             '<span class="spacer">' + C.hwBadge(h.status) + '</span></div>';
         }).join('') + '</div>' : '');
 
@@ -415,7 +414,7 @@
       lessonId: preset.lessonId || '',
       title: '', description: '',
       dueDate: U.ymd(U.addDays(new Date(), 3)),
-      status: 'assigned', score: null, feedback: '', photos: []
+      status: 'assigned', feedback: '', photos: []
     };
     var photoKeys = (data.photos || []).slice();
 
@@ -431,10 +430,6 @@
         C.field('Статус', C.select('status', data.status, Object.keys(S.HW_STATUS).map(function (k) {
           return { value: k, label: S.HW_STATUS[k].label };
         }))) +
-      '</div>' +
-      '<div class="field-row">' +
-        C.field('Оцінка (0–12)', C.input('score', data.score, 'type="number" min="0" max="12" placeholder="—"')) +
-        '<div></div>' +
       '</div>' +
       C.field('Відгук для учня', C.textarea('feedback', data.feedback,
         'placeholder="Що вийшло добре, де помилка"'));
@@ -456,7 +451,6 @@
               U.toast('Опишіть завдання або додайте фото', 'err'); return false;
             }
             if (!v.title) v.title = 'Завдання на фото';
-            if (v.score != null) v.score = U.clamp(v.score, 0, 12);
             v.photos = photoKeys.slice();
             if (isNew) {
               v.studentId = preset.lockStudent ? data.studentId : (v.studentId || data.studentId);

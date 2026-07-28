@@ -75,7 +75,8 @@
           '<div style="min-width:0"><div class="quick__title">Домашка' +
           (stat.hwPending ? '<span class="quick__badge" style="background:var(--violet)">' + stat.hwPending + '</span>' : '') +
           '</div><div class="small muted truncate" style="margin-top:2px">' +
-          (stat.avgScore != null ? 'середній бал ' + U.num(stat.avgScore, 1) + ' / 12' : 'ще без оцінок') +
+          (stat.hwPending ? U.pl(stat.hwPending, 'завдання чекає', 'завдання чекають', 'завдань чекають') +
+            ' на перевірку' : 'усе перевірено') +
           '</div></div><span class="quick__arrow">' + icon('chevronR', 18) + '</span></button>' +
 
         '<button class="quick" data-act="tab" data-arg="payments">' +
@@ -116,7 +117,8 @@
 
         '<div class="grid grid--3">' +
           C.stat('Проведено', stat.done, U.pl(stat.planned, 'попереду', 'попереду', 'попереду'), 'book') +
-          C.stat('Середній бал', stat.avgScore != null ? U.num(stat.avgScore, 1) : '—', 'з 12 за ДЗ', 'star', 'amber') +
+          C.stat('Домашні в роботі', stat.hwPending, stat.hwPending ? 'чекають на перевірку' : 'усе перевірено',
+            'checklist', stat.hwPending ? 'violet' : 'green') +
           C.stat('Пропуски', stat.missed, stat.missed ? 'варто обговорити' : 'жодного', 'alert',
             stat.missed ? 'red' : 'green') +
         '</div>' +
@@ -273,15 +275,6 @@
         icon('plus', 16) + 'Задати ДЗ</button>') + '</div>';
     }
 
-    var checked = all.filter(function (h) { return h.status === 'checked' && h.score != null; });
-    var last8 = checked.slice(0, 8).reverse();
-    var maxScore = 12;
-    var spark = last8.map(function (h) {
-      var col = h.score >= 10 ? 'var(--green)' : h.score >= 7 ? 'var(--blue-500)' : h.score >= 4 ? 'var(--amber)' : 'var(--red)';
-      return '<div class="spark__b" title="' + h.score + '/12" style="height:' +
-        Math.max(8, (h.score / maxScore) * 100) + '%;background:' + col + '"></div>';
-    }).join('');
-
     var cards = all.map(function (h) {
       var overdue = h.status === 'assigned' && U.daysBetween(U.today(), h.dueDate) < 0;
       var lesson = h.lessonId ? S.get('lessons', h.lessonId) : null;
@@ -297,9 +290,7 @@
             '</div>' +
           '</div>' +
           '<div style="text-align:right">' +
-            (h.score != null ? '<div style="font-size:22px;font-weight:800;letter-spacing:-1px;line-height:1">' +
-              h.score + '<span class="muted" style="font-size:13px;font-weight:600">/12</span></div>' : '') +
-            '<div style="margin-top:6px">' + C.hwBadge(overdue ? 'skipped' : h.status) + '</div>' +
+            '<div>' + C.hwBadge(overdue ? 'skipped' : h.status) + '</div>' +
           '</div>' +
           '<button class="icon-btn" data-act="hw-edit" data-arg="' + h.id + '">' + icon('edit', 16) + '</button>' +
         '</div>' +
@@ -315,17 +306,11 @@
 
     return '<div class="grid grid--4 mb-3">' +
         C.stat('Усього завдань', all.length, '', 'checklist') +
-        C.stat('Середній бал', stat.avgScore != null ? U.num(stat.avgScore, 1) : '—', 'з 12', 'star', 'amber') +
+        C.stat('Перевірено', stat.hwChecked, 'уже розібрали', 'check', 'green') +
         C.stat('В роботі', stat.hwPending, 'ще не перевірено', 'clock', 'violet') +
         C.stat('Не виконано', stat.hwSkipped, stat.hwSkipped ? 'варто нагадати' : 'усе здано', 'alert',
           stat.hwSkipped ? 'red' : 'green') +
       '</div>' +
-
-      (last8.length > 1 ? '<div class="card mb-3">' +
-        '<div class="card-head"><div><h3 class="card-title">Динаміка оцінок</h3>' +
-        '<div class="card-sub">останні ' + last8.length + ' перевірених робіт</div></div></div>' +
-        '<div class="spark" style="height:56px">' + spark + '</div>' +
-        '</div>' : '') +
 
       '<div class="row mb-2"><h3 class="card-title">Завдання</h3>' +
       '<button class="btn btn--soft btn--sm spacer" data-act="hw-add" data-arg="' + st.id + '">' +

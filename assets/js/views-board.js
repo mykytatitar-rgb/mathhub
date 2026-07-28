@@ -1971,7 +1971,6 @@
           id: h.id,
           title: h.title || '', desc: h.description || '',
           due: h.dueDate ? U.fmtDate(h.dueDate) : '',
-          score: h.score != null ? h.score : null,
           feedback: h.feedback || '',
           photos: (h.photos || []).slice()
         };
@@ -2113,8 +2112,7 @@
   ? '  <div class="extra"><h3>Домашнє завдання</h3>\n' + payload.homework.map(function (h) {
       return '    <div class="hw"><b>' + U.esc(h.title) + '</b>' +
         '<div class="meta">' +
-        (h.due ? 'до ' + U.esc(h.due) : '') +
-        (h.score != null ? ' · оцінка ' + h.score + '/12' : '') + '</div>' +
+        (h.due ? 'до ' + U.esc(h.due) : '') + '</div>' +
         (h.desc ? '<div class="desc">' + U.esc(h.desc) + '</div>' : '') +
         (h.feedback ? '<div class="meta" style="margin-top:6px">Відгук: ' + U.esc(h.feedback) + '</div>' : '') +
         '<div class="shots" data-shots="' + U.esc(h.id || '') + '">' +

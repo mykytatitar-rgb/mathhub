@@ -233,9 +233,8 @@
         '<div class="stu-card__stats">' +
           '<div><div class="stu-card__stat-v">' + stat.done + '</div>' +
           '<div class="stu-card__stat-l">уроків</div></div>' +
-          '<div><div class="stu-card__stat-v">' +
-          (stat.avgScore != null ? U.num(stat.avgScore, 1) : '—') + '</div>' +
-          '<div class="stu-card__stat-l">бал ДЗ</div></div>' +
+          '<div><div class="stu-card__stat-v">' + stat.hwPending + '</div>' +
+          '<div class="stu-card__stat-l">ДЗ в роботі</div></div>' +
           '<div style="min-width:0"><div class="stu-card__stat-v" style="font-size:14px;padding-top:3px">' +
           (next ? U.fmtDate(next.date) + ' ' + U.fmtTime(next.date) : '—') + '</div>' +
           '<div class="stu-card__stat-l">наступний</div></div>' +

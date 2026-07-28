@@ -381,8 +381,6 @@
     var lessons = S.lessonsOf(studentId);
     var done = lessons.filter(function (l) { return l.status === 'done'; });
     var hw = S.homeworksOf(studentId);
-    var checked = hw.filter(function (h) { return h.status === 'checked' && h.score != null; });
-    var scores = checked.map(function (h) { return h.score; });
     var prog = S.progressOf(studentId);
 
     return {
@@ -393,8 +391,7 @@
       hwTotal: hw.length,
       hwPending: hw.filter(function (h) { return h.status === 'assigned' || h.status === 'submitted'; }).length,
       hwSkipped: hw.filter(function (h) { return h.status === 'skipped'; }).length,
-      avgScore: scores.length ? U.sum(scores) / scores.length : null,
-      scores: checked,
+      hwChecked: hw.filter(function (h) { return h.status === 'checked'; }).length,
       avgProgress: prog.length ? Math.round(U.sum(prog, function (p) { return p.level; }) / prog.length) : 0,
       topicsCovered: prog.length,
       lastLesson: done.length ? done[0] : null,
@@ -914,7 +911,6 @@
               description: 'Основне — задачі 3, 7 і 9. Якщо не виходить — фотографуй спробу, розберемо разом.',
               dueDate: U.ymd(due),
               status: hwStatus,
-              score: hwStatus === 'checked' ? Math.min(12, 6 + ((idx + n) % 6) + Math.floor(n / 6)) : null,
               feedback: hwStatus === 'checked' ? 'Добре, але в №7 загубив другий корінь.' : '',
               createdAt: date.toISOString()
             });

@@ -1846,11 +1846,54 @@
     });
   }
 
+  /* Вибір матеріалів, які поїдуть учневі разом з уроком.
+     Бібліотека — робоча кухня репетитора, тому відкриваємо тільки те,
+     що він позначив сам, і для кожного уроку окремо. */
+  function materialPicker(chosen) {
+    var all = S.db().materials;
+    if (!all.length) {
+      return '<div class="field__hint mt-2">Матеріалів у бібліотеці ще немає.</div>';
+    }
+    var byTopic = {};
+    all.forEach(function (m) {
+      var t = m.topic || 'Загальне';
+      (byTopic[t] = byTopic[t] || []).push(m);
+    });
+    return '<details class="sync-more mt-2"' + (chosen.length ? ' open' : '') + '>' +
+      '<summary>Матеріали для учня' + (chosen.length ? ' · ' + chosen.length : '') + '</summary>' +
+      '<div class="mat-pick">' +
+      Object.keys(byTopic).sort(function (a, b) { return a.localeCompare(b, 'uk'); }).map(function (t) {
+        return '<div class="mat-pick__h">' + U.esc(t) + '</div>' +
+          byTopic[t].map(function (m) {
+            var n = (m.files || []).length;
+            return '<label class="mat-pick__r">' +
+              '<input type="checkbox" data-mat="' + m.id + '"' +
+              (chosen.indexOf(m.id) > -1 ? ' checked' : '') + '>' +
+              '<span>' + U.esc(m.title) +
+              (n ? ' <span class="muted">· ' + U.pl(n, 'файл', 'файли', 'файлів') + '</span>' : '') +
+              '</span></label>';
+          }).join('');
+      }).join('') +
+      '</div>' +
+      '<div class="field__hint mt-2">Учень побачить лише позначене, і лише за цим посиланням.</div>' +
+      '</details>';
+  }
+
+  function readPicked(root) {
+    return U.$$('[data-mat]', root).filter(function (el) { return el.checked; })
+      .map(function (el) { return el.dataset.mat; });
+  }
+
   /** Опублікувати урок і покласти посилання в буфер обміну. */
-  function publishShare(l, st, token, isUpdate) {
+  function publishShare(l, st, token, isUpdate, root) {
+    if (root) {
+      cur.board.share = cur.board.share || { token: token, at: new Date().toISOString() };
+      cur.board.share.materials = readPicked(root);
+    }
     U.toast(isUpdate ? 'Оновлюю урок…' : 'Готую урок для учня…');
     return publishLesson(cur.board, l, st, token).then(function (url) {
-      cur.board.share = { token: token, at: new Date().toISOString() };
+      var mats = (cur.board.share && cur.board.share.materials) || [];
+      cur.board.share = { token: token, at: new Date().toISOString(), materials: mats };
       cur.republishedAt = Date.now();
       markDirty(); flushSave();
       // копіюємо одразу: людина щойно натиснула кнопку, отже дозвіл є
@@ -1922,7 +1965,8 @@
           '<div class="field__hint mt-2">Сторінка оновлюється сама: під час роботи — ' +
           'приблизно раз на хвилину, і одразу коли ви виходите з дошки. ' +
           'Кнопка «Оновити» потрібна лише якщо хочете не чекати.</div>' +
-          facts,
+          facts +
+          materialPicker((share && share.materials) || []),
         buttons: [
           { label: 'Закрити', kind: 'btn--ghost', act: 'cancel' },
           { label: 'Відкликати', kind: 'btn--danger', act: 'revoke',
@@ -1936,7 +1980,7 @@
               });
             } },
           { label: 'Оновити', kind: 'btn--primary', act: 'go', icon: 'refresh',
-            onClick: function () { publishShare(l, st, share.token, true); } }
+            onClick: function (root) { publishShare(l, st, share.token, true, root); } }
         ]
       });
       return;
@@ -1952,6 +1996,7 @@
         'тільки цей урок: слайди, теорію та домашнє завдання. Ні входу, ні паролів, ' +
         'ні доступу до решти ваших даних.</p>' +
         facts +
+        materialPicker([]) +
         '<div class="field__hint mt-2">Код у посиланні випадковий, підібрати його неможливо. ' +
         'Доступ можна відкликати будь-коли — тоді сторінка перестане відкриватися.</div>',
       buttons: [
@@ -1959,7 +2004,7 @@
         { label: 'Зібрати файл', kind: 'btn--ghost', act: 'file', icon: 'download',
           onClick: function () { downloadViewer(l, st); } },
         { label: 'Створити посилання', kind: 'btn--primary', act: 'go', icon: 'share',
-          onClick: function () { publishShare(l, st, window.Cloud.newShareToken(), false); } }
+          onClick: function (root) { publishShare(l, st, window.Cloud.newShareToken(), false, root); } }
       ]
     });
   }
@@ -2078,7 +2123,23 @@
       h.photos.forEach(function (k) { if (keys.indexOf(k) < 0) keys.push(k); });
     });
 
-    return { payload: payload, keys: keys };
+    /* Матеріали, які репетитор навмисно відкрив для цього учня.
+       Не всі підряд: бібліотека — його робоча кухня, і учневі там не місце. */
+    var matKeys = [];
+    var chosen = (board.share && board.share.materials) || [];
+    payload.materials = chosen.map(function (mid) {
+      var m = S.get('materials', mid);
+      if (!m) return null;
+      return {
+        title: m.title || '', note: m.note || '', url: m.url || '',
+        files: (m.files || []).map(function (f) {
+          if (matKeys.indexOf(f.key) < 0) matKeys.push(f.key);
+          return { key: f.key, name: f.name || 'файл', size: f.size || 0 };
+        })
+      };
+    }).filter(Boolean);
+
+    return { payload: payload, keys: keys, matKeys: matKeys };
   }
 
   /** Файл для надсилання: картинки вшиваються всередину, щоб працювало без мережі. */
@@ -2106,14 +2167,31 @@
     var built = buildPayload(board, lesson, student);
     // учневі дозволено писати, якщо репетитор не вимкнув це для цього уроку
     built.payload.canWrite = !(board.share && board.share.readOnly);
-    return Promise.all(built.keys.map(function (k) {
+
+    var matUrls = {};
+    var jobs = built.keys.map(function (k) {
       return window.ImgStore.get(k).then(function (blob) {
         if (!blob) return null;
         return window.Cloud.publishShareImage(token, k, blob).then(function (url) {
           built.payload.images[k] = url;
         });
       }).catch(function () { return null; });   // одна невдала картинка не має валити публікацію
-    })).then(function () {
+    }).concat(built.matKeys.map(function (k) {
+      return window.ImgStore.get(k).then(function (blob) {
+        if (!blob) return null;
+        return window.Cloud.publishShareImage(token, k, blob, 'mat').then(function (url) {
+          matUrls[k] = url;
+        });
+      }).catch(function () { return null; });
+    }));
+
+    return Promise.all(jobs).then(function () {
+      built.payload.materials.forEach(function (m) {
+        m.files = m.files.filter(function (f) { return matUrls[f.key]; })
+          .map(function (f) { return { name: f.name, size: f.size, url: matUrls[f.key] }; });
+      });
+      return null;
+    }).then(function () {
       return window.Cloud.publishShareData(
         token,
         lesson ? lesson.id : '',
@@ -2167,6 +2245,9 @@
 '.addshot input{display:none}\n' +
 '.addshot span{display:inline-block;border:1.5px dashed #8FB4FF;border-radius:999px;padding:8px 15px;font-size:12.5px;font-weight:650;color:#0B4ED6;background:#F7FAFF}\n' +
 '.addshot span:hover{background:#F0F5FF}\n' +
+'.mats{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}\n' +
+'.matf{display:inline-block;border:1.5px solid #E8EEF8;border-radius:10px;padding:8px 14px;font-size:12.5px;font-weight:650;color:#0B4ED6;text-decoration:none;background:#fff}\n' +
+'.matf:hover{background:#F0F5FF;border-color:#8FB4FF}\n' +
 '.addshot.busy span{opacity:.55;border-style:solid}\n' +
 '.shots a.mine{border-color:#8FB4FF}\n' +
 'canvas.pen{cursor:crosshair}\n' +
@@ -2197,6 +2278,21 @@
 '  </div>\n' +
 '  <div class="rail" id="rail"></div>\n' +
 (payload.notes ? '  <div class="note"><b>Конспект уроку:</b>\n' + U.esc(payload.notes) + '</div>\n' : '') +
+((payload.materials && payload.materials.length)
+  ? '  <div class="extra"><h3>Матеріали</h3>\n' + payload.materials.map(function (m) {
+      return '    <div class="hw"><b>' + U.esc(m.title) + '</b>' +
+        (m.note ? '<div class="desc">' + U.esc(m.note) + '</div>' : '') +
+        (m.url ? '<div class="meta" style="margin-top:6px"><a href="' + U.esc(m.url) +
+          '" target="_blank" rel="noopener">Відкрити посилання</a></div>' : '') +
+        (m.files.length
+          ? '<div class="mats">' + m.files.map(function (f) {
+              return '<a class="matf" href="' + U.esc(f.url) + '" download="' + U.esc(f.name) +
+                '" target="_blank" rel="noopener">' + U.esc(f.name) + '</a>';
+            }).join('') + '</div>'
+          : '') +
+        '</div>\n';
+    }).join('') + '  </div>\n'
+  : '') +
 (payload.homework.length
   ? '  <div class="extra"><h3>Домашнє завдання</h3>\n' + payload.homework.map(function (h) {
       return '    <div class="hw"><b>' + U.esc(h.title) + '</b>' +

@@ -316,25 +316,30 @@
     try { localStorage.setItem(IMGMAP, JSON.stringify(m)); } catch (e) {}
   }
 
-  Cloud.shareImageUrl = function (token, key) {
+  Cloud.shareImageUrl = function (token, key, folder) {
     return Cloud.base() + '/storage/v1/object/public/shares/' +
            encodeURIComponent(Cloud.userId()) + '/' + encodeURIComponent(token) +
-           '/img/' + encodeURIComponent(key);
+           '/' + (folder || 'img') + '/' + encodeURIComponent(key);
   };
 
-  /** Вивантажити картинку уроку, якщо її там ще немає. Повертає адресу. */
-  Cloud.publishShareImage = function (token, key, blob) {
-    var url = Cloud.shareImageUrl(token, key);
+  /**
+   * Вивантажити файл уроку, якщо його там ще немає. Повертає адресу.
+   * folder розділяє картинки дошки ('img') і вкладення матеріалів ('mat').
+   */
+  Cloud.publishShareImage = function (token, key, blob, folder) {
+    folder = folder || 'img';
+    var url = Cloud.shareImageUrl(token, key, folder);
+    var mark = folder + '/' + key;
     var m = sentImages();
-    if (m[token] && m[token][key]) return Promise.resolve(url);
+    if (m[token] && m[token][mark]) return Promise.resolve(url);
     return api('/storage/v1/object/shares/' + encodeURIComponent(Cloud.userId()) + '/' +
-               encodeURIComponent(token) + '/img/' + encodeURIComponent(key), {
+               encodeURIComponent(token) + '/' + folder + '/' + encodeURIComponent(key), {
       method: 'POST',
       headers: { 'Content-Type': blob.type || 'application/octet-stream', 'x-upsert': 'true' },
       body: blob
     }).then(function (res) {
-      if (!res.ok && res.status !== 409) throw new Error('Картинка не завантажилась (' + res.status + ')');
-      rememberImage(token, key);
+      if (!res.ok && res.status !== 409) throw new Error('Файл не завантажився (' + res.status + ')');
+      rememberImage(token, mark);
       return url;
     });
   };

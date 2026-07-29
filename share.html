@@ -56,6 +56,14 @@
     font-size:12.5px;font-weight:700}
   .les__go:hover{background:#3A31B0}
   .les__go::before{content:'▸';font-size:14px;line-height:1}
+
+  /* Повернення з уроку до розкладу — поверх дошки, у безпечній зоні */
+  .back-portal{position:fixed;left:14px;top:14px;z-index:10;
+    padding:8px 14px;border-radius:9px;font-size:12.5px;font-weight:700;
+    background:rgba(255,255,255,.94);color:#3A31B0;text-decoration:none;
+    box-shadow:0 3px 14px rgba(23,22,58,.18)}
+  .back-portal:hover{background:#fff}
+  @media (max-width:700px){.back-portal{left:auto;right:14px;top:auto;bottom:14px}}
   .none{font-size:13px;color:#7C7A9C;padding:6px 0}
   .pin{max-width:320px;margin:0 auto;text-align:center}
   .pin input{width:100%;margin-top:14px;padding:13px 16px;font:inherit;font-size:19px;
@@ -126,6 +134,16 @@
   // Код — у частині адреси після #, щоб він не потрапляв у журнали сервера.
   var path = decodeURIComponent((location.hash || '').replace(/^#/, '')).trim();
 
+  /* Портал і сторінка уроку живуть за однією адресою і різняться лише
+     частиною після #. На такий перехід браузер сторінку не перезавантажує,
+     тому клік по «Відкрити урок» зовні виглядав як «нічого не сталося»:
+     адреса мінялася, а на екрані лишався портал. Перезавантажуємо самі —
+     заразом починає працювати кнопка «Назад». */
+  var bootHash = location.hash;
+  window.addEventListener('hashchange', function () {
+    if (location.hash !== bootHash) location.reload();
+  });
+
   function rpc(name, body) {
     return fetch(API + '/rest/v1/rpc/' + name, {
       method: 'POST',
@@ -140,7 +158,12 @@
      Позначка portal: спереду навмисно: без неї код порталу не відрізнити
      від коду уроку — обидва шістнадцяткові однакової довжини. */
 
+  /* Куди повертатися з уроку. Учень заходить у нього з розкладу, і без
+     цього єдиним шляхом назад лишалася б кнопка браузера. */
+  var BACK_KEY = 'vektor.fromPortal';
+
   if (/^portal:/i.test(path)) {
+    try { sessionStorage.setItem(BACK_KEY, location.hash); } catch (e) {}
     startPortal(path.replace(/^portal:/i, '').trim());
     return;
   }
@@ -150,6 +173,21 @@
   if (!path || !/^[^\s/]+\/[0-9a-f]{16,}$/i.test(path)) {
     fail('Посилання неповне', 'Схоже, адресу скопійовано не до кінця. Попросіть надіслати її ще раз.');
     return;
+  }
+
+  showBackToPortal();
+
+  /** Кнопка «до розкладу» — лише якщо учень справді прийшов з порталу. */
+  function showBackToPortal() {
+    var back = '';
+    try { back = sessionStorage.getItem(BACK_KEY) || ''; } catch (e) {}
+    if (!back) return;
+
+    var a = document.createElement('a');
+    a.className = 'back-portal';
+    a.href = back;
+    a.textContent = '← Мій розклад';
+    document.body.appendChild(a);
   }
 
   // код уроку — це <тека репетитора>/<код>, а самій базі потрібен лише код

@@ -7,7 +7,7 @@
 
    Версію треба піднімати щоразу, коли змінюється склад файлів. */
 
-var VERSION = 'mathhub-v7';
+var VERSION = 'mathhub-v8';
 
 var SHELL = [
   './',
@@ -83,6 +83,10 @@ self.addEventListener('fetch', function (e) {
       var network = fetch(req).then(function (res) {
         if (res && res.status === 200) {
           var copy = res.clone();
+          /* Кеш оновлюється у фоні, тому свіжий код показався б аж наступного
+             разу — а до того здавалося б, що зміни не доїхали. Тому помічаємо
+             розбіжність і кажемо сторінці запропонувати оновлення. */
+          if (cached && isCode(url) && stamp(cached) !== stamp(res)) tellClients();
           caches.open(VERSION).then(function (c) { c.put(req, copy); });
         }
         return res;
@@ -91,6 +95,24 @@ self.addEventListener('fetch', function (e) {
     })
   );
 });
+
+function isCode(url) {
+  return /\.(js|css)$/.test(url.pathname);
+}
+
+/** Ознака версії файлу — те, що дає сервер: ETag або дата зміни. */
+function stamp(res) {
+  return (res.headers.get('etag') || '') + '|' + (res.headers.get('last-modified') || '');
+}
+
+var told = false;
+function tellClients() {
+  if (told) return;          // одного повідомлення на завантаження досить
+  told = true;
+  self.clients.matchAll().then(function (cs) {
+    cs.forEach(function (c) { c.postMessage('assets-updated'); });
+  });
+}
 
 /* Дозволяє сторінці попросити негайне оновлення. */
 self.addEventListener('message', function (e) {

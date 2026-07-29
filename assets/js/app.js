@@ -282,6 +282,12 @@
     'progress-edit': function (arg) { F.progress(arg); },
     'contacts': function (arg) { V.contactsModal(arg); },
     'student-portal': function (arg) { V.portalModal(arg); },
+    'roadmap-fill':   function (arg) { V.roadmapFill(arg); },
+    'roadmap-add':    function (arg) { V.roadmapEdit(null, arg); },
+    'roadmap-edit':   function (arg) { V.roadmapEdit(arg); },
+    'roadmap-status': function (arg) { V.roadmapCycle(arg); },
+    'roadmap-up':     function (arg) { V.roadmapMove(arg, -1); },
+    'roadmap-down':   function (arg) { V.roadmapMove(arg, 1); },
     'gen-week': function () { F.generateWeek(); },
 
     'tab': function (arg) {

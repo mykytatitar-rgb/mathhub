@@ -333,6 +333,16 @@ a { color: inherit; text-decoration: none; }
 .card--flat { box-shadow: var(--shadow-sm); border: 1px solid var(--line); }
 .card--pad0 { padding: 0; overflow: hidden; }
 
+/* Картка, яка сама є кнопкою — веде на свою вкладку */
+.card--btn {
+  display: block; width: 100%;
+  text-align: left; font: inherit; color: inherit;
+  border: 0; cursor: pointer;
+  transition: box-shadow .16s, transform .16s;
+}
+.card--btn:hover { box-shadow: var(--shadow-lg); transform: translateY(-1px); }
+.card--btn .card-head { margin-bottom: 12px; }
+
 .card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .card-title { font-size: 16.5px; font-weight: 750; letter-spacing: -.2px; margin: 0; }
 .card-sub { font-size: 12.5px; color: var(--muted); font-weight: 500; margin-top: 3px; }
@@ -671,6 +681,70 @@ a { color: inherit; text-decoration: none; }
   cursor: pointer;
 }
 .update-bar__x:hover { background: rgba(255,255,255,.22); }
+
+/* ============================================================
+   Роудмап: план підготовки
+   ============================================================ */
+
+.rm-list { padding: 0 8px 10px; }
+
+.rm {
+  display: flex; align-items: flex-start; gap: 13px;
+  padding: 13px 16px;
+  border-radius: 13px;
+  position: relative;
+}
+.rm + .rm { margin-top: 2px; }
+.rm:hover { background: var(--blue-50); }
+
+/* Номер етапу з ниткою, що з'єднує їх у послідовність — план читається як шлях */
+.rm__n {
+  flex: 0 0 auto;
+  width: 27px; height: 27px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 11.5px; font-weight: 800;
+  background: var(--blue-50); color: var(--blue-700);
+  z-index: 1;
+}
+.rm::before {
+  content: '';
+  position: absolute;
+  left: 29.5px; top: 40px; bottom: -2px;
+  width: 2px; background: var(--line);
+}
+.rm:last-child::before { display: none; }
+
+.rm--now .rm__n { background: var(--violet); color: #fff; }
+.rm--done .rm__n { background: var(--green); color: #fff; }
+.rm--skip .rm__n { background: var(--line); color: var(--muted); }
+.rm--skip .rm__t { text-decoration: line-through; color: var(--muted); }
+.rm--done .rm__t { color: var(--muted-2); }
+
+.rm__m { flex: 1; min-width: 0; }
+.rm__t { font-weight: 650; font-size: 14px; }
+.rm__s {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 5px;
+}
+.rm__note {
+  margin-top: 6px;
+  font-size: 12.5px; line-height: 1.55; color: var(--ink-2);
+  white-space: pre-wrap;
+}
+
+.rm__a {
+  flex: 0 0 auto;
+  display: flex; gap: 2px;
+  opacity: 0;
+  transition: opacity .14s;
+}
+.rm:hover .rm__a, .rm__a:focus-within { opacity: 1; }
+/* На дотику наведення не буває — там кнопки видно завжди */
+@media (hover: none) { .rm__a { opacity: 1; } }
+/* повертаємо стрілки вгору-вниз: іконки в наборі горизонтальні */
+.rm__a [data-act="roadmap-up"] svg { transform: rotate(90deg); }
+.rm__a [data-act="roadmap-down"] svg { transform: rotate(90deg); }
 
 /* ============================================================
    Утиліти

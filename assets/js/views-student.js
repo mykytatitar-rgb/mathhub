@@ -10,6 +10,7 @@
   var TABS = [
     { id: 'overview', label: 'Огляд' },
     { id: 'lessons',  label: 'Уроки' },
+    { id: 'roadmap',  label: 'Роудмап' },
     { id: 'progress', label: 'Прогрес' },
     { id: 'payments', label: 'Оплати' },
     { id: 'notes',    label: 'Нотатки' }
@@ -33,6 +34,7 @@
 
     var counts = {
       lessons: stat.total,
+      roadmap: S.roadmapOf(id).length,
       progress: stat.topicsCovered,
       payments: S.paymentsOf(id).length,
       notes: S.notesOf(id).length
@@ -45,7 +47,7 @@
     }).join('');
 
     var bodies = {
-      overview: overview, lessons: lessons,
+      overview: overview, lessons: lessons, roadmap: roadmap,
       progress: progress, payments: payments, notes: notes
     };
     var body = (bodies[tab] || overview)(st, stat);
@@ -98,6 +100,99 @@
   /* ============================================================
      Огляд
      ============================================================ */
+
+  /* ============================================================
+     Роудмап
+     ============================================================
+
+     План підготовки під ціль учня: теми в тому порядку, у якому їх
+     збираються пройти. Готовність кожної теми не дублюємо — вона вже
+     є у вкладці «Прогрес», сюди її просто підтягуємо. */
+
+  function roadmap(st) {
+    var list = S.roadmapOf(st.id);
+    var rs = S.roadmapStats(st.id);
+
+    if (!list.length) {
+      return '<div class="card">' +
+        C.empty('target', 'Плану підготовки ще немає',
+          'Складіть його з готового набору тем під ціль «' + st.goal + '» — ' +
+          'потім можна переставляти, дописувати своє і викидати зайве.',
+          '<button class="btn btn--primary" data-act="roadmap-fill" data-arg="' + st.id + '">' +
+          icon('plus', 16) + 'Скласти план під ціль</button>') +
+        '</div>';
+    }
+
+    var rows = list.map(function (r, i) {
+      var meta = S.ROADMAP_STATUS[r.status] || S.ROADMAP_STATUS.todo;
+      var level = r.topic ? S.progressLevel(st.id, r.topic) : null;
+
+      return '<div class="rm' + (r.status === 'doing' ? ' rm--now' : '') +
+        (r.status === 'done' ? ' rm--done' : '') + (r.status === 'skip' ? ' rm--skip' : '') + '">' +
+        '<div class="rm__n">' + (i + 1) + '</div>' +
+        '<div class="rm__m">' +
+          '<div class="rm__t">' + U.esc(r.title || r.topic || 'Етап') + '</div>' +
+          '<div class="rm__s">' + C.badge(meta.label, meta.badge) +
+            (r.due ? '<span class="muted small">до ' + U.fmtDate(r.due) + '</span>' : '') +
+            (level != null ? '<span class="muted small">засвоєно ' + level + '%</span>' : '') +
+          '</div>' +
+          (r.note ? '<div class="rm__note">' + U.esc(r.note) + '</div>' : '') +
+        '</div>' +
+        '<div class="rm__a">' +
+          '<button class="icon-btn" data-act="roadmap-status" data-arg="' + r.id + '" ' +
+            'title="Змінити стан етапу">' + icon('check', 15) + '</button>' +
+          '<button class="icon-btn" data-act="roadmap-edit" data-arg="' + r.id + '" ' +
+            'title="Редагувати">' + icon('edit', 15) + '</button>' +
+          '<button class="icon-btn" data-act="roadmap-up" data-arg="' + r.id + '" ' +
+            'title="Вище">' + icon('chevronL', 15) + '</button>' +
+          '<button class="icon-btn" data-act="roadmap-down" data-arg="' + r.id + '" ' +
+            'title="Нижче">' + icon('chevronR', 15) + '</button>' +
+        '</div></div>';
+    }).join('');
+
+    return '<div class="grid grid--main">' +
+      '<div class="stack">' +
+        '<div class="card card--pad0">' +
+          '<div class="card-head" style="padding:22px 24px 14px;margin:0">' +
+            '<div><h3 class="card-title">План підготовки</h3>' +
+            '<div class="card-sub">' + U.esc(st.goal) + ' · ' +
+            U.pl(rs.total, 'етап', 'етапи', 'етапів') + '</div></div>' +
+            '<button class="btn btn--soft btn--sm spacer" data-act="roadmap-add" data-arg="' + st.id + '">' +
+            icon('plus', 15) + 'Свій етап</button>' +
+          '</div>' +
+          '<div class="rm-list">' + rows + '</div>' +
+        '</div>' +
+      '</div>' +
+
+      '<div class="stack">' +
+        '<div class="card center">' +
+          '<div class="card-head" style="justify-content:center"><div>' +
+          '<h3 class="card-title">Пройдено плану</h3>' +
+          '<div class="card-sub">' + rs.done + ' з ' + rs.total + '</div></div></div>' +
+          '<div style="display:grid;place-items:center;padding:6px 0 14px">' +
+          C.ring(rs.percent, 128, 12) + '</div>' +
+          (rs.doing
+            ? '<div class="small muted" style="line-height:1.5">Зараз: <b style="color:var(--ink)">' +
+              U.esc(rs.doing.title || rs.doing.topic) + '</b></div>'
+            : rs.next
+              ? '<div class="small muted" style="line-height:1.5">Далі: <b style="color:var(--ink)">' +
+                U.esc(rs.next.title || rs.next.topic) + '</b></div>'
+              : '<div class="small muted">Увесь план пройдено.</div>') +
+          '<button class="btn btn--soft btn--block mt-2" data-act="roadmap-fill" data-arg="' + st.id + '">' +
+          icon('plus', 16) + 'Дописати теми з шаблону</button>' +
+        '</div>' +
+
+        '<div class="card">' +
+          '<div class="card-head"><div><h3 class="card-title">Як це працює</h3></div></div>' +
+          '<div class="small muted" style="line-height:1.65">' +
+          'Кнопка з галочкою перемикає стан етапу: попереду → у роботі → пройдено → ' +
+          'пропускаємо. Пропущені етапи не рахуються в поступі взагалі — щоб ' +
+          'відсоток не падав через теми, які ви свідомо не берете.' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
 
   function overview(st, stat) {
     var boards = S.boardsOf(st.id);
@@ -162,6 +257,30 @@
           '<button class="btn btn--soft btn--block mt-2" data-act="progress-edit" data-arg="' + st.id + '">' +
           icon('edit', 16) + 'Оновити прогрес</button>' +
         '</div>' +
+
+        /* Куди рухаємось: на огляді досить одного рядка — що зараз і що далі. */
+        (function () {
+          var rs = S.roadmapStats(st.id);
+          if (!rs.total) {
+            return '<button class="card card--btn" data-act="tab" data-arg="roadmap">' +
+              '<div class="card-head"><div><h3 class="card-title">План підготовки</h3>' +
+              '<div class="card-sub">ще не складений</div></div>' +
+              '<span class="spacer">' + icon('chevronR', 18, 'style="color:var(--muted-2)"') + '</span></div>' +
+              '<div class="small muted">Розкласти ціль «' + U.esc(st.goal) +
+              '» на етапи — тоді видно, що вже пройдено, а що попереду.</div></button>';
+          }
+          var now = rs.doing || rs.next;
+          return '<button class="card card--btn" data-act="tab" data-arg="roadmap">' +
+            '<div class="card-head"><div><h3 class="card-title">План підготовки</h3>' +
+            '<div class="card-sub">' + rs.done + ' з ' + rs.total + ' етапів</div></div>' +
+            '<span class="spacer">' + icon('chevronR', 18, 'style="color:var(--muted-2)"') + '</span></div>' +
+            C.bar(rs.percent) +
+            (now ? '<div class="small muted mt-2">' +
+              (rs.doing ? 'Зараз: ' : 'Далі: ') + '<b style="color:var(--ink)">' +
+              U.esc(now.title || now.topic) + '</b></div>'
+                 : '<div class="small muted mt-2">Увесь план пройдено.</div>') +
+            '</button>';
+        })() +
 
         (boards.length ? '<div class="card card--pad0">' +
           '<div class="card-head" style="padding:22px 24px 12px;margin:0">' +
@@ -459,6 +578,88 @@
           onClick: function () { setTimeout(function () { window.F.student(id); }, 60); } },
         { label: 'Закрити', kind: 'btn--primary', act: 'ok' }
       ]
+    });
+  };
+
+  /* Стан етапу перемикаємо по колу: перебирати варіанти в діалозі заради
+     одного кліка — задорого, а станів усього чотири. */
+  var RM_CYCLE = ['todo', 'doing', 'done', 'skip'];
+
+  V.roadmapCycle = function (id) {
+    var r = S.get('roadmap', id);
+    if (!r) return;
+    var i = RM_CYCLE.indexOf(r.status || 'todo');
+    var next = RM_CYCLE[(i + 1) % RM_CYCLE.length];
+    S.update('roadmap', id, { status: next });
+    U.toast(S.ROADMAP_STATUS[next].label);
+    window.App.render();
+  };
+
+  V.roadmapMove = function (id, dir) {
+    if (S.moveRoadmapStep(id, dir)) window.App.render();
+  };
+
+  V.roadmapFill = function (studentId) {
+    var n = S.fillRoadmap(studentId);
+    U.toast(n ? 'Додано ' + U.pl(n, 'етап', 'етапи', 'етапів') : 'Усі теми шаблону вже є', n ? 'ok' : undefined);
+    window.App.render();
+  };
+
+  /** Створити або відредагувати етап. */
+  V.roadmapEdit = function (arg, studentId) {
+    var r = studentId ? null : S.get('roadmap', arg);
+    var sid = studentId || (r && r.studentId);
+    if (!sid) return;
+
+    var topics = S.TOPICS.slice();
+    S.roadmapOf(sid).forEach(function (x) {
+      if (x.topic && topics.indexOf(x.topic) < 0) topics.push(x.topic);
+    });
+
+    C.modal({
+      title: r ? 'Етап плану' : 'Новий етап',
+      body:
+        C.field('Назва', '<input class="input" data-rm-title value="' +
+          U.esc(r ? (r.title || '') : '') + '" placeholder="напр. Тригонометрія">') +
+        C.field('Тема з довідника',
+          '<input class="input" list="rm-topics" data-rm-topic value="' +
+          U.esc(r ? (r.topic || '') : '') + '" placeholder="необов’язково">' +
+          '<datalist id="rm-topics">' +
+          topics.map(function (t) { return '<option value="' + U.esc(t) + '">'; }).join('') +
+          '</datalist>',
+          'Якщо вказати тему, поруч з етапом буде видно, наскільки вона засвоєна.') +
+        C.field('Орієнтовний строк', '<input class="input" type="date" data-rm-due value="' +
+          U.esc(r ? (r.due || '') : '') + '">') +
+        C.field('Нотатка', '<textarea class="input" rows="3" data-rm-note>' +
+          U.esc(r ? (r.note || '') : '') + '</textarea>'),
+      buttons: [
+        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' }
+      ].concat(r ? [{
+        label: 'Видалити', kind: 'btn--danger', act: 'del',
+        onClick: function () {
+          S.remove('roadmap', r.id);
+          U.toast('Етап прибрано');
+          window.App.render();
+        }
+      }] : []).concat([{
+        label: 'Зберегти', kind: 'btn--primary', act: 'ok',
+        onClick: function (root) {
+          var patch = {
+            title: root.querySelector('[data-rm-title]').value.trim(),
+            topic: root.querySelector('[data-rm-topic]').value.trim(),
+            due:   root.querySelector('[data-rm-due]').value,
+            note:  root.querySelector('[data-rm-note]').value.trim()
+          };
+          if (!patch.title && !patch.topic) {
+            U.toast('Впишіть назву етапу', 'err');
+            return false;
+          }
+          if (!patch.title) patch.title = patch.topic;
+          if (r) S.update('roadmap', r.id, patch);
+          else S.addRoadmapStep(sid, patch);
+          window.App.render();
+        }
+      }])
     });
   };
 

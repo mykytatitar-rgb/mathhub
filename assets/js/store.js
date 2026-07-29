@@ -47,6 +47,46 @@
     'Текстові задачі та відсотки'
   ];
 
+  /* Порядок тем у підготовці. Не абетковий і не той, що в S.TOPICS:
+     тут теми стоять так, як їх реально проходять — спершу те, без чого
+     не піде далі (вирази, рівняння), і аж потім те, що на них спирається. */
+  S.ROADMAP_TEMPLATES = {
+    nmt: [
+      'Числа і вирази',
+      'Рівняння і нерівності',
+      'Текстові задачі та відсотки',
+      'Функції та графіки',
+      'Числові послідовності',
+      'Тригонометрія',
+      'Похідна та її застосування',
+      'Інтеграл і первісна',
+      'Планіметрія',
+      'Стереометрія',
+      'Координати і вектори',
+      'Комбінаторика, ймовірність, статистика',
+      'Повторення і пробні тести'
+    ],
+    dpa: [
+      'Числа і вирази',
+      'Рівняння і нерівності',
+      'Текстові задачі та відсотки',
+      'Функції та графіки',
+      'Планіметрія',
+      'Стереометрія',
+      'Повторення і пробні тести'
+    ]
+  };
+
+  /** Який шаблон пасує цій цілі. Нічого не вгадали — беремо теми як є. */
+  S.roadmapTemplateFor = function (goal) {
+    var g = String(goal || '').toLowerCase();
+    if (g.indexOf('нмт') > -1 || g.indexOf('зно') > -1 || g.indexOf('вступ') > -1) {
+      return S.ROADMAP_TEMPLATES.nmt;
+    }
+    if (g.indexOf('дпа') > -1) return S.ROADMAP_TEMPLATES.dpa;
+    return S.TOPICS.slice();
+  };
+
   /** Підказки для поля «Ціль». Користувач може вписати будь-що своє. */
   S.GOALS = ['НМТ-2026', 'НМТ-2027', 'НМТ-2028', 'ДПА', 'Шкільна програма',
              'Олімпіади', 'Вступ до вишу', 'Підготовка до SAT', 'Іспит IB / A-level',
@@ -77,6 +117,7 @@
       homeworks: [],
       payments: [],
       progress: [],   // {id, studentId, topic, level 0..100, updatedAt}
+      roadmap: [],    // {id, studentId, title, topic, status, due, note, ord}
       materials: [],
       notes: [],
       boards: []      // {id, lessonId, slides:[{id,title,bg,items:[]}], updatedAt}
@@ -179,7 +220,7 @@
     var lessonIds = db.lessons.filter(function (l) { return l.studentId === id; })
       .map(function (l) { return l.id; });
     db.boards = db.boards.filter(function (b) { return lessonIds.indexOf(b.lessonId) < 0; });
-    ['lessons', 'homeworks', 'payments', 'progress', 'notes'].forEach(function (name) {
+    ['lessons', 'homeworks', 'payments', 'progress', 'roadmap', 'notes'].forEach(function (name) {
       db[name] = db[name].filter(function (x) { return x.studentId !== id; });
     });
     db.students = db.students.filter(function (x) { return x.id !== id; });
@@ -226,6 +267,94 @@
   S.progressLevel = function (studentId, topic) {
     var p = db.progress.find(function (x) { return x.studentId === studentId && x.topic === topic; });
     return p ? p.level : null;
+  };
+
+  /* ============================================================
+     Роудмап: план підготовки під ціль учня
+     ============================================================
+
+     Це не автоматичний розклад, а план тем у тому порядку, у якому їх
+     збираються пройти. Стан кожного етапу веде репетитор; готовність
+     самої теми окремо не дублюємо — вона вже є в progress. */
+
+  S.ROADMAP_STATUS = {
+    todo:  { label: 'Попереду',   badge: 'badge--grey' },
+    doing: { label: 'У роботі',   badge: 'badge--violet' },
+    done:  { label: 'Пройдено',   badge: 'badge--green' },
+    skip:  { label: 'Пропускаємо', badge: 'badge--amber' }
+  };
+
+  S.roadmapOf = function (studentId) {
+    return db.roadmap
+      .filter(function (r) { return r.studentId === studentId; })
+      .sort(function (a, b) { return (a.ord || 0) - (b.ord || 0); });
+  };
+
+  function nextOrd(studentId) {
+    var list = S.roadmapOf(studentId);
+    return list.length ? (list[list.length - 1].ord || 0) + 10 : 10;
+  }
+
+  S.addRoadmapStep = function (studentId, step) {
+    return S.add('roadmap', {
+      studentId: studentId,
+      title: (step && step.title) || '',
+      topic: (step && step.topic) || '',
+      status: (step && step.status) || 'todo',
+      due: (step && step.due) || '',
+      note: (step && step.note) || '',
+      ord: nextOrd(studentId)
+    });
+  };
+
+  /**
+   * Скласти план із шаблону під ціль учня. Уже наявні етапи не чіпаємо
+   * і не дублюємо: людина могла дописати своє, і затирати це — образливо.
+   * Повертає, скільки додано.
+   */
+  S.fillRoadmap = function (studentId) {
+    var st = S.get('students', studentId);
+    if (!st) return 0;
+    var have = S.roadmapOf(studentId).map(function (r) {
+      return (r.topic || r.title).toLowerCase();
+    });
+    var added = 0;
+    S.roadmapTemplateFor(st.goal).forEach(function (t) {
+      if (have.indexOf(t.toLowerCase()) > -1) return;
+      S.addRoadmapStep(studentId, { title: t, topic: S.TOPICS.indexOf(t) > -1 ? t : '' });
+      added++;
+    });
+    return added;
+  };
+
+  /** Пересунути етап на позицію вище або нижче сусіда. */
+  S.moveRoadmapStep = function (id, dir) {
+    var step = S.get('roadmap', id);
+    if (!step) return false;
+    var list = S.roadmapOf(step.studentId);
+    var i = list.findIndex(function (r) { return r.id === id; });
+    var j = i + dir;
+    if (i < 0 || j < 0 || j >= list.length) return false;
+    var a = list[i].ord || 0, b = list[j].ord || 0;
+    list[i].ord = b;
+    list[j].ord = a;
+    S.save();
+    return true;
+  };
+
+  /** Скільки етапів пройдено — для смужки поступу. Пропущені не рахуємо взагалі. */
+  S.roadmapStats = function (studentId) {
+    var list = S.roadmapOf(studentId);
+    var counted = list.filter(function (r) { return r.status !== 'skip'; });
+    var done = counted.filter(function (r) { return r.status === 'done'; }).length;
+    var doing = list.filter(function (r) { return r.status === 'doing'; });
+    return {
+      total: counted.length,
+      done: done,
+      doing: doing[0] || null,
+      next: counted.filter(function (r) { return r.status === 'todo'; })[0] || null,
+      percent: counted.length ? Math.round(done / counted.length * 100) : 0
+    };
   };
 
   S.setProgress = function (studentId, topic, level) {

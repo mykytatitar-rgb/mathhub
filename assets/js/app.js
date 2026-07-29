@@ -131,9 +131,9 @@
         icon('chevronL', 15) + '</button>' +
       '<div class="sidebar__resize" title="Потягніть, щоб змінити ширину. Подвійний клік — типова ширина"></div>' +
 
-      '<div class="logo" data-act="nav" data-arg="#/" title="mathhub — на головну">' +
-        '<span class="logo__mark">∑</span>' +
-        '<span class="logo__text">mathhub<span class="logo__dot">.</span></span>' +
+      '<div class="logo" data-act="nav" data-arg="#/" title="Вектор — на головну">' +
+        '<span class="logo__mark">→</span>' +
+        '<span class="logo__text">Вектор<span class="logo__dot">.</span></span>' +
       '</div>' +
 
       '<div class="side-scroll">' +
@@ -567,6 +567,27 @@
     window.Cloud.onChange(function () {
       var el = document.querySelector('[data-sync-state]');
       if (el && V.syncStatusHtml) el.innerHTML = V.syncStatusHtml();
+    });
+  }
+
+  /* Оновлення застосунку. Файли з кешу віддаються миттєво, а свіжі
+     підтягуються у фоні — тож без цієї смужки зміни з'являлися б аж
+     наступного разу, і здавалося б, що їх немає. */
+  function updateBar() {
+    if (document.querySelector('.update-bar')) return;
+    var bar = document.createElement('div');
+    bar.className = 'update-bar';
+    bar.innerHTML = '<span>Вийшла нова версія кабінету.</span>' +
+      '<button class="btn btn--primary btn--sm" data-reload>Оновити</button>' +
+      '<button class="update-bar__x" data-later title="Пізніше">' + icon('x', 15) + '</button>';
+    document.body.appendChild(bar);
+    bar.querySelector('[data-reload]').onclick = function () { location.reload(); };
+    bar.querySelector('[data-later]').onclick = function () { bar.remove(); };
+  }
+
+  if (navigator.serviceWorker) {
+    navigator.serviceWorker.addEventListener('message', function (e) {
+      if (e.data === 'assets-updated') updateBar();
     });
   }
 

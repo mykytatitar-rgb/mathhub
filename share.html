@@ -51,6 +51,11 @@
     color:#3A31B0;text-decoration:none;background:#F7F6FE}
   .mat a:hover{border-color:#4B3FDB}
   .mat__soon{margin-top:7px;font-size:12.5px;color:#AAA8C2;font-style:italic}
+  .les__go{display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:7px 14px;
+    border-radius:9px;background:#4B3FDB;color:#fff;text-decoration:none;
+    font-size:12.5px;font-weight:700}
+  .les__go:hover{background:#3A31B0}
+  .les__go::before{content:'▸';font-size:14px;line-height:1}
   .none{font-size:13px;color:#7C7A9C;padding:6px 0}
   .pin{max-width:320px;margin:0 auto;text-align:center}
   .pin input{width:100%;margin-top:14px;padding:13px 16px;font:inherit;font-size:19px;
@@ -436,12 +441,19 @@
         var tag = l.status === 'done' ? '<span class="tag tag--done">проведено</span>'
                 : l.status === 'missed' ? '<span class="tag tag--miss">пропущено</span>'
                 : '';
+        /* Посилання є лише в уроків, дошку яких репетитор відкрив.
+           Ведемо на ту саму сторінку уроку, що й окреме посилання. */
+        var open = l.url
+          ? '<a class="les__go" href="' + esc(l.url) + '">Відкрити урок</a>'
+          : '';
+
         return '<div class="les">' +
           '<div class="les__d"><b>' + x.w.day + '</b><span>' + x.w.mon + '</span></div>' +
           '<div class="les__m">' +
             '<div class="les__t">' + esc(l.topic || 'Заняття') + tag + '</div>' +
             '<div class="les__s">' + x.w.time + ' · ' + (l.dur || 60) + ' хв' +
             (l.notes ? '\n' + esc(l.notes) : '') + '</div>' +
+            open +
           '</div></div>';
       }
 

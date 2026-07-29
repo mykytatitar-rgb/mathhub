@@ -2071,6 +2071,41 @@
   V.materialPicker = materialPicker;
   V.readPickedMaterials = readPicked;
 
+  /**
+   * Опублікувати дошку уроку, не відкриваючи її. Потрібно порталу:
+   * учень має заходити в самі уроки, а не лише бачити їх у розкладі.
+   *
+   * Уже опубліковані не чіпаємо: поки репетитор працює на дошці, вона
+   * оновлюється сама, і смикати її звідси — зайвий трафік.
+   * Повертає адресу або '' , якщо публікувати нема чого.
+   */
+  V.publishLessonBoard = function (lessonId) {
+    if (!window.Cloud || !Cloud.available() || !Cloud.signedIn()) return Promise.resolve('');
+
+    var board = S.getBoard(lessonId);
+    if (!board) return Promise.resolve('');
+
+    if (board.share && board.share.token) {
+      return Promise.resolve(Cloud.shareUrl(board.share.token));
+    }
+
+    // порожню дошку відкривати нема сенсу — учень побачить білий аркуш
+    var hasInk = (board.slides || []).some(function (s) {
+      return !s.hidden && (s.items || []).length;
+    });
+    if (!hasInk) return Promise.resolve('');
+
+    var lesson = S.get('lessons', lessonId);
+    var student = lesson ? S.get('students', lesson.studentId) : null;
+    var token = Cloud.newShareToken();
+
+    return publishLesson(board, lesson, student, token).then(function () {
+      board.share = { token: token, at: new Date().toISOString(), materials: [] };
+      S.saveBoard(board);
+      return Cloud.shareUrl(token);
+    });
+  };
+
   /** Опублікувати урок і покласти посилання в буфер обміну. */
   function publishShare(l, st, token, isUpdate, root) {
     if (root) {

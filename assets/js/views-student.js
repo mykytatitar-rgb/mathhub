@@ -672,18 +672,34 @@
      які ми відправляємо. Нижче складається окремий документ, і в нього
      потрапляє тільки перелічене поіменно. */
 
-  function portalLessons(studentId) {
-    return S.lessonsOf(studentId).map(function (l) {
+  /**
+   * Уроки для порталу. Якщо withBoards — до кожного уроку, на дошці якого
+   * щось є, додаємо посилання, щоб учень міг зайти в сам урок, а не лише
+   * побачити його в розкладі. Дошка публікується один раз; далі вона
+   * оновлюється сама, поки репетитор на ній працює.
+   */
+  function portalLessons(studentId, withBoards) {
+    var rows = S.lessonsOf(studentId).map(function (l) {
       return {
+        id: l.id,
         date: l.date,
         // поле зветься duration, а не dur — через dur тут завжди стояло 60
         dur: l.duration || l.dur || 60,
         topic: l.topic || '',
         status: l.status || 'planned',
         // конспект показуємо: він для учня й писався
-        notes: l.notes || ''
+        notes: l.notes || '',
+        url: ''
       };
     });
+
+    if (!withBoards || !V.publishLessonBoard) return Promise.resolve(rows);
+
+    return Promise.all(rows.map(function (row) {
+      return V.publishLessonBoard(row.id)
+        .then(function (u) { row.url = u || ''; })
+        .catch(function () { /* один урок, що не опублікувався, не має валити портал */ });
+    })).then(function () { return rows; });
   }
 
   /** Матеріали в тому вигляді, у якому їх побачить учень. */
@@ -719,15 +735,23 @@
     });
   }
 
+  /** Чи відкривати учневі самі уроки. За замовчуванням так. */
+  function wantsBoards(st) {
+    return st.portalBoards !== false;
+  }
+
   /** Вміст порталу без позначки часу — щоб його можна було порівнювати. */
   function buildPortalBody(st, matIds, token) {
-    return portalMaterials(matIds, token).then(function (mats) {
+    return Promise.all([
+      portalMaterials(matIds, token),
+      portalLessons(st.id, wantsBoards(st))
+    ]).then(function (r) {
       return {
         student: st.name,
         goal: st.goal || '',
         grade: st.grade || '',
-        lessons: portalLessons(st.id),
-        materials: mats
+        lessons: r[1],
+        materials: r[0]
       };
     });
   }
@@ -844,6 +868,13 @@
           'але код рятує, якщо його побачить хтось сторонній — наприклад на спільному ' +
           'комп\'ютері. Після десяти невдалих спроб портал закриється, поки не задасте код наново.</div></div>' +
 
+          '<div class="mt-3"><label class="mat-pick__r" style="padding-left:0">' +
+          '<input type="checkbox" data-portal-boards' + (wantsBoards(st) ? ' checked' : '') + '>' +
+          '<span>Відкривати учневі дошки уроків</span></label>' +
+          '<div class="field__hint">У розкладі поруч з уроком з\'явиться кнопка «Відкрити урок» — ' +
+          'учень побачить слайди й домашнє завдання. Тільки ті уроки, на дошці яких щось є; ' +
+          'приховані слайди не публікуються.</div></div>' +
+
           (window.V.materialPicker ? window.V.materialPicker(chosen) : ''),
 
         buttons: [
@@ -865,10 +896,14 @@
             var pinEl = root.querySelector('[data-portal-pin]');
             var pin = pinEl ? pinEl.value.trim() : '';
             var mats = window.V.readPickedMaterials ? window.V.readPickedMaterials(root) : [];
+            var boardsEl = root.querySelector('[data-portal-boards]');
+            var boards = boardsEl ? boardsEl.checked : true;
 
             /* Токен тримаємо в картці учня: за ним автооновлення знає,
                кому саме є що переробляти, і не питає щоразу сервер. */
-            S.update('students', st.id, { portalMaterials: mats, portalToken: token });
+            S.update('students', st.id, {
+              portalMaterials: mats, portalToken: token, portalBoards: boards
+            });
 
             U.toast('Готую портал…');
             buildPortalData(st, mats, token)

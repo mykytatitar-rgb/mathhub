@@ -7,11 +7,13 @@
 
   /* Окремої вкладки «Домашка» немає навмисно: завдання дають на уроці,
      тому вони й живуть усередині уроку — і в списку, і на дошці. */
+  /* «Роудмап» і «Прогрес» були про одне й те саме — які теми проходимо і
+     наскільки вони засвоєні, — тільки з різних боків. Тепер це один шлях:
+     етапи по порядку, і рівень засвоєння прямо на етапі. */
   var TABS = [
     { id: 'overview', label: 'Огляд' },
     { id: 'lessons',  label: 'Уроки' },
-    { id: 'roadmap',  label: 'Роудмап' },
-    { id: 'progress', label: 'Прогрес' },
+    { id: 'path',     label: 'Шлях' },
     { id: 'payments', label: 'Оплати' },
     { id: 'notes',    label: 'Нотатки' }
   ];
@@ -26,16 +28,16 @@
     }
 
     tab = tab || 'overview';
-    // стара адреса вкладки «Домашка» ще може бути в закладках або історії
+    // старі адреси вкладок ще можуть бути в закладках або історії
     if (tab === 'homework') tab = 'lessons';
+    if (tab === 'roadmap' || tab === 'progress') tab = 'path';
     var stat = S.studentStats(id);
     var next = stat.nextLesson;
     var cur = S.curOf(id);
 
     var counts = {
       lessons: stat.total,
-      roadmap: S.roadmapOf(id).length,
-      progress: stat.topicsCovered,
+      path: S.roadmapOf(id).length,
       payments: S.paymentsOf(id).length,
       notes: S.notesOf(id).length
     };
@@ -47,8 +49,8 @@
     }).join('');
 
     var bodies = {
-      overview: overview, lessons: lessons, roadmap: roadmap,
-      progress: progress, payments: payments, notes: notes
+      overview: overview, lessons: lessons, path: pathTab,
+      payments: payments, notes: notes
     };
     var body = (bodies[tab] || overview)(st, stat);
 
@@ -102,72 +104,115 @@
      ============================================================ */
 
   /* ============================================================
-     Роудмап
+     Шлях: план підготовки разом із засвоєнням тем
      ============================================================
 
-     План підготовки під ціль учня: теми в тому порядку, у якому їх
-     збираються пройти. Готовність кожної теми не дублюємо — вона вже
-     є у вкладці «Прогрес», сюди її просто підтягуємо. */
+     Раніше це були дві вкладки. «Роудмап» відповідав, що проходимо і в
+     якому порядку, «Прогрес» — наскільки засвоєно. Але це одне й те саме
+     питання з різних боків, і тримати теми у двох списках означало вести
+     їх двічі. Тепер етап знає свій рівень засвоєння, а сама дорога
+     показує, де ми зараз. */
 
-  function roadmap(st) {
+  /** Один вузол дороги. Бік чергується, щоб вийшла змійка, а не стовпчик. */
+  function pathNode(st, r, n, side) {
+    var status = r.status || 'todo';
+    var meta = S.ROADMAP_STATUS[status] || S.ROADMAP_STATUS.todo;
+    var level = r.topic ? S.progressLevel(st.id, r.topic) : null;
+
+    /* Кільце засвоєння малюємо прямо на вузлі: видно не лише «пройшли»,
+       а й наскільки міцно. */
+    var ring = '';
+    if (level != null) {
+      var C0 = 2 * Math.PI * 25;
+      ring = '<svg class="pnode__ring" viewBox="0 0 56 56" aria-hidden="true">' +
+        '<circle cx="28" cy="28" r="25" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="4"/>' +
+        '<circle cx="28" cy="28" r="25" fill="none" stroke="currentColor" stroke-width="4" ' +
+        'stroke-linecap="round" stroke-dasharray="' + C0 + '" ' +
+        'stroke-dashoffset="' + (C0 * (1 - U.clamp(level, 0, 100) / 100)) + '" ' +
+        'transform="rotate(-90 28 28)"/></svg>';
+    }
+
+    var face = status === 'done' ? icon('check', 20)
+             : status === 'skip' ? '<span class="pnode__n">—</span>'
+             : '<span class="pnode__n">' + n + '</span>';
+
+    return '<div class="pstep pstep--' + side + ' is-' + status + '">' +
+      '<button class="pnode" data-act="roadmap-edit" data-arg="' + r.id + '" ' +
+        'title="' + U.esc((r.title || r.topic || 'Етап') + ' — ' + meta.label) + '">' +
+        ring + face +
+      '</button>' +
+      '<div class="pinfo">' +
+        '<div class="pinfo__t">' + U.esc(r.title || r.topic || 'Етап') + '</div>' +
+        '<div class="pinfo__m">' + C.badge(meta.label, meta.badge) +
+          (level != null ? '<span class="pinfo__pct">' + level + '%</span>' : '') +
+          (r.due ? '<span class="muted small">до ' + U.fmtDate(r.due) + '</span>' : '') +
+        '</div>' +
+        (r.note ? '<div class="pinfo__n">' + U.esc(r.note) + '</div>' : '') +
+        '<div class="pinfo__a">' +
+          '<button class="icon-btn" data-act="roadmap-status" data-arg="' + r.id + '" ' +
+            'title="Наступний стан">' + icon('check', 15) + '</button>' +
+          '<button class="icon-btn" data-act="roadmap-up" data-arg="' + r.id + '" ' +
+            'title="Вище">' + icon('chevronL', 15) + '</button>' +
+          '<button class="icon-btn" data-act="roadmap-down" data-arg="' + r.id + '" ' +
+            'title="Нижче">' + icon('chevronR', 15) + '</button>' +
+        '</div>' +
+      '</div></div>';
+  }
+
+  function pathTab(st, stat) {
     var list = S.roadmapOf(st.id);
     var rs = S.roadmapStats(st.id);
 
     if (!list.length) {
       return '<div class="card">' +
-        C.empty('target', 'Плану підготовки ще немає',
+        C.empty('target', 'Шляху ще немає',
           'Складіть його з готового набору тем під ціль «' + st.goal + '» — ' +
           'потім можна переставляти, дописувати своє і викидати зайве.',
           '<button class="btn btn--primary" data-act="roadmap-fill" data-arg="' + st.id + '">' +
-          icon('plus', 16) + 'Скласти план під ціль</button>') +
+          icon('plus', 16) + 'Скласти шлях під ціль</button>') +
         '</div>';
     }
 
-    var rows = list.map(function (r, i) {
-      var meta = S.ROADMAP_STATUS[r.status] || S.ROADMAP_STATUS.todo;
-      var level = r.topic ? S.progressLevel(st.id, r.topic) : null;
-
-      return '<div class="rm' + (r.status === 'doing' ? ' rm--now' : '') +
-        (r.status === 'done' ? ' rm--done' : '') + (r.status === 'skip' ? ' rm--skip' : '') + '">' +
-        '<div class="rm__n">' + (i + 1) + '</div>' +
-        '<div class="rm__m">' +
-          '<div class="rm__t">' + U.esc(r.title || r.topic || 'Етап') + '</div>' +
-          '<div class="rm__s">' + C.badge(meta.label, meta.badge) +
-            (r.due ? '<span class="muted small">до ' + U.fmtDate(r.due) + '</span>' : '') +
-            (level != null ? '<span class="muted small">засвоєно ' + level + '%</span>' : '') +
-          '</div>' +
-          (r.note ? '<div class="rm__note">' + U.esc(r.note) + '</div>' : '') +
-        '</div>' +
-        '<div class="rm__a">' +
-          '<button class="icon-btn" data-act="roadmap-status" data-arg="' + r.id + '" ' +
-            'title="Змінити стан етапу">' + icon('check', 15) + '</button>' +
-          '<button class="icon-btn" data-act="roadmap-edit" data-arg="' + r.id + '" ' +
-            'title="Редагувати">' + icon('edit', 15) + '</button>' +
-          '<button class="icon-btn" data-act="roadmap-up" data-arg="' + r.id + '" ' +
-            'title="Вище">' + icon('chevronL', 15) + '</button>' +
-          '<button class="icon-btn" data-act="roadmap-down" data-arg="' + r.id + '" ' +
-            'title="Нижче">' + icon('chevronR', 15) + '</button>' +
-        '</div></div>';
+    var nCount = 0;
+    var steps = list.map(function (r, i) {
+      if (r.status !== 'skip') nCount++;
+      return pathNode(st, r, r.status === 'skip' ? '' : nCount, i % 2 ? 'right' : 'left');
     }).join('');
+
+    /* Теми, які оцінювали, але яких у шляху немає. Раніше вони жили в
+       окремій вкладці, і після злиття просто зникли б з очей. */
+    var inPath = list.map(function (r) { return (r.topic || r.title || '').toLowerCase(); });
+    var orphans = S.progressOf(st.id).filter(function (p) {
+      return inPath.indexOf((p.topic || '').toLowerCase()) < 0;
+    });
 
     return '<div class="grid grid--main">' +
       '<div class="stack">' +
         '<div class="card card--pad0">' +
-          '<div class="card-head" style="padding:22px 24px 14px;margin:0">' +
-            '<div><h3 class="card-title">План підготовки</h3>' +
+          '<div class="card-head" style="padding:22px 24px 10px;margin:0">' +
+            '<div><h3 class="card-title">Шлях до цілі</h3>' +
             '<div class="card-sub">' + U.esc(st.goal) + ' · ' +
             U.pl(rs.total, 'етап', 'етапи', 'етапів') + '</div></div>' +
             '<button class="btn btn--soft btn--sm spacer" data-act="roadmap-add" data-arg="' + st.id + '">' +
             icon('plus', 15) + 'Свій етап</button>' +
           '</div>' +
-          '<div class="rm-list">' + rows + '</div>' +
+          '<div class="path" style="--done:' + rs.percent + '%">' + steps + '</div>' +
         '</div>' +
+
+        (orphans.length ? '<div class="card">' +
+          '<div class="card-head"><div><h3 class="card-title">Теми поза шляхом</h3>' +
+          '<div class="card-sub">оцінені, але не поставлені в план</div></div></div>' +
+          '<div class="orph">' + orphans.map(function (p) {
+            return '<button class="orph__i" data-act="roadmap-adopt" data-arg="' +
+              st.id + '|' + U.esc(p.topic) + '" title="Додати в шлях">' +
+              U.esc(p.topic) + '<b>' + p.level + '%</b>' + icon('plus', 13) + '</button>';
+          }).join('') + '</div></div>' : '') +
       '</div>' +
 
       '<div class="stack">' +
         '<div class="card center">' +
           '<div class="card-head" style="justify-content:center"><div>' +
-          '<h3 class="card-title">Пройдено плану</h3>' +
+          '<h3 class="card-title">Пройдено шляху</h3>' +
           '<div class="card-sub">' + rs.done + ' з ' + rs.total + '</div></div></div>' +
           '<div style="display:grid;place-items:center;padding:6px 0 14px">' +
           C.ring(rs.percent, 128, 12) + '</div>' +
@@ -177,17 +222,28 @@
             : rs.next
               ? '<div class="small muted" style="line-height:1.5">Далі: <b style="color:var(--ink)">' +
                 U.esc(rs.next.title || rs.next.topic) + '</b></div>'
-              : '<div class="small muted">Увесь план пройдено.</div>') +
+              : '<div class="small muted">Увесь шлях пройдено.</div>') +
           '<button class="btn btn--soft btn--block mt-2" data-act="roadmap-fill" data-arg="' + st.id + '">' +
           icon('plus', 16) + 'Дописати теми з шаблону</button>' +
+        '</div>' +
+
+        '<div class="card center">' +
+          '<div class="card-head" style="justify-content:center"><div>' +
+          '<h3 class="card-title">Засвоєння</h3>' +
+          '<div class="card-sub">середнє по оцінених темах</div></div></div>' +
+          '<div style="display:grid;place-items:center;padding:6px 0 12px">' +
+          C.ring(stat.avgProgress, 112, 11) + '</div>' +
+          '<div class="small muted" style="line-height:1.5">Оцінено ' +
+          U.pl(stat.topicsCovered, 'тему', 'теми', 'тем') + '</div>' +
         '</div>' +
 
         '<div class="card">' +
           '<div class="card-head"><div><h3 class="card-title">Як це працює</h3></div></div>' +
           '<div class="small muted" style="line-height:1.65">' +
-          'Кнопка з галочкою перемикає стан етапу: попереду → у роботі → пройдено → ' +
-          'пропускаємо. Пропущені етапи не рахуються в поступі взагалі — щоб ' +
-          'відсоток не падав через теми, які ви свідомо не берете.' +
+          'Клік по кружечку відкриває етап: там і назва, і рівень засвоєння теми. ' +
+          'Кнопка з галочкою перемикає стан: попереду → у роботі → пройдено → ' +
+          'пропускаємо. Пропущені не рахуються в поступі взагалі — щоб відсоток ' +
+          'не падав через теми, які ви свідомо не берете.' +
           '</div>' +
         '</div>' +
       '</div>' +
@@ -262,7 +318,7 @@
         (function () {
           var rs = S.roadmapStats(st.id);
           if (!rs.total) {
-            return '<button class="card card--btn" data-act="tab" data-arg="roadmap">' +
+            return '<button class="card card--btn" data-act="tab" data-arg="path">' +
               '<div class="card-head"><div><h3 class="card-title">План підготовки</h3>' +
               '<div class="card-sub">ще не складений</div></div>' +
               '<span class="spacer">' + icon('chevronR', 18, 'style="color:var(--muted-2)"') + '</span></div>' +
@@ -270,7 +326,7 @@
               '» на етапи — тоді видно, що вже пройдено, а що попереду.</div></button>';
           }
           var now = rs.doing || rs.next;
-          return '<button class="card card--btn" data-act="tab" data-arg="roadmap">' +
+          return '<button class="card card--btn" data-act="tab" data-arg="path">' +
             '<div class="card-head"><div><h3 class="card-title">План підготовки</h3>' +
             '<div class="card-sub">' + rs.done + ' з ' + rs.total + ' етапів</div></div>' +
             '<span class="spacer">' + icon('chevronR', 18, 'style="color:var(--muted-2)"') + '</span></div>' +
@@ -385,70 +441,6 @@
      Прогрес
      ============================================================ */
 
-  function progress(st, stat) {
-    var prog = S.progressOf(st.id);
-    var byTopic = {};
-    prog.forEach(function (p) { byTopic[p.topic] = p.level; });
-
-    var rows = S.TOPICS.map(function (t) {
-      var lvl = byTopic[t];
-      var touched = lvl != null;
-      return '<div class="list__item" style="align-items:center">' +
-        '<div style="flex:1;min-width:0">' +
-          '<div style="font-weight:650;font-size:14px' + (touched ? '' : ';color:var(--muted-2)') + '">' +
-          U.esc(t) + '</div>' +
-          '<div style="margin-top:8px">' + C.bar(touched ? lvl : 0) + '</div>' +
-        '</div>' +
-        '<div style="width:62px;text-align:right;font-weight:750;font-size:15px;' +
-        (touched ? '' : 'color:var(--muted-2)') + '">' + (touched ? lvl + '%' : '—') + '</div>' +
-        '</div>';
-    }).join('');
-
-    var covered = prog.length;
-    var mastered = prog.filter(function (p) { return p.level >= 75; }).length;
-    var weakCount = prog.filter(function (p) { return p.level < 45; }).length;
-
-    return '<div class="grid grid--main">' +
-      '<div class="card card--pad0">' +
-        '<div class="card-head" style="padding:22px 24px 12px;margin:0">' +
-          '<div><h3 class="card-title">Теми програми</h3>' +
-          '<div class="card-sub">рівень засвоєння за вашою оцінкою</div></div>' +
-          '<button class="btn btn--primary btn--sm spacer" data-act="progress-edit" data-arg="' + st.id + '">' +
-          icon('edit', 15) + 'Оновити</button>' +
-        '</div>' +
-        '<div class="list">' + rows + '</div>' +
-      '</div>' +
-
-      '<div class="stack">' +
-        '<div class="card center">' +
-          '<div style="display:grid;place-items:center;padding:8px 0 16px">' + C.ring(stat.avgProgress, 132, 12) + '</div>' +
-          '<div style="font-weight:700;font-size:15px">Загальна готовність</div>' +
-          '<div class="small muted mt-1" style="line-height:1.5">Середнє по темах, які вже проходили</div>' +
-        '</div>' +
-
-        '<div class="card">' +
-          '<div class="row" style="justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line)">' +
-            '<span class="small muted">Тем пройдено</span><span class="bold">' + covered + ' / ' + S.TOPICS.length + '</span></div>' +
-          '<div class="row" style="justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line)">' +
-            '<span class="small muted">Засвоєно (75%+)</span><span class="bold" style="color:var(--green)">' + mastered + '</span></div>' +
-          '<div class="row" style="justify-content:space-between;padding:9px 0">' +
-            '<span class="small muted">Потребують уваги</span><span class="bold" style="color:' +
-            (weakCount ? 'var(--amber)' : 'var(--green)') + '">' + weakCount + '</span></div>' +
-        '</div>' +
-
-        '<div class="card" style="background:linear-gradient(135deg,var(--blue-600),var(--blue-700));color:#fff">' +
-          '<div class="row" style="gap:10px;margin-bottom:10px">' + icon('target', 20) +
-          '<span style="font-weight:750;font-size:15px">' + U.esc(st.goal) + '</span></div>' +
-          '<div style="font-size:13px;line-height:1.6;opacity:.9">' +
-          (covered < 4 ? 'Ще мало даних. Оцініть рівень хоча б за 4–5 темами, щоб бачити реальну картину.'
-            : stat.avgProgress >= 75 ? 'Учень у хорошій формі. Тримайте темп і додайте задач підвищеної складності.'
-            : stat.avgProgress >= 50 ? 'Базу закладено. Сконцентруйтесь на темах із найнижчим відсотком.'
-            : 'Багато прогалин. Варто повернутись до основ і рухатись меншими кроками.') +
-          '</div>' +
-        '</div>' +
-      '</div>' +
-    '</div>';
-  }
 
   /* ============================================================
      Оплати
@@ -616,8 +608,12 @@
       if (x.topic && topics.indexOf(x.topic) < 0) topics.push(x.topic);
     });
 
+    var lvlNow = (r && r.topic) ? S.progressLevel(sid, r.topic) : null;
+    var hasLvl = lvlNow != null;
+    var lvl0 = hasLvl ? lvlNow : 0;
+
     C.modal({
-      title: r ? 'Етап плану' : 'Новий етап',
+      title: r ? 'Етап шляху' : 'Новий етап',
       body:
         C.field('Назва', '<input class="input" data-rm-title value="' +
           U.esc(r ? (r.title || '') : '') + '" placeholder="напр. Тригонометрія">') +
@@ -627,7 +623,21 @@
           '<datalist id="rm-topics">' +
           topics.map(function (t) { return '<option value="' + U.esc(t) + '">'; }).join('') +
           '</datalist>',
-          'Якщо вказати тему, поруч з етапом буде видно, наскільки вона засвоєна.') +
+          'Тема потрібна для оцінки засвоєння — вона показується кільцем навколо етапу.') +
+
+        /* Рівень засвоєння живе тут, а не в окремій вкладці: тема і те,
+           наскільки вона дається, — одна думка, і вести їх нарізно означало
+           двічі шукати те саме. */
+        C.field('Засвоєно',
+          '<div class="lvl-row">' +
+            '<input class="lvl-range" type="range" min="0" max="100" step="5" ' +
+            'data-rm-level value="' + lvl0 + '">' +
+            '<input class="input lvl-num" type="number" min="0" max="100" step="1" ' +
+            'data-rm-level-num value="' + lvl0 + '">' +
+            '<span class="muted">%</span>' +
+          '</div>',
+          hasLvl ? '' : 'Поки не оцінено. Посуньте повзунок, щоб зафіксувати рівень.') +
+
         C.field('Орієнтовний строк', '<input class="input" type="date" data-rm-due value="' +
           U.esc(r ? (r.due || '') : '') + '">') +
         C.field('Нотатка', '<textarea class="input" rows="3" data-rm-note>' +
@@ -657,10 +667,40 @@
           if (!patch.title) patch.title = patch.topic;
           if (r) S.update('roadmap', r.id, patch);
           else S.addRoadmapStep(sid, patch);
+
+          /* Рівень пишемо лише коли є тема: він зберігається за назвою теми,
+             і без неї його нікуди покласти. Незайманий нуль теж не пишемо —
+             інакше «ще не оцінювали» стало б «оцінили на нуль». */
+          var lvlEl = root.querySelector('[data-rm-level]');
+          if (patch.topic && lvlEl) {
+            var lvl = U.clamp(+lvlEl.value || 0, 0, 100);
+            if (hasLvl || lvl > 0) S.setProgress(sid, patch.topic, lvl);
+          }
           window.App.render();
         }
-      }])
+      }]),
+      // повзунок і число показують одне значення й ходять разом
+      onMount: function (root) {
+        var rng = root.querySelector('[data-rm-level]');
+        var num = root.querySelector('[data-rm-level-num]');
+        if (!rng || !num) return;
+        rng.addEventListener('input', function () { num.value = rng.value; });
+        num.addEventListener('input', function () {
+          var v = U.clamp(+num.value || 0, 0, 100);
+          rng.value = v;
+        });
+      }
     });
+  };
+
+  /** Тема, оцінена поза шляхом, стає його етапом. */
+  V.roadmapAdopt = function (arg) {
+    var parts = String(arg || '').split('|');
+    var sid = parts[0], topic = parts.slice(1).join('|');
+    if (!sid || !topic) return;
+    S.addRoadmapStep(sid, { title: topic, topic: topic });
+    U.toast('Додано в шлях', 'ok');
+    window.App.render();
   };
 
   /* ============================================================

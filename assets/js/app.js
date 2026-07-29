@@ -288,6 +288,7 @@
     'roadmap-status': function (arg) { V.roadmapCycle(arg); },
     'roadmap-up':     function (arg) { V.roadmapMove(arg, -1); },
     'roadmap-down':   function (arg) { V.roadmapMove(arg, 1); },
+    'roadmap-adopt':  function (arg) { V.roadmapAdopt(arg); },
     'gen-week': function () { F.generateWeek(); },
 
     'tab': function (arg) {

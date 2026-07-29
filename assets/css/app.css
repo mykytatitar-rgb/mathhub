@@ -757,6 +757,173 @@ a { color: inherit; text-decoration: none; }
 .update-bar__x:hover { background: rgba(255,255,255,.22); }
 
 /* ============================================================
+   Шлях: дорога етапів
+   ============================================================
+
+   Змійка навколо однієї вертикальної нитки: вузли по черзі ліворуч і
+   праворуч, тож видно рух, а не просто список. Нитка й вузли живуть у
+   тому самому потоці — жодних обчислень у JS, тому нічого не з'їжджає
+   від довгої назви чи вузького екрана. */
+
+.path {
+  position: relative;
+  padding: 8px 20px 22px;
+}
+
+/* Нитка дороги */
+.path::before {
+  content: '';
+  position: absolute;
+  left: 50%; top: 0; bottom: 0;
+  width: 4px; margin-left: -2px;
+  border-radius: 4px;
+  background: var(--line);
+}
+
+.pstep {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 9px 0;
+  width: 50%;
+}
+.pstep--left  {
+  margin-right: 50%; flex-direction: row-reverse; text-align: right;
+  padding-right: 34px;
+}
+.pstep--right { margin-left: 50%; padding-left: 34px; }
+
+/* Поперечка від вузла до нитки */
+.pstep::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 34px; height: 3px;
+  background: var(--line);
+  border-radius: 3px;
+}
+.pstep--left::before  { right: 0; }
+.pstep--right::before { left: 0; }
+/* пройдені поперечки підсвічені — видно, доки дорога вже пройдена */
+.is-done::before { background: var(--green); }
+.is-doing::before { background: var(--brand-600); }
+
+.pnode {
+  flex: 0 0 auto;
+  position: relative;
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  border: 3px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  display: grid; place-items: center;
+  cursor: pointer;
+  transition: transform .16s, box-shadow .16s, border-color .16s;
+}
+.pnode:hover { transform: scale(1.07); box-shadow: var(--shadow); }
+.pnode__n { font-size: 17px; font-weight: 800; }
+
+/* Кільце засвоєння сидить рівно по краю вузла */
+.pnode__ring {
+  position: absolute;
+  inset: -3px;
+  width: calc(100% + 6px); height: calc(100% + 6px);
+  pointer-events: none;
+}
+
+.is-done .pnode {
+  background: var(--green); border-color: var(--green); color: #fff;
+}
+.is-doing .pnode {
+  background: var(--brand-600); border-color: var(--brand-600); color: #fff;
+  box-shadow: 0 0 0 6px var(--brand-100);
+}
+.is-skip .pnode {
+  border-style: dashed; color: var(--muted-2);
+}
+
+.pinfo { flex: 1; min-width: 0; }
+.pinfo__t { font-weight: 700; font-size: 14.5px; line-height: 1.3; }
+.is-skip .pinfo__t { text-decoration: line-through; color: var(--muted); }
+.is-done .pinfo__t { color: var(--ink-2); }
+
+.pinfo__m {
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  margin-top: 6px;
+}
+.pstep--left .pinfo__m,
+.pstep--left .pinfo__a { justify-content: flex-end; }
+
+.pinfo__pct {
+  font-size: 12px; font-weight: 800;
+  color: var(--brand-700);
+  background: var(--brand-50);
+  padding: 2px 8px; border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+.pinfo__n {
+  margin-top: 6px;
+  font-size: 12.5px; line-height: 1.5; color: var(--ink-2);
+  white-space: pre-wrap;
+}
+.pinfo__a {
+  display: flex; gap: 2px; margin-top: 4px;
+  opacity: 0; transition: opacity .14s;
+}
+.pstep:hover .pinfo__a, .pinfo__a:focus-within { opacity: 1; }
+@media (hover: none) { .pinfo__a { opacity: 1; } }
+.pinfo__a [data-act="roadmap-up"] svg,
+.pinfo__a [data-act="roadmap-down"] svg { transform: rotate(90deg); }
+
+/* На вузькому екрані змійка не читається — вирівнюємо в один стовпчик */
+@media (max-width: 786px) {
+  .path { padding: 8px 4px 18px; }
+  .path::before { left: 28px; margin-left: 0; }
+  .pstep, .pstep--left, .pstep--right {
+    width: auto; margin: 0; padding-left: 0; padding-right: 0;
+    flex-direction: row; text-align: left;
+  }
+  .pstep::before { display: none; }
+  .pstep--left .pinfo__m, .pstep--left .pinfo__a { justify-content: flex-start; }
+}
+
+/* Теми, оцінені поза шляхом */
+.orph { display: flex; flex-wrap: wrap; gap: 8px; }
+.orph__i {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 12px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-sm);
+  background: none; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--ink-2);
+  transition: border-color .14s, background .14s;
+}
+.orph__i:hover { border-color: var(--brand-300); background: var(--brand-50); }
+.orph__i b { color: var(--brand-700); font-variant-numeric: tabular-nums; }
+
+/* Рівень засвоєння у вікні етапу */
+.lvl-row { display: flex; align-items: center; gap: 12px; }
+.lvl-num { width: 78px; flex: 0 0 auto; text-align: center; }
+.lvl-range {
+  flex: 1; min-width: 0;
+  -webkit-appearance: none; appearance: none;
+  height: 5px; padding: 0; margin: 0;
+  border-radius: 999px; background: var(--line); cursor: pointer;
+}
+.lvl-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; border: 3px solid var(--brand-600);
+  box-shadow: var(--shadow-sm); cursor: grab;
+}
+.lvl-range::-moz-range-thumb {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; border: 3px solid var(--brand-600);
+  box-shadow: var(--shadow-sm); cursor: grab;
+}
+
+/* ============================================================
    Роудмап: план підготовки
    ============================================================ */
 

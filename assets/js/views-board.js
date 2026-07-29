@@ -127,7 +127,16 @@
         '<button class="board-rail__toggle" data-act="board-rail-toggle" ' +
           'title="Згорнути або показати слайди">' +
           icon('chevronD', 15) + '<span data-rail-count></span></button>' +
-        '<div class="board-rail" data-rail></div>' +
+        '<div class="board-rails">' +
+          '<div class="board-rail-row">' +
+            '<span class="rail-tag">Урок</span>' +
+            '<div class="board-rail" data-rail="lesson"></div>' +
+          '</div>' +
+          '<div class="board-rail-row board-rail-row--hw">' +
+            '<span class="rail-tag rail-tag--hw">ДЗ</span>' +
+            '<div class="board-rail" data-rail="hw"></div>' +
+          '</div>' +
+        '</div>' +
       '</div>' +
     '</div>';
   };
@@ -478,7 +487,14 @@
 
       msgs.forEach(function (m) {
         if (m.mathhub === 'ink' && m.item) {
-          var s = cur.board.slides[m.slide];
+          /* Спершу за id слайда: приховані слайди не публікуються, тому
+             номер у учня свій, і за ним запис ліг би не туди. Номер лишаємо
+             запасним — для сторінок, опублікованих до цієї зміни. */
+          var s = null;
+          if (m.sid) {
+            s = cur.board.slides.filter(function (x) { return x.id === m.sid; })[0] || null;
+          }
+          if (!s && m.sid == null) s = cur.board.slides[m.slide];
           if (!s) return;
           if (!s.items) s.items = [];
           // позначаємо чиє це — щоб на дошці було видно, що писав учень
@@ -623,17 +639,59 @@
     updateSelBar();
   }
 
-  function addSlide(copyFrom) {
-    var s = S.newSlide();
+  /** Наступний або попередній слайд у тому самому рядку. */
+  function stepSlide(dir) {
+    var idx = railIndexes(curKind());
+    var pos = idx.indexOf(cur.index) + dir;
+    if (pos < 0 || pos >= idx.length) return;
+    selectSlide(idx[pos]);
+  }
+
+  /** Куди класти новий слайд рядка kind: одразу за поточним або в кінець рядка. */
+  function insertPos(kind) {
+    if (curKind() === kind) return cur.index + 1;
+    var idx = railIndexes(kind);
+    return idx.length ? idx[idx.length - 1] + 1 : cur.board.slides.length;
+  }
+
+  function addSlide(copyFrom, kind) {
+    kind = kind || (copyFrom ? S.slideKind(copyFrom) : curKind());
+    var s = S.newSlide('', kind);
     if (copyFrom) {
       s.items = JSON.parse(JSON.stringify(copyFrom.items || []));
       s.bg = copyFrom.bg;
+      s.hidden = copyFrom.hidden ? 1 : 0;
       s.title = (copyFrom.title || 'Слайд') + ' — копія';
     }
-    cur.board.slides.splice(cur.index + 1, 0, s);
+    var at = insertPos(kind);
+    cur.board.slides.splice(at, 0, s);
     markDirty();
     flushSave();
-    selectSlide(cur.index + 1);
+    selectSlide(at);
+  }
+
+  /** Перекинути поточний слайд в інший рядок — у його кінець. */
+  function moveSlideRow() {
+    var s = cur.board.slides[cur.index];
+    var to = S.slideKind(s) === 'hw' ? 'lesson' : 'hw';
+    cur.board.slides.splice(cur.index, 1);
+    s.kind = to;
+    var idx = railIndexes(to);
+    var at = idx.length ? idx[idx.length - 1] + 1 : cur.board.slides.length;
+    cur.board.slides.splice(at, 0, s);
+    cur.thumbs = {};
+    markDirty(); flushSave();
+    selectSlide(at);
+    U.toast(to === 'hw' ? 'Слайд перенесено в ДЗ' : 'Слайд перенесено в урок');
+  }
+
+  function toggleSlideHidden() {
+    var s = cur.board.slides[cur.index];
+    s.hidden = s.hidden ? 0 : 1;
+    markDirty(); flushSave();
+    renderRail();
+    U.toast(s.hidden ? 'Слайд прихований від учня' : 'Слайд знову видно учневі');
+    scheduleRepublish();
   }
 
   function deleteSlide() {
@@ -654,14 +712,18 @@
       });
   }
 
+  /* Пересуваємо в межах свого рядка: сусід — це сусідній слайд того самого
+     виду, а не наступний у спільному масиві. */
   function moveSlide(dir) {
-    var i = cur.index, j = i + dir;
-    if (j < 0 || j >= cur.board.slides.length) return;
-    var arr = cur.board.slides;
-    var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    var idx = railIndexes(curKind());
+    var pos = idx.indexOf(cur.index);
+    var j = pos + dir;
+    if (pos < 0 || j < 0 || j >= idx.length) return;
+    var arr = cur.board.slides, a = idx[pos], b = idx[j];
+    var tmp = arr[a]; arr[a] = arr[b]; arr[b] = tmp;
     cur.thumbs = {};
     markDirty(); flushSave();
-    selectSlide(j);
+    selectSlide(b);
   }
 
   function updateSlideName() {
@@ -684,40 +746,86 @@
     return url;
   }
 
-  function renderRail() {
-    var rail = document.querySelector('[data-rail]');
+  /** Номери слайдів одного рядка — у порядку загального масиву. */
+  function railIndexes(kind) {
+    var out = [];
+    cur.board.slides.forEach(function (s, i) { if (S.slideKind(s) === kind) out.push(i); });
+    return out;
+  }
+
+  /** Рядок, у якому зараз стоїмо. */
+  function curKind() {
+    return cur ? S.slideKind(cur.board.slides[cur.index]) : 'lesson';
+  }
+
+  function slideCardHtml(i, nInRow) {
+    var s = cur.board.slides[i];
+    var url = thumbFor(i);
+    var name = s.title || ('Слайд ' + nInRow);
+    return '<button class="slide-card' + (i === cur.index ? ' is-active' : '') +
+      (s.hidden ? ' is-hidden-slide' : '') +
+      '" data-slide-index="' + i + '" title="' + U.esc(name) +
+      (s.hidden ? ' — учень цього не бачить' : '') + '">' +
+      (url ? '<img class="slide-card__thumb" src="' + url + '" alt="">'
+           : '<div class="slide-card__empty">порожній</div>') +
+      (s.hidden ? '<span class="slide-card__eye" title="Прихований від учня">' +
+        icon('eyeOff', 13) + '</span>' : '') +
+      '<div class="slide-card__foot">' +
+        '<span class="slide-card__num">' + nInRow + '</span>' +
+        '<span class="slide-card__name">' + U.esc(name) + '</span>' +
+      '</div></button>';
+  }
+
+  function renderRailRow(kind) {
+    var rail = document.querySelector('[data-rail="' + kind + '"]');
     if (!rail || !cur) return;
 
-    var html = cur.board.slides.map(function (s, i) {
-      var url = thumbFor(i);
-      return '<button class="slide-card' + (i === cur.index ? ' is-active' : '') +
-        '" data-slide-index="' + i + '" title="' + U.esc(s.title || ('Слайд ' + (i + 1))) + '">' +
-        (url ? '<img class="slide-card__thumb" src="' + url + '" alt="">'
-             : '<div class="slide-card__empty">порожній</div>') +
-        '<div class="slide-card__foot">' +
-          '<span class="slide-card__num">' + (i + 1) + '</span>' +
-          '<span class="slide-card__name">' + U.esc(s.title || 'Слайд ' + (i + 1)) + '</span>' +
-        '</div></button>';
-    }).join('');
+    var idx = railIndexes(kind);
+    var html = idx.map(function (i, n) { return slideCardHtml(i, n + 1); }).join('');
+
+    /* Кнопки правки стосуються поточного слайда, тому їх показуємо
+       лише в тому рядку, де він стоїть — інакше незрозуміло, що видалиться. */
+    var isCur = curKind() === kind;
 
     rail.innerHTML = html +
-      '<button class="slide-add" data-act="board-slide-add" title="Додати слайд">' + icon('plus', 20) + '</button>' +
-      '<button class="slide-add" data-act="board-slides-photos" ' +
-        'title="Слайди з фото домашнього завдання">' + icon('image', 18) + '</button>' +
-      '<div style="flex:0 0 auto;display:flex;flex-direction:column;gap:4px;margin-left:6px">' +
-        '<button class="icon-btn" data-act="board-slide-dup" title="Дублювати слайд">' + icon('copy', 16) + '</button>' +
-        '<button class="icon-btn icon-btn--danger" data-act="board-slide-del" title="Видалити слайд">' + icon('trash', 16) + '</button>' +
-      '</div>' +
-      '<div style="flex:0 0 auto;display:flex;flex-direction:column;gap:4px">' +
-        '<button class="icon-btn" data-act="board-slide-left" title="Перемістити ліворуч">' + icon('chevronL', 16) + '</button>' +
-        '<button class="icon-btn" data-act="board-slide-right" title="Перемістити праворуч">' + icon('chevronR', 16) + '</button>' +
-      '</div>';
+      '<button class="slide-add" data-act="board-slide-add" data-arg="' + kind + '" ' +
+        'title="Додати слайд у цей рядок">' + icon('plus', 20) + '</button>' +
+      (kind === 'hw'
+        ? '<button class="slide-add" data-act="board-slides-photos" ' +
+            'title="Слайди з фото завдання">' + icon('image', 18) + '</button>'
+        : '') +
+      (isCur
+        ? '<div class="rail-tools">' +
+            '<button class="icon-btn" data-act="board-slide-hide" title="Показувати учневі чи ні">' +
+              icon(cur.board.slides[cur.index].hidden ? 'eyeOff' : 'eye', 16) + '</button>' +
+            '<button class="icon-btn" data-act="board-slide-move-row" ' +
+              'title="Перенести в інший рядок">' + icon('swap', 16) + '</button>' +
+          '</div>' +
+          '<div class="rail-tools">' +
+            '<button class="icon-btn" data-act="board-slide-dup" title="Дублювати слайд">' + icon('copy', 16) + '</button>' +
+            '<button class="icon-btn icon-btn--danger" data-act="board-slide-del" title="Видалити слайд">' + icon('trash', 16) + '</button>' +
+          '</div>' +
+          '<div class="rail-tools">' +
+            '<button class="icon-btn" data-act="board-slide-left" title="Перемістити ліворуч">' + icon('chevronL', 16) + '</button>' +
+            '<button class="icon-btn" data-act="board-slide-right" title="Перемістити праворуч">' + icon('chevronR', 16) + '</button>' +
+          '</div>'
+        : '');
 
     var active = rail.querySelector('.slide-card.is-active');
     if (active && active.scrollIntoView) active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+
+  function renderRail() {
+    if (!cur) return;
+    renderRailRow('lesson');
+    renderRailRow('hw');
 
     var cnt = document.querySelector('[data-rail-count]');
-    if (cnt) cnt.textContent = (cur.index + 1) + ' / ' + cur.board.slides.length;
+    if (!cnt) return;
+    var row = railIndexes(curKind());
+    var hid = cur.board.slides.filter(function (s) { return s.hidden; }).length;
+    cnt.textContent = (row.indexOf(cur.index) + 1) + ' / ' + row.length +
+      (hid ? ' · ' + hid + ' прихов.' : '');
   }
 
   /* ---------- Згортання стрічки слайдів ---------- */
@@ -1240,8 +1348,9 @@
     if (e.key === '+' || e.key === '=') { e.preventDefault(); eng.zoomBy(1.2); return; }
     if (e.key === '-' || e.key === '_') { e.preventDefault(); eng.zoomBy(1 / 1.2); return; }
     if (e.key === '0') { e.preventDefault(); eng.resetView(); return; }
-    if (e.key === 'PageDown') { e.preventDefault(); selectSlide(cur.index + 1); return; }
-    if (e.key === 'PageUp') { e.preventDefault(); selectSlide(cur.index - 1); return; }
+    // гортаємо свій рядок, а не перескакуємо з уроку в ДЗ посеред пояснення
+    if (e.key === 'PageDown') { e.preventDefault(); stepSlide(1); return; }
+    if (e.key === 'PageUp') { e.preventDefault(); stepSlide(-1); return; }
   }
 
   window.addEventListener('keyup', function (e) {
@@ -1314,9 +1423,11 @@
     'board-zoom-out': function () { cur.engine.zoomBy(1 / 1.25); },
     'board-zoom-reset': function () { cur.engine.resetView(); },
     'board-fit': function () { cur.engine.fit(); },
-    'board-slide-add': function () { addSlide(null); },
+    'board-slide-add': function (arg) { addSlide(null, arg || null); },
     'board-slides-photos': function () { document.querySelector('[data-multi-input]').click(); },
     'board-slide-dup': function () { addSlide(slide()); },
+    'board-slide-hide': function () { toggleSlideHidden(); },
+    'board-slide-move-row': function () { moveSlideRow(); },
     'board-slide-del': function () { deleteSlide(); },
     'board-slide-left': function () { moveSlide(-1); },
     'board-slide-right': function () { moveSlide(1); },
@@ -1396,10 +1507,12 @@
       if (!ok.length) { U.toast('Не вдалося прочитати жодного файлу', 'err'); return; }
 
       var e = cur.engine;
+      // це фото завдання — тож слайди йдуть у рядок ДЗ, а не в рядок уроку
+      var base = insertPos('hw');
       if (mode === 'each') {
         ok.forEach(function (m, i) {
-          var s = S.newSlide('Фото ' + (i + 1));
-          cur.board.slides.splice(cur.index + 1 + i, 0, s);
+          var s = S.newSlide('Фото ' + (i + 1), 'hw');
+          cur.board.slides.splice(base + i, 0, s);
           // кладемо фото в природному розмірі навколо початку координат
           var w = Math.min(900, m.w), h = w / (m.w / m.h);
           s.items.push({ t: 'i', k: m.key, r: m.w / m.h,
@@ -1407,10 +1520,10 @@
           s.view = { x: -w / 2 - 60, y: -h / 2 - 60, s: 1 };
         });
         markDirty(); flushSave();
-        selectSlide(cur.index + 1);
+        selectSlide(base);
       } else {
-        var s2 = S.newSlide('Домашнє завдання');
-        cur.board.slides.splice(cur.index + 1, 0, s2);
+        var s2 = S.newSlide('Домашнє завдання', 'hw');
+        cur.board.slides.splice(base, 0, s2);
         var cols = Math.ceil(Math.sqrt(ok.length));
         var cell = 560, gap = 40;
         ok.forEach(function (m, i) {
@@ -1425,7 +1538,7 @@
         var rows = Math.ceil(ok.length / cols);
         s2.view = { x: -60, y: -60, s: Math.min(1, 700 / (rows * (cell + gap))) };
         markDirty(); flushSave();
-        selectSlide(cur.index + 1);
+        selectSlide(base);
       }
 
       cur.thumbs = {};
@@ -2164,6 +2277,10 @@
       });
     }
 
+    /* Слайди з позначкою «приховано» не публікуються взагалі: не ховаються
+       в інтерфейсі учня, а просто не потрапляють у те, що йому надсилається. */
+    var shown = board.slides.filter(function (s) { return !s.hidden; });
+
     var payload = {
       title: lesson ? (lesson.topic || 'Урок') : 'Урок',
       student: student ? student.name : '',
@@ -2181,15 +2298,20 @@
         };
       }),
       images: {},
-      slides: board.slides.map(function (s) {
+      slides: shown.map(function (s) {
         return {
+          /* id обовʼязковий: учень надсилає, на якому слайді він писав, а
+             приховані слайди зсувають нумерацію — по номеру не знайдемо. */
+          id: s.id,
           title: s.title || '', bg: s.bg || 'grid',
+          kind: S.slideKind(s),
           items: bakeSlideItems(s.items || [])
         };
       })
     };
 
-    var keys = window.Board.imageKeysIn(board.slides);
+    // картинки беремо теж лише з відкритих слайдів — інакше приховане поїхало б у файл
+    var keys = window.Board.imageKeysIn(shown);
     payload.homework.forEach(function (h) {
       h.photos.forEach(function (k) { if (keys.indexOf(k) < 0) keys.push(k); });
     });
@@ -2300,6 +2422,10 @@
 '.rail{flex:0 0 auto;display:flex;gap:8px;padding:10px 14px;background:#fff;border-top:1px solid #E8EEF8;overflow-x:auto}\n' +
 '.sc{flex:0 0 auto;border:2px solid #E8EEF8;background:#fff;border-radius:10px;padding:7px 13px;cursor:pointer;font:inherit;font-size:12px;font-weight:650;color:#33456B;white-space:nowrap}\n' +
 '.sc.on{border-color:#1358F5;color:#0B4ED6;background:#F0F5FF}\n' +
+'.sc-tag{flex:0 0 auto;align-self:center;font-size:10.5px;font-weight:800;letter-spacing:.7px;' +
+'text-transform:uppercase;color:#A6B4CC;padding:0 4px 0 8px;border-left:2px solid #E8EEF8;white-space:nowrap}\n' +
+'.sc-tag:first-child{border-left:0;padding-left:0}\n' +
+'.sc-tag.hw{color:#C2751A}\n' +
 '.note{padding:12px 18px;background:#F0F5FF;border-top:1px solid #E8EEF8;font-size:13px;line-height:1.6;white-space:pre-wrap}\n' +
 '.extra{max-height:34vh;overflow-y:auto;border-top:1px solid #E8EEF8;background:#fff}\n' +
 '.extra h3{margin:0;padding:12px 18px 6px;font-size:13px;letter-spacing:.6px;text-transform:uppercase;color:#A6B4CC}\n' +
@@ -2507,7 +2633,12 @@ VIEWER_SCRIPT +
 '[].forEach.call(document.querySelectorAll(".sc"),function(b,n){b.className="sc"+(n===idx?" on":"")});',
 'if(noFit){draw();}else{fit();}keep();}',
 'var rail=document.getElementById("rail");',
-'DATA.slides.forEach(function(s,i){var b=document.createElement("button");b.className="sc";',
+// у стрічці слайди уроку й слайди ДЗ розділені підписом, як і в репетитора
+'var lastKind=null;',
+'DATA.slides.forEach(function(s,i){var k=s.kind==="hw"?"hw":"lesson";',
+'if(k!==lastKind){var t=document.createElement("span");t.className="sc-tag"+(k==="hw"?" hw":"");',
+'t.textContent=k==="hw"?"Домашнє завдання":"Урок";rail.appendChild(t);lastKind=k;}',
+'var b=document.createElement("button");b.className="sc";',
 'b.textContent=(i+1)+". "+(s.title||"Слайд "+(i+1));b.onclick=function(){go(i)};rail.appendChild(b);});',
 'document.getElementById("prev").onclick=function(){go(idx-1)};',
 'document.getElementById("next").onclick=function(){go(idx+1)};',
@@ -2540,8 +2671,9 @@ VIEWER_SCRIPT +
 'ww.innerHTML=WIDS.map(function(w){var d=Math.min(16,4+w);',
 'return \'<button class="wd\'+(w===PENW?" on":"")+\'" data-w="\'+w+\'"><i style="width:\'+d+\'px;height:\'+Math.max(2,w)+\'px"></i></button>\';}).join("");}',
 
+'function sidOf(i){var s=DATA.slides[i];return s&&s.id?s.id:null;}',
 'function pushMine(it){if(!MY[idx])MY[idx]=[];MY[idx].push(it);mine.push({s:idx,id:it.id});undone=[];',
-'say({mathhub:"ink",slide:idx,item:it});flash();syncUndo();draw();}',
+'say({mathhub:"ink",slide:idx,sid:sidOf(idx),item:it});flash();syncUndo();draw();}',
 'function syncUndo(){var u=document.getElementById("undo"),r=document.getElementById("redo");',
 'if(u)u.disabled=!mine.length;if(r)r.disabled=!undone.length;}',
 
@@ -2613,7 +2745,7 @@ VIEWER_SCRIPT +
 'function doRedo(){if(!undone.length)return;var back=undone.pop();',
 'if(!MY[back.s])MY[back.s]=[];MY[back.s].push(back.item);',
 'mine.push({s:back.s,id:back.item.id});',
-'say({mathhub:"ink",slide:back.s,item:back.item});syncUndo();draw();}',
+'say({mathhub:"ink",slide:back.s,sid:sidOf(back.s),item:back.item});syncUndo();draw();}',
 'if(undoB)undoB.onclick=doUndo;',
 'if(redoB)redoB.onclick=doRedo;',
 

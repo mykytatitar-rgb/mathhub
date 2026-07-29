@@ -488,17 +488,53 @@
 
 .board-rail-wrap { flex: 0 0 auto; position: relative; }
 
-.board-rail {
+/* Два рядки: слайди уроку зверху, слайди домашнього завдання під ними. */
+.board-rails {
   background: #fff;
   border-top: 1px solid var(--line);
-  padding: 7px 12px;
+}
+.board-rail-row {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+}
+.board-rail-row--hw { border-top: 1px dashed var(--line); }
+
+.rail-tag {
+  flex: 0 0 auto;
+  width: 26px;
+  display: grid; place-items: center;
+  padding: 0 2px;
+  font-size: 9.5px; font-weight: 800;
+  letter-spacing: .5px; text-transform: uppercase;
+  color: var(--muted-2);
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  background: #FBFCFE;
+  border-right: 1px solid var(--line);
+}
+.rail-tag--hw { color: #C2751A; background: #FFF8EF; }
+
+.board-rail {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: #fff;
+  /* Рядків тепер два, тож картки нижчі — інакше слайди з'їдають чверть екрана */
+  padding: 6px 12px;
   display: flex;
   align-items: center;
   gap: 8px;
   overflow-x: auto;
-  min-height: 78px;
+  min-height: 66px;
 }
-.board.is-rail-collapsed .board-rail { display: none; }
+.board.is-rail-collapsed .board-rails { display: none; }
+
+.rail-tools {
+  flex: 0 0 auto;
+  display: flex; flex-direction: column; gap: 4px;
+  margin-left: 6px;
+}
+.rail-tools + .rail-tools { margin-left: 0; }
 
 /* Кнопка згортання — сидить на межі стрічки */
 .board-rail__toggle {
@@ -538,7 +574,7 @@
 .slide-card.is-active { border-color: var(--blue-600); box-shadow: 0 0 0 3px var(--blue-50); }
 
 .slide-card__thumb {
-  height: 44px;
+  height: 36px;
   background: #FBFCFE;
   display: block;
   width: 100%;
@@ -546,7 +582,7 @@
   border-bottom: 1px solid var(--line);
 }
 .slide-card__empty {
-  height: 44px;
+  height: 36px;
   display: grid; place-items: center;
   color: var(--muted-2);
   font-size: 11px; font-weight: 600;
@@ -555,7 +591,7 @@
 }
 .slide-card__foot {
   display: flex; align-items: center; gap: 6px;
-  padding: 6px 8px;
+  padding: 4px 7px;
 }
 .slide-card__num {
   width: 18px; height: 18px; border-radius: 6px;
@@ -569,9 +605,24 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
+/* Прихований слайд: у репетитора лишається, учневі не публікується. */
+.slide-card.is-hidden-slide { border-style: dashed; }
+.slide-card.is-hidden-slide .slide-card__thumb,
+.slide-card.is-hidden-slide .slide-card__empty { opacity: .42; }
+.slide-card.is-hidden-slide .slide-card__name { color: var(--muted); }
+.slide-card__eye {
+  position: absolute;
+  right: 5px; top: 5px;
+  width: 21px; height: 21px;
+  display: grid; place-items: center;
+  border-radius: 7px;
+  background: rgba(13, 33, 73, .78);
+  color: #fff;
+}
+
 .slide-add {
   flex: 0 0 auto;
-  width: 48px; height: 66px;
+  width: 44px; height: 54px;
   border: 2px dashed var(--line);
   border-radius: 12px;
   background: none;
@@ -634,7 +685,11 @@
   /* На вузькому екрані інструменти лежать смугою знизу — масштаб ставимо над ними */
   .board-zoom { right: 12px; bottom: 96px; }
   .board-hint { display: none; }
-  .board-rail { min-height: 72px; }
+  /* На вузькому екрані два рядки слайдів з'їли б пів екрана — тримаємо їх нижчими */
+  .board-rail { min-height: 62px; padding: 5px 8px; }
+  .slide-card { width: 92px; }
+  .slide-card__thumb, .slide-card__empty { height: 36px; }
+  .rail-tag { width: 20px; font-size: 9px; }
 }
 
 /* ============================================================

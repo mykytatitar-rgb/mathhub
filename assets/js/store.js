@@ -458,9 +458,19 @@
 
   S.BOARD_BG = ['grid', 'dots', 'blank'];
 
-  S.newSlide = function (title) {
-    return { id: U.uid('sl'), title: title || '', bg: 'grid', items: [] };
+  /* kind: 'lesson' — слайди уроку, 'hw' — слайди домашнього завдання.
+     hidden: 1 — слайд лишається в репетитора, але учневі не публікується. */
+  S.SLIDE_KINDS = ['lesson', 'hw'];
+
+  S.newSlide = function (title, kind) {
+    return {
+      id: U.uid('sl'), title: title || '', bg: 'grid', items: [],
+      kind: kind === 'hw' ? 'hw' : 'lesson', hidden: 0
+    };
   };
+
+  /** Слайди одного рядка, у їхньому порядку. Старі слайди без kind — урок. */
+  S.slideKind = function (s) { return s && s.kind === 'hw' ? 'hw' : 'lesson'; };
 
   /** Дошка уроку або null, якщо її ще не створювали. */
   S.getBoard = function (lessonId) {

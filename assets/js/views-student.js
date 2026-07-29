@@ -740,6 +740,27 @@
     return st.portalBoards !== false;
   }
 
+  /* Скільки уроків учень зможе відкрити. Без цього рядка незрозуміло, чому
+     кнопок у розкладі немає: порожній урок не публікується, і зовні це
+     виглядає як поламана функція. */
+  function boardsHint(st) {
+    var all = S.lessonsOf(st.id);
+    if (!all.length) return 'Уроків ще немає — відкривати нічого.';
+
+    var ready = V.lessonHasContent
+      ? all.filter(function (l) { return V.lessonHasContent(l.id); }).length
+      : 0;
+
+    if (!ready) {
+      return 'Зараз відкривати нічого: у цих уроків порожні дошки й не задано ' +
+        'домашнє. Щойно ви щось напишете на дошці або зададете завдання — ' +
+        'у розкладі в учня з\'явиться кнопка «Відкрити урок».';
+    }
+    return 'Учень зможе відкрити ' + U.pl(ready, 'урок', 'уроки', 'уроків') +
+      ' із ' + all.length + ' — ті, де є записи на дошці або задане домашнє. ' +
+      'Приховані слайди не публікуються.';
+  }
+
   /** Вміст порталу без позначки часу — щоб його можна було порівнювати. */
   function buildPortalBody(st, matIds, token) {
     return Promise.all([
@@ -871,9 +892,7 @@
           '<div class="mt-3"><label class="mat-pick__r" style="padding-left:0">' +
           '<input type="checkbox" data-portal-boards' + (wantsBoards(st) ? ' checked' : '') + '>' +
           '<span>Відкривати учневі дошки уроків</span></label>' +
-          '<div class="field__hint">У розкладі поруч з уроком з\'явиться кнопка «Відкрити урок» — ' +
-          'учень побачить слайди й домашнє завдання. Тільки ті уроки, на дошці яких щось є; ' +
-          'приховані слайди не публікуються.</div></div>' +
+          '<div class="field__hint">' + boardsHint(st) + '</div></div>' +
 
           (window.V.materialPicker ? window.V.materialPicker(chosen) : ''),
 

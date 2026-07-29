@@ -205,6 +205,28 @@
       applyToSelection({ w: +el.dataset.width });
     });
 
+    /* Шкала товщини. Перемальовувати всю панель на кожен рух повзунка не
+       можна — браузер загубив би сам повзунок під пальцем, тому оновлюємо
+       лише кружечок і число поруч. */
+    root.addEventListener('input', function (e) {
+      var el = e.target.closest ? e.target.closest('[data-width-range]') : null;
+      if (!el) return;
+      var w = +el.value;
+      engine.width = w;
+      el.title = 'Товщина ' + w + ' px';
+
+      var dot = root.querySelector('[data-width-dot]');
+      if (dot) {
+        var d = Math.max(4, Math.min(26, w * 1.25 + 3));
+        dot.style.width = d + 'px';
+        dot.style.height = d + 'px';
+      }
+      var val = root.querySelector('[data-width-val]');
+      if (val) val.textContent = w;
+
+      applyToSelection({ w: w });
+    });
+
     U.onClick(root, '[data-size]', function (el) {
       engine.fontSize = +el.dataset.size;
       U.$$('[data-size]', root).forEach(function (x) { x.classList.remove('is-active'); });
@@ -936,15 +958,24 @@
     updateSelBar();
   }
 
-  /* --- Вузька смужка для олівця, лінії та стрілки (як у Miro) --- */
+  /* --- Панель олівця, лінії та стрілки --- */
 
-  function stripWidthsHtml() {
-    return '<div class="strip-group">' + PEN_WIDTHS.map(function (w) {
-      var d = 5 + w * 1.7;
-      return '<button class="dot-btn' + (w === cur.engine.width ? ' is-active' : '') +
-        '" data-width="' + w + '" title="Товщина ' + w + '">' +
-        '<i style="width:' + d + 'px;height:' + d + 'px;background:' + cur.engine.color + '"></i></button>';
-    }).join('') + '</div>';
+  var W_MIN = 1, W_MAX = 24;
+
+  /* Товщина — плавна шкала, а не три готові розміри. Три кроки завжди
+     виявлялися або замалими, або завеликими: для підпису під фігурою
+     потрібне одне, для виділення відповіді — інше. */
+  function strokeWidthHtml() {
+    var w = cur.engine.width;
+    var d = Math.max(4, Math.min(26, w * 1.25 + 3));
+    return '<div><div class="board-opts__label">Товщина</div>' +
+      '<div class="w-row">' +
+        '<span class="w-preview"><i class="w-dot" data-width-dot style="width:' + d +
+          'px;height:' + d + 'px;background:' + cur.engine.color + '"></i></span>' +
+        '<input class="w-range" type="range" data-width-range min="' + W_MIN + '" max="' + W_MAX +
+          '" step="1" value="' + w + '" title="Товщина ' + w + ' px">' +
+        '<span class="w-val" data-width-val>' + w + '</span>' +
+      '</div></div>';
   }
 
   function stripColorsHtml() {
@@ -1037,16 +1068,19 @@
 
     var inner = '';
     if (kind === 'stroke') {
-      // вузька смужка: товщини кружечками, під ними кольори
-      inner = stripWidthsHtml() + '<div class="strip-sep"></div>' + stripColorsHtml() +
-        (cur.engine.tool === 'pen' ? '<div class="strip-sep"></div>' + stripSmoothHtml() : '');
+      // шкала товщини, під нею кольори, а для олівця ще й корекція почерку
+      inner = strokeWidthHtml() +
+        '<div class="w-sep"></div>' + stripColorsHtml() +
+        (cur.engine.tool === 'pen'
+          ? '<div class="w-sep"></div><div class="w-smooth">' + stripSmoothHtml() + '</div>'
+          : '');
     }
     else if (kind === 'text') inner = colorsHtml() + sizesHtml();
     else if (kind === 'shape') inner = shapesHtml() + colorsHtml() + widthsHtml();
 
     panel.innerHTML = inner;
     panel.classList.toggle('board-opts--wide', kind === 'shape');
-    panel.classList.toggle('board-opts--strip', kind === 'stroke');
+    panel.classList.toggle('board-opts--stroke', kind === 'stroke');
   }
 
   function toggleOpts() {
@@ -2079,21 +2113,33 @@
    * оновлюється сама, і смикати її звідси — зайвий трафік.
    * Повертає адресу або '' , якщо публікувати нема чого.
    */
+  /**
+   * Чи є що показувати учневі в цьому уроці. Не лише записи на дошці:
+   * урок із заданим домашнім теж варто відкрити, навіть якщо дошка чиста —
+   * саме там учень побачить завдання й надішле розв'язання.
+   */
+  V.lessonHasContent = function (lessonId) {
+    var board = S.getBoard(lessonId);
+    var ink = board && (board.slides || []).some(function (s) {
+      return !s.hidden && (s.items || []).length;
+    });
+    if (ink) return true;
+    return S.db().homeworks.some(function (h) { return h.lessonId === lessonId; });
+  };
+
   V.publishLessonBoard = function (lessonId) {
     if (!window.Cloud || !Cloud.available() || !Cloud.signedIn()) return Promise.resolve('');
 
     var board = S.getBoard(lessonId);
-    if (!board) return Promise.resolve('');
-
-    if (board.share && board.share.token) {
+    if (board && board.share && board.share.token) {
       return Promise.resolve(Cloud.shareUrl(board.share.token));
     }
 
-    // порожню дошку відкривати нема сенсу — учень побачить білий аркуш
-    var hasInk = (board.slides || []).some(function (s) {
-      return !s.hidden && (s.items || []).length;
-    });
-    if (!hasInk) return Promise.resolve('');
+    // порожній урок відкривати нема сенсу — учень побачить білий аркуш
+    if (!V.lessonHasContent(lessonId)) return Promise.resolve('');
+
+    // дошки може ще не бути — урок міг мати тільки домашнє
+    if (!board) board = S.ensureBoard(lessonId);
 
     var lesson = S.get('lessons', lessonId);
     var student = lesson ? S.get('students', lesson.studentId) : null;

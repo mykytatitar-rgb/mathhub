@@ -1,41 +1,59 @@
 /* ============================================================
-   mathhub — дизайн-система
-   ============================================================ */
+   Вектор — дизайн-система
+   ============================================================
+
+   Основа — індиго, а не чистий синій, і тепліший папір замість
+   холодного. Форми стриманіші: тонші лінії, менші заокруглення,
+   легші тіні. Замість «дружнього SaaS» — відчуття інструмента,
+   яким працюють щодня.
+
+   Імена --brand-* описують роль; --blue-* лишені як синоніми,
+   бо на них спирається чимало правил і вбудованих стилів. */
 
 :root {
-  --blue-900: #062A6E;
-  --blue-700: #0B4ED6;
-  --blue-600: #1358F5;
-  --blue-500: #2B6FFF;
-  --blue-300: #8FB4FF;
-  --blue-100: #E3EDFF;
-  --blue-50:  #F0F5FF;
+  --brand-900: #211A54;
+  --brand-700: #3A31B0;
+  --brand-600: #4B3FDB;   /* основний */
+  --brand-500: #6355EE;
+  --brand-300: #ADA4F7;
+  --brand-100: #E4E1FD;
+  --brand-50:  #F1EFFE;
 
-  --ink:      #0D2149;
-  --ink-2:    #33456B;
-  --muted:    #7E90AE;
-  --muted-2:  #A6B4CC;
+  --blue-900: var(--brand-900);
+  --blue-700: var(--brand-700);
+  --blue-600: var(--brand-600);
+  --blue-500: var(--brand-500);
+  --blue-300: var(--brand-300);
+  --blue-100: var(--brand-100);
+  --blue-50:  var(--brand-50);
 
-  --bg:       #F4F7FC;
+  --ink:      #17163A;
+  --ink-2:    #3D3B63;
+  /* Приглушений текст усе одно має читатися: 4.95:1 на білому
+     і 4.57:1 на тлі сторінки — обидва вище норми 4.5 для дрібного тексту. */
+  --muted:    #6F6D8C;
+  --muted-2:  #9C9AB6;
+
+  --bg:       #F6F5FB;
   --surface:  #FFFFFF;
-  --line:     #E8EEF8;
+  --line:     #E7E5F2;
 
-  --green:    #17B26A;
-  --green-bg: #E6F7EF;
-  --amber:    #F79009;
-  --amber-bg: #FEF3E2;
-  --red:      #E5484D;
-  --red-bg:   #FDECEC;
-  --violet:   #7A5AF8;
-  --violet-bg:#EFEBFE;
+  --green:    #12A268;
+  --green-bg: #E4F6EE;
+  --amber:    #E07C0B;
+  --amber-bg: #FDF1E0;
+  --red:      #DC3F49;
+  --red-bg:   #FCEAEB;
+  --violet:   #9333EA;
+  --violet-bg:#F5E9FE;
 
-  --r-lg: 22px;
-  --r-md: 16px;
-  --r-sm: 11px;
+  --r-lg: 18px;
+  --r-md: 13px;
+  --r-sm: 9px;
 
-  --shadow-sm: 0 2px 8px rgba(13, 33, 73, .05);
-  --shadow:    0 6px 24px rgba(13, 33, 73, .07);
-  --shadow-lg: 0 18px 50px rgba(13, 33, 73, .16);
+  --shadow-sm: 0 1px 3px rgba(23, 22, 58, .05);
+  --shadow:    0 3px 14px rgba(23, 22, 58, .06);
+  --shadow-lg: 0 14px 40px rgba(23, 22, 58, .14);
 
   --sidebar-w: 274px;
 }
@@ -47,18 +65,40 @@ html, body {
   padding: 0;
   background: var(--bg);
   color: var(--ink);
-  font-family: 'Montserrat', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-family: 'Manrope', 'Segoe UI', system-ui, -apple-system, sans-serif;
   font-size: 15px;
   -webkit-font-smoothing: antialiased;
 }
 
+/* Цифри однакової ширини: суми й дати в стовпчиках не стрибають,
+   коли змінюється значення. */
+.stat__value, .money, .bar__label, td, th, input[type="number"],
+.les__d, .rm__n, .tab__count { font-variant-numeric: tabular-nums; }
+
 button, input, select, textarea { font-family: inherit; font-size: inherit; color: inherit; }
 a { color: inherit; text-decoration: none; }
 
+/* Помітна рамка фокуса — щоб клавіатурою було видно, де ти */
+:focus-visible {
+  outline: 2px solid var(--brand-600);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection { background: var(--brand-100); color: var(--brand-900); }
+
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: #D5DEEC; border-radius: 20px; border: 3px solid transparent; background-clip: content-box; }
-::-webkit-scrollbar-thumb:hover { background: #BFCCE0; background-clip: content-box; border: 3px solid transparent; }
+::-webkit-scrollbar-thumb { background: #D3D0E6; border-radius: 20px; border: 3px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: #BAB6D6; background-clip: content-box; border: 3px solid transparent; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* Плавність там, де вона доречна — і жодної, якщо людина її вимкнула */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    transition-duration: .001ms !important;
+  }
+}
 
 /* ============================================================
    Каркас
@@ -169,12 +209,12 @@ a { color: inherit; text-decoration: none; }
 .logo__mark {
   width: 30px; height: 30px;
   border-radius: 9px;
-  background: linear-gradient(140deg, var(--blue-500), var(--blue-700));
+  background: linear-gradient(140deg, var(--brand-500), var(--brand-700));
   display: grid; place-items: center;
-  color: #fff; font-size: 17px; font-weight: 800;
-  box-shadow: 0 4px 12px rgba(19, 88, 245, .35);
+  color: #fff; font-size: 18px; font-weight: 800;
+  box-shadow: 0 3px 10px rgba(75, 63, 219, .38);
 }
-.logo__dot { color: var(--blue-600); }
+.logo__dot { color: var(--brand-600); }
 
 .side-scroll { flex: 1; overflow-y: auto; padding: 0 16px 8px; }
 
@@ -254,19 +294,36 @@ a { color: inherit; text-decoration: none; }
 .avatar--76 { width: 76px; height: 76px; font-size: 26px; border: 3px solid rgba(255,255,255,.55); }
 
 /* ============================================================
-   Hero (синій банер)
+   Hero (банер сторінки)
    ============================================================ */
 
 .hero {
   position: relative;
-  background: linear-gradient(118deg, #2775FF 0%, #1358F5 45%, #0B4ED6 100%);
+  background:
+    radial-gradient(115% 130% at 88% -25%, rgba(147, 51, 234, .40) 0%, rgba(147, 51, 234, 0) 58%),
+    linear-gradient(124deg, #5A4DE8 0%, #4B3FDB 42%, #2E248F 100%);
   padding: 26px 40px 92px;
   overflow: hidden;
   color: #fff;
 }
 .hero--short { padding-bottom: 34px; }
-.hero__pattern { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.hero__inner { position: relative; z-index: 1; }
+
+/* Клітинка, як у зошиті: тема наша власна, а не запозичений візерунок.
+   Ближче до низу гасне, щоб не сперечатися з картками, які на неї наїжджають. */
+.hero::after {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255,255,255,.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px);
+  background-size: 34px 34px;
+  -webkit-mask-image: linear-gradient(#000 20%, transparent 92%);
+  mask-image: linear-gradient(#000 20%, transparent 92%);
+}
+
+.hero__pattern { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+.hero__inner { position: relative; z-index: 2; }
 
 .hero__back {
   display: inline-flex; align-items: center; gap: 9px;
@@ -281,20 +338,22 @@ a { color: inherit; text-decoration: none; }
 .hero__sub { font-size: 14px; font-weight: 600; opacity: .82; margin-top: 6px; text-transform: uppercase; letter-spacing: .4px; }
 .hero__actions { margin-left: auto; display: flex; gap: 12px; flex-wrap: wrap; }
 
+/* Кнопки в шапці — прямокутні зі скругленням, а не «пігулки»:
+   круглі форми всюди читаються як загальний шаблон, а не як своє обличчя. */
 .hero-btn {
   display: inline-flex; align-items: center; gap: 10px;
-  padding: 12px 22px;
-  border: 1.6px solid rgba(255,255,255,.55);
-  border-radius: 999px;
-  background: rgba(255,255,255,.07);
-  color: #fff; font-weight: 650; font-size: 14px;
+  padding: 11px 18px;
+  border: 1px solid rgba(255,255,255,.34);
+  border-radius: var(--r-sm);
+  background: rgba(255,255,255,.10);
+  color: #fff; font-weight: 650; font-size: 13.5px;
   cursor: pointer;
-  transition: background .15s, border-color .15s;
-  backdrop-filter: blur(2px);
+  transition: background .15s, border-color .15s, transform .15s;
+  backdrop-filter: blur(3px);
 }
-.hero-btn:hover { background: rgba(255,255,255,.19); border-color: #fff; }
-.hero-btn--solid { background: #fff; color: var(--blue-700); border-color: #fff; }
-.hero-btn--solid:hover { background: #F0F5FF; }
+.hero-btn:hover { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.7); transform: translateY(-1px); }
+.hero-btn--solid { background: #fff; color: var(--brand-700); border-color: #fff; }
+.hero-btn--solid:hover { background: var(--brand-50); }
 
 /* ============================================================
    Сторінка / сітки
@@ -324,10 +383,13 @@ a { color: inherit; text-decoration: none; }
    Картки
    ============================================================ */
 
+/* Картки тримає волосяна лінія, а не важка тінь: так на світлому папері
+   видно межу навіть там, де тінь губиться. */
 .card {
   background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--r-lg);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-sm);
   padding: 22px 24px;
 }
 .card--flat { box-shadow: var(--shadow-sm); border: 1px solid var(--line); }
@@ -391,22 +453,23 @@ a { color: inherit; text-decoration: none; }
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 9px;
-  padding: 11px 20px;
-  border-radius: 999px;
+  padding: 10px 18px;
+  border-radius: var(--r-sm);
   border: 0;
   font-weight: 650; font-size: 14px;
   cursor: pointer;
-  transition: background .15s, color .15s, box-shadow .15s, opacity .15s;
+  transition: background .15s, color .15s, box-shadow .15s, opacity .15s, transform .15s;
   white-space: nowrap;
 }
-.btn--primary { background: var(--blue-600); color: #fff; box-shadow: 0 4px 14px rgba(19,88,245,.28); }
-.btn--primary:hover { background: var(--blue-700); }
-.btn--soft { background: var(--blue-100); color: var(--blue-700); }
-.btn--soft:hover { background: #D3E3FF; }
-.btn--ghost { background: transparent; color: var(--ink-2); border: 1.5px solid var(--line); }
-.btn--ghost:hover { background: var(--blue-50); border-color: var(--blue-100); color: var(--blue-700); }
+.btn:active { transform: translateY(1px); }
+.btn--primary { background: var(--brand-600); color: #fff; box-shadow: 0 2px 8px rgba(75, 63, 219, .30); }
+.btn--primary:hover { background: var(--brand-700); box-shadow: 0 4px 14px rgba(75, 63, 219, .36); }
+.btn--soft { background: var(--brand-100); color: var(--brand-700); }
+.btn--soft:hover { background: #D6D1FB; }
+.btn--ghost { background: transparent; color: var(--ink-2); border: 1px solid var(--line); }
+.btn--ghost:hover { background: var(--brand-50); border-color: var(--brand-100); color: var(--brand-700); }
 .btn--danger { background: var(--red-bg); color: var(--red); }
-.btn--danger:hover { background: #FBDDDD; }
+.btn--danger:hover { background: #F9DADC; }
 .btn--sm { padding: 8px 15px; font-size: 13px; }
 .btn--block { width: 100%; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
@@ -450,14 +513,25 @@ a { color: inherit; text-decoration: none; }
 .chip.is-active { background: var(--blue-600); border-color: var(--blue-600); color: #fff; }
 
 /* Таби */
-.tabs { display: flex; gap: 6px; background: #fff; padding: 6px; border-radius: 999px; box-shadow: var(--shadow-sm); overflow-x: auto; }
+.tabs {
+  display: flex; gap: 4px;
+  background: #fff;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
 .tab {
-  padding: 10px 20px; border-radius: 999px; border: 0; background: none;
+  padding: 9px 17px; border-radius: var(--r-sm); border: 0; background: none;
   font-weight: 650; font-size: 14px; color: var(--muted); cursor: pointer; white-space: nowrap;
   transition: background .14s, color .14s;
 }
-.tab:hover { color: var(--ink); }
-.tab.is-active { background: var(--blue-600); color: #fff; }
+.tab:hover { color: var(--ink); background: var(--brand-50); }
+.tab.is-active { background: var(--brand-600); color: #fff; }
+.tab.is-active:hover { background: var(--brand-700); }
 .tab__count { opacity: .7; font-size: 12px; margin-left: 4px; }
 
 /* ============================================================
@@ -623,7 +697,7 @@ a { color: inherit; text-decoration: none; }
 
 .modal-root { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px; }
 .modal-root[hidden] { display: none; }
-.modal__scrim { position: absolute; inset: 0; background: rgba(13, 33, 73, .42); backdrop-filter: blur(3px); animation: fade .16s ease; }
+.modal__scrim { position: absolute; inset: 0; background: rgba(23, 22, 58, .42); backdrop-filter: blur(3px); animation: fade .16s ease; }
 .modal {
   position: relative;
   background: #fff; border-radius: 24px; box-shadow: var(--shadow-lg);
@@ -847,7 +921,7 @@ a { color: inherit; text-decoration: none; }
 
 .cal-day { position: relative; border-left: 1px solid var(--line); min-width: 0; }
 .cal-day:first-child { border-left: 0; }
-.cal-day.is-today { background: rgba(19, 88, 245, .03); }
+.cal-day.is-today { background: rgba(75, 63, 219, .03); }
 
 .cal-ev {
   position: absolute;
@@ -936,7 +1010,7 @@ a { color: inherit; text-decoration: none; }
   top: 3px; right: 3px;
   width: 17px; height: 17px;
   border-radius: 50%;
-  border: 1.5px solid rgba(13, 33, 73, .28);
+  border: 1.5px solid rgba(23, 22, 58, .28);
   background: rgba(255, 255, 255, .85);
   color: #fff;
   display: grid; place-items: center;
@@ -1075,7 +1149,7 @@ a { color: inherit; text-decoration: none; }
 }
 .sol-when {
   position: absolute; left: 0; right: 0; bottom: 0;
-  background: rgba(13, 33, 73, .72); color: #fff;
+  background: rgba(23, 22, 58, .72); color: #fff;
   font-size: 10.5px; font-weight: 650; text-align: center;
   padding: 2px 0;
 }

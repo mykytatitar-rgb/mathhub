@@ -611,7 +611,7 @@
     var away = 13 / s;
 
     ctx.save();
-    ctx.font = '700 ' + size + 'px Montserrat, "Segoe UI", system-ui, sans-serif';
+    ctx.font = '700 ' + size + 'px Manrope, "Segoe UI", system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.lineWidth = 3 / s;
@@ -764,7 +764,7 @@
     }
 
     if (it.t === 'x') {
-      ctx.font = '500 ' + it.s + 'px Montserrat, "Segoe UI", system-ui, sans-serif';
+      ctx.font = '500 ' + it.s + 'px Manrope, "Segoe UI", system-ui, sans-serif';
       ctx.textBaseline = 'alphabetic';
       ctx.textAlign = 'left';
       String(it.v).split('\n').forEach(function (line, n) {
@@ -787,7 +787,7 @@
       ctx.strokeRect(x, y, w, h);
       ctx.setLineDash([]);
       ctx.fillStyle = '#7E90AE';
-      ctx.font = '600 ' + Math.max(12, Math.min(20, h / 8)) + 'px Montserrat, "Segoe UI", sans-serif';
+      ctx.font = '600 ' + Math.max(12, Math.min(20, h / 8)) + 'px Manrope, "Segoe UI", sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(e && e.state === 'fail' ? 'картинку не знайдено' : 'завантаження…', x + w / 2, y + h / 2);
@@ -1336,7 +1336,7 @@
   /** Напівпрозора заливка з того ж кольору, що й контур. */
   function fillFrom(color) {
     var m = /^#([0-9a-f]{6})$/i.exec(color || '');
-    if (!m) return 'rgba(19,88,245,.14)';
+    if (!m) return 'rgba(75,63,219,.14)';
     var n = parseInt(m[1], 16);
     return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',.15)';
   }
@@ -1820,7 +1820,7 @@
         var gb = unionBounds(this.selection);
         if (gb) {
           var gp = 11 * k;
-          ctx.strokeStyle = 'rgba(19,88,245,.55)';
+          ctx.strokeStyle = 'rgba(75,63,219,.55)';
           ctx.lineWidth = 1.2 * k;
           ctx.strokeRect(gb.x1 - gp, gb.y1 - gp, (gb.x2 - gb.x1) + gp * 2, (gb.y2 - gb.y1) + gp * 2);
         }
@@ -1844,7 +1844,7 @@
     if (this.band) {
       var bx = Math.min(this.band.x0, this.band.x1), by = Math.min(this.band.y0, this.band.y1);
       var bw = Math.abs(this.band.x1 - this.band.x0), bh = Math.abs(this.band.y1 - this.band.y0);
-      ctx.fillStyle = 'rgba(19,88,245,.08)';
+      ctx.fillStyle = 'rgba(75,63,219,.08)';
       ctx.fillRect(bx, by, bw, bh);
       ctx.strokeStyle = '#1358F5';
       ctx.lineWidth = 1.2 * k;
@@ -1864,7 +1864,7 @@
     }
     if (labels.length) {
       ctx.save();
-      ctx.font = '700 11.5px Montserrat, "Segoe UI", system-ui, sans-serif';
+      ctx.font = '700 11.5px Manrope, "Segoe UI", system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       for (i = 0; i < labels.length; i++) {

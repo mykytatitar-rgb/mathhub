@@ -126,7 +126,7 @@
 .dot-btn i { display: block; border-radius: 50%; }
 .dot-btn--color i {
   width: 20px; height: 20px;
-  box-shadow: inset 0 0 0 1px rgba(13, 33, 73, .18);
+  box-shadow: inset 0 0 0 1px rgba(23, 22, 58, .18);
 }
 .dot-btn--icon.is-active { color: var(--green); box-shadow: inset 0 0 0 2px var(--green); background: var(--green-bg); }
 .dot-btn--icon.is-strong { color: #0C8A50; box-shadow: inset 0 0 0 2.5px var(--green); }
@@ -176,7 +176,7 @@
 .board-opts__open[hidden] { display: none; }
 .board-opts__dot {
   width: 20px; height: 20px; border-radius: 50%;
-  box-shadow: inset 0 0 0 1px rgba(13,33,73,.15);
+  box-shadow: inset 0 0 0 1px rgba(23,22,58,.15);
 }
 
 /* Крапка на інструменті, що має налаштування */
@@ -195,7 +195,7 @@
   width: 26px; height: 26px; border-radius: 50%;
   border: 2.5px solid transparent; cursor: pointer; padding: 0;
   transition: transform .12s;
-  box-shadow: inset 0 0 0 1px rgba(13,33,73,.12);
+  box-shadow: inset 0 0 0 1px rgba(23,22,58,.12);
 }
 .pen-color:hover { transform: scale(1.14); }
 .pen-color.is-active { border-color: var(--ink); }
@@ -356,7 +356,7 @@
 .constr-chip i { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
 .constr-chip button {
   width: 18px; height: 18px; border: 0; border-radius: 50%;
-  background: rgba(13,33,73,.1); color: var(--ink-2);
+  background: rgba(23,22,58,.1); color: var(--ink-2);
   display: grid; place-items: center; cursor: pointer; padding: 0;
 }
 .constr-chip button:hover { background: var(--red); color: #fff; }
@@ -453,7 +453,7 @@
   position: absolute;
   left: 50%; bottom: 16px;
   transform: translateX(-50%);
-  background: rgba(13, 33, 73, .78);
+  background: rgba(23, 22, 58, .78);
   color: #fff;
   padding: 8px 14px;
   border-radius: 999px;
@@ -476,7 +476,7 @@
   padding: 6px 9px;
   outline: none;
   resize: none;
-  font-family: 'Montserrat', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Manrope', 'Segoe UI', system-ui, sans-serif;
   font-weight: 500;
   line-height: 1.25;
   min-width: 120px;
@@ -616,7 +616,7 @@
   width: 21px; height: 21px;
   display: grid; place-items: center;
   border-radius: 7px;
-  background: rgba(13, 33, 73, .78);
+  background: rgba(23, 22, 58, .78);
   color: #fff;
 }
 
@@ -719,7 +719,7 @@
 .photo-del {
   position: absolute; top: 3px; right: 3px;
   width: 20px; height: 20px; border-radius: 50%;
-  border: 0; background: rgba(13,33,73,.62); color: #fff;
+  border: 0; background: rgba(23,22,58,.62); color: #fff;
   display: grid; place-items: center; cursor: pointer; padding: 0;
 }
 .photo-del:hover { background: var(--red); }

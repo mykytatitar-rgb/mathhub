@@ -7,7 +7,7 @@
 
    Версію треба піднімати щоразу, коли змінюється склад файлів. */
 
-var VERSION = 'mathhub-v8';
+var VERSION = 'vektor-v9';
 
 var SHELL = [
   './',

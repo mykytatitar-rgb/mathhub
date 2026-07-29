@@ -210,10 +210,10 @@
     return '<div class="grid grid--main">' +
       '<div class="stack">' +
 
-        '<div class="grid grid--3">' +
+        /* Окремої картки про домашні тут немає: завдання живуть в уроці,
+           і те, що чекає на перевірку, видно значком у картці уроку. */
+        '<div class="grid grid--2">' +
           C.stat('Проведено', stat.done, U.pl(stat.planned, 'попереду', 'попереду', 'попереду'), 'book') +
-          C.stat('Домашні в роботі', stat.hwPending, stat.hwPending ? 'чекають на перевірку' : 'усе перевірено',
-            'checklist', stat.hwPending ? 'violet' : 'green') +
           C.stat('Пропуски', stat.missed, stat.missed ? 'варто обговорити' : 'жодного', 'alert',
             stat.missed ? 'red' : 'green') +
         '</div>' +

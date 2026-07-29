@@ -101,12 +101,10 @@
             icon('redo', 20) + '</button>' +
         '</div>' +
 
+        /* Окремої кнопки «показати налаштування» немає навмисно: вона робила
+           те саме, що клік по вже активному інструменту, і просто висіла
+           поруч із панеллю зайвою крапкою. */
         '<div class="board-opts" data-opts hidden></div>' +
-
-        '<button class="board-opts__open" data-act="board-opts-toggle" data-opts-open hidden ' +
-          'title="Показати налаштування інструмента">' +
-          '<span class="board-opts__dot" data-opts-dot style="background:' + PEN_COLORS[0] + '"></span>' +
-        '</button>' +
 
         '<div class="sel-bar" data-sel-bar hidden></div>' +
 
@@ -197,8 +195,6 @@
 
     U.onClick(root, '[data-color]', function (el) {
       engine.color = el.dataset.color;
-      var dot = root.querySelector('[data-opts-dot]');
-      if (dot) dot.style.background = el.dataset.color;
       renderOpts();                       // кружечки товщини теж перефарбовуються
       applyToSelection({ c: el.dataset.color });
     });
@@ -1028,18 +1024,15 @@
   function renderOpts() {
     if (!cur) return;
     var panel = document.querySelector('[data-opts]');
-    var open = document.querySelector('[data-opts-open]');
-    if (!panel || !open) return;
+    if (!panel) return;
 
     var kind = TOOL_OPTS[cur.engine.tool];
-    var dot = document.querySelector('[data-opts-dot]');
-    if (dot) dot.style.background = cur.engine.color;
 
     // у інструментів без налаштувань підменю просто немає
-    if (!kind) { panel.hidden = true; open.hidden = true; return; }
+    if (!kind) { panel.hidden = true; return; }
 
-    if (optsHidden()) { panel.hidden = true; open.hidden = false; return; }
-    open.hidden = true;
+    // згорнули — відкриється кліком по тому самому інструменту
+    if (optsHidden()) { panel.hidden = true; return; }
     panel.hidden = false;
 
     var inner = '';
@@ -1374,7 +1367,6 @@
     'board-undo': function () { cur.engine.undo(); refreshUndo(); refreshEmpty(); scheduleThumb(); },
     'board-redo': function () { cur.engine.redo(); refreshUndo(); refreshEmpty(); scheduleThumb(); },
     'board-image': function () { document.querySelector('[data-img-input]').click(); },
-    'board-opts-toggle': function () { toggleOpts(); },
     'board-rail-toggle': function () { toggleRail(); },
     'board-save-view': function () {
       if (cur.engine.saveCurrentView()) {

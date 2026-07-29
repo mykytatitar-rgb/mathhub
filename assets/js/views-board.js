@@ -254,6 +254,33 @@
       }
     });
 
+    U.onClick(root, '[data-flip]', function () {
+      /* Виділені фігури перевертаємо одразу, інакше готуємо наступну. */
+      var selF = engine.selection.filter(function (i) { return i.t === 'g'; });
+      if (selF.length) {
+        engine.snapshot();
+        selF.forEach(function (i) { i.fx = i.fx ? 0 : 1; });
+        engine.changed();
+        U.toast('Відзеркалено');
+        return;
+      }
+      engine.flipX = !engine.flipX;
+      renderOpts();
+      U.toast(engine.flipX ? 'Наступна фігура — дзеркальна' : 'Звичайна орієнтація');
+    });
+
+    U.onClick(root, '[data-labels]', function () {
+      engine.showLabels = !engine.showLabels;
+      renderOpts();
+      var selL = engine.selection.filter(function (i) { return i.t === 'g'; });
+      if (selL.length) {
+        engine.snapshot();
+        selL.forEach(function (i) { i.lb = engine.showLabels ? 1 : 0; });
+        engine.changed();
+      }
+      U.toast(engine.showLabels ? 'Вершини підписуються' : 'Підписи вершин вимкнено');
+    });
+
     U.onClick(root, '[data-facts]', function (el) { factsModal(el.dataset.facts); });
 
     U.onClick(root, '[data-slide-index]', function (el) { selectSlide(+el.dataset.slideIndex); });
@@ -823,7 +850,7 @@
     }).join('') + '</div>';
   }
 
-  var SMOOTH_LABELS = ['без корекції', 'звичайна корекція', 'сильна корекція'];
+  var SMOOTH_LABELS = ['без корекції', 'легка — гасить дрижання', 'сильна — для схем'];
 
   function stripSmoothHtml() {
     var lv = cur.engine.smoothing || 0;
@@ -869,10 +896,25 @@
       ';border-color:var(--violet)"></span>' +
       (cur.engine.showMeasures ? 'Розміри видно' : 'Розміри сховані') + '</button>';
 
+    var labs = '<button class="fill-toggle' + (cur.engine.showLabels ? ' is-active' : '') +
+      '" data-labels title="Підписувати вершини літерами A, B, C">' +
+      '<span class="fill-toggle__box" style="background:' +
+      (cur.engine.showLabels ? 'rgba(19,88,245,.18)' : 'transparent') +
+      ';border-color:var(--blue-600)"></span>' +
+      (cur.engine.showLabels ? 'Вершини A, B, C' : 'Без підписів') + '</button>';
+
+    var flip = '<button class="fill-toggle' + (cur.engine.flipX ? ' is-active' : '') +
+      '" data-flip title="Дзеркально: прямий кут з іншого боку">' +
+      '<span class="fill-toggle__box" style="background:' +
+      (cur.engine.flipX ? 'rgba(240,138,44,.20)' : 'transparent') +
+      ';border-color:var(--orange, #F08A2C)"></span>' +
+      (cur.engine.flipX ? 'Дзеркально' : 'Звичайно') + '</button>';
+
     var info = '<button class="facts-btn" data-facts="' + cur.engine.shape + '">' +
       icon('info', 15) + 'Властивості фігури</button>';
 
-    return '<div><div class="board-opts__label">Фігура</div>' + tabs + grid + fill + meas + info + '</div>';
+    return '<div><div class="board-opts__label">Фігура</div>' +
+      tabs + grid + fill + meas + labs + flip + info + '</div>';
   }
 
   function renderOpts() {
@@ -1563,11 +1605,15 @@
       return avail.map(function (o) {
         var ctrl;
         if (o.per === 'vertex' || o.per === 'side') {
-          var word = o.per === 'vertex' ? 'вершини' : 'сторони';
+          /* Підписуємо літерами так само, як вони стоять на самій фігурі —
+             інакше доводиться подумки перекладати «сторона 2» у «BC». */
+          var isV = o.per === 'vertex';
+          var word = isV ? 'вершини' : 'сторони';
           var btns = '';
           for (var i = 0; i < o.count; i++) {
+            var nm = isV ? Cn.vertexName(i) : Cn.sideName(i, o.count);
             btns += '<button class="constr-num" data-add="' + o.k + '" data-i="' + i + '" ' +
-              'title="Від ' + word + ' ' + (i + 1) + '">' + (i + 1) + '</button>';
+              'title="Від ' + word + ' ' + nm + '">' + nm + '</button>';
           }
           btns += '<button class="constr-num constr-num--all" data-add-all="' + o.k +
             '" data-count="' + o.count + '">усі</button>';
@@ -1598,9 +1644,18 @@
       if (!list.length) {
         return '<div class="field__hint">Ще нічого не побудовано.</div>';
       }
+      var vcount = (B.shapePoints(shape) || []).length;
       return '<div class="constr-list">' + list.map(function (x, n) {
-        var lbl = (Cn.KINDS[x.k] || {}).label || x.k;
-        var extra = x.i != null ? ' ' + (x.i + 1) : (x.a1 != null ? ' ' + x.a1 + '°' : '');
+        var kind = Cn.KINDS[x.k] || {};
+        var lbl = kind.label || x.k;
+        var extra = '';
+        if (x.i != null && vcount) {
+          if (x.k === 'midline') extra = ' ∥ ' + Cn.sideName(x.i, vcount);
+          else if (kind.per === 'side') extra = ' до ' + Cn.sideName(x.i, vcount);
+          else extra = ' з ' + Cn.vertexName(x.i);
+        } else if (x.a1 != null) {
+          extra = ' ' + x.a1 + '°';
+        }
         return '<span class="constr-chip"><i style="background:' + (x.c || '#0D2149') + '"></i>' +
           U.esc(lbl + extra) +
           '<button data-del-constr="' + n + '" title="Прибрати">' + icon('x', 12) + '</button></span>';
@@ -1645,9 +1700,12 @@
         });
 
         U.onClick(root, '[data-add-all]', function (el) {
-          var k = el.dataset.addAll, n = +el.dataset.count, made = 0;
-          for (var i = 0; i < n; i++) if (addOne(k, i)) made++;
-          if (made) { U.toast('Додано ' + made, 'ok'); refresh(); updateSelBar(); }
+          var k = el.dataset.addAll, n = +el.dataset.count;
+          var was = cur.engine.constructionsOf(shape).length;
+          for (var i = 0; i < n; i++) addOne(k, i);
+          var made = cur.engine.constructionsOf(shape).length - was;
+          if (made > 0) { U.toast('Додано ' + made, 'ok'); refresh(); updateSelBar(); }
+          else U.toast('Усе це вже побудовано');
         });
 
         U.onClick(root, '[data-del-constr]', function (el) {

@@ -150,7 +150,15 @@
     if (!base) return null;
     var x1 = Math.min(it.a[0], it.a[2]), y1 = Math.min(it.a[1], it.a[3]);
     var w = Math.abs(it.a[2] - it.a[0]), h = Math.abs(it.a[3] - it.a[1]);
-    return base.map(function (p) { return [x1 + p[0] * w, y1 + p[1] * h]; });
+
+    /* fx — дзеркало по горизонталі, fy — по вертикалі. Потрібне передусім
+       прямокутному трикутнику: у задачах прямий кут буває і зліва, і справа.
+       Робимо це для всіх фігур, бо коштує рівно нічого. */
+    return base.map(function (p) {
+      var px = it.fx ? (1 - p[0]) : p[0];
+      var py = it.fy ? (1 - p[1]) : p[1];
+      return [x1 + px * w, y1 + py * h];
+    });
   }
 
   /** Нормалізувати набір абсолютних точок у квадрат 0..1 + рамку. */
@@ -256,14 +264,19 @@
     var strong = lv >= 2;
     pts = movingAverage(pts, strong ? 2 : 1);
 
-    var eps = Math.max(strong ? 1.6 : 0.9, (width || 3) * (strong ? 0.7 : 0.4));
+    /* Легкий рівень навмисно майже не спрощує лінію: саме викидання точок
+       і подвійне згладжування перетворювало рукописний текст на друкований.
+       Тепер він лише гасить дрижання руки, а форма букв лишається своєю.
+       Сильний рівень — для схем і креслень, де потрібні рівні дуги. */
+    var eps = strong
+      ? Math.max(1.6, (width || 3) * 0.7)
+      : Math.max(0.35, (width || 3) * 0.12);
     var simple = rdp(pts, eps);
 
     // якщо після спрощення лишилось дуже мало точок — це вже пряма, згладжувати нічого
     var smooth = simple;
-    if (simple.length >= 3) {
-      smooth = chaikin(simple);
-      if (strong) smooth = chaikin(smooth);
+    if (simple.length >= 3 && strong) {
+      smooth = chaikin(chaikin(simple));
     }
 
     var out = [];
@@ -399,6 +412,7 @@
       var g = prims.get(it);
       if (!g) return null;
       g.segs.forEach(function (s) { xs.push(s[0], s[2]); ys.push(s[1], s[3]); });
+      (g.dashed || []).forEach(function (s) { xs.push(s[0], s[2]); ys.push(s[1], s[3]); });
       g.circles.forEach(function (c) {
         xs.push(c.c[0] - c.r, c.c[0] + c.r); ys.push(c.c[1] - c.r, c.c[1] + c.r);
       });
@@ -468,8 +482,9 @@
     if (it.t === 'd') {
       var g = prims.get(it);
       if (!g) return false;
-      for (i = 0; i < g.segs.length; i++) {
-        var s = g.segs[i];
+      var segs = g.dashed && g.dashed.length ? g.segs.concat(g.dashed) : g.segs;
+      for (i = 0; i < segs.length; i++) {
+        var s = segs[i];
         if (distToSegment(x, y, s[0], s[1], s[2], s[3]) <= tol + (it.w || 2) / 2) return true;
       }
       for (i = 0; i < g.circles.length; i++) {
@@ -566,6 +581,55 @@
      Малювання
      ============================================================ */
 
+  /* Латиниця навмисно: у геометрії вершини підписують саме так,
+     і в підручниках теж — A, B, C, а не А, Б, В. */
+  var VERTEX_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+  /**
+   * Підписи вершин. Літера ставиться назовні від центру фігури, щоб не
+   * налазити на саму лінію. Розмір і відступ ділимо на масштаб — тоді
+   * підпис лишається однаковим на екрані за будь-якого наближення.
+   */
+  function drawVertexLabels(ctx, it, scale) {
+    var s = scale || 1;
+    var sh = SHAPES[it.sh];
+    var pts;
+
+    if (sh && sh.round) {
+      // у кола вершин немає — підписуємо центр, як заведено
+      pts = [[(it.a[0] + it.a[2]) / 2, (it.a[1] + it.a[3]) / 2]];
+    } else {
+      pts = shapePoints(it);
+      if (!pts || !pts.length) return;
+    }
+
+    var cx = 0, cy = 0, i;
+    for (i = 0; i < pts.length; i++) { cx += pts[i][0]; cy += pts[i][1]; }
+    cx /= pts.length; cy /= pts.length;
+
+    var size = 15 / s;
+    var away = 13 / s;
+
+    ctx.save();
+    ctx.font = '700 ' + size + 'px Montserrat, "Segoe UI", system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 3 / s;
+    ctx.strokeStyle = '#fff';                 // світла обводка, щоб читалось на лінії
+    ctx.fillStyle = it.c || '#0D2149';
+
+    for (i = 0; i < pts.length && i < VERTEX_LETTERS.length; i++) {
+      var dx = pts[i][0] - cx, dy = pts[i][1] - cy;
+      var len = Math.hypot(dx, dy) || 1;
+      var lx = pts[i][0] + (dx / len) * away;
+      var ly = pts[i][1] + (dy / len) * away;
+      var ch = (sh && sh.round) ? 'O' : VERTEX_LETTERS[i];
+      ctx.strokeText(ch, lx, ly);
+      ctx.fillText(ch, lx, ly);
+    }
+    ctx.restore();
+  }
+
   function drawItem(ctx, it, scale) {
     ctx.strokeStyle = it.c || '#0D2149';
     ctx.fillStyle = it.c || '#0D2149';
@@ -584,6 +648,14 @@
       g.segs.forEach(function (s) {
         ctx.beginPath(); ctx.moveTo(s[0], s[1]); ctx.lineTo(s[2], s[3]); ctx.stroke();
       });
+      // допоміжні лінії (продовження сторони) — завжди пунктиром
+      if (g.dashed && g.dashed.length) {
+        ctx.setLineDash([6 * k, 5 * k]);
+        g.dashed.forEach(function (s) {
+          ctx.beginPath(); ctx.moveTo(s[0], s[1]); ctx.lineTo(s[2], s[3]); ctx.stroke();
+        });
+        ctx.setLineDash(it.dash ? [7 * k, 5 * k] : []);
+      }
       g.circles.forEach(function (c) {
         ctx.beginPath(); ctx.arc(c.c[0], c.c[1], c.r, 0, Math.PI * 2); ctx.stroke();
       });
@@ -687,6 +759,7 @@
       if (it.f) { ctx.fillStyle = it.f; ctx.fill(); }
       ctx.strokeStyle = it.c || '#0D2149';
       ctx.stroke();
+      if (it.lb) drawVertexLabels(ctx, it, scale);
       return;
     }
 
@@ -778,7 +851,12 @@
     this.fontSize = 26;
     this.fillOn = false;
     this.showMeasures = false;  // підписи сторін і кутів — лише за командою
-    this.smoothing = 2;         // корекція почерку: 0 вимк, 1 звичайна, 2 сильна
+    this.showLabels = true;     // підписи вершин A, B, C — як у підручнику
+    this.flipX = false;         // наступна фігура дзеркальна (прямий кут справа)
+    /* Корекція почерку вимкнена за замовчуванням: 0 вимк, 1 легка, 2 сильна.
+       Раніше стояла сильна — і рукописний текст перетворювався на друкований,
+       хоча людина хотіла бачити саме свій почерк. */
+    this.smoothing = 0;
 
     this.selection = [];       // масив виділених об'єктів
     this.draft = null;
@@ -913,6 +991,13 @@
 
     var g = window.Constructions.resolve(it, parent);
     if (!g || (!g.segs.length && !g.circles.length)) return null;
+
+    /* Та сама побудова двічі — це просто друга лінія поверх першої: на вигляд
+       нічого не змінилось, а прибирати доводиться двічі. Тому мовчки пропускаємо. */
+    var dup = this.constructionsOf(parent).filter(function (x) {
+      return window.Constructions.sameSpec(x, it);
+    })[0];
+    if (dup) return dup;
 
     this.snapshot();
     this.slide.items.push(it);
@@ -1233,6 +1318,8 @@
         t: 'g', id: uid('sh'), sh: this.shape, c: this.color, w: this.width,
         f: this.fillOn ? fillFrom(this.color) : null,
         m: this.showMeasures ? 1 : 0,
+        lb: this.showLabels ? 1 : 0,
+        fx: this.flipX ? 1 : 0,
         a: [round(w.x), round(w.y), round(w.x), round(w.y)]
       };
       return;
@@ -1850,6 +1937,7 @@
   Board.SHAPE_GROUPS = SHAPE_GROUPS;
   Board.shapeIcon = shapeIcon;
   Board.shapePoints = shapePoints;
+  Board.VERTEX_LETTERS = VERTEX_LETTERS;
   Board.imageKeysIn = imageKeysIn;
   Board.itemBounds = itemBounds;
   Board.unionBounds = unionBounds;

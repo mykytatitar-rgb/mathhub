@@ -275,14 +275,15 @@
 
   /**
    * Обчислити геометрію побудови.
-   * Повертає {segs:[[x1,y1,x2,y2]…], circles:[{c,r}], right:[{at,d1,d2}],
-   *           ticks:[[x,y,dx,dy]…], dots:[[x,y]…]} або null.
+   * Повертає {segs:[[x1,y1,x2,y2]…], dashed:[…], circles:[{c,r}],
+   *           right:[{at,d1,d2}], ticks:[[x,y,dx,dy]…], dots:[[x,y]…]} або null.
+   * dashed — допоміжні лінії (продовження сторони), їх малюємо пунктиром.
    */
   C.resolve = function (item, parent) {
     var B = window.Board;
     if (!parent || parent.t !== 'g') return null;
     var sh = B.SHAPES[parent.sh] || {};
-    var out = { segs: [], circles: [], right: [], ticks: [], dots: [] };
+    var out = { segs: [], dashed: [], circles: [], right: [], ticks: [], dots: [] };
 
     if (sh.round) {
       var b = B.itemBounds(parent);
@@ -328,8 +329,8 @@
     var i = ((item.i || 0) % n + n) % n;
 
     if (item.k === 'median') {
-      var A = pts[i], M = mid(pts[(i + 1) % n], pts[(i + 2) % n]);
       if (n !== 3) return null;
+      var A = pts[i], M = mid(pts[(i + 1) % n], pts[(i + 2) % n]);
       out.segs.push([A[0], A[1], M[0], M[1]]);
       // рисочки на рівних половинах основи
       out.ticks.push(tickAt(mid(pts[(i + 1) % n], M), sub(M, pts[(i + 1) % n])));
@@ -365,10 +366,12 @@
       }
       var F = foot(V, S1, S2);
       out.segs.push([V[0], V[1], F[0], F[1]]);
-      // якщо основа впала за межі сторони — показуємо продовження
+      /* У тупокутному трикутнику основа висоти лежить поза стороною. Тоді
+         сторону треба продовжити — але це допоміжна лінія, не сама висота,
+         тож і малюємо її пунктиром, як у зошиті. */
       var t = projParam(F, S1, S2);
-      if (t < 0) out.segs.push([S1[0], S1[1], F[0], F[1]]);
-      else if (t > 1) out.segs.push([S2[0], S2[1], F[0], F[1]]);
+      if (t < 0) out.dashed.push([S1[0], S1[1], F[0], F[1]]);
+      else if (t > 1) out.dashed.push([S2[0], S2[1], F[0], F[1]]);
       out.right.push({ at: F, d1: norm(sub(S2, S1)), d2: norm(sub(V, F)) });
       out.dots.push(F);
       return out;
@@ -438,6 +441,34 @@
     var d = norm(dir);
     return [p[0], p[1], -d[1], d[0]];   // точка + напрям рисочки (перпендикуляр)
   }
+
+  /* ============================================================
+     Назви вершин і сторін — ті самі літери, що підписані на фігурі
+     ============================================================ */
+
+  function letters() {
+    return (window.Board && window.Board.VERTEX_LETTERS) || 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  }
+
+  /** Літера вершини: 0 → A, 1 → B… Якщо вершин більше за абетку — номер. */
+  C.vertexName = function (i) {
+    var L = letters();
+    return i < L.length ? L[i] : String(i + 1);
+  };
+
+  /** Сторона i — від вершини i до наступної: 0 → «AB». */
+  C.sideName = function (i, n) {
+    return C.vertexName(i) + C.vertexName((i + 1) % n);
+  };
+
+  /** Чи така сама побудова вже є (щоб «усі» неклало другий шар поверх). */
+  C.sameSpec = function (a, b) {
+    if (a.k !== b.k) return false;
+    if ((a.i || 0) !== (b.i || 0)) return false;
+    if ((a.a1 == null ? null : +a.a1) !== (b.a1 == null ? null : +b.a1)) return false;
+    if ((a.a2 == null ? null : +a.a2) !== (b.a2 == null ? null : +b.a2)) return false;
+    return true;
+  };
 
   /** Коротка позначка виду побудови — для підпису на полотні. */
   C.shortLabel = function (item) {

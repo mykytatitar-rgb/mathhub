@@ -175,6 +175,13 @@
 
     // поки дошка відкрита — забираємо те, що пише учень за посиланням
     cur.pullTimer = setInterval(pullContributions, PULL_MS);
+
+    /* Урок, опублікований старішою версією програми, оновлюємо мовчки: учень
+       має бачити те саме, що й ми, а сам він на це вплинути не може — у нього
+       збережений знімок сторінки. */
+    if (cur.board.share && cur.board.share.token && cur.board.share.v !== VIEWER_VERSION) {
+      scheduleRepublish();
+    }
     applyRail();
     renderRail();
     renderOpts();
@@ -463,6 +470,16 @@
      майже одразу, як на другому пристрої репетитора. */
   var REPUBLISH_MS = 2500;
 
+  /* Версія сторінки уроку.
+     Опублікований урок — це знімок HTML на сервері, а не жива сторінка. Тому
+     коли переглядач змінюється (нові інструменти, інша нумерація), уже
+     опубліковані уроки лишаються старими, скільки б учень не оновлював
+     браузер. Це число підіймається разом із переглядачем, і за ним видно,
+     які уроки треба перевидати.
+
+     Підіймати щоразу, коли міняється VIEWER_SCRIPT або розмітка переглядача. */
+  var VIEWER_VERSION = 2;
+
   function scheduleRepublish() {
     if (!cur || !cur.board.share) return;
     if (!(window.Cloud && Cloud.available() && Cloud.signedIn())) return;
@@ -477,6 +494,7 @@
       var st = l ? S.get('students', l.studentId) : null;
       publishLesson(cur.board, l, st, cur.board.share.token).then(function () {
         if (cur && cur.lessonId === lessonId) cur.republishedAt = Date.now();
+        cur.board.share.v = VIEWER_VERSION;
       }).catch(function (e) {
         console.warn('Не вдалося оновити урок для учня:', e && e.message);
       });
@@ -2163,8 +2181,21 @@
     if (!window.Cloud || !Cloud.available() || !Cloud.signedIn()) return Promise.resolve('');
 
     var board = S.getBoard(lessonId);
+
+    /* Уже опублікований урок перевидаємо лише тоді, коли він зроблений
+       старішим переглядачем. Інакше учень нових можливостей не побачить,
+       скільки б не оновлював сторінку: у нього збережений знімок. */
     if (board && board.share && board.share.token) {
-      return Promise.resolve(Cloud.shareUrl(board.share.token));
+      var url = Cloud.shareUrl(board.share.token);
+      if (board.share.v === VIEWER_VERSION) return Promise.resolve(url);
+
+      var l0 = S.get('lessons', lessonId);
+      var st0 = l0 ? S.get('students', l0.studentId) : null;
+      return publishLesson(board, l0, st0, board.share.token).then(function () {
+        board.share.v = VIEWER_VERSION;
+        S.saveBoard(board);
+        return url;
+      }).catch(function () { return url; });   // не вийшло — хай лишається старий
     }
 
     // порожній урок відкривати нема сенсу — учень побачить білий аркуш
@@ -2178,7 +2209,7 @@
     var token = Cloud.newShareToken();
 
     return publishLesson(board, lesson, student, token).then(function () {
-      board.share = { token: token, at: new Date().toISOString(), materials: [] };
+      board.share = { token: token, at: new Date().toISOString(), materials: [], v: VIEWER_VERSION };
       S.saveBoard(board);
       return Cloud.shareUrl(token);
     });
@@ -2193,7 +2224,9 @@
     U.toast(isUpdate ? 'Оновлюю урок…' : 'Готую урок для учня…');
     return publishLesson(cur.board, l, st, token).then(function (url) {
       var mats = (cur.board.share && cur.board.share.materials) || [];
-      cur.board.share = { token: token, at: new Date().toISOString(), materials: mats };
+      cur.board.share = {
+        token: token, at: new Date().toISOString(), materials: mats, v: VIEWER_VERSION
+      };
       cur.republishedAt = Date.now();
       markDirty(); flushSave();
       // копіюємо одразу: людина щойно натиснула кнопку, отже дозвіл є

@@ -496,6 +496,7 @@
     if (!cur || !rows || !rows.length) return { changed: false, ids: [] };
     var changed = false;
     var ids = [];
+    var pics = [];   // картинки від учня — їх треба забрати до себе
 
     rows.forEach(function (row) {
       ids.push(row.id);
@@ -518,6 +519,14 @@
           // позначаємо чиє це — щоб на дошці було видно, що писав учень
           var it = m.item;
           it.by = 'student';
+          /* Учень міг вставити фото чи скріншот. У нас його ще немає —
+             у повідомленні лежить лише адреса. Запам'ятовуємо, щоб забрати
+             файл до себе, і саму адресу з об'єкта прибираємо: у сховищі
+             картинки живуть за ключем, а не за посиланням. */
+          if (it.t === 'i' && it.src) {
+            pics.push({ key: it.k, url: it.src });
+            delete it.src;
+          }
           if (!s.items.some(function (x) { return x.id === it.id; })) {
             s.items.push(it);
             changed = true;
@@ -532,6 +541,29 @@
         }
       });
     });
+
+    /* Файли забираємо у фоні: доки вони йдуть, картинка вже стоїть на дошці
+       порожньою рамкою, а домалюється, щойно доїде. Чекати на це, тримаючи
+       злиття, не варто — решта записів учня має з'явитися одразу. */
+    if (pics.length && window.ImgStore && window.ImgStore.available()) {
+      Promise.all(pics.map(function (p) {
+        if (!p.key || !p.url) return null;
+        return window.ImgStore.get(p.key).then(function (have) {
+          if (have) return null;                       // уже забрали раніше
+          return fetch(p.url).then(function (res) {
+            if (!res.ok) throw new Error('http ' + res.status);
+            return res.blob();
+          }).then(function (blob) { return window.ImgStore.put(p.key, blob); });
+        }).catch(function (e) {
+          console.warn('Картинка від учня не забралася:', e && e.message);
+        });
+      })).then(function () {
+        if (!cur) return;
+        cur.engine.ensureImages();
+        cur.engine.render();
+        markDirty();
+      });
+    }
 
     return { changed: changed, ids: ids };
   }
@@ -2582,6 +2614,10 @@
     '      <button class="tl" data-tool="arrow" title="Стрілка">→</button>\n' +
     '      <button class="tl" data-tool="rect" title="Прямокутник">▭</button>\n' +
     '      <button class="tl" data-tool="ell" title="Коло">◯</button>\n' +
+    /* Своє фото на дошку. На комп\'ютері швидше Ctrl+V, але на телефоні
+       вставки з буфера немає — тому ще й кнопка. */
+    '      <label class="tl" id="pic" title="Додати фото або скріншот (можна Ctrl+V)">🖼' +
+    '<input type="file" accept="image/*" multiple hidden id="picinp"></label>\n' +
     '    </div>\n' +
     '    <div class="opts" id="opts">\n' +
     '      <div class="opts__row" id="cols"></div>\n' +
@@ -2658,8 +2694,10 @@ VIEWER_SCRIPT +
 'function keep(){if(keepT)clearTimeout(keepT);',
 'keepT=setTimeout(function(){keepT=null;',
 'say({mathhub:"view",idx:idx,scale:scale,cam:{x:cam.x,y:cam.y}});},250);}',
-'function flash(){var s=document.getElementById("sv");if(!s)return;s.className="saved show";',
-'setTimeout(function(){s.className="saved"},1400);}',
+// без тексту — звичайне «надіслано»; з текстом — своє повідомлення
+'function flash(msg){var s=document.getElementById("sv");if(!s)return;',
+'s.textContent=msg||"Надіслано репетитору";s.className="saved show";',
+'setTimeout(function(){s.className="saved"},msg?2200:1400);}',
 'Object.keys(DATA.images||{}).forEach(function(k){var im=new Image();im.onload=function(){draw();};im.src=DATA.images[k];IMGS[k]=im;});',
 'function bounds(it){var xs=[],ys=[],i;',
 'if(it.t==="p"){for(i=0;i<it.d.length;i+=2){xs.push(it.d[i]);ys.push(it.d[i+1]);}}',
@@ -2711,9 +2749,17 @@ VIEWER_SCRIPT +
 'if(!b){scale=1;cam={x:-W/2,y:-H/2};draw();return;}var p=60,w=Math.max(1,b.x2-b.x1),h=Math.max(1,b.y2-b.y1);',
 'scale=Math.max(MINS,Math.min(2,Math.min((W-p*2)/w,(H-p*2)/h)));',
 'cam.x=(b.x1+b.x2)/2-W/(2*scale);cam.y=(b.y1+b.y2)/2-H/(2*scale);draw();}',
+/* Нумерація в кожному рядку своя: домашнє завдання теж починається
+   з першого слайда, а не продовжує наскрізний рахунок уроку. Рахуємо
+   один раз наперед, бо ці числа потрібні і стрічці, і підпису зверху. */
+'var ROW={lesson:0,hw:0};',
+'DATA.slides.forEach(function(s){var k=s.kind==="hw"?"hw":"lesson";s.__k=k;s.__n=++ROW[k];});',
+'function slideName(s){return s.title||("Слайд "+s.__n);}',
+
 'function go(i,noFit){if(i<0||i>=DATA.slides.length)return;idx=i;',
-'document.getElementById("pos").textContent=(idx+1)+" / "+DATA.slides.length;',
-'document.getElementById("nm").textContent=DATA.slides[idx].title||("Слайд "+(idx+1));',
+'var s=DATA.slides[idx];',
+'document.getElementById("pos").textContent=s.__n+" / "+ROW[s.__k];',
+'document.getElementById("nm").textContent=slideName(s);',
 'document.getElementById("prev").disabled=idx===0;',
 'document.getElementById("next").disabled=idx===DATA.slides.length-1;',
 '[].forEach.call(document.querySelectorAll(".sc"),function(b,n){b.className="sc"+(n===idx?" on":"")});',
@@ -2721,11 +2767,11 @@ VIEWER_SCRIPT +
 'var rail=document.getElementById("rail");',
 // у стрічці слайди уроку й слайди ДЗ розділені підписом, як і в репетитора
 'var lastKind=null;',
-'DATA.slides.forEach(function(s,i){var k=s.kind==="hw"?"hw":"lesson";',
-'if(k!==lastKind){var t=document.createElement("span");t.className="sc-tag"+(k==="hw"?" hw":"");',
-'t.textContent=k==="hw"?"Домашнє завдання":"Урок";rail.appendChild(t);lastKind=k;}',
+'DATA.slides.forEach(function(s,i){',
+'if(s.__k!==lastKind){var t=document.createElement("span");t.className="sc-tag"+(s.__k==="hw"?" hw":"");',
+'t.textContent=s.__k==="hw"?"Домашнє завдання":"Урок";rail.appendChild(t);lastKind=s.__k;}',
 'var b=document.createElement("button");b.className="sc";',
-'b.textContent=(i+1)+". "+(s.title||"Слайд "+(i+1));b.onclick=function(){go(i)};rail.appendChild(b);});',
+'b.textContent=s.__n+". "+slideName(s);b.onclick=function(){go(i)};rail.appendChild(b);});',
 'document.getElementById("prev").onclick=function(){go(idx-1)};',
 'document.getElementById("next").onclick=function(){go(idx+1)};',
 'document.getElementById("zi").onclick=function(){zoomAt(1.25,W/2,H/2)};',
@@ -2860,6 +2906,44 @@ VIEWER_SCRIPT +
 'if(u){a.querySelector("img").src=u;a.href=u;}});',
 // фото рішень: самі файли віддаємо назовні, бо ця сторінка не знає ні адреси
 // бази, ні ключа — вивантаженням займається сторінка, що нас показує
+/* ---- Свої фото та скріншоти на дошці ----
+
+   Сама сторінка не знає ні адреси бази, ні ключа: файли віддаємо обгортці,
+   вона їх стискає й вивантажує, а нам повертає готові адреси. Далі картинка
+   стає таким самим об'єктом дошки, як лінія чи напис, і їде до репетитора
+   тим самим шляхом. */
+'function addPics(files){',
+'if(!CANW)return;',
+'var fs=[].slice.call(files||[]).filter(function(f){return f&&/^image\\//.test(f.type);});',
+'if(!fs.length)return;',
+'flash("Надсилаю "+fs.length+" фото…");',
+'say({mathhub:"pic",files:fs});}',
+
+'window.addEventListener("paste",function(e){',
+'if(!CANW)return;',
+'if(e.target&&e.target.tagName==="TEXTAREA")return;',   // поки пишуть текст — вставляється текст
+'var items=(e.clipboardData||{}).items;if(!items)return;',
+'var fs=[];for(var i=0;i<items.length;i++){if(items[i].type&&items[i].type.indexOf("image/")===0){',
+'var f=items[i].getAsFile();if(f)fs.push(f);}}',
+'if(!fs.length)return;e.preventDefault();addPics(fs);});',
+
+'var picInp=document.getElementById("picinp");',
+'if(picInp)picInp.onchange=function(){addPics(picInp.files);picInp.value="";};',
+
+'window.addEventListener("message",function(e){var d=e.data;if(!d||d.mathhub!=="pic-done")return;',
+'if(d.error||!d.items||!d.items.length){flash("Не вдалося надіслати фото");return;}',
+'var c=[cam.x+W/(2*scale),cam.y+H/(2*scale)];',
+'d.items.forEach(function(p,n){',
+'var key="img_"+seq();',
+// вписуємо в видиму область, щоб вставлене не полетіло за край екрана
+'var maxW=Math.min(900,(W/scale)*0.6);',
+'var w=Math.min(maxW,p.w||600),h=w*((p.h||400)/(p.w||600));',
+'var x=c[0]-w/2+n*26,y=c[1]-h/2+n*26;',
+'var im=new Image();im.onload=function(){draw();};im.src=p.url;IMGS[key]=im;',
+'pushMine({t:"i",id:seq(),k:key,src:p.url,r:(p.w||600)/(p.h||400),',
+'a:[Math.round(x),Math.round(y),Math.round(x+w),Math.round(y+h)]});});',
+'flash("Надіслано репетитору");});',
+
 '[].forEach.call(document.querySelectorAll("input[data-hw]"),function(inp){',
 'inp.onchange=function(){var fs=[].slice.call(inp.files||[]);if(!fs.length)return;',
 'var lab=inp.parentNode;lab.className="addshot busy";',

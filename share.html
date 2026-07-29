@@ -326,7 +326,8 @@
         cv.toBlob(function (blob) {
           if (!blob) { reject(new Error('не стиснулось')); return; }
           // якщо стиснення не допомогло — краще надіслати оригінал
-          resolve(blob.size < file.size ? blob : file);
+          // розміри повертаємо теж: за ними картинка лягає на дошку в правильних пропорціях
+          resolve({ blob: blob.size < file.size ? blob : file, w: w, h: h });
         }, type, 0.85);
       };
       img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('не прочиталось')); };
@@ -351,15 +352,27 @@
     });
   }
 
-  function sendHomework(hwId, files) {
+  /** Стиснути й вивантажити пачку файлів. Повертає [{key,url,w,h}]. */
+  function uploadAll(files) {
     var done = [];
     var chain = Promise.resolve();
     files.slice(0, 10).forEach(function (f) {          // більше десяти за раз не приймаємо
       chain = chain.then(function () {
-        return shrink(f).then(uploadPhoto).then(function (r) { done.push(r); })
+        return shrink(f)
+          .then(function (r) {
+            return uploadPhoto(r.blob).then(function (up) {
+              done.push({ key: up.key, url: up.url, w: r.w, h: r.h });
+            });
+          })
           .catch(function () { /* одне невдале фото не має валити решту */ });
       });
     });
+    return chain.then(function () { return done; });
+  }
+
+  function sendHomework(hwId, files) {
+    var done = [];
+    var chain = uploadAll(files).then(function (r) { done = r; });
     return chain.then(function () {
       if (!done.length) throw new Error('нічого не завантажилось');
       return rpc('share_contribute', {
@@ -397,6 +410,20 @@
         })
         .catch(function () {
           frame.contentWindow.postMessage({ mathhub: 'hw-done', hw: d.hw, error: true }, '*');
+        });
+      return;
+    }
+
+    /* Фото чи скріншот, вставлені учнем прямо на дошку. Вивантажуємо тут,
+       бо сторінка уроку не знає ні адреси бази, ні ключа — і не повинна. */
+    if (d.mathhub === 'pic') {
+      uploadAll([].slice.call(d.files || []))
+        .then(function (items) {
+          if (!items.length) throw new Error('нічого не завантажилось');
+          frame.contentWindow.postMessage({ mathhub: 'pic-done', items: items }, '*');
+        })
+        .catch(function () {
+          frame.contentWindow.postMessage({ mathhub: 'pic-done', error: true }, '*');
         });
     }
   });

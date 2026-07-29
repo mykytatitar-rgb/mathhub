@@ -397,8 +397,15 @@
     m.angles.forEach(function (A) {
       var dx = c[0] - A.at[0], dy = c[1] - A.at[1];
       var d = Math.hypot(dx, dy) || 1;
+      /* Кут можна підписати вручну. Потрібно на кресленнях до задачі:
+         там кут «за умовою» 30°, а намальований від руки — 34°, і показувати
+         треба саме умову. it.ang — {номер вершини: підпис}. */
+      var man = it.ang && it.ang[A.i];
+      var txt = (man == null || man === '')
+        ? Math.round(A.deg) + '°'
+        : (/^-?\d+([.,]\d+)?$/.test(String(man)) ? String(man) + '°' : String(man));
       out.push({ w: A.at, off: [dx / d, dy / d], offPx: 26,
-                 text: Math.round(A.deg) + '°', kind: 'a' });
+                 text: txt, kind: 'a', manual: man != null && man !== '' });
     });
   }
 

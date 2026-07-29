@@ -1631,6 +1631,29 @@
      Розміри фігури: показ і точне задання
      ============================================================ */
 
+  /* Підписи кутів вручну.
+
+     Потрібно на кресленнях до задачі: за умовою кут 30°, а намальований
+     від руки — 34°, і показувати треба саме умову. Сама фігура при цьому
+     не змінюється: це підпис, а не геометрія. Порожнє поле означає
+     «як виміряно». */
+  function manualAnglesHtml(it, m) {
+    if (m.round || !m.angles || !m.angles.length || m.pts.length > 8) return '';
+    var L = (window.Board.VERTEX_LETTERS || 'ABCDEFGHIJKLMNOPQRSTUVWXYZ');
+    var man = it.ang || {};
+
+    return '<div class="dim-sep" style="margin:16px 0 12px"></div>' +
+      '<div class="board-opts__label" style="margin-bottom:8px">Підписати кути вручну</div>' +
+      '<div class="ang-grid">' + m.angles.map(function (A, i) {
+        var name = i < L.length ? L[i] : String(i + 1);
+        return '<label class="ang-cell"><span>' + name + '</span>' +
+          '<input class="input" data-ang="' + i + '" value="' + U.esc(man[i] == null ? '' : man[i]) +
+          '" placeholder="' + Math.round(A.deg) + '"></label>';
+      }).join('') + '</div>' +
+      '<div class="field__hint mt-1">Порожнє поле — показувати виміряний кут. ' +
+      'Можна вписати не лише число, а й позначення: α, 2x.</div>';
+  }
+
   function dimensionsDialog(it) {
     var B = window.Board;
     var m = B.shapeMeasure(it);
@@ -1651,8 +1674,9 @@
       var sides = m.sides.map(function (s, i) {
         return row('Сторона ' + (i + 1), u(s.len));
       }).join('');
+      var L = B.VERTEX_LETTERS || 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
       var angles = m.angles.map(function (A, i) {
-        return row('Кут ' + (i + 1), Math.round(A.deg) + '°');
+        return row('Кут ' + (i < L.length ? L[i] : i + 1), Math.round(A.deg) + '°');
       }).join('');
       info = '<div class="dim-list">' + sides +
         '<div class="dim-sep"></div>' + angles +
@@ -1734,12 +1758,26 @@
                 '" data-mode="' + o.v + '">' + o.l + '</button>';
             }).join('') + '</div>' +
             '<div class="mt-2" data-fields>' + fields('box') + '</div>' +
+            manualAnglesHtml(it, m) +
           '</div>' +
         '</div>',
       buttons: [
         { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
         { label: 'Застосувати', kind: 'btn--primary', act: 'ok', icon: 'check',
           onClick: function (root) {
+            /* Підписи кутів застосовуємо завжди — навіть якщо розміри
+               лишили без змін: людина могла зайти саме заради них. */
+            var angEls = U.$$('[data-ang]', root);
+            if (angEls.length) {
+              var ang = {};
+              angEls.forEach(function (el) {
+                var s = el.value.trim();
+                if (s) ang[el.dataset.ang] = s;
+              });
+              it.ang = Object.keys(ang).length ? ang : null;
+              if (it.ang) it.m = 1;            // підписаний кут має бути видно
+            }
+
             var mode = root.querySelector('.seg__btn.is-active').dataset.mode;
             var v = C.readForm(root);
             var spec = null;

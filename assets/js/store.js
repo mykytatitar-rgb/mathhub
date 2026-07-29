@@ -148,12 +148,22 @@
     return db;
   };
 
+  /* Хто хоче знати про зміни в базі. Потрібно тому, що портал учня —
+     це знімок даних на сервері, і його треба переробляти сам, а не
+     чекати, поки репетитор згадає натиснути «Оновити». */
+  var saveHooks = [];
+  S.onSave = function (fn) { if (typeof fn === 'function') saveHooks.push(fn); };
+
   S.save = function () {
     try {
       localStorage.setItem(KEY, JSON.stringify(db));
     } catch (e) {
       U.toast('Не вдалося зберегти дані: ' + e.message, 'err');
     }
+    // збій в одному слухачі не має валити збереження
+    saveHooks.forEach(function (fn) {
+      try { fn(); } catch (e) { console.warn('onSave:', e); }
+    });
   };
 
   S.db = function () { return db; };

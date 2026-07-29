@@ -1131,6 +1131,10 @@ a { color: inherit; text-decoration: none; }
 .mat-pick__r:hover { background: var(--blue-50, #f0f5ff); }
 .mat-pick__r input { accent-color: var(--blue-600, #1358f5); cursor: pointer; }
 
+/* Матеріал, у якому ні файлу, ні посилання — учневі відкривати нічого */
+.mat-pick__r.is-empty span { color: var(--muted); }
+.mat-pick__empty { color: var(--amber); font-weight: 650; }
+
 /* ============================================================
    Домашні завдання просто з уроку
    ============================================================ */

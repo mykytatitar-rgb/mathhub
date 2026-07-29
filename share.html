@@ -50,6 +50,7 @@
     border:1px solid #E7E5F2;border-radius:9px;font-size:12.5px;font-weight:650;
     color:#3A31B0;text-decoration:none;background:#F7F6FE}
   .mat a:hover{border-color:#4B3FDB}
+  .mat__soon{margin-top:7px;font-size:12.5px;color:#AAA8C2;font-style:italic}
   .none{font-size:13px;color:#7C7A9C;padding:6px 0}
   .pin{max-width:320px;margin:0 auto;text-align:center}
   .pin input{width:100%;margin-top:14px;padding:13px 16px;font:inherit;font-size:19px;
@@ -151,6 +152,7 @@
   var frame = document.getElementById('frame');
   var shownRev = -1;
   var failures = 0;
+  var gone = 0;         // скільки разів поспіль сервер сказав, що посилання немає
 
   /* Де саме учень зараз дивиться. Сама сторінка уроку повідомляє це нам,
      а ми повертаємо назад після оновлення — інакше кожна зміна від репетитора
@@ -200,16 +202,27 @@
     setTimeout(function () {
       if (document.visibilityState === 'hidden') { watch(); return; }
       rpc('share_rev', { p_token: token })
-        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(function (res) {
+          /* Збій запиту — це НЕ «доступ закрито». Раніше будь-яка невдала
+             відповідь читалася як відкликання, і урок зникав з екрана
+             через хвилинну втрату зв'язку. Тепер такі випадки просто
+             чекають наступної спроби. */
+          if (!res.ok) throw new Error('net');
+          return res.json();
+        })
         .then(function (rev) {
-          // доступ відкликали — прибираємо урок з екрана, а не вдаємо, що все гаразд
           if (rev == null) {
+            /* Сервер відповів і сказав, що такого посилання немає. Але
+               одну відповідь можна отримати й на порожньому місці, тому
+               прибираємо урок лише після двох поспіль. */
+            if (++gone < 2) return;
             frame.style.display = 'none';
             frame.srcdoc = '';
             msg.style.display = '';
             fail('Урок більше не доступний', 'Репетитор закрив доступ за цим посиланням.');
             throw new Error('stop');
           }
+          gone = 0;
           if (rev !== shownRev) return load();
         })
         .then(function () { watch(); }, function (e) {
@@ -374,6 +387,7 @@
     var pin = '';
     try { pin = sessionStorage.getItem(PIN_KEY) || ''; } catch (e) {}
     var shown = -1;
+    var portalGone = 0;   // скільки разів поспіль сервер сказав, що порталу немає
 
     function esc(s) {
       return String(s == null ? '' : s)
@@ -397,14 +411,25 @@
     /* Порталом користуються з телефона перед заняттям, тому найближче —
        зверху, а вже проведене — нижче й згорнуте. */
     function render(data) {
-      var now = Date.now();
       var all = (data.lessons || []).map(function (l) {
         var w = when(l.date);
         return { l: l, w: w };
       }).sort(function (a, b) { return a.w.ts - b.w.ts; });
 
-      var future = all.filter(function (x) { return x.w.ts >= now - 2 * 3600e3; });
-      var past = all.filter(function (x) { return x.w.ts < now - 2 * 3600e3; }).reverse();
+      /* Межа — початок сьогоднішнього дня, а не поточна година. Інакше
+         заняття, що було вранці, після обіду переїжджало б у «пройдено»,
+         хоч репетитор ще не позначив його проведеним. Заразом усе, що вже
+         позначено (проведено, пропущено, скасовано), одразу йде вниз. */
+      var today = new Date(); today.setHours(0, 0, 0, 0);
+      var dayStart = today.getTime();
+      var OPEN = { planned: 1, moved: 1 };
+
+      var future = all.filter(function (x) {
+        return OPEN[x.l.status] && x.w.ts >= dayStart;
+      });
+      var past = all.filter(function (x) {
+        return !(OPEN[x.l.status] && x.w.ts >= dayStart);
+      }).reverse();
 
       function lesHtml(x) {
         var l = x.l;
@@ -432,7 +457,6 @@
 
           '<div class="pcard">' +
             '<h2>Найближчі заняття</h2>' +
-            '<div class="h-sub">розклад лише для перегляду — змінює його репетитор</div>' +
             (future.length ? future.map(lesHtml).join('')
                            : '<div class="none">Наступних занять поки не заплановано.</div>') +
           '</div>' +
@@ -444,8 +468,13 @@
               var links = '';
               if (m.url) links += '<a href="' + esc(m.url) + '" target="_blank" rel="noopener">Відкрити</a>';
               (m.files || []).forEach(function (f) {
-                links += '<a href="' + esc(f.url) + '" target="_blank" rel="noopener">' + esc(f.name) + '</a>';
+                links += '<a href="' + esc(f.url) + '" target="_blank" rel="noopener">' +
+                  esc(f.name) + '</a>';
               });
+              /* Матеріал може бути без посилання й без файлів — тоді відкривати
+                 нема чого. Раніше він мовчки виглядав як звичайний рядок, і
+                 здавалося, що просто нічого не працює. */
+              if (!links) links = '<div class="mat__soon">Репетитор ще не додав сюди файл</div>';
               return '<div class="mat"><div class="mat__t">' + esc(m.title) + '</div>' +
                 (m.note ? '<div class="mat__n">' + esc(m.note) + '</div>' : '') +
                 links + '</div>';
@@ -488,14 +517,21 @@
       setTimeout(function () {
         if (document.visibilityState === 'hidden') { watchPortal(); return; }
         rpc('portal_rev', { p_token: tok })
-          .then(function (res) { return res.ok ? res.json() : null; })
+          .then(function (res) {
+            // збій мережі — не привід прибирати сторінку з-під учня
+            if (!res.ok) throw new Error('net');
+            return res.json();
+          })
           .then(function (rev) {
             if (rev == null) {
+              // прибираємо лише після двох поспіль однакових відповідей
+              if (++portalGone < 2) return;
               box.style.display = 'none';
               document.getElementById('msg').style.display = '';
               fail('Доступ закрито', 'Репетитор закрив цей портал.');
               throw new Error('stop');
             }
+            portalGone = 0;
             if (rev !== shown) return read();
           })
           .then(function () { watchPortal(); }, function (e) {

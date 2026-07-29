@@ -2040,16 +2040,24 @@
         return '<div class="mat-pick__h">' + U.esc(t) + '</div>' +
           byTopic[t].map(function (m) {
             var n = (m.files || []).length;
-            return '<label class="mat-pick__r">' +
+            /* Матеріал без посилання й без файлів учневі показувати нема сенсу:
+               він побачить назву, під якою нічого не відкривається. Краще
+               попередити тут, ніж щоб учень тицяв у порожнє. */
+            var empty = !n && !m.url;
+            var tail = n
+              ? ' <span class="muted">· ' + U.pl(n, 'файл', 'файли', 'файлів') + '</span>'
+              : m.url ? ' <span class="muted">· посилання</span>'
+                      : ' <span class="mat-pick__empty">· порожній</span>';
+            return '<label class="mat-pick__r' + (empty ? ' is-empty' : '') + '"' +
+              (empty ? ' title="Ні файлу, ні посилання — учневі нічого відкривати"' : '') + '>' +
               '<input type="checkbox" data-mat="' + m.id + '"' +
               (chosen.indexOf(m.id) > -1 ? ' checked' : '') + '>' +
-              '<span>' + U.esc(m.title) +
-              (n ? ' <span class="muted">· ' + U.pl(n, 'файл', 'файли', 'файлів') + '</span>' : '') +
-              '</span></label>';
+              '<span>' + U.esc(m.title) + tail + '</span></label>';
           }).join('');
       }).join('') +
       '</div>' +
-      '<div class="field__hint mt-2">Учень побачить лише позначене, і лише за цим посиланням.</div>' +
+      '<div class="field__hint mt-2">Учень побачить лише позначене, і лише за цим посиланням. ' +
+      'Позначені «порожній» відкрити не вийде — до них спершу треба додати файл або посилання.</div>' +
       '</details>';
   }
 

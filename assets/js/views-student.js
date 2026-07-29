@@ -676,7 +676,8 @@
     return S.lessonsOf(studentId).map(function (l) {
       return {
         date: l.date,
-        dur: l.dur || 60,
+        // поле зветься duration, а не dur — через dur тут завжди стояло 60
+        dur: l.duration || l.dur || 60,
         topic: l.topic || '',
         status: l.status || 'planned',
         // конспект показуємо: він для учня й писався
@@ -718,18 +719,83 @@
     });
   }
 
-  function buildPortalData(st, matIds, token) {
+  /** Вміст порталу без позначки часу — щоб його можна було порівнювати. */
+  function buildPortalBody(st, matIds, token) {
     return portalMaterials(matIds, token).then(function (mats) {
-      return JSON.stringify({
+      return {
         student: st.name,
         goal: st.goal || '',
         grade: st.grade || '',
-        updated: new Date().toISOString(),
         lessons: portalLessons(st.id),
         materials: mats
+      };
+    });
+  }
+
+  function buildPortalData(st, matIds, token) {
+    return buildPortalBody(st, matIds, token).then(function (body) {
+      body.updated = new Date().toISOString();
+      return JSON.stringify(body);
+    });
+  }
+
+  /* ---------- Автооновлення ----------
+
+     Портал — це знімок даних на сервері. Спершу він оновлювався лише
+     кнопкою, і додані потім уроки учень не бачив: у нього лишався той
+     розклад, який був у мить створення. Тепер портал переробляється сам,
+     коли змінюється те, що в ньому показано.
+
+     Порівнюємо вміст, а не час: інакше кожне збереження бази — а воно
+     буває щосекунди під час уроку — слало б на сервер той самий документ. */
+
+  var PORTAL_HASH = 'vektor.portalHash';
+  var PORTAL_DELAY = 6000;
+
+  function portalHashes() {
+    try { return JSON.parse(localStorage.getItem(PORTAL_HASH) || '{}'); } catch (e) { return {}; }
+  }
+
+  function rememberPortalHash(token, h) {
+    var m = portalHashes();
+    m[token] = h;
+    try { localStorage.setItem(PORTAL_HASH, JSON.stringify(m)); } catch (e) {}
+  }
+
+  function hashOf(s) {
+    var h = 5381;
+    for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+    return String(h) + ':' + s.length;
+  }
+
+  var portalTimer = null;
+
+  function schedulePortalSync() {
+    if (portalTimer) clearTimeout(portalTimer);
+    portalTimer = setTimeout(runPortalSync, PORTAL_DELAY);
+  }
+
+  function runPortalSync() {
+    portalTimer = null;
+    if (!window.Cloud || !Cloud.available() || !Cloud.signedIn()) return;
+
+    S.students().forEach(function (st) {
+      if (!st.portalToken) return;
+      buildPortalBody(st, st.portalMaterials || [], st.portalToken).then(function (body) {
+        var json = JSON.stringify(body);
+        var h = hashOf(json);
+        if (portalHashes()[st.portalToken] === h) return;   // нічого не змінилось
+        body.updated = new Date().toISOString();
+        return Cloud.publishPortal(st.id, st.portalToken, JSON.stringify(body), null)
+          .then(function () { rememberPortalHash(st.portalToken, h); });
+      }).catch(function (e) {
+        // мовчки: портал наздожене наступного разу, лякати репетитора нема чого
+        console.warn('portal sync:', e);
       });
     });
   }
+
+  S.onSave(schedulePortalSync);
 
   V.portalModal = function (id) {
     var st = S.get('students', id);
@@ -751,6 +817,11 @@
       var url = window.Cloud.portalUrl(token);
       var chosen = (st.portalMaterials || []).slice();
       var exists = !!row;
+
+      // портали, створені до появи автооновлення, токена в картці не мали
+      if (exists && st.portalToken !== token) {
+        S.update('students', st.id, { portalToken: token });
+      }
 
       C.modal({
         title: 'Портал ' + st.name,
@@ -781,6 +852,8 @@
           label: 'Закрити доступ', kind: 'btn--danger', act: 'revoke',
           onClick: function () {
             window.Cloud.revokePortal(token).then(function () {
+              // без токена автооновленню нема чого шукати
+              S.update('students', st.id, { portalToken: '' });
               U.toast('Портал закрито — посилання більше не працює', 'ok');
             }).catch(function (e) {
               U.toast('Не вдалося закрити: ' + (e && e.message ? e.message : e), 'err');
@@ -793,7 +866,9 @@
             var pin = pinEl ? pinEl.value.trim() : '';
             var mats = window.V.readPickedMaterials ? window.V.readPickedMaterials(root) : [];
 
-            S.update('students', st.id, { portalMaterials: mats });
+            /* Токен тримаємо в картці учня: за ним автооновлення знає,
+               кому саме є що переробляти, і не питає щоразу сервер. */
+            S.update('students', st.id, { portalMaterials: mats, portalToken: token });
 
             U.toast('Готую портал…');
             buildPortalData(st, mats, token)

@@ -483,3 +483,169 @@ create policy uploads_delete on storage.objects
       where s.token = (storage.foldername(name))[1] and s.owner = auth.uid()
     )
   );
+
+-- ============================================================
+-- Портал учня: свій розклад і матеріали
+-- ============================================================
+--
+-- Окремо від shares навмисно. Посилання на урок дає рівно один урок;
+-- портал — це постійний вхід учня, і живе він за іншими правилами.
+--
+-- Що учень бачить: свої заняття (дата, час, тема, стан) і матеріали, які
+-- репетитор йому відкрив. Чого не бачить: грошей узагалі — ні ціни заняття,
+-- ні оплат, ні боргу. Їх немає не в інтерфейсі, а в самих даних: репетитор
+-- складає для порталу окремий документ і кладе туди лише дозволене.
+--
+-- Вхід: довге посилання (128 бітів) плюс короткий код, який задає репетитор.
+-- Посилання — і є основний захист; код — на випадок, якщо посилання побачить
+-- хтось сторонній (спільний комп'ютер, переслане повідомлення).
+
+create table if not exists public.portals (
+  token      text        primary key,
+  owner      uuid        not null references auth.users (id) on delete cascade,
+  student_id text        not null,
+  pin        text,                                -- короткий код; null — входити без коду
+  fails      int         not null default 0,      -- поспіль невдалих спроб коду
+  revoked    boolean     not null default false,
+  data       text,                                -- JSON: розклад і матеріали
+  rev        bigint      not null default 0,
+  updated_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
+-- один портал на учня: інакше старі посилання жили б поруч із новими
+create unique index if not exists portals_student_idx on public.portals (owner, student_id);
+create index if not exists portals_owner_idx on public.portals (owner);
+
+alter table public.portals enable row level security;
+
+grant select, insert, update, delete on public.portals to authenticated;
+revoke all on public.portals from anon;
+
+drop policy if exists portals_own on public.portals;
+drop policy if exists portals_ins on public.portals;
+drop policy if exists portals_upd on public.portals;
+drop policy if exists portals_del on public.portals;
+
+create policy portals_own on public.portals
+  for select using (auth.uid() = owner);
+create policy portals_ins on public.portals
+  for insert with check (auth.uid() = owner);
+create policy portals_upd on public.portals
+  for update using (auth.uid() = owner) with check (auth.uid() = owner);
+create policy portals_del on public.portals
+  for delete using (auth.uid() = owner);
+
+/* Номер версії піднімає база — щоб сторінка учня бачила зміни. Заразом
+   скидаємо лічильник невдалих спроб, коли репетитор змінює код: інакше
+   заблокований портал не можна було б відкрити навіть новим кодом. */
+create or replace function public.portals_touch()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.data is distinct from old.data then
+    new.rev := old.rev + 1;
+    new.updated_at := now();
+  end if;
+  if new.pin is distinct from old.pin then
+    new.fails := 0;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists portals_touch_trg on public.portals;
+create trigger portals_touch_trg
+  before update on public.portals
+  for each row execute function public.portals_touch();
+
+-- ------------------------------------------------------------
+-- Що може учень
+-- ------------------------------------------------------------
+
+/* Чи потрібен код. Навмисно не повертає ні імені, ні будь-чого іншого:
+   до вдалого входу стороння людина не має дізнатися навіть, чий це портал. */
+create or replace function public.portal_gate(p_token text)
+returns table (needs_pin boolean, locked boolean)
+language sql
+security definer
+set search_path = public
+as $$
+  select (p.pin is not null), (p.fails >= 10)
+  from public.portals p
+  where p.token = p_token and not p.revoked;
+$$;
+
+/* Перевірка коду в одному місці. Рахує невдалі спроби: маючи посилання,
+   чотиризначний код інакше можна було б просто перебрати. Після десяти
+   помилок портал закривається, поки репетитор не задасть код наново. */
+create or replace function public.portal_ok(p_token text, p_pin text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_pin   text;
+  v_fails int;
+begin
+  select pin, fails into v_pin, v_fails
+  from public.portals
+  where token = p_token and not revoked;
+
+  if not found then return false; end if;
+  if v_fails >= 10 then return false; end if;
+  if v_pin is null then return true; end if;
+
+  if v_pin = coalesce(p_pin, '') then
+    if v_fails > 0 then
+      update public.portals set fails = 0 where token = p_token;
+    end if;
+    return true;
+  end if;
+
+  update public.portals set fails = v_fails + 1 where token = p_token;
+  return false;
+end;
+$$;
+
+create or replace function public.portal_read(p_token text, p_pin text)
+returns table (data text, rev bigint, updated_at timestamptz)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.portal_ok(p_token, p_pin) then
+    raise exception 'Доступ закрито';
+  end if;
+  return query
+    select p.data, p.rev, p.updated_at
+    from public.portals p
+    where p.token = p_token and not p.revoked;
+end;
+$$;
+
+/* Лише номер версії — для дешевого опитування «чи є нове».
+   Код тут не перевіряємо навмисно: номер версії нічого не розкриває,
+   а перевірка на кожне опитування накручувала б лічильник спроб. */
+create or replace function public.portal_rev(p_token text)
+returns bigint
+language sql
+security definer
+set search_path = public
+as $$
+  select p.rev from public.portals p where p.token = p_token and not p.revoked;
+$$;
+
+revoke all on function public.portal_gate(text)       from public;
+revoke all on function public.portal_ok(text, text)   from public;
+revoke all on function public.portal_read(text, text) from public;
+revoke all on function public.portal_rev(text)        from public;
+
+-- portal_ok лишається лише для внутрішнього виклику з portal_read:
+-- інакше нею можна було б перебирати код без жодного сліду в даних
+grant execute on function public.portal_gate(text)       to anon, authenticated;
+grant execute on function public.portal_read(text, text) to anon, authenticated;
+grant execute on function public.portal_rev(text)        to anon, authenticated;

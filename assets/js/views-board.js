@@ -2066,6 +2066,11 @@
       .map(function (el) { return el.dataset.mat; });
   }
 
+  /* Той самий вибір матеріалів потрібен і в порталі учня — щоб репетитор
+     не вчився двом різним спискам, віддаємо його назовні. */
+  V.materialPicker = materialPicker;
+  V.readPickedMaterials = readPicked;
+
   /** Опублікувати урок і покласти посилання в буфер обміну. */
   function publishShare(l, st, token, isUpdate, root) {
     if (root) {

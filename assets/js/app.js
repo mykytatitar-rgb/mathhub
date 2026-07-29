@@ -281,6 +281,7 @@
 
     'progress-edit': function (arg) { F.progress(arg); },
     'contacts': function (arg) { V.contactsModal(arg); },
+    'student-portal': function (arg) { V.portalModal(arg); },
     'gen-week': function () { F.generateWeek(); },
 
     'tab': function (arg) {

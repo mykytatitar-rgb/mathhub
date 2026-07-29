@@ -390,6 +390,70 @@
       .catch(function () { return []; });
   };
 
+  /* ============================================================
+     Портал учня: постійний вхід у свій розклад і матеріали
+     ============================================================
+
+     Портал живе поруч із посиланнями на уроки, але окремо від них:
+     посилання дає один урок, портал — постійний доступ. Сторінка та сама
+     (share), бо саме її й лише її пускає повз захист Cloudflare; режим
+     розрізняємо позначкою portal: у частині адреси після #. */
+
+  Cloud.portalUrl = function (token) {
+    if (!token) return '';
+    return location.origin + location.pathname.replace(/[^/]*$/, '') +
+           'share#portal:' + token;
+  };
+
+  /** Портал цього учня або null, якщо ще не створювали. */
+  Cloud.portalOf = function (studentId) {
+    if (!Cloud.signedIn()) return Promise.resolve(null);
+    return api('/rest/v1/portals?student_id=eq.' + encodeURIComponent(studentId) +
+               '&owner=eq.' + encodeURIComponent(Cloud.userId()) +
+               '&select=token,pin,revoked,rev,updated_at')
+      .then(function (res) { return res.ok ? res.json() : []; })
+      .then(function (rows) { return (rows && rows[0]) || null; })
+      .catch(function () { return null; });
+  };
+
+  /**
+   * Створити або оновити портал. pin === null лишає код без змін,
+   * '' прибирає його зовсім, рядок — задає новий.
+   */
+  Cloud.publishPortal = function (studentId, token, dataJson, pin) {
+    if (!Cloud.available() || !Cloud.signedIn()) {
+      return Promise.reject(new Error('Спершу увімкніть синхронізацію в Налаштуваннях'));
+    }
+    var row = {
+      token: token,
+      owner: Cloud.userId(),
+      student_id: studentId,
+      data: dataJson,
+      revoked: false
+    };
+    if (pin !== null && pin !== undefined) row.pin = pin === '' ? null : String(pin);
+
+    return api('/rest/v1/portals?on_conflict=token', {
+      method: 'POST',
+      headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(row)
+    }).then(function (res) {
+      if (!res.ok) throw new Error('Сервер відповів ' + res.status);
+      return Cloud.portalUrl(token);
+    });
+  };
+
+  Cloud.revokePortal = function (token) {
+    if (!Cloud.available() || !Cloud.signedIn()) return Promise.resolve();
+    return api('/rest/v1/portals?token=eq.' + encodeURIComponent(token), { method: 'DELETE' })
+      .then(function (res) {
+        if (!res.ok && res.status !== 404) throw new Error('Сервер відповів ' + res.status);
+        var m = sentImages();
+        delete m[token];
+        try { localStorage.setItem(IMGMAP, JSON.stringify(m)); } catch (e) {}
+      });
+  };
+
   Cloud.markContributionsMerged = function (ids) {
     if (!ids || !ids.length || !Cloud.signedIn()) return Promise.resolve();
     return api('/rest/v1/share_contributions?id=in.(' + ids.join(',') + ')', {

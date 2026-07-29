@@ -18,6 +18,48 @@
   .spin{width:34px;height:34px;margin:0 auto 16px;border:3px solid #E8EEF8;
     border-top-color:#1358F5;border-radius:50%;animation:r .8s linear infinite}
   @keyframes r{to{transform:rotate(360deg)}}
+
+  /* ---- Портал учня ---- */
+  #portal{display:none;min-height:100%;padding:0 0 40px}
+  .pw{max-width:760px;margin:0 auto;padding:0 18px}
+  .phead{background:linear-gradient(140deg,#1358F5,#0B3FB0);color:#fff;padding:26px 0 30px;margin-bottom:-14px}
+  .phead h1{margin:0;font-size:22px;letter-spacing:-.3px}
+  .phead .sub{margin-top:5px;font-size:13.5px;opacity:.85}
+  .pcard{background:#fff;border:1px solid #E8EEF8;border-radius:16px;padding:18px 20px;margin-bottom:14px;
+    box-shadow:0 6px 20px rgba(13,33,73,.05)}
+  .pcard h2{margin:0 0 3px;font-size:15px}
+  .pcard .h-sub{font-size:12.5px;color:#8494B0;margin-bottom:12px}
+  .les{display:flex;gap:13px;align-items:flex-start;padding:11px 0;border-top:1px solid #F0F4FA}
+  .les:first-of-type{border-top:0}
+  .les__d{flex:0 0 auto;width:46px;text-align:center}
+  .les__d b{display:block;font-size:17px;line-height:1}
+  .les__d span{font-size:10px;text-transform:uppercase;font-weight:700;color:#8494B0}
+  .les__m{flex:1;min-width:0}
+  .les__t{font-weight:650;font-size:14px}
+  .les__s{font-size:12.5px;color:#5B6C8C;margin-top:2px;white-space:pre-wrap}
+  .tag{display:inline-block;font-size:10.5px;font-weight:800;text-transform:uppercase;
+    letter-spacing:.4px;padding:2px 8px;border-radius:999px;margin-left:6px;vertical-align:1px}
+  .tag--done{background:#E6F7EF;color:#0E7A48}
+  .tag--miss{background:#FDECEC;color:#C0392B}
+  .tag--soon{background:#EAF1FE;color:#0B4ED6}
+  .mat{padding:12px 0;border-top:1px solid #F0F4FA}
+  .mat:first-of-type{border-top:0}
+  .mat__t{font-weight:650;font-size:14px}
+  .mat__n{font-size:12.5px;color:#5B6C8C;margin-top:3px;white-space:pre-wrap}
+  .mat a{display:inline-flex;align-items:center;gap:6px;margin:7px 8px 0 0;padding:6px 12px;
+    border:1px solid #E8EEF8;border-radius:9px;font-size:12.5px;font-weight:650;
+    color:#0B4ED6;text-decoration:none;background:#F7FAFF}
+  .mat a:hover{border-color:#1358F5}
+  .none{font-size:13px;color:#8494B0;padding:6px 0}
+  .pin{max-width:320px;margin:0 auto;text-align:center}
+  .pin input{width:100%;margin-top:14px;padding:13px 16px;font:inherit;font-size:19px;
+    text-align:center;letter-spacing:4px;border:2px solid #E8EEF8;border-radius:12px;background:#fff}
+  .pin input:focus{outline:0;border-color:#1358F5}
+  .pin button{width:100%;margin-top:10px;padding:13px;font:inherit;font-size:14px;font-weight:700;
+    border:0;border-radius:12px;background:#1358F5;color:#fff;cursor:pointer}
+  .pin button:disabled{opacity:.5;cursor:default}
+  .pin .err{margin-top:10px;font-size:13px;color:#C0392B;min-height:18px}
+  .foot{text-align:center;font-size:11.5px;color:#A6B4CC;margin-top:22px}
 </style>
 </head>
 <body>
@@ -33,6 +75,10 @@
     <p id="p">Хвилинку, завантажуються слайди.</p>
   </div>
 </div>
+
+<!-- Портал учня: розклад і матеріали. Та сама сторінка, бо саме її
+     й лише її пускає повз захист сайту. -->
+<div id="portal"></div>
 
 <script>
 /* Навіщо ця сторінка взагалі потрібна.
@@ -71,8 +117,27 @@
     p.textContent = text;
   }
 
-  // Код уроку — у частині адреси після #, щоб він не потрапляв у журнали сервера.
+  // Код — у частині адреси після #, щоб він не потрапляв у журнали сервера.
   var path = decodeURIComponent((location.hash || '').replace(/^#/, '')).trim();
+
+  function rpc(name, body) {
+    return fetch(API + '/rest/v1/rpc/' + name, {
+      method: 'POST',
+      headers: { apikey: KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  }
+
+  /* ============================================================
+     Портал учня
+     ============================================================
+     Позначка portal: спереду навмисно: без неї код порталу не відрізнити
+     від коду уроку — обидва шістнадцяткові однакової довжини. */
+
+  if (/^portal:/i.test(path)) {
+    startPortal(path.replace(/^portal:/i, '').trim());
+    return;
+  }
 
   // важливий тут лише код уроку — 32 шістнадцяткові символи; що перед ним,
   // нас не обходить, це тека репетитора
@@ -86,14 +151,6 @@
   var frame = document.getElementById('frame');
   var shownRev = -1;
   var failures = 0;
-
-  function rpc(name, body) {
-    return fetch(API + '/rest/v1/rpc/' + name, {
-      method: 'POST',
-      headers: { apikey: KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-  }
 
   /* Де саме учень зараз дивиться. Сама сторінка уроку повідомляє це нам,
      а ми повертаємо назад після оновлення — інакше кожна зміна від репетитора
@@ -299,6 +356,221 @@
         fail('Не вдалося відкрити урок', 'Перевірте інтернет і спробуйте ще раз.');
       }
     });
+
+  /* ============================================================
+     Портал: розклад і матеріали
+     ============================================================ */
+
+  function startPortal(tok) {
+    document.title = 'Мій розклад — Вектор';
+
+    if (!/^[0-9a-f]{16,}$/i.test(tok)) {
+      fail('Посилання неповне', 'Схоже, адресу скопійовано не до кінця. Попросіть надіслати її ще раз.');
+      return;
+    }
+
+    var box = document.getElementById('portal');
+    var PIN_KEY = 'vektor.pin.' + tok;
+    var pin = '';
+    try { pin = sessionStorage.getItem(PIN_KEY) || ''; } catch (e) {}
+    var shown = -1;
+
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    var MON = ['січ', 'лют', 'бер', 'квіт', 'трав', 'черв',
+               'лип', 'серп', 'вер', 'жовт', 'лист', 'груд'];
+
+    function when(iso) {
+      var d = new Date(iso);
+      if (isNaN(d)) return { day: '—', mon: '', time: '', ts: 0 };
+      return {
+        day: d.getDate(),
+        mon: MON[d.getMonth()],
+        time: ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2),
+        ts: d.getTime()
+      };
+    }
+
+    /* Порталом користуються з телефона перед заняттям, тому найближче —
+       зверху, а вже проведене — нижче й згорнуте. */
+    function render(data) {
+      var now = Date.now();
+      var all = (data.lessons || []).map(function (l) {
+        var w = when(l.date);
+        return { l: l, w: w };
+      }).sort(function (a, b) { return a.w.ts - b.w.ts; });
+
+      var future = all.filter(function (x) { return x.w.ts >= now - 2 * 3600e3; });
+      var past = all.filter(function (x) { return x.w.ts < now - 2 * 3600e3; }).reverse();
+
+      function lesHtml(x) {
+        var l = x.l;
+        var tag = l.status === 'done' ? '<span class="tag tag--done">проведено</span>'
+                : l.status === 'missed' ? '<span class="tag tag--miss">пропущено</span>'
+                : '';
+        return '<div class="les">' +
+          '<div class="les__d"><b>' + x.w.day + '</b><span>' + x.w.mon + '</span></div>' +
+          '<div class="les__m">' +
+            '<div class="les__t">' + esc(l.topic || 'Заняття') + tag + '</div>' +
+            '<div class="les__s">' + x.w.time + ' · ' + (l.dur || 60) + ' хв' +
+            (l.notes ? '\n' + esc(l.notes) : '') + '</div>' +
+          '</div></div>';
+      }
+
+      var mats = data.materials || [];
+
+      box.innerHTML =
+        '<div class="phead"><div class="pw">' +
+          '<h1>' + esc(data.student || 'Мій кабінет') + '</h1>' +
+          '<div class="sub">' + esc([data.grade, data.goal].filter(Boolean).join(' · ')) + '</div>' +
+        '</div></div>' +
+
+        '<div class="pw" style="padding-top:24px">' +
+
+          '<div class="pcard">' +
+            '<h2>Найближчі заняття</h2>' +
+            '<div class="h-sub">розклад лише для перегляду — змінює його репетитор</div>' +
+            (future.length ? future.map(lesHtml).join('')
+                           : '<div class="none">Наступних занять поки не заплановано.</div>') +
+          '</div>' +
+
+          (mats.length ? '<div class="pcard">' +
+            '<h2>Матеріали</h2>' +
+            '<div class="h-sub">те, що репетитор відкрив саме тобі</div>' +
+            mats.map(function (m) {
+              var links = '';
+              if (m.url) links += '<a href="' + esc(m.url) + '" target="_blank" rel="noopener">Відкрити</a>';
+              (m.files || []).forEach(function (f) {
+                links += '<a href="' + esc(f.url) + '" target="_blank" rel="noopener">' + esc(f.name) + '</a>';
+              });
+              return '<div class="mat"><div class="mat__t">' + esc(m.title) + '</div>' +
+                (m.note ? '<div class="mat__n">' + esc(m.note) + '</div>' : '') +
+                links + '</div>';
+            }).join('') +
+          '</div>' : '') +
+
+          (past.length ? '<div class="pcard">' +
+            '<h2>Уже пройдено</h2>' +
+            '<div class="h-sub">' + past.length + ' — можна освіжити в памʼяті</div>' +
+            past.slice(0, 40).map(lesHtml).join('') +
+          '</div>' : '') +
+
+          '<div class="foot">Вектор · сторінка оновлюється сама</div>' +
+        '</div>';
+
+      document.getElementById('msg').style.display = 'none';
+      box.style.display = 'block';
+      document.title = (data.student || 'Мій розклад') + ' — Вектор';
+    }
+
+    function read() {
+      return rpc('portal_read', { p_token: tok, p_pin: pin })
+        .then(function (res) {
+          if (res.status === 404) throw new Error('setup');
+          if (!res.ok) throw new Error('denied');
+          return res.json();
+        })
+        .then(function (rows) {
+          var row = rows && rows[0];
+          if (!row || !row.data) throw new Error('empty');
+          shown = row.rev;
+          try { sessionStorage.setItem(PIN_KEY, pin); } catch (e) {}
+          render(JSON.parse(row.data));
+        });
+    }
+
+    /* Розклад міняється рідко, тому питаємо нечасто: щосекундне опитування
+       тут не дало б нічого, крім витрати батареї. */
+    function watchPortal() {
+      setTimeout(function () {
+        if (document.visibilityState === 'hidden') { watchPortal(); return; }
+        rpc('portal_rev', { p_token: tok })
+          .then(function (res) { return res.ok ? res.json() : null; })
+          .then(function (rev) {
+            if (rev == null) {
+              box.style.display = 'none';
+              document.getElementById('msg').style.display = '';
+              fail('Доступ закрито', 'Репетитор закрив цей портал.');
+              throw new Error('stop');
+            }
+            if (rev !== shown) return read();
+          })
+          .then(function () { watchPortal(); }, function (e) {
+            if (!e || e.message !== 'stop') watchPortal();
+          });
+      }, 30000);
+    }
+
+    function askPin(msg) {
+      spin.style.display = 'none';
+      h.textContent = 'Твій кабінет';
+      p.innerHTML = '';
+      var wrap = document.createElement('div');
+      wrap.className = 'pin';
+      wrap.innerHTML =
+        '<div style="font-size:13.5px;color:#5B6C8C;line-height:1.6">Введи код, який дав репетитор.</div>' +
+        '<input inputmode="numeric" autocomplete="off" maxlength="8" aria-label="Код входу">' +
+        '<button type="button">Увійти</button>' +
+        '<div class="err">' + (msg || '') + '</div>';
+      p.appendChild(wrap);
+
+      var inp = wrap.querySelector('input');
+      var btn = wrap.querySelector('button');
+      var err = wrap.querySelector('.err');
+      inp.focus();
+
+      function go() {
+        var v = inp.value.trim();
+        if (!v) { err.textContent = 'Введи код.'; return; }
+        btn.disabled = true;
+        err.textContent = '';
+        pin = v;
+        read().then(function () { watchPortal(); }, function () {
+          btn.disabled = false;
+          pin = '';
+          inp.value = '';
+          inp.focus();
+          err.textContent = 'Код не підходить. Спробуй ще раз.';
+        });
+      }
+      btn.onclick = go;
+      inp.onkeydown = function (e) { if (e.key === 'Enter') go(); };
+    }
+
+    h.textContent = 'Відкриваю кабінет…';
+    p.textContent = 'Хвилинку.';
+
+    rpc('portal_gate', { p_token: tok })
+      .then(function (res) {
+        if (res.status === 404) throw new Error('setup');
+        if (!res.ok) throw new Error('net');
+        return res.json();
+      })
+      .then(function (rows) {
+        var g = rows && rows[0];
+        if (!g) throw new Error('gone');
+        if (g.locked) {
+          fail('Вхід тимчасово закрито',
+               'Код вводили неправильно забагато разів. Попроси репетитора задати новий.');
+          return;
+        }
+        if (!g.needs_pin) return read().then(function () { watchPortal(); });
+        // код уже вводили в цій вкладці — пробуємо мовчки
+        if (pin) {
+          return read().then(function () { watchPortal(); }, function () { askPin(''); });
+        }
+        askPin('');
+      })
+      .catch(function (e) {
+        var m = e && e.message;
+        if (m === 'gone') fail('Доступ закрито', 'Репетитор закрив цей портал.');
+        else if (m === 'setup') fail('Кабінет ще не готовий', 'Зверніться до репетитора — він має завершити налаштування.');
+        else fail('Не вдалося відкрити кабінет', 'Перевірте інтернет і спробуйте ще раз.');
+      });
+  }
 })();
 </script>
 </body>

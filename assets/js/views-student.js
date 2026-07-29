@@ -58,6 +58,7 @@
       sub: st.grade + ' · ' + st.goal,
       actions: [
         { label: 'Контакти', icon: 'phone', act: 'contacts', arg: id },
+        { label: 'Портал учня', icon: 'share', act: 'student-portal', arg: id },
         { label: 'Записати урок', icon: 'plus', act: 'lesson-add-for', arg: id },
         { label: 'Редагувати', icon: 'edit', act: 'student-edit', arg: id, solid: true }
       ]
@@ -458,6 +459,167 @@
           onClick: function () { setTimeout(function () { window.F.student(id); }, 60); } },
         { label: 'Закрити', kind: 'btn--primary', act: 'ok' }
       ]
+    });
+  };
+
+  /* ============================================================
+     Портал учня
+     ============================================================
+
+     Постійний вхід для учня: свій розклад і матеріали, які йому відкрили.
+     Грошей там немає взагалі — не сховані в інтерфейсі, а відсутні в даних,
+     які ми відправляємо. Нижче складається окремий документ, і в нього
+     потрапляє тільки перелічене поіменно. */
+
+  function portalLessons(studentId) {
+    return S.lessonsOf(studentId).map(function (l) {
+      return {
+        date: l.date,
+        dur: l.dur || 60,
+        topic: l.topic || '',
+        status: l.status || 'planned',
+        // конспект показуємо: він для учня й писався
+        notes: l.notes || ''
+      };
+    });
+  }
+
+  /** Матеріали в тому вигляді, у якому їх побачить учень. */
+  function portalMaterials(ids, token) {
+    var jobs = [];
+    var out = (ids || []).map(function (mid) {
+      var m = S.get('materials', mid);
+      if (!m) return null;
+      var row = { title: m.title || '', note: m.note || '', url: m.url || '', files: [] };
+      (m.files || []).forEach(function (f) {
+        var file = { name: f.name || 'файл', size: f.size || 0, url: '' };
+        row.files.push(file);
+        // вкладення кладемо в те саме публічне сховище, що й файли уроків
+        jobs.push(
+          window.ImgStore.get(f.key)
+            .then(function (blob) {
+              if (!blob) return null;
+              return window.Cloud.publishShareImage(token, f.key, blob, 'mat');
+            })
+            .then(function (url) { if (url) file.url = url; })
+            .catch(function () { /* один файл, що не доїхав, не має валити портал */ })
+        );
+      });
+      return row;
+    }).filter(Boolean);
+
+    return Promise.all(jobs).then(function () {
+      // посилання, які так і не завантажились, учневі показувати нема сенсу
+      out.forEach(function (r) {
+        r.files = r.files.filter(function (f) { return f.url; });
+      });
+      return out;
+    });
+  }
+
+  function buildPortalData(st, matIds, token) {
+    return portalMaterials(matIds, token).then(function (mats) {
+      return JSON.stringify({
+        student: st.name,
+        goal: st.goal || '',
+        grade: st.grade || '',
+        updated: new Date().toISOString(),
+        lessons: portalLessons(st.id),
+        materials: mats
+      });
+    });
+  }
+
+  V.portalModal = function (id) {
+    var st = S.get('students', id);
+    if (!st) return;
+
+    if (!window.Cloud || !window.Cloud.available() || !window.Cloud.signedIn()) {
+      C.modal({
+        title: 'Портал учня',
+        body: '<div class="field__hint">Портал працює через синхронізацію: дані має де ' +
+          'зберігатися, щоб учень бачив їх зі свого пристрою. Увімкніть синхронізацію ' +
+          'в Налаштуваннях і поверніться сюди.</div>',
+        buttons: [{ label: 'Зрозуміло', kind: 'btn--primary', act: 'ok' }]
+      });
+      return;
+    }
+
+    window.Cloud.portalOf(id).then(function (row) {
+      var token = (row && row.token) || window.Cloud.newShareToken();
+      var url = window.Cloud.portalUrl(token);
+      var chosen = (st.portalMaterials || []).slice();
+      var exists = !!row;
+
+      C.modal({
+        title: 'Портал ' + st.name,
+        sub: exists ? 'Портал уже відкрито' : 'Учень ще не має доступу',
+        wide: true,
+        body:
+          '<div class="field__hint">Учень побачить свій розклад і теми уроків — ' +
+          'лише перегляд, без можливості щось змінити. Оплат, цін і боргів у порталі ' +
+          'немає взагалі: вони не потрапляють у те, що йому надсилається.</div>' +
+
+          (exists
+            ? '<div class="mt-3"><div class="board-opts__label">Посилання для учня</div>' +
+              '<input class="input" readonly data-portal-url value="' + U.esc(url) + '"></div>'
+            : '') +
+
+          '<div class="mt-3"><div class="board-opts__label">Код входу</div>' +
+          '<input class="input" data-portal-pin inputmode="numeric" maxlength="8" ' +
+          'placeholder="' + (row && row.pin ? 'код задано — введіть новий, щоб змінити' : 'напр. 2408') + '">' +
+          '<div class="field__hint mt-1">Необов\'язковий. Саме посилання вже є ключем, ' +
+          'але код рятує, якщо його побачить хтось сторонній — наприклад на спільному ' +
+          'комп\'ютері. Після десяти невдалих спроб портал закриється, поки не задасте код наново.</div></div>' +
+
+          (window.V.materialPicker ? window.V.materialPicker(chosen) : ''),
+
+        buttons: [
+          { label: 'Закрити', kind: 'btn--ghost', act: 'cancel' }
+        ].concat(exists ? [{
+          label: 'Закрити доступ', kind: 'btn--danger', act: 'revoke',
+          onClick: function () {
+            window.Cloud.revokePortal(token).then(function () {
+              U.toast('Портал закрито — посилання більше не працює', 'ok');
+            }).catch(function (e) {
+              U.toast('Не вдалося закрити: ' + (e && e.message ? e.message : e), 'err');
+            });
+          }
+        }] : []).concat([{
+          label: exists ? 'Оновити' : 'Відкрити портал', kind: 'btn--primary', act: 'save',
+          onClick: function (root, close) {
+            var pinEl = root.querySelector('[data-portal-pin]');
+            var pin = pinEl ? pinEl.value.trim() : '';
+            var mats = window.V.readPickedMaterials ? window.V.readPickedMaterials(root) : [];
+
+            S.update('students', st.id, { portalMaterials: mats });
+
+            U.toast('Готую портал…');
+            buildPortalData(st, mats, token)
+              .then(function (json) {
+                /* Порожній рядок означає «лишити код як був», а не «прибрати»:
+                   інакше кожне оновлення розкладу мовчки знімало б захист. */
+                return window.Cloud.publishPortal(st.id, token, json, pin ? pin : null);
+              })
+              .then(function (link) {
+                // копіюємо одразу: людина щойно натиснула кнопку, отже дозвіл є
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                  return navigator.clipboard.writeText(link).then(function () {
+                    U.toast('Портал готовий, посилання скопійовано', 'ok');
+                  }, function () {
+                    U.toast('Портал готовий. Скопіюйте посилання з вікна', 'ok');
+                  });
+                }
+                U.toast('Портал готовий', 'ok');
+              })
+              .then(function () { close(); })
+              .catch(function (e) {
+                U.toast('Не вдалося: ' + (e && e.message ? e.message : e), 'err');
+              });
+            return false;   // вікно лишаємо відкритим, поки все не доїде
+          }
+        }])
+      });
     });
   };
 })();

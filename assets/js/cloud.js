@@ -40,6 +40,18 @@
   var listeners = [];
   var started = false;
   var suppress = 0;           // >0 поки ми самі пишемо в базу (прийняли серверну версію)
+  var housekeeping = 0;       // >0 поки програма пише сама, а не людина
+
+  /**
+   * Обгортка для того, що програма робить сама: заповнення розкладу з
+   * шаблону, міграції, дрібне прибирання. Дані зберігаються й поїдуть на
+   * сервер як завжди, але часом правки не вважаються — інакше вони
+   * перебивають справжні зміни з інших пристроїв.
+   */
+  Cloud.housekeeping = function (fn) {
+    housekeeping++;
+    try { return fn(); } finally { housekeeping--; }
+  };
   var retry = false;          // захист від нескінченного кола при збігу записів у часі
 
   function loadMeta() {
@@ -688,14 +700,22 @@
            Рішення за ВМІСТОМ, а не за прапорцем dirty: прапорець лежить у
            спільному сховищі, і друга вкладка могла його скинути. */
         var mineChanged = locallyChanged();
-        if (mineChanged && localIsNewer(row)) {
+        if (mineChanged && localIsNewer(row) && !localLooksTruncated(row)) {
           meta.rev = row.rev;         // підганяємось під серверну нумерацію
           saveMeta();
           return push().then(function () {
             U.toast('Залишено новішу версію — з цього пристрою', 'ok');
           });
         }
+        var wasTruncated = mineChanged && localIsNewer(row) && localLooksTruncated(row);
         return adopt(row).then(function () {
+          if (wasTruncated) {
+            /* Найнебезпечніший випадок: на пристрої лежали давні дані, і за
+               часом він виглядав новішим. Кажемо прямо, бо людина щойно
+               бачила менше учнів, ніж має бути. */
+            U.toast('На цьому пристрої були давніші дані — підтягнуто повні з сервера', 'ok');
+            return;
+          }
           if (!mineChanged) return;
           // не називаємо пристрій, якщо це той самий, за яким людина сидить —
           // «взято версію з Windows / Chrome» на Windows / Chrome тільки збиває
@@ -718,6 +738,47 @@
     var theirs = new Date(row.updated_at).getTime();
     if (!mine || !theirs) return false;
     return mine > theirs;
+  }
+
+  /**
+   * Чи не є локальна версія обрізаною відносно серверної.
+   *
+   * Навіщо. «Новіша перемагає» вирішується за часом зміни, а час зміни
+   * підіймає будь-яке збереження — навіть те, що програма робить сама на
+   * старті. Через це пристрій, який лежав тиждень із давніми даними, після
+   * простого відкриття ставав «новішим» і затирав усе, що з'явилося потім.
+   *
+   * Тому дивимось не лише на час, а й на вміст: якщо на сервері є учні або
+   * уроки, яких у нас немає взагалі, це не «свіжіша правка», а втрата.
+   * Такі випадки вирішуємо на користь сервера, а локальне лишається в
+   * mathhub.before-sync — див. adopt().
+   */
+  function localLooksTruncated(row) {
+    var mine, theirs;
+    try {
+      mine = JSON.parse(localJSON());
+      theirs = JSON.parse(row.data);
+    } catch (e) { return true; }               // не прочитали — не ризикуємо
+    if (!mine || !theirs) return true;
+
+    function ids(db, name) {
+      return (db[name] || []).map(function (x) { return x.id; }).filter(Boolean);
+    }
+    // учень, якого в нас немає, — найважливіший сигнал: усе решта висить на ньому
+    var mineStu = ids(mine, 'students');
+    var lost = ids(theirs, 'students').filter(function (id) {
+      return mineStu.indexOf(id) < 0;
+    });
+    if (lost.length) return true;
+
+    // те саме для уроків і оплат: їх втрата так само незворотна
+    var names = ['lessons', 'payments', 'homeworks'];
+    for (var i = 0; i < names.length; i++) {
+      var have = ids(mine, names[i]);
+      var gone = ids(theirs, names[i]).filter(function (id) { return have.indexOf(id) < 0; });
+      if (gone.length) return true;
+    }
+    return false;
   }
 
   /** Розв'язання конфлікту: залишити локальне або взяти серверне. */
@@ -779,7 +840,12 @@
   function schedulePush() {
     if (suppress > 0) return;
     meta.dirty = true;
-    meta.changedAt = new Date().toISOString();   // потрібен, щоб знати, де зміна свіжіша
+    /* changedAt — це час ПРАВКИ ЛЮДИНИ, і саме за ним вирішується, чия
+       версія новіша. Тому службові записи його не підіймають: інакше
+       пристрій, який лежав тиждень, після простого відкриття програми
+       ставав «новішим» — програма сама заповнює розклад із шаблону на
+       старті, і цього збереження досить, щоб затерти чужі зміни. */
+    if (!housekeeping) meta.changedAt = new Date().toISOString();
     saveMeta();
     if (!Cloud.available() || !Cloud.signedIn()) return;
     if (state !== 'conflict') setState('syncing', 'зміни ще не відправлені');

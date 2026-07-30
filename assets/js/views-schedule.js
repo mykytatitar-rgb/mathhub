@@ -208,8 +208,10 @@
         nowLine + blocks + '</div>';
     }).join('');
 
-    /* --- бічна панель --- */
-    var upcoming = S.upcoming(6);
+    /* --- бічна панель ---
+       Три уроки, не більше: це підказка «що далі», а не другий розклад.
+       Довший список тільки дублював сітку поруч і розтягував сторінку. */
+    var upcoming = S.upcoming(3);
     var upHtml = upcoming.length ? upcoming.map(function (l) {
       var st = S.get('students', l.studentId);
       var meet = S.meetUrlFor(l.studentId);

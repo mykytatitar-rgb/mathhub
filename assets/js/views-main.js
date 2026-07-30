@@ -24,7 +24,6 @@
     var earnedMap = S.earnedMap(monthStart, monthEnd);
     var debtMap = S.debtMap();
     var hasDebt = U.mapSize(debtMap) > 0;
-    var hwToCheck = db.homeworks.filter(function (x) { return x.status === 'submitted'; }).length;
 
     /* --- Тижневий графік навантаження --- */
     var weekStart = U.startOfWeek(today);
@@ -117,13 +116,10 @@
           (todayLessons.length ? 'перший о ' + U.fmtTime(todayLessons[0].date) : 'вільний день') + '</div></div>' +
           '<span class="quick__arrow">' + icon('chevronR', 18) + '</span></button>' +
 
-        '<button class="quick" data-act="nav" data-arg="#/students">' +
-          '<div class="quick__icon" style="background:var(--violet-bg);color:var(--violet)">' + icon('checklist', 21) + '</div>' +
-          '<div><div class="quick__title">На перевірку' +
-          (hwToCheck ? '<span class="quick__badge" style="background:var(--violet)">' + hwToCheck + '</span>' : '') + '</div>' +
-          '<div class="small muted" style="margin-top:2px">' +
-          (hwToCheck ? U.pl(hwToCheck, 'робота', 'роботи', 'робіт') + ' чекає' : 'усе перевірено') + '</div></div>' +
-          '<span class="quick__arrow">' + icon('chevronR', 18) + '</span></button>' +
+        /* Картки «На перевірку» тут немає навмисно: вона показувала саму лише
+           кількість і вела в список учнів, тоді як «Потребує уваги» на цьому ж
+           екрані називає, хто саме здав і яку роботу. Дві згадки про одне —
+           це не подвійна увага, а зайвий крок. */
 
         '<button class="quick" data-act="nav" data-arg="#/finance">' +
           '<div class="quick__icon" style="background:' + (hasDebt ? 'var(--red-bg)' : 'var(--green-bg)') +

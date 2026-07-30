@@ -756,6 +756,38 @@ a { color: inherit; text-decoration: none; }
 }
 .update-bar__x:hover { background: rgba(255,255,255,.22); }
 
+/* Загальний дохід за місяць: дві мірки поруч */
+.tot__row {
+  display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+  margin-top: 4px;
+}
+.tot__v {
+  font-size: 30px; font-weight: 800; letter-spacing: -.8px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.tot__v--alt { color: var(--muted); font-size: 24px; }
+.tot__sep { width: 1px; align-self: stretch; background: var(--line); }
+.tot__parts {
+  margin-top: 10px;
+  font-size: 12.5px; font-weight: 600; color: var(--ink-2);
+}
+.tot__src { margin-top: 8px; font-size: 12px; color: var(--muted); }
+.tot__warn {
+  display: flex; align-items: flex-start; gap: 7px;
+  margin-top: 10px; padding: 9px 11px;
+  border-radius: var(--r-sm);
+  background: var(--amber-bg); color: #8A5008;
+  font-size: 12.5px; line-height: 1.5;
+}
+.tot__warn svg { flex: 0 0 auto; margin-top: 2px; }
+
+@media (max-width: 560px) {
+  .tot__v { font-size: 25px; }
+  .tot__v--alt { font-size: 20px; }
+  .tot__sep { display: none; }
+}
+
 /* Стан захисту даних у Налаштуваннях */
 .guard {
   display: flex; align-items: flex-start; gap: 9px;

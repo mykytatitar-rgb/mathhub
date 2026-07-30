@@ -287,6 +287,70 @@
      Фінанси
      ============================================================ */
 
+  /* ============================================================
+     Загальний дохід за місяць
+     ============================================================
+
+     Решта сторінки навмисно показує одну валюту за раз: складати гривні
+     з доларами без курсу — брехня. Але «скільки я заробив цього місяця»
+     — питання про все разом, тож окремо зводимо все за курсом НБУ і
+     показуємо двома звичними мірками: у гривнях і в доларах.
+
+     Якщо курсу якоїсь валюти немає, чесно кажемо, що сума неповна, а не
+     мовчки її занижуємо. */
+  function totalIncomeCard(mStart, mEnd, pStart, pEnd) {
+    var R = window.Rates;
+    if (!R) return '';
+
+    var map = S.incomeMap(mStart, mEnd);
+    if (!U.mapSize(map)) return '';
+
+    var now = R.sumToUAH(map);
+    var prev = R.sumToUAH(S.incomeMap(pStart, pEnd));
+
+    var usdRate = R.get('USD');
+    var inUsd = usdRate ? now.uah / usdRate : null;
+
+    var diff = (prev.uah && !prev.partial && !now.partial)
+      ? Math.round((now.uah - prev.uah) / prev.uah * 100) : null;
+
+    // з чого склалася сума — щоб число не виглядало як здогад
+    var parts = U.mapSize(map) > 1
+      ? '<div class="tot__parts">' + U.moneyMap(map) + '</div>' : '';
+
+    var note;
+    if (now.partial) {
+      note = '<div class="tot__warn">' + icon('alert', 14) +
+        '<span>Немає курсу для ' + U.esc(now.missing.join(', ')) +
+        ' — ці оплати в суму не входять. Курс можна вписати вручну в Налаштуваннях.</span></div>';
+    } else if (!usdRate) {
+      note = '<div class="tot__warn">' + icon('alert', 14) +
+        '<span>Немає курсу долара — показано лише гривні.</span></div>';
+    } else {
+      var src = R.sourceOf('USD') === 'manual' ? 'курс вписано вручну' : 'курс НБУ';
+      note = '<div class="tot__src">' + U.esc(src) + ' · $1 = ' +
+        U.esc(String(Math.round(usdRate * 100) / 100)) + ' ₴</div>';
+    }
+
+    return '<div class="card tot mb-3">' +
+      '<div class="card-head"><div><h3 class="card-title">Загальний дохід за місяць</h3>' +
+      '<div class="card-sub">усі валюти разом, за курсом</div></div>' +
+      (diff != null
+        ? '<span class="spacer badge ' + (diff >= 0 ? 'badge--green' : 'badge--red') + '">' +
+          (diff >= 0 ? '↑ ' : '↓ ') + Math.abs(diff) + '% до минулого</span>'
+        : '') +
+      '</div>' +
+      '<div class="tot__row">' +
+        '<div class="tot__v">' + U.esc(U.money(Math.round(now.uah), 'UAH')) + '</div>' +
+        (inUsd != null
+          ? '<div class="tot__sep"></div><div class="tot__v tot__v--alt">' +
+            U.esc(U.money(Math.round(inUsd), 'USD')) + '</div>'
+          : '') +
+      '</div>' +
+      parts + note +
+      '</div>';
+  }
+
   V.finance = function (query) {
     var today = U.today();
     var mStart = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -368,6 +432,7 @@
 
     '<div class="page">' +
       curChips +
+      totalIncomeCard(mStart, mEnd, pStart, pEnd) +
       '<div class="grid grid--4 mb-3">' +
         C.stat('Надійшло за місяць', U.money(income, code),
           diff != null ? (diff >= 0 ? '↑ ' : '↓ ') + Math.abs(diff) + '% до минулого' : 'перший місяць',

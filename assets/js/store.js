@@ -375,27 +375,50 @@
   };
 
   /** Уроки в діапазоні [from, to] включно, за днями. */
+  /** Чи учень в архіві, тобто більше не займається. */
+  S.isArchived = function (studentId) {
+    var s = S.get('students', studentId);
+    return !!(s && s.archived);
+  };
+
+  /* Уроки учня, який більше не займається, у розкладі не потрібні: вони
+     лише займають місце й вводять в оману. Самі записи лишаються — гроші
+     за проведені заняття далі рахуються у фінансах, а якщо учень
+     повернеться, його розклад повернеться разом із ним. */
+  function visible(list) {
+    return list.filter(function (l) { return !S.isArchived(l.studentId); });
+  }
+
   S.lessonsBetween = function (from, to) {
     var a = U.ymd(from), b = U.ymd(to);
-    return U.sortBy(db.lessons.filter(function (l) {
+    return U.sortBy(visible(db.lessons.filter(function (l) {
       var d = l.date.slice(0, 10);
       return d >= a && d <= b;
-    }), function (l) { return l.date; });
+    })), function (l) { return l.date; });
   };
 
   S.lessonsOnDay = function (day) {
     var d = U.ymd(day);
-    return U.sortBy(db.lessons.filter(function (l) { return l.date.slice(0, 10) === d; }),
+    return U.sortBy(visible(db.lessons.filter(function (l) { return l.date.slice(0, 10) === d; })),
       function (l) { return l.date; });
   };
 
   S.upcoming = function (limit) {
     var now = new Date();
-    var list = db.lessons.filter(function (l) {
+    var list = visible(db.lessons.filter(function (l) {
       return l.status === 'planned' && U.toDate(l.date) >= new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    });
+    }));
     list = U.sortBy(list, function (l) { return l.date; });
     return limit ? list.slice(0, limit) : list;
+  };
+
+  /**
+   * Перевести в архів або повернути. Дані не чіпаємо: уроки, оплати,
+   * дошки лишаються на місці — архів це про «більше не займається»,
+   * а не про «видалити».
+   */
+  S.setArchived = function (studentId, on) {
+    return S.update('students', studentId, { archived: !!on });
   };
 
   /* ---------- Валюта ---------- */

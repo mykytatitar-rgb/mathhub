@@ -268,9 +268,15 @@
       (archived.length ? '<h3 class="card-title mt-3 mb-2">В архіві</h3>' +
         '<div class="card card--pad0"><div class="list">' +
         archived.map(function (s) {
-          return '<div class="list__item">' + C.avatar(s, 32) +
-            '<div style="flex:1"><div style="font-weight:650">' + U.esc(s.name) + '</div>' +
-            '<div class="small muted">' + U.esc(s.grade) + '</div></div>' +
+          var stat = S.studentStats(s.id);
+          // рядок відкриває картку: історія й оплати нікуди не поділися
+          return '<div class="list__item">' +
+            '<button class="row" data-act="student-open" data-arg="' + s.id + '" ' +
+            'style="flex:1;min-width:0;border:0;background:none;cursor:pointer;padding:0;gap:10px;text-align:left">' +
+            C.avatar(s, 32) +
+            '<span style="min-width:0"><span style="font-weight:650;display:block">' + U.esc(s.name) + '</span>' +
+            '<span class="small muted">' + U.esc(s.grade) + ' · ' +
+            U.pl(stat.done, 'урок', 'уроки', 'уроків') + ' в історії</span></span></button>' +
             '<button class="btn btn--ghost btn--sm" data-act="student-restore" data-arg="' + s.id + '">Повернути</button>' +
             '</div>';
         }).join('') + '</div></div>' : '') +

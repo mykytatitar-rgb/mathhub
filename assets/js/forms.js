@@ -105,6 +105,30 @@
             'Разом з ним зникнуть усі уроки, домашні завдання, оплати та нотатки. Дію не можна скасувати.',
             function () { S.removeStudent(id); U.toast('Учня видалено'); location.hash = '#/students'; refresh(); });
         } } : null,
+
+        /* Архів — для тих, хто просто перестав займатися. На відміну від
+           видалення, нічого не зникає: історія, оплати й дошки лишаються,
+           а учень зникає лише з розкладу й списків. */
+        !isNew ? (data.archived
+          ? { label: 'Повернути з архіву', kind: 'btn--ghost', act: 'unarch', close: true,
+              onClick: function () {
+                S.setArchived(id, false);
+                U.toast('Учня повернуто', 'ok');
+                refresh();
+              } }
+          : { label: 'В архів', kind: 'btn--ghost', act: 'arch', close: true,
+              onClick: function () {
+                C.confirm('Перевести ' + data.name + ' в архів?',
+                  'Учень зникне з розкладу й списків, а нові уроки за його постійним ' +
+                  'розкладом більше не створюватимуться. Нічого не видаляється: історія, ' +
+                  'оплати й дошки лишаються, і його можна повернути будь-коли.',
+                  function () {
+                    S.setArchived(id, true);
+                    U.toast('Учня переведено в архів', 'ok');
+                    location.hash = '#/students';
+                    refresh();
+                  }, 'Перевести в архів');
+              } }) : null,
         { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
         { label: isNew ? 'Додати учня' : 'Зберегти', kind: 'btn--primary', act: 'save', icon: 'check',
           onClick: function (root) {

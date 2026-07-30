@@ -59,7 +59,8 @@
       avatar: '<div class="avatar avatar--76" style="background:' + st.color + '">' +
         U.esc(U.initials(st.name)) + '</div>',
       title: st.name,
-      sub: st.grade + ' · ' + st.goal,
+      // архівного учня видно одразу, інакше незрозуміло, чому його немає в розкладі
+      sub: st.grade + ' · ' + st.goal + (st.archived ? ' · в архіві' : ''),
       actions: [
         { label: 'Контакти', icon: 'phone', act: 'contacts', arg: id },
         { label: 'Портал учня', icon: 'share', act: 'student-portal', arg: id },

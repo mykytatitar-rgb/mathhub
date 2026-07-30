@@ -13,6 +13,14 @@
     return U.fmtTime(d);
   }
 
+  /** Звична тривалість уроку: спершу в учня, потім загальна, потім година. */
+  function defaultDuration(studentId) {
+    var st = studentId ? S.get('students', studentId) : null;
+    if (st && st.duration) return st.duration;
+    var t = S.db().tutor || {};
+    return t.defaultDuration || 60;
+  }
+
   /* ============================================================
      Учень
      ============================================================ */
@@ -166,19 +174,30 @@
     var stList = S.students();
     if (!stList.length) { U.toast('Спочатку додайте учня', 'err'); return; }
 
+    var firstId = preset.studentId || stList[0].id;
     var data = ls || {
-      studentId: preset.studentId || stList[0].id,
+      studentId: firstId,
       date: (preset.date || U.ymd(new Date())) + 'T' + (preset.time || nowTimeRounded()),
-      topic: '', status: 'planned', notes: '', duration: 60, price: null
+      topic: '', status: 'planned', notes: '', price: null,
+      // звична тривалість цього учня, а не завжди година
+      duration: defaultDuration(firstId)
     };
 
     var stud = S.get('students', data.studentId);
     var lessonCur = data.currency || S.curOf(data.studentId);
     var body =
       (preset.lockStudent ? '' : C.field('Учень', C.studentSelect('studentId', data.studentId))) +
-      '<div class="field-row">' +
+      '<div class="field-row field-row--3">' +
         C.field('Дата', C.input('_date', data.date.slice(0, 10), 'type="date"')) +
         C.field('Час', C.input('_time', data.date.slice(11, 16) || '15:00', 'type="time"')) +
+        /* Тривалість досі можна було змінити лише перетягуванням краю уроку
+           в розкладі — і про це ніяк не здогадатися. Тут її видно завжди. */
+        C.field('Тривалість, хв',
+          C.input('duration', data.duration || 60,
+            'type="number" min="15" max="480" step="5" list="dur-list"') +
+          '<datalist id="dur-list">' +
+          [30, 45, 60, 90, 120].map(function (d) { return '<option value="' + d + '">'; }).join('') +
+          '</datalist>') +
       '</div>' +
       C.field('Тема уроку', C.input('topic', data.topic, 'placeholder="Напр. Логарифмічні нерівності" list="topic-list"') +
         '<datalist id="topic-list">' + S.TOPICS.map(function (t) { return '<option value="' + U.esc(t) + '">'; }).join('') + '</datalist>') +
@@ -220,6 +239,8 @@
             var v = C.readForm(root);
             v.date = v._date + 'T' + (v._time || '00:00');
             delete v._date; delete v._time;
+            // порожнє чи безглузде поле не має перетворювати урок на нульовий
+            v.duration = U.clamp(v.duration || defaultDuration(v.studentId), 15, 480);
             if (preset.lockStudent) v.studentId = data.studentId;
             v.currency = S.curOf(v.studentId);
             if (isNew) { S.add('lessons', v); U.toast('Урок додано', 'ok'); }
@@ -236,6 +257,9 @@
           var code = s.currency || 'UAH';
           root.querySelector('[data-cur-tag]').textContent = U.symbol(code) + ' ' + code;
           root.querySelector('[name=price]').value = s.price;
+          // тривалість теж своя в кожного учня
+          var dur = root.querySelector('[name=duration]');
+          if (dur) dur.value = defaultDuration(s.id);
         });
       }
     });

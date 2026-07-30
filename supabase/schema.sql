@@ -130,47 +130,6 @@ create policy state_own on public.state
 create policy snapshots_read on public.snapshots
   for select using (auth.uid() = owner);
 
--- ============================================================
--- Збереження стану: одна операція замість "прочитати, порівняти, записати"
--- ============================================================
---
--- Повертає новий rev при успіху або -1, якщо на сервері вже є свіжіша версія
--- (тобто хтось зберіг з іншого пристрою). Тоді програма не перезаписує чуже,
--- а показує попередження — так втратити дані неможливо.
-
-create or replace function public.save_state(p_data text, p_base_rev bigint, p_device text)
-returns bigint
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_owner uuid := auth.uid();
-  v_rev   bigint;
-begin
-  if v_owner is null then
-    raise exception 'Не авторизовано';
-  end if;
-
-  select rev into v_rev from public.state where owner = v_owner and id = 'main';
-
-  if v_rev is null then
-    insert into public.state (id, owner, rev, data, device)
-    values ('main', v_owner, 1, p_data, p_device);
-    return 1;
-  end if;
-
-  if v_rev <> p_base_rev then
-    return -1;                     -- конфлікт: на сервері новіше
-  end if;
-
-  update public.state
-     set data = p_data, rev = v_rev + 1, device = p_device
-   where owner = v_owner and id = 'main';
-
-  return v_rev + 1;
-end;
-$$;
 
 -- Postgres за замовчуванням дозволяє викликати функції всім. Для save_state це
 -- безпечно (вона сама бере власника з auth.uid()), а от trim_snapshots приймає
@@ -180,7 +139,7 @@ $$;
 revoke all on function public.trim_snapshots(uuid, int) from public, anon, authenticated;
 revoke all on function public.state_archive()              from public, anon, authenticated;
 
-grant execute on function public.save_state(text, bigint, text) to authenticated;
+-- сама save_state створюється нижче, у розділі про запобіжник від затирання
 
 -- ============================================================
 -- Сховище картинок дошок
@@ -483,6 +442,131 @@ create policy uploads_delete on storage.objects
       where s.token = (storage.foldername(name))[1] and s.owner = auth.uid()
     )
   );
+
+-- ============================================================
+-- Запобіжник від затирання даних
+-- ============================================================
+--
+-- Навіщо це в базі, а не в програмі. Пристрій, який давно не відкривали,
+-- має старі дані. Якщо він відправить їх поверх свіжих, зникнуть учні,
+-- уроки й оплати. У програмі перевірка вже є, але вона не рятує від
+-- пристрою, на якому програма стара: телефон тримає файли в кеші й може
+-- тижнями працювати попередньою версією.
+--
+-- База — єдине місце, де сходяться всі пристрої. Тут перевірка діє
+-- незалежно від того, хто і якою версією пише.
+--
+-- Правило просте: запис, який ПОВНІСТЮ ВИДАЛЯЄ наявні записи, не
+-- проходить сам собою. Зміни всередині записів (перейменування, нова
+-- тема, оплата) не обмежуються ніяк — блокується лише зникнення.
+
+/* Що саме зникне, якщо прийняти новий документ. Повертає, наприклад,
+   'students:5', або null, якщо нічого не втрачається. */
+create or replace function public.state_would_lose(p_old text, p_new text)
+returns text
+language plpgsql
+immutable
+set search_path = public
+as $$
+declare
+  v_names text[] := array['students', 'lessons', 'payments', 'homeworks', 'boards'];
+  v_name  text;
+  v_lost  bigint;
+  v_o     jsonb;
+  v_n     jsonb;
+begin
+  if p_old is null or p_new is null then return null; end if;
+
+  begin
+    v_o := p_old::jsonb;
+    v_n := p_new::jsonb;
+  exception when others then
+    return null;                       -- не JSON: не нам судити
+  end;
+
+  foreach v_name in array v_names loop
+    -- якщо будь-де не масив, порівнювати нічого
+    if jsonb_typeof(v_o -> v_name) = 'array' and jsonb_typeof(v_n -> v_name) = 'array' then
+      select count(*) into v_lost
+      from jsonb_array_elements(v_o -> v_name) old_el
+      where old_el ->> 'id' is not null
+        and not exists (
+          select 1
+          from jsonb_array_elements(v_n -> v_name) new_el
+          where new_el ->> 'id' = old_el ->> 'id'
+        );
+
+      if v_lost > 0 then
+        return v_name || ':' || v_lost;
+      end if;
+    end if;
+  end loop;
+
+  return null;
+end;
+$$;
+
+revoke all on function public.state_would_lose(text, text) from public, anon, authenticated;
+
+/* Стару тризначну версію треба саме прибрати: якби вона лишилася поруч із
+   новою, виклик із трьома аргументами став би неоднозначним. */
+drop function if exists public.save_state(text, bigint, text);
+
+/* Повертає новий rev при успіху,
+   -1 — на сервері вже свіжіша версія (хтось зберіг з іншого пристрою),
+   -2 — запис знищив би наявні записи; програма мусить спершу підтягнути
+        серверну версію. p_force = true проходить попри це: ним користується
+        свідоме видалення, яке робить людина. */
+create or replace function public.save_state(
+  p_data text,
+  p_base_rev bigint,
+  p_device text,
+  p_force boolean default false
+)
+returns bigint
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_owner uuid := auth.uid();
+  v_rev   bigint;
+  v_old   text;
+  v_loss  text;
+begin
+  if v_owner is null then
+    raise exception 'Не авторизовано';
+  end if;
+
+  select rev, data into v_rev, v_old
+  from public.state where owner = v_owner and id = 'main';
+
+  if v_rev is null then
+    insert into public.state (id, owner, rev, data, device)
+    values ('main', v_owner, 1, p_data, p_device);
+    return 1;
+  end if;
+
+  if v_rev <> p_base_rev then
+    return -1;                     -- конфлікт: на сервері новіше
+  end if;
+
+  if not coalesce(p_force, false) then
+    v_loss := public.state_would_lose(v_old, p_data);
+    if v_loss is not null then
+      return -2;                   -- відмова: запис знищив би дані
+    end if;
+  end if;
+
+  update public.state
+     set data = p_data, rev = v_rev + 1, device = p_device
+   where owner = v_owner and id = 'main';
+
+  return v_rev + 1;
+end;
+$$;
+
+grant execute on function public.save_state(text, bigint, text, boolean) to authenticated;
 
 -- ============================================================
 -- Портал учня: свій розклад і матеріали

@@ -41,6 +41,7 @@
   var started = false;
   var suppress = 0;           // >0 поки ми самі пишемо в базу (прийняли серверну версію)
   var housekeeping = 0;       // >0 поки програма пише сама, а не людина
+  var forceNext = false;      // найближче відправлення — свідоме видалення
 
   /**
    * Обгортка для того, що програма робить сама: заповнення розкладу з
@@ -650,9 +651,12 @@
     }
 
     setState('syncing');
+    var force = forceNext;
     return api('/rest/v1/rpc/save_state', {
       method: 'POST',
-      body: JSON.stringify({ p_data: data, p_base_rev: meta.rev, p_device: deviceName() })
+      body: JSON.stringify({
+        p_data: data, p_base_rev: meta.rev, p_device: deviceName(), p_force: force
+      })
     }).then(function (res) {
       if (!res.ok) throw new Error('Сервер відповів ' + res.status);
       return res.json();
@@ -665,11 +669,24 @@
         retry = true;
         return Cloud.syncNow().then(function () { retry = false; });
       }
+
+      /* -2 — база не пустила запис, бо він знищив би наявні записи. Таке
+         буває, коли на пристрої лежали давні дані. Беремо серверну версію;
+         локальна не зникає, вона лягає в mathhub.before-sync. */
+      if (newRev === -2) {
+        return pull().then(function (row) {
+          if (!row) { setState('error', 'Не вдалося зберегти'); return; }
+          return adopt(row).then(function () {
+            U.toast('На цьому пристрої були давніші дані — підтягнуто повні з сервера', 'ok');
+          });
+        });
+      }
       meta.rev = newRev;
       meta.hash = h;
       meta.dirty = false;
       meta.lastSync = new Date().toISOString();
       saveMeta();
+      if (force) forceNext = false;     // дозвіл одноразовий
       setState('idle');
     });
   }
@@ -700,14 +717,16 @@
            Рішення за ВМІСТОМ, а не за прапорцем dirty: прапорець лежить у
            спільному сховищі, і друга вкладка могла його скинути. */
         var mineChanged = locallyChanged();
-        if (mineChanged && localIsNewer(row) && !localLooksTruncated(row)) {
+        // forceNext — людина щойно щось видалила, і це не втрата, а її намір
+        if (mineChanged && localIsNewer(row) && (forceNext || !localLooksTruncated(row))) {
           meta.rev = row.rev;         // підганяємось під серверну нумерацію
           saveMeta();
           return push().then(function () {
             U.toast('Залишено новішу версію — з цього пристрою', 'ok');
           });
         }
-        var wasTruncated = mineChanged && localIsNewer(row) && localLooksTruncated(row);
+        var wasTruncated = mineChanged && localIsNewer(row) &&
+          !forceNext && localLooksTruncated(row);
         return adopt(row).then(function () {
           if (wasTruncated) {
             /* Найнебезпечніший випадок: на пристрої лежали давні дані, і за
@@ -863,6 +882,19 @@
       orig.apply(S, arguments);
       schedulePush();
     };
+
+    /* База не пропускає запис, який видаляє наявні записи — це захист від
+       пристрою з давніми даними. Але коли видаляє людина, це саме те, чого
+       вона хоче. Тому позначаємо такі дії, і найближче відправлення йде
+       з дозволом. */
+    ['remove', 'removeStudent', 'removeLesson', 'removeBoard'].forEach(function (name) {
+      var fn = S[name];
+      if (typeof fn !== 'function') return;
+      S[name] = function () {
+        forceNext = true;
+        return fn.apply(S, arguments);
+      };
+    });
   }
 
   /* Кілька вкладок одного сайту ділять сховище, але кожна тримає власну копію

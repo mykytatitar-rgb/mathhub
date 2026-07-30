@@ -49,6 +49,88 @@
   };
 
   /** Кільце прогресу. */
+  /* Кольори секторів. Беремо не кольори учнів: два учні можуть мати
+     однаковий, і на діаграмі сектори злилися б в один. */
+  C.PIE_COLORS = ['#4B3FDB', '#9333EA', '#12A268', '#E07C0B', '#DC3F49',
+                  '#6355EE', '#0EA5A5', '#B06A10', '#7C3AED', '#0F766E'];
+
+  /**
+   * Кільцева діаграма з підписами.
+   * slices: [{label, value, color}] — від'ємні й нульові відкидаються.
+   * Повертає '' , якщо показувати нема чого: порожнє коло гірше за
+   * відсутність блоку.
+   */
+  C.donut = function (slices, opts) {
+    opts = opts || {};
+    var list = (slices || []).filter(function (s) { return Number(s.value) > 0; });
+    if (!list.length) return '';
+
+    var total = list.reduce(function (a, s) { return a + Number(s.value); }, 0);
+    if (!(total > 0)) return '';
+
+    /* Дрібні сектори не читаються й засмічують підписи, тому все, що менше
+       за поріг, зводимо в одне «інші». */
+    var minShare = opts.minShare == null ? 0.03 : opts.minShare;
+    var big = list.filter(function (s) { return s.value / total >= minShare; });
+    var small = list.filter(function (s) { return s.value / total < minShare; });
+    big.sort(function (a, b) { return b.value - a.value; });
+    if (small.length > 1) {
+      big.push({
+        label: 'Інші · ' + small.length,
+        value: small.reduce(function (a, s) { return a + Number(s.value); }, 0),
+        color: '#AAA8C2'
+      });
+    } else if (small.length === 1) {
+      big.push(small[0]);
+    }
+
+    var sz = opts.size || 168;
+    var sw = opts.stroke || 26;
+    var r = (sz - sw) / 2;
+    var circ = 2 * Math.PI * r;
+
+    var at = 0;
+    var arcs = big.map(function (s, i) {
+      var frac = s.value / total;
+      var col = s.color || C.PIE_COLORS[i % C.PIE_COLORS.length];
+      var seg = '<circle cx="' + sz / 2 + '" cy="' + sz / 2 + '" r="' + r + '" fill="none" ' +
+        'stroke="' + col + '" stroke-width="' + sw + '" ' +
+        // проміжок між секторами — щоб сусідні кольори не зливалися
+        'stroke-dasharray="' + Math.max(0, circ * frac - 2).toFixed(2) + ' ' + circ.toFixed(2) + '" ' +
+        'stroke-dashoffset="' + (-circ * at).toFixed(2) + '" ' +
+        'transform="rotate(-90 ' + sz / 2 + ' ' + sz / 2 + ')"><title>' +
+        U.esc(s.label + ' — ' + (frac < 0.005 ? '<1' : Math.round(frac * 100)) + '%') +
+        '</title></circle>';
+      s._col = col;
+      // «0%» читається як помилка, хоча сума є — тому дрібне пишемо як «<1%»
+      s._pct = frac > 0 && frac < 0.005 ? '<1%' : Math.round(frac * 100) + '%';
+      at += frac;
+      return seg;
+    }).join('');
+
+    var legend = big.map(function (s) {
+      return '<div class="pie__row">' +
+        '<span class="pie__dot" style="background:' + s._col + '"></span>' +
+        '<span class="pie__name">' + U.esc(s.label) + '</span>' +
+        '<span class="pie__pct">' + s._pct + '</span>' +
+        (opts.fmt ? '<span class="pie__val">' + U.esc(opts.fmt(s.value)) + '</span>' : '') +
+        '</div>';
+    }).join('');
+
+    return '<div class="pie">' +
+      '<div class="pie__chart" style="width:' + sz + 'px;height:' + sz + 'px">' +
+      '<svg width="' + sz + '" height="' + sz + '" role="img">' + arcs + '</svg>' +
+      (opts.centerTop || opts.center
+        ? '<div class="pie__mid">' +
+          (opts.centerTop ? '<b>' + U.esc(opts.centerTop) + '</b>' : '') +
+          (opts.center ? '<span>' + U.esc(opts.center) + '</span>' : '') +
+          '</div>'
+        : '') +
+      '</div>' +
+      '<div class="pie__legend">' + legend + '</div>' +
+      '</div>';
+  };
+
   C.ring = function (value, size, stroke, color) {
     var v = U.clamp(Number(value) || 0, 0, 100);
     var sz = size || 74, sw = stroke || 8;

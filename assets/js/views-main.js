@@ -340,15 +340,114 @@
           (diff >= 0 ? '↑ ' : '↓ ') + Math.abs(diff) + '% до минулого</span>'
         : '') +
       '</div>' +
+      /* Два рівноправні розділи, а не головне число й приписка збоку:
+         дохід той самий, просто виміряний двома мірками. */
       '<div class="tot__row">' +
-        '<div class="tot__v">' + U.esc(U.money(Math.round(now.uah), 'UAH')) + '</div>' +
+        '<div class="tot__cell">' +
+          '<div class="tot__k">У гривнях</div>' +
+          '<div class="tot__v">' + U.esc(U.money(Math.round(now.uah), 'UAH')) + '</div>' +
+        '</div>' +
         (inUsd != null
-          ? '<div class="tot__sep"></div><div class="tot__v tot__v--alt">' +
-            U.esc(U.money(Math.round(inUsd), 'USD')) + '</div>'
+          ? '<div class="tot__sep"></div>' +
+            '<div class="tot__cell">' +
+              '<div class="tot__k">У доларах</div>' +
+              '<div class="tot__v">' + U.esc(U.money(Math.round(inUsd), 'USD')) + '</div>' +
+            '</div>'
           : '') +
       '</div>' +
       parts + note +
       '</div>';
+  }
+
+  /* ============================================================
+     Дашборди: з чого складається місяць
+     ============================================================
+
+     Стовпчики показують, СКІЛЬКИ, але не показують, ЗВІДКИ. Три питання,
+     на які стовпчиками не відповісти: хто приносить дохід, скільки з
+     нарахованого вже дійшло, і як розподілені борги.
+
+     Усі суми зводимо в гривні за курсом — інакше сектори різних валют
+     не можна порівнювати між собою. Валюти без курсу відкидаємо: краще
+     не показати сектор, ніж намалювати його з вигаданого числа. */
+  function toUah(amount, code) {
+    var R = window.Rates;
+    if (!R) return code === 'UAH' ? amount : null;
+    return R.toUAH(amount, code);
+  }
+
+  function financePies(mStart, mEnd) {
+    var uah = function (v) { return U.money(Math.round(v), 'UAH'); };
+
+    /* 1. Хто приносить дохід */
+    var byStudent = {};
+    S.paymentsBetween(mStart, mEnd).forEach(function (p) {
+      var v = toUah(p.amount, S.paymentCur(p));
+      if (v == null) return;
+      byStudent[p.studentId] = (byStudent[p.studentId] || 0) + v;
+    });
+    var studentSlices = Object.keys(byStudent).map(function (id) {
+      var s = S.get('students', id);
+      return { label: s ? s.name : 'Видалений учень', value: byStudent[id] };
+    });
+
+    /* 2. Скільки з нарахованого дійшло. Порівнюємо за той самий місяць:
+       нараховано за проведені уроки проти отриманих оплат. */
+    var earnedUah = 0;
+    S.doneLessonsBetween(mStart, mEnd).forEach(function (l) {
+      var v = toUah(l.price || 0, S.lessonCur(l));
+      if (v != null) earnedUah += v;
+    });
+    var paidUah = studentSlices.reduce(function (a, s) { return a + s.value; }, 0);
+    var owedUah = Math.max(0, earnedUah - paidUah);
+    var collectSlices = [
+      { label: 'Оплачено', value: Math.min(paidUah, earnedUah), color: '#12A268' },
+      { label: 'Ще не оплачено', value: owedUah, color: '#E07C0B' }
+    ];
+    var collected = earnedUah > 0 ? Math.round(Math.min(paidUah, earnedUah) / earnedUah * 100) : 0;
+
+    /* 3. Борги за учнями — видно, з ким саме говорити */
+    var debtSlices = S.students().map(function (s) {
+      var b = S.balance(s.id);
+      if (b >= 0) return null;
+      var v = toUah(-b, S.curOf(s.id));
+      return v == null ? null : { label: s.name, value: v };
+    }).filter(Boolean);
+
+    var cards = [];
+
+    var p1 = C.donut(studentSlices, { size: 168, fmt: uah,
+      centerTop: uah(paidUah), center: 'за місяць' });
+    if (p1) {
+      cards.push('<div class="card">' +
+        '<div class="card-head"><div><h3 class="card-title">Хто приносить дохід</h3>' +
+        '<div class="card-sub">оплати цього місяця, у гривнях за курсом</div></div></div>' +
+        p1 + '</div>');
+    }
+
+    // без нарахувань частка не має сенсу: ділити нема на що
+    var p2 = earnedUah > 0 ? C.donut(collectSlices, { size: 168, fmt: uah, minShare: 0,
+      centerTop: collected + '%', center: 'зібрано' }) : '';
+    if (p2) {
+      cards.push('<div class="card">' +
+        '<div class="card-head"><div><h3 class="card-title">Скільки вже зібрано</h3>' +
+        '<div class="card-sub">нараховано за проведені уроки: ' + U.esc(uah(earnedUah)) +
+        '</div></div></div>' + p2 + '</div>');
+    }
+
+    var p3 = C.donut(debtSlices, { size: 168, fmt: uah,
+      centerTop: uah(debtSlices.reduce(function (a, s) { return a + s.value; }, 0)),
+      center: 'борг' });
+    if (p3) {
+      cards.push('<div class="card">' +
+        '<div class="card-head"><div><h3 class="card-title">Хто винен</h3>' +
+        '<div class="card-sub">поточна заборгованість, у гривнях за курсом</div></div></div>' +
+        p3 + '</div>');
+    }
+
+    if (!cards.length) return '';
+    return '<div class="grid grid--' + Math.min(3, cards.length) + ' mb-3">' +
+      cards.join('') + '</div>';
   }
 
   V.finance = function (query) {
@@ -444,6 +543,8 @@
         C.stat('Середній чек', U.money(studs.length ? U.sum(studs, function (s) { return s.price; }) / studs.length : 0, code),
           'за урок', 'chart', 'violet') +
       '</div>' +
+
+      financePies(mStart, mEnd) +
 
       '<div class="grid grid--main mb-3">' +
         '<div class="card">' +

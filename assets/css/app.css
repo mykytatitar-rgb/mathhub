@@ -756,18 +756,68 @@ a { color: inherit; text-decoration: none; }
 }
 .update-bar__x:hover { background: rgba(255,255,255,.22); }
 
-/* Загальний дохід за місяць: дві мірки поруч */
-.tot__row {
+/* ============================================================
+   Кільцева діаграма
+   ============================================================ */
+
+.pie {
   display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
-  margin-top: 4px;
+}
+.pie__chart { flex: 0 0 auto; position: relative; }
+.pie__chart svg { display: block; }
+
+/* Підсумок у центрі кільця — щоб не шукати його очима збоку */
+.pie__mid {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  text-align: center; pointer-events: none;
+}
+.pie__mid b {
+  font-size: 17px; font-weight: 800; letter-spacing: -.4px;
+  font-variant-numeric: tabular-nums;
+}
+.pie__mid span { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+
+.pie__legend { flex: 1; min-width: 148px; display: grid; gap: 7px; }
+.pie__row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.pie__dot { flex: 0 0 9px; width: 9px; height: 9px; border-radius: 3px; }
+.pie__name {
+  flex: 1; min-width: 0; font-weight: 650; color: var(--ink-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pie__pct {
+  flex: 0 0 auto; font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.pie__val {
+  flex: 0 0 auto; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* У вузькій картці підпис під кільцем читається краще, ніж збоку */
+@media (max-width: 900px) {
+  .pie { flex-direction: column; align-items: stretch; }
+  .pie__chart { align-self: center; }
+}
+
+/* Загальний дохід за місяць: дві мірки поруч */
+/* Дві рівноправні мірки одного доходу — жодна не другорядна */
+.tot__row {
+  display: flex; align-items: stretch; gap: 22px; flex-wrap: wrap;
+  margin-top: 6px;
+}
+.tot__cell { min-width: 0; }
+.tot__k {
+  font-size: 10.5px; font-weight: 800; letter-spacing: .8px;
+  text-transform: uppercase; color: var(--muted);
+  margin-bottom: 4px;
 }
 .tot__v {
   font-size: 30px; font-weight: 800; letter-spacing: -.8px;
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
 }
-.tot__v--alt { color: var(--muted); font-size: 24px; }
-.tot__sep { width: 1px; align-self: stretch; background: var(--line); }
+.tot__sep { width: 1px; background: var(--line); }
 .tot__parts {
   margin-top: 10px;
   font-size: 12.5px; font-weight: 600; color: var(--ink-2);
@@ -784,7 +834,6 @@ a { color: inherit; text-decoration: none; }
 
 @media (max-width: 560px) {
   .tot__v { font-size: 25px; }
-  .tot__v--alt { font-size: 20px; }
   .tot__sep { display: none; }
 }
 

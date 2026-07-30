@@ -7,7 +7,7 @@
 
    Версію треба піднімати щоразу, коли змінюється склад файлів. */
 
-var VERSION = 'vektor-v10';
+var VERSION = 'vektor-v11';
 
 var SHELL = [
   './',
@@ -77,16 +77,32 @@ self.addEventListener('fetch', function (e) {
     return;
   }
 
-  // Решта: віддаємо з кешу миттєво, оновлюємо у фоні
+  /* Код застосунку: спершу мережа, кеш — запасний варіант.
+
+     Раніше було навпаки — кеш одразу, а свіже підтягувалося у фоні. Через це
+     кожна зміна показувалася аж наступного відкриття, і збоку це виглядало
+     так, ніби її не зробили. Пояснення й смужка «є оновлення» проблему не
+     знімали: людина відкриває сторінку й бачить старе.
+
+     Мережа з обмеженням часу: якщо інтернет повільний або його немає,
+     за секунду з половиною беремо кеш і працюємо далі. */
+  if (isCode(url)) {
+    e.respondWith(
+      fromNetworkFirst(req).catch(function () {
+        return caches.match(req).then(function (r) {
+          return r || Response.error();
+        });
+      })
+    );
+    return;
+  }
+
+  // Решта (картинки, іконки): кеш миттєво, оновлення у фоні
   e.respondWith(
     caches.match(req).then(function (cached) {
       var network = fetch(req).then(function (res) {
         if (res && res.status === 200) {
           var copy = res.clone();
-          /* Кеш оновлюється у фоні, тому свіжий код показався б аж наступного
-             разу — а до того здавалося б, що зміни не доїхали. Тому помічаємо
-             розбіжність і кажемо сторінці запропонувати оновлення. */
-          if (cached && isCode(url) && stamp(cached) !== stamp(res)) tellClients();
           caches.open(VERSION).then(function (c) { c.put(req, copy); });
         }
         return res;
@@ -95,6 +111,34 @@ self.addEventListener('fetch', function (e) {
     })
   );
 });
+
+var NET_TIMEOUT = 1500;
+
+/** Мережа з обмеженням часу; вдале — одразу в кеш. */
+function fromNetworkFirst(req) {
+  return new Promise(function (resolve, reject) {
+    var settled = false;
+    var timer = setTimeout(function () {
+      if (!settled) { settled = true; reject(new Error('timeout')); }
+    }, NET_TIMEOUT);
+
+    fetch(req).then(function (res) {
+      if (res && res.status === 200) {
+        var copy = res.clone();
+        /* Вкладку могли не закривати годинами — тоді сторінка й далі
+           виконує старий код. Помічаємо, що файл на сервері змінився,
+           і пропонуємо оновитися. */
+        caches.match(req).then(function (old) {
+          if (old && stamp(old) !== stamp(res)) tellClients();
+          return caches.open(VERSION).then(function (c) { c.put(req, copy); });
+        });
+      }
+      if (!settled) { settled = true; clearTimeout(timer); resolve(res); }
+    }).catch(function (err) {
+      if (!settled) { settled = true; clearTimeout(timer); reject(err); }
+    });
+  });
+}
 
 function isCode(url) {
   return /\.(js|css)$/.test(url.pathname);

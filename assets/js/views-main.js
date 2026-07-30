@@ -607,6 +607,14 @@
       '<div class="row" style="gap:8px" data-sync-state>' + V.syncStatusHtml() + '</div>' +
       '<div class="field__hint">' + U.esc(st.email || '') + ' · зберігається саме, ' +
       'нічого натискати не треба</div>' +
+
+      /* Рядок про захист бази. Потрібен тому, що захист ставиться вручну
+         одним запуском файлу в Supabase, і без такого рядка дізнатися,
+         чи він стоїть, можна лише читаючи SQL. */
+      '<div class="guard" data-guard>' +
+        '<span class="guard__dot"></span><span>Перевіряю захист даних…</span>' +
+      '</div>' +
+
       V.syncBackups() +
       '<details class="sync-more mt-2">' +
         '<summary>Подробиці</summary>' +
@@ -647,8 +655,37 @@
       '</div></div>';
   };
 
+  /* Захист від затирання даних ставиться вручну — одним запуском файлу
+     supabase/schema.sql у Supabase. Питаємо базу, чи він там є, і кажемо
+     людською мовою: читати SQL для цього не має бути потрібно. */
+  function fillGuard() {
+    var el = document.querySelector('[data-guard]');
+    if (!el) return;
+    if (!syncOn() || !window.Cloud.guardInstalled) { el.remove(); return; }
+
+    window.Cloud.guardInstalled().then(function (state) {
+      if (state === 'on') {
+        el.className = 'guard guard--on';
+        el.innerHTML = '<span class="guard__dot"></span>' +
+          '<span>Захист даних увімкнено — пристрій із давніми даними ' +
+          'не зможе затерти свіжі</span>';
+        return;
+      }
+      if (state === 'off') {
+        el.className = 'guard guard--off';
+        el.innerHTML = '<span class="guard__dot"></span>' +
+          '<span><b>Захист даних не налаштований.</b> Відкрийте Supabase → SQL Editor, ' +
+          'вставте вміст файлу supabase/schema.sql і натисніть Run. ' +
+          'Без цього пристрій, який давно не відкривали, може затерти свіжі дані.</span>';
+        return;
+      }
+      el.remove();     // не змогли перевірити — краще нічого, ніж хибна тривога
+    });
+  }
+
   /** Історія автоматичних копій — приходить із сервера, тому дописуємо після рендеру. */
   V.fillSyncAsync = function () {
+    fillGuard();
     var box = document.querySelector('[data-sync-snaps]');
     if (!box || !syncOn()) return;
     window.Cloud.snapshots().then(function (rows) {

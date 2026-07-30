@@ -756,6 +756,23 @@ a { color: inherit; text-decoration: none; }
 }
 .update-bar__x:hover { background: rgba(255,255,255,.22); }
 
+/* Стан захисту даних у Налаштуваннях */
+.guard {
+  display: flex; align-items: flex-start; gap: 9px;
+  margin-top: 12px; padding: 11px 13px;
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  font-size: 12.5px; line-height: 1.55; color: var(--ink-2);
+}
+.guard__dot {
+  flex: 0 0 8px; width: 8px; height: 8px; margin-top: 5px;
+  border-radius: 50%; background: var(--muted-2);
+}
+.guard--on { background: var(--green-bg); color: #0A6B44; }
+.guard--on .guard__dot { background: var(--green); }
+.guard--off { background: var(--red-bg); color: #9E2A32; }
+.guard--off .guard__dot { background: var(--red); }
+
 /* ============================================================
    Шлях: дорога етапів
    ============================================================

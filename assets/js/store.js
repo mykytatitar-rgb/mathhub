@@ -525,14 +525,24 @@
   };
 
   /** Сумарні борги в розрізі валют (додатні числа). */
+  /**
+   * Усі, хто винен, — включно з тими, хто вже не займається.
+   *
+   * Архів ховає учня з розкладу й списків, але не з фінансів: людина
+   * пішла, а борг лишився. Якби ми брали лише активних, сума мовчки
+   * зникала б з очей саме тоді, коли про неї найлегше забути.
+   */
+  S.debtors = function () {
+    return db.students.map(function (s) {
+      var b = S.balance(s.id);
+      return b < 0 ? { s: s, debt: -b, cur: S.curOf(s.id) } : null;
+    }).filter(Boolean);
+  };
+
   S.debtMap = function () {
     var out = {};
-    S.students().forEach(function (s) {
-      var b = S.balance(s.id);
-      if (b < 0) {
-        var c = S.curOf(s.id);
-        out[c] = (out[c] || 0) + (-b);
-      }
+    S.debtors().forEach(function (d) {
+      out[d.cur] = (out[d.cur] || 0) + d.debt;
     });
     return out;
   };
@@ -569,14 +579,13 @@
     var out = [];
     var today = U.today();
 
-    S.students().forEach(function (st) {
-      var bal = S.balance(st.id);
-      if (bal < 0) {
-        out.push({
-          kind: 'debt', studentId: st.id, priority: 1,
-          title: st.name, text: 'Борг ' + U.money(-bal, S.curOf(st.id))
-        });
-      }
+    // архівні теж: борг не зникає від того, що людина перестала займатися
+    S.debtors().forEach(function (d) {
+      out.push({
+        kind: 'debt', studentId: d.s.id, priority: 1,
+        title: d.s.name + (d.s.archived ? ' · в архіві' : ''),
+        text: 'Борг ' + U.money(d.debt, d.cur)
+      });
     });
 
     db.homeworks.forEach(function (h) {

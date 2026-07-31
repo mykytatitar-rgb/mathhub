@@ -409,11 +409,10 @@
     var collected = earnedUah > 0 ? Math.round(Math.min(paidUah, earnedUah) / earnedUah * 100) : 0;
 
     /* 3. Борги за учнями — видно, з ким саме говорити */
-    var debtSlices = S.students().map(function (s) {
-      var b = S.balance(s.id);
-      if (b >= 0) return null;
-      var v = toUah(-b, S.curOf(s.id));
-      return v == null ? null : { label: s.name, value: v };
+    var debtSlices = S.debtors().map(function (d) {
+      var v = toUah(d.debt, d.cur);
+      return v == null ? null
+        : { label: d.s.name + (d.s.archived ? ' · в архіві' : ''), value: v };
     }).filter(Boolean);
 
     var cards = [];
@@ -469,8 +468,11 @@
     var diff = prevIncome ? Math.round((income - prevIncome) / prevIncome * 100) : null;
 
     var studs = S.students().filter(function (s) { return S.curOf(s.id) === code; });
-    var debts = studs.map(function (s) { return { s: s, b: S.balance(s.id) }; })
-      .filter(function (x) { return x.b < 0; });
+    /* Боржники — з архівними разом: людина пішла, а гроші лишились винні.
+       Якби ми брали лише активних, борг зникав би з очей саме тоді, коли
+       про нього найлегше забути. */
+    var debts = S.debtors().filter(function (d) { return d.cur === code; })
+      .map(function (d) { return { s: d.s, b: -d.debt }; });
     var totalDebt = U.sum(debts, function (x) { return -x.b; });
 
     var curChips = codes.length > 1
@@ -564,8 +566,10 @@
           (debts.length ? debts.map(function (x) {
             return '<button class="list__item list__item--btn" data-act="student-open" data-arg="' + x.s.id + '">' +
               C.avatar(x.s, 32) +
-              '<div style="flex:1;min-width:0"><div style="font-weight:650;font-size:14px">' + U.esc(x.s.name) + '</div>' +
-              '<div class="small muted">' + U.pl(Math.ceil(-x.b / x.s.price),
+              '<div style="flex:1;min-width:0"><div style="font-weight:650;font-size:14px">' +
+              U.esc(x.s.name) +
+              (x.s.archived ? ' <span class="badge badge--grey">в архіві</span>' : '') + '</div>' +
+              '<div class="small muted">' + U.pl(Math.ceil(-x.b / (x.s.price || 1)),
                 'неоплачений урок', 'неоплачені уроки', 'неоплачених уроків') + '</div></div>' +
               '<span class="bold" style="color:var(--red)">' + U.money(-x.b, code) + '</span></button>';
           }).join('') : C.empty('check', 'Боргів немає', 'Усі учні мають додатний або нульовий баланс.')) +

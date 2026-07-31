@@ -637,12 +637,30 @@
     ctx.restore();
   }
 
+  /* Обгортка зі збереженням стану полотна. Потрібна тому, що всередині
+     виставляються тінь, пунктир і прозорість, а виходів із функції багато —
+     без цього налаштування одного об'єкта протікали б на наступний. */
   function drawItem(ctx, it, scale) {
+    ctx.save();
+    try { drawItemBody(ctx, it, scale); } finally { ctx.restore(); }
+  }
+
+  function drawItemBody(ctx, it, scale) {
     ctx.strokeStyle = it.c || '#0D2149';
     ctx.fillStyle = it.c || '#0D2149';
     ctx.lineWidth = it.w || 3;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+
+    /* Написане учнем видно як учнівське. Позначка by:'student' ставилася
+       давно, але ніде не читалася, тож на дошці все виглядало однаково —
+       і відрізнити свій запис від учнівського було неможливо.
+       Не перефарбовуємо: колір міг обрати сам учень. Замість цього легкий
+       ореол — його видно на будь-якому кольорі й він не заважає читати. */
+    if (it.by === 'student') {
+      ctx.shadowColor = 'rgba(147, 51, 234, .55)';
+      ctx.shadowBlur = 9 / (scale || 1);
+    }
 
     var i, x, y, w, h;
 

@@ -800,6 +800,37 @@ a { color: inherit; text-decoration: none; }
   .pie__chart { align-self: center; }
 }
 
+/* Дві незалежні позначки уроку: проведено й оплачено */
+.marks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.mark {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: border-color .14s, background .14s;
+  user-select: none;
+}
+.mark:hover { border-color: var(--brand-300); }
+.mark input { position: absolute; opacity: 0; pointer-events: none; }
+.mark__box {
+  flex: 0 0 22px; width: 22px; height: 22px;
+  border-radius: 7px;
+  border: 1.5px solid var(--line);
+  display: grid; place-items: center;
+  color: transparent;
+  transition: background .14s, border-color .14s, color .14s;
+}
+.mark__t { font-size: 13.5px; font-weight: 650; }
+.mark__sum {
+  margin-left: auto; font-size: 12.5px; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.mark.is-on { border-color: var(--green); background: var(--green-bg); }
+.mark.is-on .mark__box { background: var(--green); border-color: var(--green); color: #fff; }
+.mark.is-on .mark__sum { color: #0A6B44; }
+@media (max-width: 480px) { .marks { grid-template-columns: 1fr; } }
+
 /* Загальний дохід за місяць: дві мірки поруч */
 /* Дві рівноправні мірки одного доходу — жодна не другорядна */
 .tot__row {

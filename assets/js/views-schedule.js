@@ -8,7 +8,14 @@
 
   var HOUR_PX = 64;          // висота однієї години
   var SNAP_MIN = 15;         // крок прилипання під час перетягування
-  var DEFAULT_FROM = 8, DEFAULT_TO = 21;
+  /* Повна доба. Раніше сітка починалася о 8:00 і закінчувалася о 21:00, і
+     заняття поза цими межами доводилося ловити розтягуванням. Тепер видно
+     весь день, а щоб не гортати щоразу з ночі, після відкриття сітка сама
+     стає на робочі години — див. scrollToWork(). */
+  var DEFAULT_FROM = 0, DEFAULT_TO = 24;
+
+  // куди прокрутити сітку одразу після показу
+  var WORK_FROM = 8;
 
   /* ============================================================
      Дрібні помічники
@@ -240,19 +247,6 @@
       function (l) { return (l.duration || 60) / 60; });
     var weekUAH = window.Rates ? window.Rates.sumToUAH(money) : null;
 
-    var tmpl = S.students().map(function (s) {
-      var sched = (s.schedule || []).map(function (x) {
-        return '<span class="tmpl-slot">' + U.DAYS_SHORT[x.day % 7] + ' ' + x.time + '</span>';
-      }).join('');
-      return '<button class="list__item list__item--btn" data-act="student-edit" data-arg="' + s.id + '">' +
-        C.avatar(s, 28) +
-        '<div style="flex:1;min-width:0">' +
-        '<div style="font-weight:650;font-size:13px" class="truncate">' + U.esc(s.name) + '</div>' +
-        '<div class="tmpl-slots">' + (sched || '<span class="muted small">не заданий</span>') + '</div></div>' +
-        icon('edit', 15, 'style="color:var(--muted-2)"') +
-        '</button>';
-    }).join('');
-
     var label = view === 'week'
       ? (off === 0 ? 'Поточний тиждень' : off === 1 ? 'Наступний тиждень' : off === -1 ? 'Минулий тиждень'
          : days[0].getDate() + ' ' + U.MONTHS_GEN[days[0].getMonth()] + ' — ' +
@@ -325,18 +319,39 @@
             '<div class="list">' + upHtml + '</div>' +
           '</div>' +
 
-          '<div class="card card--pad0">' +
-            '<div class="card-head" style="padding:20px 20px 12px;margin:0">' +
-              '<div><h3 class="card-title">Шаблон тижня</h3>' +
-              '<div class="card-sub">постійні слоти учнів</div></div>' +
-              '<button class="btn btn--soft btn--sm spacer" data-act="gen-week">' +
-              icon('sparkles', 14) + '</button>' +
-            '</div>' +
-            '<div class="list">' + (tmpl || C.empty('users', 'Немає учнів', '')) + '</div>' +
-          '</div>' +
+          /* Картки «Шаблон тижня» тут немає навмисно: постійні слоти учня
+             належать його картці, де їх і задають. Окремий перелік лише
+             показував те саме вдруге й підказував, що розклад мислиться
+             тижнями — хоча створювати уроки можна на скільки завгодно
+             наперед кнопкою «Створити за шаблоном» угорі. */
         '</div>') +
       '</div>' +
     '</div>';
+  };
+
+  /**
+   * Сітка показує всю добу, але починати з опівночі безглуздо: там ніколи
+   * нічого немає. Тому одразу після показу прокручуємо до найранішого
+   * уроку дня, а якщо уроків немає — до звичайних робочих годин.
+   *
+   * Робимо це лише коли людина ще не гортала сама: інакше кожне
+   * перемальовування смикало б сітку назад.
+   */
+  V.scrollScheduleToWork = function () {
+    var body = document.querySelector('.cal-body');
+    if (!body || body.dataset.placed) return;
+    body.dataset.placed = '1';
+
+    var first = null;
+    U.$$('.cal-ev', body).forEach(function (el) {
+      var top = parseFloat(el.style.top) || 0;
+      if (first == null || top < first) first = top;
+    });
+
+    var target = first != null
+      ? Math.max(0, first - HOUR_PX / 2)
+      : WORK_FROM * HOUR_PX;
+    body.scrollTop = target;
   };
 
   /* ============================================================

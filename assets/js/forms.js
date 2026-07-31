@@ -310,6 +310,24 @@
       '<div style="font-size:17px;font-weight:750;margin-top:8px">' + U.esc(ls.topic || 'Тема не вказана') + '</div>' +
       '</div>' +
 
+      /* Дві незалежні позначки. Досі проведення й оплата були зчеплені: урок
+         не можна було відмітити проведеним, не зарахувавши гроші, а це
+         звичайна річ — заняття було, платять пізніше. Кнопка внизу лишилась
+         для найчастішого випадку, коли обидва разом. */
+      '<div class="marks">' +
+        '<label class="mark' + (ls.status === 'done' ? ' is-on' : '') + '">' +
+          '<input type="checkbox" data-mark="done"' + (ls.status === 'done' ? ' checked' : '') + '>' +
+          '<span class="mark__box">' + icon('check', 14) + '</span>' +
+          '<span class="mark__t">Проведено</span>' +
+        '</label>' +
+        '<label class="mark' + (ls.paid ? ' is-on' : '') + '">' +
+          '<input type="checkbox" data-mark="paid"' + (ls.paid ? ' checked' : '') + '>' +
+          '<span class="mark__box">' + icon('check', 14) + '</span>' +
+          '<span class="mark__t">Оплачено</span>' +
+          '<span class="mark__sum">' + U.esc(U.money(ls.price || 0, S.lessonCur(ls))) + '</span>' +
+        '</label>' +
+      '</div>' +
+
       (ls.notes ? '<div class="field"><label class="field__label">Конспект</label>' +
         '<div class="pre-wrap small" style="background:var(--blue-50);padding:14px 16px;border-radius:12px">' +
         U.esc(ls.notes) + '</div></div>' : '') +
@@ -334,22 +352,37 @@
           onClick: function () { setTimeout(function () { F.lesson(id); }, 60); } },
         { label: 'Дошка', kind: 'btn--soft', act: 'board', icon: 'board',
           onClick: function () { location.hash = '#/board/' + id; } },
-        ls.status === 'done'
-          ? { label: ls.paid ? 'Скасувати проведення' : 'Відмітити оплату',
-              kind: ls.paid ? 'btn--ghost' : 'btn--primary', act: 'paid',
-              icon: ls.paid ? 'undo' : 'wallet',
-              onClick: function () {
-                if (ls.paid) { S.uncompleteLesson(id); U.toast('Урок знову запланований'); }
-                else { S.setLessonPaid(id, true); U.toast('Оплату зараховано', 'ok'); }
-                refresh();
-              } }
+        // кнопка лише для найчастішого випадку; поодинці — позначками вище
+        (ls.status === 'done' && ls.paid)
+          ? null
           : { label: 'Проведено й оплачено', kind: 'btn--primary', act: 'done', icon: 'check',
               onClick: function () {
                 S.completeLesson(id, true);
                 U.toast('Проведено й оплачено · ' + U.money(ls.price || 0, S.lessonCur(ls)), 'ok');
                 refresh();
               } }
-      ].filter(Boolean)
+      ].filter(Boolean),
+
+      onMount: function (root, close) {
+        U.$$('[data-mark]', root).forEach(function (inp) {
+          inp.addEventListener('change', function () {
+            var on = inp.checked;
+            if (inp.dataset.mark === 'done') {
+              /* Знімаємо проведення — знімаємо й оплату: платять за урок,
+                 якого тепер немає. Ставимо — оплату не чіпаємо. */
+              if (on) { S.completeLesson(id, false); U.toast('Відмічено як проведений', 'ok'); }
+              else { S.uncompleteLesson(id); U.toast('Урок знову запланований'); }
+            } else {
+              S.setLessonPaid(id, on);
+              U.toast(on ? 'Оплату зараховано' : 'Оплату знято', on ? 'ok' : undefined);
+            }
+            refresh();
+            // перевідкриваємо, щоб позначки й кнопка показували новий стан
+            close();
+            setTimeout(function () { F.lessonView(id); }, 60);
+          });
+        });
+      }
     });
   };
 
@@ -915,9 +948,16 @@
   F.generateWeek = function () {
     var monday = U.startOfWeek(U.addDays(new Date(), 7));
     var body =
-      C.field('Тиждень, що починається з', C.input('from', U.ymd(monday), 'type="date"')) +
-      C.field('Скільки тижнів', C.select('weeks', '1', ['1', '2', '3', '4'])) +
-      '<div class="field__hint">Уроки створяться для всіх учнів, у яких заповнений постійний розклад. Дублікати на ту саму дату й час пропускаються.</div>';
+      C.field('Починаючи з', C.input('from', U.ymd(monday), 'type="date"')) +
+      /* Раніше тут був вибір із чотирьох тижнів, і це змушувало повертатися
+         до вікна щомісяця. Поле вільне: скільки треба, стільки й наперед. */
+      C.field('На скільки тижнів вперед',
+        C.input('weeks', 4, 'type="number" min="1" max="104" step="1" list="weeks-list"') +
+        '<datalist id="weeks-list">' +
+        [1, 2, 4, 8, 12, 26, 52].map(function (w) { return '<option value="' + w + '">'; }).join('') +
+        '</datalist>',
+        'Хоч на рік наперед — 52. Уроки можна буде переносити й скасовувати як завжди.') +
+      '<div class="field__hint">Уроки створяться для всіх учнів, у яких заповнений постійний розклад. Учні в архіві пропускаються. Дублікати на ту саму дату й час теж.</div>';
 
     C.modal({
       title: 'Створити уроки за розкладом',
@@ -928,7 +968,7 @@
           onClick: function (root) {
             var v = C.readForm(root);
             var start = U.startOfWeek(v.from);
-            var weeks = +v.weeks || 1;
+            var weeks = U.clamp(+v.weeks || 4, 1, 104);
             var made = 0;
 
             for (var w = 0; w < weeks; w++) {

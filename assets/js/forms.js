@@ -945,6 +945,77 @@
      Згенерувати уроки на тиждень за постійним розкладом
      ============================================================ */
 
+  /* ============================================================
+     Вивантаження оплат
+     ============================================================
+
+     Таблиця для звіту чи податкової. CSV, бо його відкриє і Excel, і
+     Google Таблиці, і будь-що інше — на відміну від нашого формату
+     резервної копії, який зрозуміла б лише сама програма. */
+
+  function csvCell(v) {
+    var s = String(v == null ? '' : v);
+    // кома, лапки й переноси рядків мають бути екрановані, інакше стовпці поїдуть
+    return /[",;\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+
+  F.exportPayments = function () {
+    var today = U.today();
+    var from = new Date(today.getFullYear(), today.getMonth(), 1);
+    var to = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+    C.modal({
+      title: 'Вивантажити оплати',
+      sub: 'таблиця для звіту — відкриється в Excel чи Google Таблицях',
+      body:
+        '<div class="field-row">' +
+          C.field('З', C.input('from', U.ymd(from), 'type="date"')) +
+          C.field('По', C.input('to', U.ymd(to), 'type="date"')) +
+        '</div>' +
+        '<div class="field__hint">Один рядок — одна оплата: дата, учень, сума, валюта, ' +
+        'спосіб і примітка. Суми лишаються у своїй валюті, без переведення — ' +
+        'щоб у звіті стояли ті самі числа, які ви отримали.</div>',
+      buttons: [
+        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+        { label: 'Зберегти файл', kind: 'btn--primary', act: 'go', icon: 'download',
+          onClick: function (root) {
+            var v = C.readForm(root);
+            var a1 = U.toDate(v.from), b1 = U.toDate(v.to);
+            if (!v.from || !v.to || a1 > b1) { U.toast('Перевірте дати', 'err'); return false; }
+
+            var rows = U.sortBy(S.paymentsBetween(a1, b1), function (p) { return p.date; });
+            if (!rows.length) { U.toast('За цей проміжок оплат немає', 'err'); return false; }
+
+            var head = ['Дата', 'Учень', 'Сума', 'Валюта', 'Спосіб', 'Примітка'];
+            var body = rows.map(function (p) {
+              var st = S.get('students', p.studentId);
+              return [
+                p.date.slice(0, 10),
+                st ? st.name : 'Видалений учень',
+                // кома як десятковий роздільник — так очікує українська локаль Excel
+                String(p.amount == null ? '' : p.amount).replace('.', ','),
+                S.paymentCur(p),
+                p.method || '',
+                p.note || ''
+              ].map(csvCell).join(';');
+            });
+
+            /* BOM на початку: без нього Excel читає файл у своєму кодуванні
+               й українські імена перетворюються на кракозябри. */
+            var csv = '﻿' + [head.map(csvCell).join(';')].concat(body).join('\r\n');
+            var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'oplaty-' + v.from + '_' + v.to + '.csv';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+            U.toast('Вивантажено ' + U.pl(rows.length, 'оплату', 'оплати', 'оплат'), 'ok');
+          } }
+      ]
+    });
+  };
+
   F.generateWeek = function () {
     var monday = U.startOfWeek(U.addDays(new Date(), 7));
     var body =

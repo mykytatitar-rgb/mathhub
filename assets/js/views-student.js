@@ -432,8 +432,22 @@
       '<button class="btn btn--soft btn--sm spacer" data-act="lesson-add-for" data-arg="' + st.id + '">' +
       icon('plus', 15) + 'Додати урок</button></div>' +
 
-      '<div class="stack">' +
-      past.map(function (l) { return C.lessonRow(l, numberOf[l.id], { withHw: true }); }).join('') +
+      /* Пошук по темах і конспектах. Історія швидко стає довгою, і питання
+         «на якому уроці ми це розбирали» інакше вирішується гортанням. */
+      (past.length > 4
+        ? '<div class="search-line mb-2">' + icon('search', 16) +
+          '<input class="input" data-lesson-find placeholder="Знайти в темах і конспектах…">' +
+          '<span class="search-line__n" data-lesson-found></span></div>'
+        : '') +
+
+      '<div class="stack" data-lesson-list>' +
+      past.map(function (l) {
+        /* Шукане тримаємо в самому рядку: так фільтрування — це показати
+           або сховати, без перемальовування списку й втрати позиції. */
+        var hay = [l.topic, l.notes, U.fmtDate(l.date)].join(' ').toLowerCase();
+        return '<div data-hay="' + U.esc(hay) + '">' +
+          C.lessonRow(l, numberOf[l.id], { withHw: true }) + '</div>';
+      }).join('') +
       '</div>';
   }
 

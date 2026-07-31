@@ -530,7 +530,10 @@
       title: 'Фінанси',
       sub: U.MONTHS_NOM[today.getMonth()] + ' ' + today.getFullYear() +
         (codes.length > 1 ? ' · ' + U.symbol(code) + ' ' + code : ''),
-      actions: [{ label: 'Записати оплату', icon: 'plus', act: 'pay-add', solid: true }]
+      actions: [
+        { label: 'Вивантажити', icon: 'download', act: 'pay-export' },
+        { label: 'Записати оплату', icon: 'plus', act: 'pay-add', solid: true }
+      ]
     }) +
 
     '<div class="page">' +

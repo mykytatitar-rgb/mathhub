@@ -272,6 +272,7 @@
 
     'pay-add': function (arg) { F.payment(null, arg ? { studentId: arg, lockStudent: true } : {}); },
     'pay-edit': function (arg) { F.payment(arg); },
+    'pay-export': function () { F.exportPayments(); },
 
     'note-add': function (arg) { F.note(null, { studentId: arg }); },
     'note-edit': function (arg) { F.note(arg); },
@@ -517,6 +518,21 @@
   });
 
   document.addEventListener('input', function (e) {
+    /* Пошук по конспектах фільтрує вже намальований список, а не перебудовує
+       сторінку: інакше кожна літера скидала б фокус і позицію прокрутки. */
+    if (e.target.matches && e.target.matches('[data-lesson-find]')) {
+      var q = e.target.value.trim().toLowerCase();
+      var shown = 0;
+      U.$$('[data-hay]').forEach(function (el) {
+        var hit = !q || el.dataset.hay.indexOf(q) > -1;
+        el.hidden = !hit;
+        if (hit) shown++;
+      });
+      var n = document.querySelector('[data-lesson-found]');
+      if (n) n.textContent = q ? U.pl(shown, 'урок', 'уроки', 'уроків') : '';
+      return;
+    }
+
     if (e.target.id === 'stu-search') {
       clearTimeout(App._searchTimer);
       var val = e.target.value;

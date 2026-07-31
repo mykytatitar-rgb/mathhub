@@ -494,9 +494,16 @@
       var dayStart = today.getTime();
       var OPEN = { planned: 1, moved: 1 };
 
-      var future = all.filter(function (x) {
+      /* «Найближчі» — це найближчі. Розклад буває розписаний на місяці
+         наперед, і показувати два десятки однакових рядків означає
+         поховати серед них те єдине, що справді потрібне: коли наступне
+         заняття. Решту згортаємо в один рядок. */
+      var SHOW_NEXT = 5;
+      var futureAll = all.filter(function (x) {
         return OPEN[x.l.status] && x.w.ts >= dayStart;
       });
+      var future = futureAll.slice(0, SHOW_NEXT);
+      var futureRest = futureAll.length - future.length;
       var past = all.filter(function (x) {
         return !(OPEN[x.l.status] && x.w.ts >= dayStart);
       }).reverse();
@@ -536,6 +543,9 @@
             '<h2>Найближчі заняття</h2>' +
             (future.length ? future.map(lesHtml).join('')
                            : '<div class="none">Наступних занять поки не заплановано.</div>') +
+            (futureRest > 0
+              ? '<div class="none">…і ще ' + futureRest + ' далі за розкладом</div>'
+              : '') +
           '</div>' +
 
           (mats.length ? '<div class="pcard">' +

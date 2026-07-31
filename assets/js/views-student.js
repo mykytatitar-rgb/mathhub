@@ -935,7 +935,19 @@
           '<span>Відкривати учневі дошки уроків</span></label>' +
           '<div class="field__hint">' + boardsHint(st) + '</div></div>' +
 
-          (window.V.materialPicker ? window.V.materialPicker(chosen) : ''),
+          (window.V.materialPicker ? window.V.materialPicker(chosen) : '') +
+
+          /* Перевірка очима учня. Без неї переконатися, що портал справді
+             працює і що в ньому немає зайвого, можна лише відкривши
+             посилання в іншому браузері й повіривши очам. */
+          (exists
+            ? '<div class="dim-sep" style="margin:16px 0 12px"></div>' +
+              '<button class="btn btn--ghost btn--sm" data-portal-check>' +
+              icon('eye', 15) + 'Перевірити очима учня</button>' +
+              '<div class="field__hint mt-1">Звернемось до бази без вашого входу — ' +
+              'точно як його сторінка — і покажемо, що саме він побачить.</div>' +
+              '<div data-portal-check-out></div>'
+            : ''),
 
         buttons: [
           { label: 'Закрити', kind: 'btn--ghost', act: 'cancel' }
@@ -989,8 +1001,59 @@
               });
             return false;   // вікно лишаємо відкритим, поки все не доїде
           }
-        }])
+        }]),
+
+        onMount: function (root) {
+          var btn = root.querySelector('[data-portal-check]');
+          if (!btn) return;
+          var out = root.querySelector('[data-portal-check-out]');
+
+          btn.addEventListener('click', function () {
+            btn.disabled = true;
+            out.innerHTML = '<div class="field__hint mt-2">Перевіряю…</div>';
+            var pinEl = root.querySelector('[data-portal-pin]');
+            var pin = pinEl && pinEl.value.trim();
+
+            window.Cloud.portalSelfCheck(token, pin).then(function (r) {
+              btn.disabled = false;
+              out.innerHTML = portalCheckHtml(r);
+            });
+          });
+        }
       });
     });
   };
+
+  /** Людською мовою: що побачив би учень просто зараз. */
+  function portalCheckHtml(r) {
+    if (!r.ok) {
+      var why = {
+        setup: 'У базі ще немає потрібних функцій. Виконайте supabase/schema.sql у SQL Editor.',
+        gone: 'База каже, що такого порталу немає. Натисніть «Оновити», щоб створити його наново.',
+        locked: 'Портал закрито: код вводили неправильно забагато разів. Задайте код наново й збережіть.',
+        pin: 'Код не підійшов. Впишіть його в поле вище й перевірте ще раз — саме його треба дати учневі.',
+        empty: 'Портал є, але порожній. Натисніть «Оновити».',
+        broken: 'Дані порталу пошкоджені. Натисніть «Оновити».',
+        net: 'Не вдалося звернутися до бази. Перевірте інтернет.'
+      }[r.why] || 'Не вдалося перевірити.';
+      return '<div class="guard guard--off mt-2"><span class="guard__dot"></span><span>' +
+        U.esc(why) + '</span></div>';
+    }
+
+    var lines = [
+      'Учень бачить: ' + U.pl(r.lessons, 'заняття', 'заняття', 'занять') +
+        (r.openable ? ', з них ' + r.openable + ' можна відкрити' : ', жодного не можна відкрити'),
+      U.pl(r.materials, 'матеріал', 'матеріали', 'матеріалів'),
+      r.needsPin ? 'Вхід за кодом' : 'Вхід без коду — досить самого посилання'
+    ];
+
+    var money = r.leaks.length
+      ? '<div class="guard guard--off mt-2"><span class="guard__dot"></span><span>' +
+        'Увага: у даних знайдено поля ' + U.esc(r.leaks.join(', ')) +
+        '. Це схоже на фінанси — скажіть мені про це.</span></div>'
+      : '<div class="guard guard--on mt-2"><span class="guard__dot"></span>' +
+        '<span>Грошей у даних немає — ні цін, ні оплат, ні боргів.</span></div>';
+
+    return '<div class="field__hint mt-2">' + U.esc(lines.join(' · ')) + '</div>' + money;
+  }
 })();

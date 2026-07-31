@@ -456,6 +456,67 @@
     });
   };
 
+  /**
+   * Перевірка порталу очима учня.
+   *
+   * Ходить у базу БЕЗ вашого входу — лише з публічним ключем, точно як
+   * сторінка учня. Тому перевіряється справжній шлях, а не наше уявлення
+   * про нього: чи пускає код, що саме віддається, і чи не просочилися гроші.
+   *
+   * Потрібно тому, що інакше єдиний спосіб переконатися — відкривати
+   * посилання в іншому браузері й вірити очам.
+   */
+  Cloud.portalSelfCheck = function (token, pin) {
+    var base = Cloud.base();
+    function anon(fn, body) {
+      return fetch(base + '/rest/v1/rpc/' + fn, {
+        method: 'POST',
+        headers: { apikey: cfg.anonKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+    }
+
+    return anon('portal_gate', { p_token: token }).then(function (res) {
+      if (res.status === 404) return { ok: false, why: 'setup' };
+      if (!res.ok) return { ok: false, why: 'net' };
+      return res.json().then(function (rows) {
+        var g = rows && rows[0];
+        if (!g) return { ok: false, why: 'gone' };
+        if (g.locked) return { ok: false, why: 'locked' };
+
+        return anon('portal_read', { p_token: token, p_pin: pin || '' })
+          .then(function (r2) {
+            if (!r2.ok) return { ok: false, why: 'pin', needsPin: g.needs_pin };
+            return r2.json().then(function (rows2) {
+              var row = rows2 && rows2[0];
+              if (!row || !row.data) return { ok: false, why: 'empty' };
+
+              var raw = row.data;
+              var d;
+              try { d = JSON.parse(raw); } catch (e) { return { ok: false, why: 'broken' }; }
+
+              /* Найважливіше в перевірці: переконатися, що грошей там немає.
+                 Шукаємо в сирому тексті, а не в розібраному об'єкті — так
+                 знайдеться й те, про що ми забули. */
+              var leaks = ['price', 'paid', 'amount', 'balance', 'debt', 'payment']
+                .filter(function (k) { return raw.indexOf('"' + k + '"') > -1; });
+
+              return {
+                ok: true,
+                needsPin: g.needs_pin,
+                student: d.student || '',
+                lessons: (d.lessons || []).length,
+                openable: (d.lessons || []).filter(function (l) { return l.url; }).length,
+                materials: (d.materials || []).length,
+                leaks: leaks,
+                updated: d.updated || row.updated_at || ''
+              };
+            });
+          });
+      });
+    }).catch(function () { return { ok: false, why: 'net' }; });
+  };
+
   Cloud.revokePortal = function (token) {
     if (!Cloud.available() || !Cloud.signedIn()) return Promise.resolve();
     return api('/rest/v1/portals?token=eq.' + encodeURIComponent(token), { method: 'DELETE' })

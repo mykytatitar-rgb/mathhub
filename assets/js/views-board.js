@@ -478,7 +478,7 @@
      які уроки треба перевидати.
 
      Підіймати щоразу, коли міняється VIEWER_SCRIPT або розмітка переглядача. */
-  var VIEWER_VERSION = 2;
+  var VIEWER_VERSION = 3;
 
   function scheduleRepublish() {
     if (!cur || !cur.board.share) return;
@@ -2549,6 +2549,10 @@
     var built = buildPayload(board, lesson, student);
     // учневі дозволено писати, якщо репетитор не вимкнув це для цього уроку
     built.payload.canWrite = !(board.share && board.share.readOnly);
+    /* Код уроку потрібен самій сторінці: за ним вона тримає написане учнем
+       у його браузері окремо для кожного уроку. Нового доступу це не дає —
+       код і так стоїть в адресі, за якою сторінку відкривають. */
+    built.payload.token = token;
 
     var matUrls = {};
     var jobs = built.keys.map(function (k) {
@@ -2752,6 +2756,30 @@ VIEWER_SCRIPT +
 'var IMGS={};',
 // MY — написане учнем, ще не влите репетитором; cur — штрих, який малюється зараз
 'var MY={},cur=null,mine=[],erasing=false;',
+
+/* Написане учнем живе в його ж браузері, поки репетитор його не забере.
+   Без цього оновлення сторінки стирало все: MY існував лише в памʼяті, а
+   на сервері лежить знімок дошки репетитора, де записів учня ще немає.
+   Ключ — по коду уроку, щоб різні уроки не змішувалися. */
+/* Без коду уроку не зберігаємо: так буває у файлі, надісланому окремо,
+   і там писати однаково не можна. */
+'var MYKEY=DATA.token?("vektor.my."+DATA.token):null;',
+'function saveMine(){if(!MYKEY)return;',
+'try{localStorage.setItem(MYKEY,JSON.stringify(MY));}catch(e){}}',
+'function loadMine(){',
+'if(!MYKEY)return;',
+'try{var raw=localStorage.getItem(MYKEY);if(raw)MY=JSON.parse(raw)||{};}catch(e){MY={};}',
+/* Те, що репетитор уже влив у дошку, приходить у DATA — тоді свою копію
+   прибираємо, інакше той самий запис малювався б двічі. */
+'var have={};DATA.slides.forEach(function(s){(s.items||[]).forEach(function(it){if(it.id)have[it.id]=1;});});',
+'Object.keys(MY).forEach(function(k){',
+'MY[k]=(MY[k]||[]).filter(function(it){return it&&it.id&&!have[it.id];});',
+'if(!MY[k].length)delete MY[k];});',
+// картинки треба перезавантажити: у памʼяті їх уже немає
+'Object.keys(MY).forEach(function(k){MY[k].forEach(function(it){',
+'if(it.t==="i"&&it.src&&!IMGS[it.k]){var im=new Image();im.onload=function(){draw();};im.src=it.src;IMGS[it.k]=im;}',
+'});});',
+'saveMine();}',
 'var tool="pen",PENC="#E11D48",PENW=3;',
 'var CANW=!!DATA.canWrite;',
 'function seq(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}',
@@ -2876,6 +2904,7 @@ VIEWER_SCRIPT +
 
 'function sidOf(i){var s=DATA.slides[i];return s&&s.id?s.id:null;}',
 'function pushMine(it){if(!MY[idx])MY[idx]=[];MY[idx].push(it);mine.push({s:idx,id:it.id});undone=[];',
+'saveMine();',
 'say({mathhub:"ink",slide:idx,sid:sidOf(idx),item:it});flash();syncUndo();draw();}',
 'function syncUndo(){var u=document.getElementById("undo"),r=document.getElementById("redo");',
 'if(u)u.disabled=!mine.length;if(r)r.disabled=!undone.length;}',
@@ -2885,6 +2914,7 @@ VIEWER_SCRIPT +
 'if(wx>=b.x1-tol&&wx<=b.x2+tol&&wy>=b.y1-tol&&wy<=b.y2+tol){hit=list[i];break;}}',
 'if(!hit)return;MY[idx]=list.filter(function(x){return x.id!==hit.id});',
 'mine=mine.filter(function(m){return m.id!==hit.id});',
+'saveMine();',
 'say({mathhub:"ink-undo",id:hit.id});syncUndo();draw();}',
 
 'cv.addEventListener("pointerdown",function(e){try{cv.setPointerCapture(e.pointerId)}catch(x){}var r=cv.getBoundingClientRect();',
@@ -2944,10 +2974,12 @@ VIEWER_SCRIPT +
 'var arr=MY[last.s]||[];var it=arr.filter(function(x){return x.id===last.id;})[0];',
 'MY[last.s]=arr.filter(function(x){return x.id!==last.id});',
 'if(it)undone.push({s:last.s,item:it});',
+'saveMine();',
 'say({mathhub:"ink-undo",id:last.id});syncUndo();draw();}',
 'function doRedo(){if(!undone.length)return;var back=undone.pop();',
 'if(!MY[back.s])MY[back.s]=[];MY[back.s].push(back.item);',
 'mine.push({s:back.s,id:back.item.id});',
+'saveMine();',
 'say({mathhub:"ink",slide:back.s,sid:sidOf(back.s),item:back.item});syncUndo();draw();}',
 'if(undoB)undoB.onclick=doUndo;',
 'if(redoB)redoB.onclick=doRedo;',
@@ -3030,6 +3062,8 @@ VIEWER_SCRIPT +
 '(d.urls||[]).forEach(function(u){var a=document.createElement("a");a.className="mine";a.href=u;',
 'a.target="_blank";a.rel="noopener";a.innerHTML=\'<img alt="Фото розв\\\'язання">\';',
 'a.querySelector("img").src=u;if(box)box.appendChild(a);});});',
+// спершу повертаємо написане учнем — інакше перший малюнок буде без нього
+'loadMine();',
 'resize();',
 /* Якщо обгортка передала, де учень був до оновлення — повертаємось туди,
    а не на початок. Слайд обмежуємо: репетитор міг його видалити. */

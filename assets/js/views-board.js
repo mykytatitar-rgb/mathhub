@@ -60,6 +60,10 @@
 
         '<div class="spacer row" style="gap:8px;flex-wrap:wrap">' +
           '<span class="board-top__saved" data-saved>' + icon('check', 15) + 'Збережено</span>' +
+          /* Стан копії учня. Досі перевидання відбувалося мовчки, і так само
+             мовчки падало: репетитор малював, а учень бачив старе — і жоден
+             з них не міг про це здогадатися. */
+          '<button class="board-top__pub" data-pub data-act="board-republish" hidden></button>' +
           (S.meetUrlFor(lesson.studentId)
             ? '<a class="btn btn--ghost btn--sm" href="' + U.esc(S.meetUrlFor(lesson.studentId)) +
               '" target="_blank" rel="noopener" title="Відкрити зустріч">' +
@@ -181,6 +185,9 @@
        збережений знімок сторінки. */
     if (cur.board.share && cur.board.share.token && cur.board.share.v !== VIEWER_VERSION) {
       scheduleRepublish();
+    } else {
+      // урок уже свіжий — так і кажемо, щоб стан був видно з першої секунди
+      setPubState('ok');
     }
     applyRail();
     renderRail();
@@ -480,12 +487,37 @@
      Підіймати щоразу, коли міняється VIEWER_SCRIPT або розмітка переглядача. */
   var VIEWER_VERSION = 3;
 
+  /**
+   * Показати, що зараз із копією учня.
+   * Кнопки немає взагалі, поки урок не опубліковано — тоді нема про що
+   * звітувати. Помилка лишається на екрані, поки не вдасться відправити.
+   */
+  function setPubState(state, detail) {
+    var el = document.querySelector('[data-pub]');
+    if (!el) return;
+    if (!cur || !cur.board.share || !cur.board.share.token) { el.hidden = true; return; }
+
+    el.hidden = false;
+    el.className = 'board-top__pub is-' + state;
+    if (state === 'sending') {
+      el.innerHTML = icon('clock', 14) + 'Оновлюю в учня…';
+      el.title = 'Надсилаю свіжий вигляд уроку на сторінку учня';
+    } else if (state === 'ok') {
+      el.innerHTML = icon('check', 14) + 'Учень бачить це';
+      el.title = 'Сторінка учня показує те саме, що й ця дошка';
+    } else {
+      el.innerHTML = icon('alert', 14) + 'Учень бачить старе';
+      el.title = 'Не вдалося оновити: ' + (detail || '') + '. Натисніть, щоб спробувати ще раз';
+    }
+  }
+
   function scheduleRepublish() {
     if (!cur || !cur.board.share) return;
     if (!(window.Cloud && Cloud.available() && Cloud.signedIn())) return;
     if (cur.republishTimer) return;                 // одне заплановане перевидання за раз
 
     var wait = Math.max(0, REPUBLISH_MS - (Date.now() - (cur.republishedAt || 0)));
+    setPubState('sending');
     cur.republishTimer = setTimeout(function () {
       cur.republishTimer = null;
       if (!cur || !cur.board.share) return;
@@ -495,8 +527,13 @@
       publishLesson(cur.board, l, st, cur.board.share.token).then(function () {
         if (cur && cur.lessonId === lessonId) cur.republishedAt = Date.now();
         cur.board.share.v = VIEWER_VERSION;
+        setPubState('ok');
       }).catch(function (e) {
+        /* Раніше помилка йшла лише в консоль — тобто нікуди. Тепер вона
+           на видноті: інакше репетитор упевнений, що учень бачить свіже,
+           хоча в того досі старий знімок. */
         console.warn('Не вдалося оновити урок для учня:', e && e.message);
+        setPubState('fail', e && e.message ? e.message : 'немає звʼязку');
       });
     }, wait);
   }
@@ -1452,6 +1489,13 @@
     'board-redo': function () { cur.engine.redo(); refreshUndo(); refreshEmpty(); scheduleThumb(); },
     'board-image': function () { document.querySelector('[data-img-input]').click(); },
     'board-rail-toggle': function () { toggleRail(); },
+    /* Повторна спроба вручну. Потрібна, коли зв'язок пропав саме в мить
+       відправлення: сама собою вона не повториться, бо дошка не змінюється. */
+    'board-republish': function () {
+      if (!cur || !cur.board.share) return;
+      cur.republishedAt = 0;                 // не чекаємо паузу — людина попросила зараз
+      scheduleRepublish();
+    },
     'board-save-view': function () {
       if (cur.engine.saveCurrentView()) {
         flushSave();

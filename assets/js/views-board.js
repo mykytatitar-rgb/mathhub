@@ -183,11 +183,17 @@
     /* Урок, опублікований старішою версією програми, оновлюємо мовчки: учень
        має бачити те саме, що й ми, а сам він на це вплинути не може — у нього
        збережений знімок сторінки. */
-    if (cur.board.share && cur.board.share.token && cur.board.share.v !== VIEWER_VERSION) {
-      scheduleRepublish();
-    } else {
-      // урок уже свіжий — так і кажемо, щоб стан був видно з першої секунди
-      setPubState('ok');
+    if (cur.board.share && cur.board.share.token) {
+      if (!(window.Cloud && Cloud.available() && Cloud.signedIn())) {
+        /* Без синхронізації відправляти нікуди. Кажемо це одразу, а не
+           показуємо зелене «учень бачить це», якого ніхто не перевіряв. */
+        scheduleRepublish();                       // сам виставить причину
+      } else if (cur.board.share.v !== VIEWER_VERSION) {
+        scheduleRepublish();
+      } else {
+        // урок уже свіжий — так і кажемо, щоб стан був видно з першої секунди
+        setPubState('ok');
+      }
     }
     applyRail();
     renderRail();
@@ -508,12 +514,33 @@
     } else {
       el.innerHTML = icon('alert', 14) + 'Учень бачить старе';
       el.title = 'Не вдалося оновити: ' + (detail || '') + '. Натисніть, щоб спробувати ще раз';
+
+      /* Причину показуємо й повідомленням, а не лише в підказці: щоб її
+         побачити, треба було здогадатися навести мишу — а без неї ми обидва
+         лише гадаємо, чому учень бачить старе. Один раз на причину, щоб не
+         сипати те саме при кожному штриху. */
+      if (cur && cur.lastPubFail !== detail) {
+        cur.lastPubFail = detail;
+        U.toast('Учень не отримав оновлення: ' + (detail || 'невідома причина'), 'err');
+      }
     }
+    if (state === 'ok' && cur) cur.lastPubFail = null;
   }
 
   function scheduleRepublish() {
     if (!cur || !cur.board.share) return;
-    if (!(window.Cloud && Cloud.available() && Cloud.signedIn())) return;
+
+    /* Раніше тут був мовчазний вихід. Через це напис лишався зеленим —
+       програма запевняла, що учень бачить свіже, хоча нічого не
+       відправлялося взагалі. */
+    if (!(window.Cloud && Cloud.available())) {
+      setPubState('fail', 'синхронізацію не налаштовано');
+      return;
+    }
+    if (!Cloud.signedIn()) {
+      setPubState('fail', 'ви вийшли з акаунта синхронізації');
+      return;
+    }
     if (cur.republishTimer) return;                 // одне заплановане перевидання за раз
 
     var wait = Math.max(0, REPUBLISH_MS - (Date.now() - (cur.republishedAt || 0)));

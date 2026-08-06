@@ -537,16 +537,40 @@
     });
   };
 
+  /* Поновлення сесії — одне на всіх.
+
+     Публікація уроку шле багато запитів одночасно: кожне фото окремо плюс
+     сам урок. Коли термін токена спливає, вони всі отримують відмову в ту
+     саму мить. Раніше кожен брався поновлювати сесію сам — а Supabase при
+     поновленні видає НОВИЙ токен і гасить старий. Тобто перший запит
+     спрацьовував, а решта надсилали вже недійсний токен і отримували
+     «Сесія втратила чинність». Сесія помирала саме тоді, коли роботи
+     найбільше — на уроці з фотографіями.
+
+     Тепер перший, хто помітив відмову, поновлює сесію, а решта чекають на
+     той самий результат. */
+  var refreshing = null;
+
   function refresh() {
+    if (refreshing) return refreshing;
+
     if (!meta.session || !meta.session.refresh_token) {
       return Promise.reject(new Error('Немає активного входу'));
     }
-    return fetch(cfg.url.replace(/\/+$/, '') + '/auth/v1/token?grant_type=refresh_token', {
+
+    refreshing = fetch(cfg.url.replace(/\/+$/, '') + '/auth/v1/token?grant_type=refresh_token', {
       method: 'POST',
       headers: { apikey: cfg.anonKey, 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh_token: meta.session.refresh_token })
     }).then(function (res) {
-      if (!res.ok) throw new Error('Сесія втратила чинність — увійдіть знову');
+      if (!res.ok) {
+        /* Сервер прямо відмовив — токен більше не чинний. Прибираємо сесію,
+           щоб програма не вдавала, що вхід є: інакше кожна наступна дія
+           мовчки падала б, а в Налаштуваннях стояло б «увійдено». */
+        var e = new Error('Сесія втратила чинність — увійдіть знову');
+        e.expired = true;
+        throw e;
+      }
       return res.json();
     }).then(function (j) {
       meta.session = {
@@ -555,7 +579,15 @@
         email: (j.user && j.user.email) || (meta.session && meta.session.email)
       };
       saveMeta();
+      refreshing = null;
+    }, function (e) {
+      refreshing = null;
+      // на збої мережі сесію не чіпаємо: вона, найпевніше, ще жива
+      if (e && e.expired) { meta.session = null; saveMeta(); setState('signedout'); }
+      throw e;
     });
+
+    return refreshing;
   }
 
   /* ============================================================

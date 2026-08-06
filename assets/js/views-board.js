@@ -538,7 +538,7 @@
       return;
     }
     if (!Cloud.signedIn()) {
-      setPubState('fail', 'ви вийшли з акаунта синхронізації');
+      setPubState('fail', 'сесія скінчилася — увійдіть у Налаштуваннях');
       return;
     }
     if (cur.republishTimer) return;                 // одне заплановане перевидання за раз

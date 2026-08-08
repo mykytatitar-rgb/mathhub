@@ -838,7 +838,28 @@
            Рішення за ВМІСТОМ, а не за прапорцем dirty: прапорець лежить у
            спільному сховищі, і друга вкладка могла його скинути. */
         var mineChanged = locallyChanged();
-        // forceNext — людина щойно щось видалила, і це не втрата, а її намір
+
+        /* Безумовний запобіжник, поставлений після втрати 8 серпня 2026.
+           Якщо серверна версія бідніша за нашу — приймати її не можна навіть
+           тоді, коли за часом вона новіша. Час зміни підіймає будь-яке
+           збереження, зокрема те, що програма робить сама на старті; а от
+           намальоване на дошці з нізвідки не береться.
+
+           Серверна версія при цьому не гине: її тримає тригер у snapshots,
+           і вона доступна в Налаштуваннях. Тобто ціна помилки тут —
+           зайвий рядок в історії, а не втрачений урок.
+
+           forceNext — людина щойно щось видалила свідомо, це не втрата. */
+        var loss = forceNext ? null : serverWouldLose(row);
+        if (loss) {
+          keepBackup('серверна версія була бідніша: ' + loss);
+          meta.rev = row.rev;
+          saveMeta();
+          return push().then(function () {
+            U.toast('На сервері було менше (' + loss + ') — залишено дані з цього пристрою', 'ok');
+          });
+        }
+
         if (mineChanged && localIsNewer(row) && (forceNext || !localLooksTruncated(row))) {
           meta.rev = row.rev;         // підганяємось під серверну нумерацію
           saveMeta();
@@ -919,6 +940,68 @@
       if (gone.length) return true;
     }
     return false;
+  }
+
+  /** Скільки намальованого на дошках, по кожній окремо. */
+  function boardWeight(db) {
+    var out = {};
+    (db.boards || []).forEach(function (b) {
+      var n = 0;
+      (b.slides || []).forEach(function (s) { n += (s.items || []).length; });
+      out[b.id] = { slides: (b.slides || []).length, items: n };
+    });
+    return out;
+  }
+
+  /**
+   * Що зникне, якщо прийняти серверну версію.
+   *
+   * Ця перевірка зʼявилася після втрати 8 серпня 2026: на дошці лежало 1741
+   * намальованих обʼєктів, на сервері — 908, і програма мовчки взяла серверне.
+   * Стара перевірка це пропустила з двох причин, і обидві виправлено тут.
+   *
+   * Перша: вона рахувала учнів, уроки, оплати й домашки, але не дошки. Втрата
+   * годин малювання на уроці не вважалася втратою взагалі.
+   *
+   * Друга, гірша: її питали лише тоді, коли локальна версія «новіша за часом».
+   * Якщо час зміни був невідомий, серверне приймалося без жодної перевірки.
+   * Тепер перевірка безумовна: спершу дивимось, що зникне, і лише потім
+   * вирішуємо.
+   */
+  function serverWouldLose(row) {
+    var mine, theirs;
+    try {
+      mine = JSON.parse(localJSON());
+      theirs = JSON.parse(row.data);
+    } catch (e) { return null; }
+    if (!mine || !theirs) return null;
+
+    var lost = [];
+
+    /* Назви українською: цей рядок іде людині в повідомлення, а не в консоль. */
+    var WHAT = {
+      students: 'учнів', lessons: 'уроків', payments: 'оплат',
+      homeworks: 'домашок', materials: 'матеріалів', notes: 'нотаток'
+    };
+    Object.keys(WHAT).forEach(function (name) {
+      var thereIds = (theirs[name] || []).map(function (x) { return x.id; });
+      var goneN = (mine[name] || []).filter(function (x) {
+        return x.id && thereIds.indexOf(x.id) < 0;
+      }).length;
+      if (goneN) lost.push(goneN + ' ' + WHAT[name]);
+    });
+
+    var mineB = boardWeight(mine), theirsB = boardWeight(theirs);
+    var items = 0, slides = 0;
+    Object.keys(mineB).forEach(function (id) {
+      var t = theirsB[id] || { slides: 0, items: 0 };
+      if (mineB[id].items > t.items) items += mineB[id].items - t.items;
+      if (mineB[id].slides > t.slides) slides += mineB[id].slides - t.slides;
+    });
+    if (slides) lost.push(slides + ' слайдів');
+    if (items) lost.push(items + ' намальованого на дошках');
+
+    return lost.length ? lost.join(', ') : null;
   }
 
   /** Розв'язання конфлікту: залишити локальне або взяти серверне. */

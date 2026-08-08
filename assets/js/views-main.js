@@ -806,6 +806,63 @@
   };
 
   /**
+   * Копії в сховищі браузера й стан захисту від видалення.
+   *
+   * Дописується після рендеру, бо IndexedDB відповідає не миттєво.
+   * Показуємо навіть тоді, коли все добре: людина має бачити, що копії
+   * взагалі є, — інакше вона про них згадає лише тоді, коли пізно.
+   */
+  V.fillVaultAsync = function () {
+    var box = document.querySelector('[data-vault]');
+    if (!box || !window.Vault || !Vault.available()) return;
+
+    function size(n) {
+      if (!n) return '0 Б';
+      return n < 1024 ? n + ' Б'
+           : n < 1048576 ? Math.round(n / 1024) + ' КБ'
+           : (n / 1048576).toFixed(1) + ' МБ';
+    }
+
+    Promise.all([Vault.persist(), Vault.usage(), Vault.list()]).then(function (res) {
+      var p = res[0], use = res[1], list = res[2];
+
+      var state = !p.supported
+        ? '<span class="guard__dot"></span>Браузер не вміє закріплювати сховище — покладаємось на копії'
+        : p.persisted
+          ? '<span class="guard__dot"></span>Сховище закріплене: браузер не зможе стерти дані сайту, ' +
+            'навіть коли на диску стане тісно'
+          : '<span class="guard__dot"></span><b>Сховище не закріплене.</b> Браузер має право стерти ' +
+            'дані сайту під тиском місця. Закріплення дається автоматично, коли сайт додано в закладки ' +
+            'або встановлено як застосунок';
+
+      var room = use && use.quota
+        ? '<div class="field__hint mt-2">Зайнято ' + size(use.used) +
+          ' з доступних ' + size(use.quota) + '.</div>'
+        : '';
+
+      var copies = !list.length
+        ? '<div class="field__hint mt-2">Копій ще немає — перша зʼявиться завтра при відкритті.</div>'
+        : '<div class="field__label" style="margin:10px 0 6px">Копії в цьому браузері · ' + list.length + '</div>' +
+          '<div class="snap-list">' +
+          list.slice(0, 12).map(function (b) {
+            var s = b.sum || {};
+            return '<div class="snap-row">' +
+              '<span class="small">' + U.esc(U.fmtDateTime(new Date(b.at))) + '</span>' +
+              '<span class="small muted">' + (s.lessons || 0) + ' уроків, ' +
+              (s.items || 0) + ' на дошках</span>' +
+              '<button class="btn btn--ghost btn--sm spacer" data-act="vault-restore" ' +
+              'data-arg="' + b.id + '">Повернути</button>' +
+            '</div>';
+          }).join('') + '</div>' +
+          '<div class="field__hint mt-2">Копія відкладається раз на добу при відкритті ' +
+          'та перед кожним прийняттям версії з сервера. Тримаються останні тридцять.</div>';
+
+      box.innerHTML = '<div class="guard ' + (p.persisted ? 'guard--on' : 'guard--off') + '">' +
+        state + '</div>' + room + copies;
+    }).catch(function () { box.remove(); });
+  };
+
+  /**
    * Страхові копії, зроблені перед прийняттям серверної версії.
    * Показуємо лише коли вони є — це аварійний вихід, а не щоденний інструмент.
    */
@@ -972,6 +1029,10 @@
             '<div class="field__hint mt-2">' + (syncOn()
               ? 'Синхронізація вже тримає історію версій на сервері, тому щотижневий експорт більше не обов\'язковий. Файл усе одно корисний: він єдиний працює, коли сервер недоступний, і забирає картинки дошок, яких у синхронізації поки немає.'
               : 'Резервну копію варто робити раз на тиждень. Файл JSON можна перенести на інший комп\'ютер або в інший браузер.') + '</div>' +
+            /* Копії в браузері й стан закріплення сховища. Тут, а не всередині
+               синхронізації: вони працюють і без входу, і саме сюди людина
+               йде, коли щось зникло. */
+            '<div class="mt-2" data-vault></div>' +
           '</div>' +
 
           '<div class="card">' +
@@ -1050,6 +1111,7 @@
     if (route && route.parts && route.parts[0] === 'settings') {
       V.fillSettingsAsync();
       V.fillSyncAsync();
+      V.fillVaultAsync();
     }
     V.hydratePhotos();
     if (V.scrollScheduleToWork) V.scrollScheduleToWork();

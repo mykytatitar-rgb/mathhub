@@ -467,6 +467,23 @@
         'Повернути');
     },
 
+    'vault-restore': function (id) {
+      C.confirm('Повернути цю копію?',
+        'Поточні дані буде замінено копією з памʼяті браузера. Перед заміною теперішня ' +
+        'версія теж відкладеться в копії, тому дію можна відкотити.',
+        function () {
+          U.toast('Повертаю…');
+          window.Cloud.restoreVault(id).then(function () {
+            U.toast('Копію повернуто', 'ok');
+            location.hash = '#/';
+            App.render();
+          }).catch(function (e) {
+            U.toast('Не вдалося повернути: ' + (e && e.message ? e.message : e), 'err');
+          });
+        },
+        'Повернути');
+    },
+
     'sync-restore': function (id) {
       C.confirm('Відновити цю версію?',
         'Поточні дані буде замінено вибраною копією. Сама поточна версія при цьому ' +
@@ -591,6 +608,29 @@
   } catch (e) { console.warn('autoFill:', e); }
   App.render();
   applySidebar();
+
+  /* Захист сховища. Дві дії, обидві мовчазні.
+
+     Перша: просимо браузер вважати дані цього сайту постійними. Без такого
+     дозволу він має право стерти їх цілком, коли на диску стає тісно, —
+     без попередження й без можливості повернути.
+
+     Друга: раз на добу відкладаємо копію бази в IndexedDB. Найгірші втрати
+     трапляються не в момент синхронізації, а тихо, і виявляються за кілька
+     днів — коли трьох копій «перед синхронізацією» вже давно немає. */
+  try {
+    if (window.Vault && Vault.available()) {
+      Vault.persist();
+
+      var DAILY = 'mathhub.vault.daily';
+      var today = new Date().toISOString().slice(0, 10);
+      if (localStorage.getItem(DAILY) !== today) {
+        Vault.put('щоденна копія', JSON.stringify(S.db())).then(function () {
+          try { localStorage.setItem(DAILY, today); } catch (e) {}
+        });
+      }
+    }
+  } catch (e) { console.warn('vault:', e); }
 
   /* Рядок стану синхронізації оновлюємо на місці, без перемальовування сторінки:
      інакше він застигає таким, яким був у момент рендеру. */

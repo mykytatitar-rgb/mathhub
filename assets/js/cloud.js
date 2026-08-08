@@ -156,6 +156,14 @@
   /* Копія локального стану перед тим, як прийняти серверну версію.
      Щоб навіть при найгіршому збігу обставин дані можна було повернути. */
   function keepBackup(reason) {
+    /* Друга копія — в IndexedDB, де місця на порядки більше. У localStorage
+       поміщається три штуки й ті тіснять саму базу; тут їх тридцять.
+       Пишемо в обидва місця: старий список лишається як був, новий переживе
+       і переповнення localStorage, і чистку історії. */
+    try {
+      if (window.Vault && Vault.available()) Vault.put(reason, localJSON());
+    } catch (e) { /* сховище копій не має ламати синхронізацію */ }
+
     try {
       var list = JSON.parse(localStorage.getItem(BACKUP) || '[]');
       list.unshift({ at: new Date().toISOString(), reason: reason || '', data: localJSON() });
@@ -228,6 +236,31 @@
     saveMeta();
     if (window.App && window.App.render) window.App.render();
     return push();
+  };
+
+  /** Те саме, але з копії в IndexedDB — там їх тридцять, а не три. */
+  Cloud.restoreVault = function (id) {
+    if (!window.Vault || !Vault.available()) return Promise.reject(new Error('Сховище копій недоступне'));
+    return Vault.get(id).then(function (rec) {
+      if (!rec || !rec.data) throw new Error('Копію не знайдено');
+      /* Перед заміною відкладаємо теперішнє: людина може обрати не ту копію,
+         і тоді дороги назад не було б. */
+      keepBackup('перед поверненням копії від ' + rec.at);
+      suppress++;
+      try { S.importJSON(rec.data); } finally { suppress--; }
+      meta.hash = 0;
+      meta.dirty = true;
+      saveMeta();
+      if (window.App && window.App.render) window.App.render();
+
+      /* Дані вже повернуто на місце — відправка на сервер лише наздоганяє.
+         Якщо вона не вдалася (немає мережі, не виконано вхід), казати
+         «не вдалося повернути» не можна: людина побачила б помилку там,
+         де насправді все спрацювало. Синхронізація дожене пізніше сама. */
+      return push().catch(function (e) {
+        console.warn('копію повернуто, але відправити не вийшло:', e);
+      });
+    });
   };
 
   function deviceName() {

@@ -112,7 +112,8 @@
 
         '<div class="sel-bar" data-sel-bar hidden></div>' +
 
-        '<input type="file" accept="image/*" data-img-input hidden>' +
+        // multiple — інакше кілька картинок за раз просто не позначити
+        '<input type="file" accept="image/*" multiple data-img-input hidden>' +
         '<input type="file" accept="image/*" multiple data-multi-input hidden>' +
 
         '<div class="board-zoom">' +
@@ -336,9 +337,9 @@
 
     var fileInput = root.querySelector('[data-img-input]');
     fileInput.addEventListener('change', function () {
-      var f = fileInput.files && fileInput.files[0];
+      var fs = Array.prototype.slice.call(fileInput.files || []);
       fileInput.value = '';
-      if (f) insertImageFile(f);
+      if (fs.length) insertImageFiles(fs);
     });
 
     var multiInput = root.querySelector('[data-multi-input]');
@@ -353,12 +354,15 @@
       if (e.target && e.target.matches && e.target.matches('input, textarea')) return;
       var items = e.clipboardData && e.clipboardData.items;
       if (items) {
+        // у буфері може бути кілька картинок — беремо всі
+        var pasted = [];
         for (var i = 0; i < items.length; i++) {
           if (items[i].type && items[i].type.indexOf('image/') === 0) {
             var f = items[i].getAsFile();
-            if (f) { e.preventDefault(); insertImageFile(f); return; }
+            if (f) pasted.push(f);
           }
         }
+        if (pasted.length) { e.preventDefault(); insertImageFiles(pasted); return; }
       }
       // картинки в буфері немає — вставляємо скопійовані об'єкти дошки
       if (cur.engine.hasClipboard()) {
@@ -375,11 +379,13 @@
     cur.drop = function (e) {
       e.preventDefault();
       body.classList.remove('is-dropping');
-      var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-      if (!f) return;
-      // ставимо саме туди, куди відпустили файл
+      // усі перетягнуті файли, а не лише перший
+      var fs = (e.dataTransfer && e.dataTransfer.files)
+        ? Array.prototype.slice.call(e.dataTransfer.files) : [];
+      if (!fs.length) return;
+      // ставимо саме туди, куди відпустили файли
       var r = canvas.getBoundingClientRect();
-      insertImageFile(f, { x: e.clientX - r.left, y: e.clientY - r.top });
+      insertImageFiles(fs, { x: e.clientX - r.left, y: e.clientY - r.top });
     };
     body.addEventListener('dragover', cur.dragOver);
     body.addEventListener('dragleave', cur.dragLeave);
@@ -1335,28 +1341,70 @@
      Вставка картинки
      ============================================================ */
 
-  /** at — необов'язкова точка на полотні; без неї беремо позицію курсора. */
-  function insertImageFile(file, at) {
+  /**
+   * Додати одну або кілька картинок.
+   *
+   * Раніше з кількох файлів бралася лише перша, і решта зникали без жодного
+   * слова — саме звідси «не всі файли зберігаються на дошці». Тепер беремо
+   * всі, по черзі: паралельно вони змагалися б за одну й ту саму позицію.
+   *
+   * at — необов'язкова точка на полотні; без неї беремо позицію курсора.
+   */
+  function insertImageFiles(files, at) {
     if (!cur) return;
     if (!window.ImgStore || !window.ImgStore.available()) {
       U.toast('Браузер не дає зберігати картинки (немає IndexedDB)', 'err');
       return;
     }
-    if (!/^image\//.test(file.type || '')) {
+
+    var list = Array.prototype.slice.call(files || [])
+      .filter(function (f) { return f && /^image\//.test(f.type || ''); });
+
+    if (!list.length) {
       U.toast('Це не картинка — підійдуть PNG, JPG, WebP', 'err');
       return;
     }
+
     // позицію фіксуємо зараз: поки картинка стискається, курсор може зʼїхати
-    var spot = at || (cur.engine.lastPointer ? { x: cur.engine.lastPointer.x, y: cur.engine.lastPointer.y } : null);
-    U.toast('Обробляю картинку…');
-    window.ImgStore.ingest(file).then(function (meta) {
+    var spot = at || (cur.engine.lastPointer
+      ? { x: cur.engine.lastPointer.x, y: cur.engine.lastPointer.y } : null);
+
+    U.toast(list.length > 1
+      ? 'Обробляю ' + U.pl(list.length, 'картинку', 'картинки', 'картинок') + '…'
+      : 'Обробляю картинку…');
+
+    var added = 0, failed = 0, bytes = 0;
+    var chain = Promise.resolve();
+
+    list.forEach(function (file, i) {
+      chain = chain.then(function () {
+        return window.ImgStore.ingest(file).then(function (meta) {
+          if (!cur) return;
+          // кожну наступну зсуваємо, щоб вони не лягали одна на одну
+          var at2 = spot ? { x: spot.x + i * 28, y: spot.y + i * 28 } : null;
+          cur.engine.addImage(meta, at2);
+          added++;
+          bytes += meta.bytes || 0;
+        }).catch(function (e) {
+          failed++;
+          console.warn('Картинка не додалася:', file.name, e && e.message);
+        });
+      });
+    });
+
+    chain.then(function () {
       if (!cur) return;
-      cur.engine.addImage(meta, spot);
       flushSave();
       renderRail();
-      U.toast('Картинку додано · ' + Math.max(1, Math.round(meta.bytes / 1024)) + ' КБ', 'ok');
-    }).catch(function (e) {
-      U.toast('Не вдалося додати картинку: ' + (e && e.message ? e.message : e), 'err');
+      if (added) {
+        U.toast('Додано ' + U.pl(added, 'картинку', 'картинки', 'картинок') +
+          ' · ' + Math.max(1, Math.round(bytes / 1024)) + ' КБ', 'ok');
+      }
+      // про невдачі кажемо окремо: мовчки втрачати файли не можна
+      if (failed) {
+        U.toast('Не вдалося додати ' + U.pl(failed, 'файл', 'файли', 'файлів') +
+          ' — можливо, це не картинки', 'err');
+      }
     });
   }
 

@@ -118,6 +118,7 @@
       payments: [],
       progress: [],   // {id, studentId, topic, level 0..100, updatedAt}
       roadmap: [],    // {id, studentId, title, topic, status, due, note, ord}
+      desk: [],       // мої власні справи: {id, title, note, status, tag}
       materials: [],
       notes: [],
       boards: []      // {id, lessonId, slides:[{id,title,bg,items:[]}], updatedAt}
@@ -890,6 +891,43 @@
       (m.files || []).forEach(function (f) { add(f && f.key); });
     });
     return keys;
+  };
+
+  /* ============================================================
+     Мої справи: те, у чому розбираюся сам
+     ============================================================
+
+     Окрема колекція, а не «учень я сам»: інакше власна робота лізла б у
+     розклад, фінанси й портали. Дошка тут та сама, що й на уроці — вона
+     прив'язується до будь-якого власника за ідентифікатором. */
+
+  S.DESK_STATUS = {
+    open:  { label: 'Розбираюся', badge: 'badge--violet' },
+    stuck: { label: 'Застряг',    badge: 'badge--amber' },
+    done:  { label: 'Розібрався', badge: 'badge--green' }
+  };
+
+  S.deskItems = function () {
+    return U.sortBy(db.desk || [], function (d) { return d.updatedAt || d.createdAt; }, true);
+  };
+
+  S.addDeskItem = function (data) {
+    return S.add('desk', {
+      title: (data && data.title) || '',
+      note: (data && data.note) || '',
+      tag: (data && data.tag) || '',
+      status: (data && data.status) || 'open'
+    });
+  };
+
+  /** Дошка справи разом із самою справою — щоб не лишалося сиріт. */
+  S.removeDeskItem = function (id) {
+    var b = db.boards.filter(function (x) { return x.lessonId === id; })[0];
+    if (b) db.boards = db.boards.filter(function (x) { return x !== b; });
+    db.desk = (db.desk || []).filter(function (d) { return d.id !== id; });
+    S.save();
+    S.gcImages();
+    return true;
   };
 
   /** Прибрати з IndexedDB картинки, які вже нікому не потрібні. */

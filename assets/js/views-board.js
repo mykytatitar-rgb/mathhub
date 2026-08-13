@@ -34,13 +34,18 @@
 
   V.board = function (lessonId) {
     var lesson = S.get('lessons', lessonId);
-    if (!lesson) {
+    /* Дошка обслуговує не лише уроки: та сама потрібна для власних справ.
+       Вона прив'язана до власника за ідентифікатором, тож досить знайти,
+       кому саме належить ця дошка. */
+    var deskItem = lesson ? null : S.get('desk', lessonId);
+
+    if (!lesson && !deskItem) {
       return '<div class="page"><div class="card">' +
-        C.empty('alert', 'Урок не знайдено', 'Можливо, його було видалено.',
+        C.empty('alert', 'Дошку не знайдено', 'Можливо, її було видалено.',
           '<button class="btn btn--primary" data-act="nav" data-arg="#/">На головну</button>') +
         '</div></div>';
     }
-    var st = S.get('students', lesson.studentId);
+    var st = lesson ? S.get('students', lesson.studentId) : null;
 
     var tools = TOOLS.map(function (t) {
       return '<button class="tool-btn' + (t.id === 'pen' ? ' is-active' : '') + '" data-tool="' + t.id +
@@ -54,8 +59,13 @@
         '<button class="icon-btn" data-act="board-exit" title="Вийти з дошки">' + icon('arrowLeft', 20) + '</button>' +
         (st ? C.avatar(st, 32) : '') +
         '<div style="min-width:0">' +
-          '<div class="board-top__title truncate">' + U.esc(lesson.topic || 'Урок без теми') + '</div>' +
-          '<div class="board-top__sub">' + U.esc(st ? st.name : '—') + ' · ' + U.fmtDateTime(lesson.date) + '</div>' +
+          '<div class="board-top__title truncate">' +
+          U.esc(lesson ? (lesson.topic || 'Урок без теми') : (deskItem.title || 'Моя справа')) + '</div>' +
+          '<div class="board-top__sub">' +
+          (lesson
+            ? U.esc((st ? st.name : '—') + ' · ' + U.fmtDateTime(lesson.date))
+            : U.esc('Моя справа' + (deskItem.tag ? ' · ' + deskItem.tag : ''))) +
+          '</div>' +
         '</div>' +
 
         '<div class="spacer row" style="gap:8px;flex-wrap:wrap">' +
@@ -64,7 +74,8 @@
              мовчки падало: репетитор малював, а учень бачив старе — і жоден
              з них не міг про це здогадатися. */
           '<button class="board-top__pub" data-pub data-act="board-republish" hidden></button>' +
-          (S.meetUrlFor(lesson.studentId)
+          // зустріч і поділитися — лише для уроку: власну справу нікому не шлють
+          (lesson && S.meetUrlFor(lesson.studentId)
             ? '<a class="btn btn--ghost btn--sm" href="' + U.esc(S.meetUrlFor(lesson.studentId)) +
               '" target="_blank" rel="noopener" title="Відкрити зустріч">' +
               icon('present', 15) + 'Зустріч</a>' : '') +
@@ -76,11 +87,16 @@
             icon('edit', 15) + '<span data-slide-name>Слайд</span></button>' +
           '<button class="btn btn--ghost btn--sm" data-act="board-bg" title="Фон слайда">' +
             icon('grid', 15) + 'Фон</button>' +
-          '<button class="btn btn--ghost btn--sm" data-act="board-hw" title="Домашнє завдання цього уроку">' +
-            icon('checklist', 15) + 'ДЗ<span data-hw-count></span></button>' +
+          (lesson
+            ? '<button class="btn btn--ghost btn--sm" data-act="board-hw" title="Домашнє завдання цього уроку">' +
+              icon('checklist', 15) + 'ДЗ<span data-hw-count></span></button>'
+            : '') +
           '<button class="btn btn--ghost btn--sm" data-act="board-png">' + icon('image', 15) + 'PNG</button>' +
-          '<button class="btn btn--primary btn--sm" data-act="board-share">' +
-            icon('share', 15) + 'Надіслати учню</button>' +
+          (lesson
+            ? '<button class="btn btn--primary btn--sm" data-act="board-share">' +
+              icon('share', 15) + 'Надіслати учню</button>'
+            : '<button class="btn btn--primary btn--sm" data-act="nav" data-arg="#/desk">' +
+              icon('folder', 15) + 'До моїх справ</button>') +
         '</div>' +
       '</div>' +
 

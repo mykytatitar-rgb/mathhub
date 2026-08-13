@@ -11,7 +11,11 @@
     { hash: '#/schedule',  icon: 'calendar',  label: 'Розклад',   count: function () {
         return S.lessonsOnDay(U.today()).filter(function (l) { return l.status === 'planned'; }).length; } },
     { hash: '#/finance',   icon: 'wallet',    label: 'Фінанси' },
-    { hash: '#/materials', icon: 'folder',    label: 'Матеріали' }
+    { hash: '#/materials', icon: 'folder',    label: 'Матеріали' },
+    /* Власна математика окремо від учнівської: те, у чому розбираєшся сам,
+       не має домішуватися в розклад, фінанси й портали. */
+    { hash: '#/desk',      icon: 'compass',   label: 'Моє',       count: function () {
+        return (S.deskItems() || []).filter(function (d) { return d.status !== 'done'; }).length; } }
   ];
 
   /* ============================================================
@@ -197,6 +201,8 @@
           html = V.finance(route.query); break;
         case 'materials':
           html = V.materials(route.query); break;
+        case 'desk':
+          html = V.desk(route.query); break;
         case 'settings':
           html = V.settings(); break;
         default:
@@ -290,6 +296,15 @@
     'roadmap-up':     function (arg) { V.roadmapMove(arg, -1); },
     'roadmap-down':   function (arg) { V.roadmapMove(arg, 1); },
     'roadmap-adopt':  function (arg) { V.roadmapAdopt(arg); },
+
+    'desk-add':    function () { F.deskItem(null); },
+    'desk-edit':   function (arg) { F.deskItem(arg); },
+    'desk-open':   function (arg) {
+      // дошка створюється на місці: справа без неї сенсу не має
+      S.ensureBoard(arg);
+      location.hash = '#/board/' + arg;
+    },
+    'desk-status': function (arg) { V.deskCycle(arg); },
     'gen-week': function () { F.generateWeek(); },
 
     'tab': function (arg) {
@@ -298,6 +313,7 @@
     },
     'filter-goal': function (arg) { setQuery({ goal: arg }); },
     'filter-topic': function (arg) { setQuery({ topic: arg }); },
+    'filter-tag': function (arg) { setQuery({ tag: arg }); },
     'filter-cur': function (arg) { setQuery({ cur: arg }); },
     'week': function (arg) { setQuery({ w: arg === '0' ? '' : arg }); },
     'cal-view': function (arg) { setQuery({ v: arg === 'week' ? '' : arg, off: '' }); },

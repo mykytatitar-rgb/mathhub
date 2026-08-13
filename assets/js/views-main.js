@@ -617,6 +617,87 @@
      Матеріали
      ============================================================ */
 
+  /* ============================================================
+     Моє: власна математика
+     ============================================================
+
+     Те, у чому репетитор розбирається сам. Окремо від учнів навмисно:
+     інакше власна справа лізла б у розклад, фінанси й портал учня.
+     Дошка тут та сама, що й на уроці — з усіма фігурами й побудовами. */
+
+  V.deskCycle = function (id) {
+    var order = ['open', 'stuck', 'done'];
+    var d = S.get('desk', id);
+    if (!d) return;
+    var next = order[(order.indexOf(d.status || 'open') + 1) % order.length];
+    S.update('desk', id, { status: next });
+    U.toast(S.DESK_STATUS[next].label);
+    App.render();
+  };
+
+  V.desk = function (query) {
+    var tag = (query && query.tag) || '';
+    var all = S.deskItems();
+    var list = tag ? all.filter(function (d) { return d.tag === tag; }) : all;
+
+    var tags = [];
+    all.forEach(function (d) { if (d.tag && tags.indexOf(d.tag) < 0) tags.push(d.tag); });
+
+    var chips = tags.length
+      ? '<div class="row row--wrap mb-3" style="gap:9px">' +
+        '<button class="chip' + (tag ? '' : ' is-active') + '" data-act="filter-tag" data-arg="">' +
+        'Усі <span style="opacity:.6">' + all.length + '</span></button>' +
+        tags.map(function (t) {
+          return '<button class="chip' + (tag === t ? ' is-active' : '') +
+            '" data-act="filter-tag" data-arg="' + U.esc(t) + '">' + U.esc(t) + '</button>';
+        }).join('') + '</div>'
+      : '';
+
+    var cards = list.map(function (d) {
+      var meta = S.DESK_STATUS[d.status] || S.DESK_STATUS.open;
+      var bs = S.boardStats(d.id);
+      return '<div class="card desk">' +
+        '<div class="row" style="gap:10px;align-items:flex-start">' +
+          '<div style="flex:1;min-width:0">' +
+            '<div class="desk__t">' + U.esc(d.title || 'Без назви') + '</div>' +
+            '<div class="row row--wrap" style="gap:7px;margin-top:7px">' +
+              C.badge(meta.label, meta.badge) +
+              (d.tag ? '<span class="muted small">' + U.esc(d.tag) + '</span>' : '') +
+              (bs && !bs.empty
+                ? '<span class="muted small">' + U.pl(bs.slides, 'слайд', 'слайди', 'слайдів') + '</span>'
+                : '<span class="muted small">дошка порожня</span>') +
+            '</div>' +
+          '</div>' +
+          '<button class="icon-btn" data-act="desk-status" data-arg="' + d.id + '" ' +
+            'title="Змінити стан">' + icon('check', 16) + '</button>' +
+          '<button class="icon-btn" data-act="desk-edit" data-arg="' + d.id + '" ' +
+            'title="Редагувати">' + icon('edit', 16) + '</button>' +
+        '</div>' +
+        (d.note ? '<div class="desk__n">' + U.esc(d.note) + '</div>' : '') +
+        '<button class="btn btn--soft btn--block mt-2" data-act="desk-open" data-arg="' + d.id + '">' +
+          icon('board', 16) + 'Розбиратися на дошці</button>' +
+      '</div>';
+    }).join('');
+
+    return C.hero({
+      short: true,
+      title: 'Моє',
+      sub: 'математика, у якій розбираюся сам',
+      actions: [{ label: 'Нова справа', icon: 'plus', act: 'desk-add', solid: true }]
+    }) +
+
+    '<div class="page">' + chips +
+      (list.length
+        ? '<div class="grid grid--auto">' + cards + '</div>'
+        : '<div class="card">' + C.empty('compass', 'Тут порожньо',
+            'Місце для власної математики: тема, у якій хочеться розібратися, ' +
+            'задача, що не піддалася, ідея для уроку. У кожної справи своя дошка — ' +
+            'та сама, що й на уроці, з фігурами й побудовами.',
+            '<button class="btn btn--primary" data-act="desk-add">' +
+            icon('plus', 16) + 'Створити першу</button>') + '</div>') +
+    '</div>';
+  };
+
   V.materials = function (query) {
     var topic = query.topic || '';
     var all = S.db().materials;

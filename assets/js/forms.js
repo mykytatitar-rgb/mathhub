@@ -946,6 +946,72 @@
      ============================================================ */
 
   /* ============================================================
+     Моя справа
+     ============================================================ */
+
+  F.deskItem = function (id) {
+    var d = id ? S.get('desk', id) : null;
+    var isNew = !d;
+    var data = d || { title: '', note: '', tag: '', status: 'open' };
+
+    // теми, які вже вживалися — щоб не вигадувати назву щоразу
+    var tags = [];
+    S.deskItems().forEach(function (x) { if (x.tag && tags.indexOf(x.tag) < 0) tags.push(x.tag); });
+
+    C.modal({
+      title: isNew ? 'Нова справа' : 'Моя справа',
+      sub: isNew ? 'те, у чому хочеться розібратися' : '',
+      body:
+        C.field('Про що', C.input('title', data.title,
+          'placeholder="Напр. Означення границі через епсилон-дельта"')) +
+        '<div class="field-row">' +
+          C.field('Тема', C.input('tag', data.tag,
+            'list="desk-tags" placeholder="необов’язково"') +
+            '<datalist id="desk-tags">' +
+            tags.concat(S.TOPICS).filter(function (t, i, a) { return a.indexOf(t) === i; })
+              .map(function (t) { return '<option value="' + U.esc(t) + '">'; }).join('') +
+            '</datalist>') +
+          C.field('Стан', C.select('status', data.status,
+            Object.keys(S.DESK_STATUS).map(function (k) {
+              return { value: k, label: S.DESK_STATUS[k].label };
+            }))) +
+        '</div>' +
+        C.field('Нотатка', C.textarea('note', data.note,
+          'placeholder="Що саме незрозуміло, де застряг, що вже пробував"')),
+      buttons: [
+        !isNew ? { label: 'Видалити', kind: 'btn--danger', act: 'del', close: true, onClick: function () {
+          C.confirm('Видалити справу?',
+            'Разом з нею зникне її дошка з усіма записами. Дію не можна скасувати.',
+            function () {
+              S.removeDeskItem(id);
+              U.toast('Справу видалено');
+              location.hash = '#/desk';
+              refresh();
+            });
+        } } : null,
+        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+        { label: isNew ? 'Створити' : 'Зберегти', kind: 'btn--primary', act: 'save', icon: 'check',
+          onClick: function (root) {
+            var v = C.readForm(root);
+            if (!v.title) { U.toast('Впишіть, про що справа', 'err'); return false; }
+            if (isNew) {
+              var made = S.addDeskItem(v);
+              /* Одразу на дошку: справу створюють, щоб розбиратися, а не
+                 щоб дивитися на неї в списку. */
+              S.ensureBoard(made.id);
+              U.toast('Створено — розбираймося', 'ok');
+              location.hash = '#/board/' + made.id;
+              return;
+            }
+            S.update('desk', id, v);
+            U.toast('Збережено', 'ok');
+            refresh();
+          } }
+      ].filter(Boolean)
+    });
+  };
+
+  /* ============================================================
      Вивантаження оплат
      ============================================================
 

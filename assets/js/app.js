@@ -483,6 +483,34 @@
         'Повернути');
     },
 
+    /* Чесна перевірка картинок: не «є ключ у сховищі», а справжня спроба
+       прочитати файл. Читання перехоплене синхронізацією, тож те, що лежить
+       на сервері, дорогою підтягнеться до себе — перевірка заразом і лікує. */
+    'check-images': function (_a, el) {
+      if (!window.ImgStore || !ImgStore.available()) return;
+      var keys = S.usedImageKeys();
+      if (el) { el.disabled = true; el.textContent = 'Перевіряю…'; }
+
+      var missing = [];
+      var i = 0;
+      function step() {
+        if (i >= keys.length) {
+          if (el) { el.disabled = false; el.textContent = 'Перевірити картинки'; }
+          if (!missing.length) U.toast('Усі ' + keys.length + ' картинок на місці', 'ok');
+          else U.toast('Не знайшлося: ' + U.pl(missing.length, 'картинка', 'картинки', 'картинок') +
+            ' з ' + keys.length + '. Спробуйте імпорт з файлу резервної копії', 'err');
+          if (V.fillHealthAsync) V.fillHealthAsync();
+          return;
+        }
+        var k = keys[i++];
+        ImgStore.get(k).then(function (blob) {
+          if (!blob) missing.push(k);
+          step();
+        }, function () { missing.push(k); step(); });
+      }
+      step();
+    },
+
     'vault-restore': function (id) {
       C.confirm('Повернути цю копію?',
         'Поточні дані буде замінено копією з памʼяті браузера. Перед заміною теперішня ' +

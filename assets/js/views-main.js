@@ -886,6 +886,147 @@
       '</div>';
   };
 
+  /* ============================================================
+     Чи все ціле
+     ============================================================
+
+     Досі про втрату дізнавалися останніми: дошка порожня, учень бачить
+     старе, картинка не відкривається — і все це виявлялося випадково, вже
+     після того, як сталося. Ця картка збирає такі перевірки в одне місце,
+     щоб питання «чи все на місці» мало відповідь до того, як щось зникне,
+     а не після. */
+
+  V.healthCard = function () {
+    return '<div class="card">' +
+      '<div class="card-head"><div><h3 class="card-title">Чи все ціле</h3>' +
+      '<div class="card-sub">перевірки, які видно з одного погляду</div></div></div>' +
+      '<div data-health class="muted">Перевіряю…</div>' +
+      '</div>';
+  };
+
+  /** Один рядок перевірки з кольоровою позначкою. */
+  function healthRow(tone, title, text) {
+    return '<div class="guard guard--' + tone + '" style="align-items:flex-start">' +
+      '<span class="guard__dot" style="margin-top:6px"></span>' +
+      '<span><b>' + U.esc(title) + '</b><br>' + text + '</span></div>';
+  }
+
+  V.fillHealthAsync = function () {
+    var box = document.querySelector('[data-health]');
+    if (!box) return;
+
+    var db = S.db();
+    var jobs = [
+      window.BoardHistory && BoardHistory.available()
+        ? BoardHistory.stats() : Promise.resolve(null),
+      window.ImgStore && ImgStore.available()
+        ? ImgStore.keys() : Promise.resolve(null)
+    ];
+
+    Promise.all(jobs).then(function (res) {
+      var hist = res[0], localKeys = res[1];
+      var out = '';
+
+      /* 1. Синхронізація. Тут коротко й по суті: подробиці — вище в картці
+         синхронізації, сюди людина йде по відповідь «так чи ні». */
+      if (!window.Cloud || !Cloud.available()) {
+        out += healthRow('warn', 'Синхронізація не налаштована',
+          'Дані живуть лише в цьому браузері. Якщо він зникне — зникнуть і вони. ' +
+          'Копії в браузері та експорт у файл поки що єдиний захист.');
+      } else if (!Cloud.signedIn()) {
+        out += healthRow('warn', 'Вихід із синхронізації',
+          'Зміни залишаються тут і на сервер не їдуть. Учні свіжого не побачать. ' +
+          'Увійдіть у картці синхронізації вище.');
+      } else {
+        var s = Cloud.status();
+        out += healthRow('on', 'Синхронізація працює',
+          'Останнє оновлення — ' + (s.lastSync ? U.esc(U.fmtDateTime(s.lastSync)) : 'ще не було') +
+          (s.dirty ? '. Є зміни, які зараз відправляються.' : '.'));
+      }
+
+      /* 2. Історія дошок — та сама, з якої можна повернути втрачене. */
+      var filled = db.boards.filter(function (b) {
+        return (b.slides || []).some(function (sl) { return (sl.items || []).length; });
+      }).length;
+
+      if (!hist) {
+        out += healthRow('warn', 'Історія дошок недоступна',
+          'Цей браузер не дає програмі власного сховища. Відкат дошки тут не працюватиме.');
+      } else if (!hist.total) {
+        out += healthRow('warn', 'Історія дошок поки порожня',
+          'Версії зʼявляться, щойно ви відкриєте дошку. ' +
+          (filled ? 'Непорожніх дошок зараз ' + filled + '.' : ''));
+      } else {
+        out += healthRow('on', 'Дошки можна відкотити',
+          U.pl(hist.total, 'збережена версія', 'збережені версії', 'збережених версій') +
+          ' на ' + U.pl(hist.boards, 'дошці', 'дошках', 'дошках') +
+          ' з ' + filled + ' непорожніх. Кнопка «Історія» — на самій дошці.');
+      }
+
+      /* 3. Що бачить учень. Найгірша з відомих поломок була саме тут:
+         репетитор малює, учень дивиться на старе, і жоден не знає. */
+      var shared = db.boards.filter(function (b) { return b.share && b.share.token; });
+      var log = V.publishLog ? V.publishLog() : {};
+      var bad = shared.filter(function (b) {
+        var r = log[b.lessonId];
+        return r && !r.ok;
+      });
+
+      if (!shared.length) {
+        out += healthRow('on', 'Посилань учням не видано',
+          'Перевіряти нічого.');
+      } else if (bad.length) {
+        out += healthRow('off', 'Учень бачить старе: ' +
+          U.pl(bad.length, 'урок', 'уроки', 'уроків'),
+          bad.map(function (b) {
+            var l = S.get('lessons', b.lessonId);
+            var st = l ? S.get('students', l.studentId) : null;
+            var r = log[b.lessonId];
+            return '· ' + U.esc((st ? st.name + ' — ' : '') + (l ? (l.topic || 'урок') : 'урок')) +
+              ' <span class="muted">(' + U.esc(r.err || 'не дійшло') + ')</span>';
+          }).join('<br>') +
+          '<br><span class="muted">Відкрийте дошку такого уроку — вона відправиться сама, ' +
+          'або натисніть на ній «Надіслати учню».</span>');
+      } else {
+        out += healthRow('on', 'Уроки в учнів свіжі',
+          U.pl(shared.length, 'урок відправлено', 'уроки відправлено', 'уроків відправлено') +
+          ' без помилок.');
+      }
+
+      /* 4. Картинки. Місцева нестача ще не втрата: якщо синхронізація
+         увімкнена, файл приїде з сервера при першому ж відкритті. */
+      var used = S.usedImageKeys();
+      if (!localKeys) {
+        out += healthRow('warn', 'Сховище картинок недоступне',
+          'Картинки на дошках у цьому браузері не збережуться.');
+      } else {
+        var have = {};
+        localKeys.forEach(function (k) { have[k] = 1; });
+        var absent = used.filter(function (k) { return !have[k]; });
+
+        if (!used.length) {
+          out += healthRow('on', 'Картинок ще немає', 'Перевіряти нічого.');
+        } else if (!absent.length) {
+          out += healthRow('on', 'Усі картинки на місці',
+            U.pl(used.length, 'файл', 'файли', 'файлів') + ' у сховищі браузера.');
+        } else {
+          out += healthRow('warn', 'Не всі картинки лежать у цьому браузері',
+            'Не знайшлося ' + absent.length + ' з ' + used.length + '. ' +
+            'Найімовірніше, їх додали з іншого пристрою — ' +
+            'тоді вони приїдуть із сервера при відкритті. ' +
+            'Щоб перевірити напевно, натисніть кнопку нижче.' +
+            '<div class="mt-2"><button class="btn btn--ghost btn--sm" data-act="check-images">' +
+            'Перевірити картинки</button></div>');
+        }
+      }
+
+      box.className = '';
+      box.innerHTML = out;
+    }).catch(function () {
+      box.innerHTML = '<div class="field__hint">Перевірку не вдалося виконати.</div>';
+    });
+  };
+
   /**
    * Копії в сховищі браузера й стан захисту від видалення.
    *
@@ -1116,6 +1257,8 @@
             '<div class="mt-2" data-vault></div>' +
           '</div>' +
 
+          V.healthCard() +
+
           '<div class="card">' +
             '<div class="card-head"><div><h3 class="card-title">Що зараз у базі</h3></div></div>' +
             '<div class="grid grid--2" style="gap:12px">' +
@@ -1193,6 +1336,7 @@
       V.fillSettingsAsync();
       V.fillSyncAsync();
       V.fillVaultAsync();
+      V.fillHealthAsync();
     }
     V.hydratePhotos();
     if (V.scrollScheduleToWork) V.scrollScheduleToWork();

@@ -447,7 +447,11 @@
       var board = cur.board;
       var l = S.get('lessons', cur.lessonId);
       var st = l ? S.get('students', l.studentId) : null;
-      publishLesson(board, l, st, board.share.token).catch(function (e) {
+      var leavingId = cur.lessonId;
+      publishLesson(board, l, st, board.share.token).then(function () {
+        publogSet(leavingId, true);
+      }, function (e) {
+        publogSet(leavingId, false, e && e.message ? e.message : 'немає звʼязку');
         console.warn('Не вдалося оновити урок для учня при виході:', e && e.message);
       });
     }
@@ -563,10 +567,12 @@
        програма запевняла, що учень бачить свіже, хоча нічого не
        відправлялося взагалі. */
     if (!(window.Cloud && Cloud.available())) {
+      publogSet(cur.lessonId, false, 'синхронізацію не налаштовано');
       setPubState('fail', 'синхронізацію не налаштовано');
       return;
     }
     if (!Cloud.signedIn()) {
+      publogSet(cur.lessonId, false, 'сесія скінчилася');
       setPubState('fail', 'сесія скінчилася — увійдіть у Налаштуваннях');
       return;
     }
@@ -583,8 +589,10 @@
       publishLesson(cur.board, l, st, cur.board.share.token).then(function () {
         if (cur && cur.lessonId === lessonId) cur.republishedAt = Date.now();
         cur.board.share.v = VIEWER_VERSION;
+        publogSet(lessonId, true);
         setPubState('ok');
       }).catch(function (e) {
+        publogSet(lessonId, false, e && e.message ? e.message : 'немає звʼязку');
         /* Раніше помилка йшла лише в консоль — тобто нікуди. Тепер вона
            на видноті: інакше репетитор упевнений, що учень бачить свіже,
            хоча в того досі старий знімок. */
@@ -774,6 +782,28 @@
      Не частіше ніж раз на хвилину: інакше сорок місць в історії з'їв би
      один урок, і в ній не лишилося б нічого, крім останніх п'яти хвилин. */
   var SNAP_MS = 60000;
+
+  /* ---- Журнал відправлень учню -------------------------------------------
+
+     Позначку «востаннє дійшло» не можна тримати в самій дошці: її запис
+     рахувався б зміною дошки й тягнув би наступне відправлення, а те —
+     наступну позначку, і так по колу. Тому журнал лежить окремо, у цьому
+     браузері, і потрібен рівно для одного — щоб у Налаштуваннях було видно,
+     чи бачить учень свіже, не відкриваючи кожен урок. */
+  var PUBLOG = 'vektor.publog.v1';
+
+  function publogAll() {
+    try { return JSON.parse(localStorage.getItem(PUBLOG) || '{}'); } catch (e) { return {}; }
+  }
+
+  function publogSet(lessonId, ok, err) {
+    if (!lessonId) return;
+    var m = publogAll();
+    m[lessonId] = { at: new Date().toISOString(), ok: ok ? 1 : 0, err: err || '' };
+    try { localStorage.setItem(PUBLOG, JSON.stringify(m)); } catch (e) {}
+  }
+
+  V.publishLog = publogAll;
 
   /** Повертає обіцянку: знімок уже в сховищі. Потрібно тим, хто одразу читає список. */
   function snapshot(force) {
@@ -2529,6 +2559,7 @@
         token: token, at: new Date().toISOString(), materials: mats, v: VIEWER_VERSION
       };
       cur.republishedAt = Date.now();
+      publogSet(cur.lessonId, true);
       markDirty(); flushSave();
       // копіюємо одразу: людина щойно натиснула кнопку, отже дозвіл є
       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -2542,6 +2573,7 @@
       }
       return url;
     }).catch(function (e) {
+      publogSet(cur && cur.lessonId, false, e && e.message ? e.message : 'немає звʼязку');
       U.toast('Не вдалося опублікувати: ' + (e && e.message ? e.message : e), 'err');
     });
   }

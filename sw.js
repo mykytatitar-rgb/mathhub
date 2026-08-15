@@ -26,6 +26,7 @@ var SHELL = [
   './assets/js/forms.js',
   './assets/js/rates.js',
   './assets/js/imagestore.js',
+  './assets/js/boardhistory.js',
   './assets/js/cloudimages.js',
   './assets/js/shapefacts.js',
   './assets/js/constructions.js',

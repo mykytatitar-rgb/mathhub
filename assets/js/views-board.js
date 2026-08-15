@@ -87,6 +87,8 @@
             icon('edit', 15) + '<span data-slide-name>Слайд</span></button>' +
           '<button class="btn btn--ghost btn--sm" data-act="board-bg" title="Фон слайда">' +
             icon('grid', 15) + 'Фон</button>' +
+          '<button class="btn btn--ghost btn--sm" data-act="board-history" ' +
+            'title="Попередні версії цієї дошки">' + icon('refresh', 15) + 'Історія</button>' +
           (lesson
             ? '<button class="btn btn--ghost btn--sm" data-act="board-hw" title="Домашнє завдання цього уроку">' +
               icon('checklist', 15) + 'ДЗ<span data-hw-count></span></button>'
@@ -191,6 +193,10 @@
 
     engine.setSlide(board.slides[0]);
     engine.applyCursor();
+
+    /* Знімок стану, з яким дошку відкрили. Найгірше — коли за урок усе
+       зникло; тоді ця точка й буде тим, до чого повертатись. */
+    snapshot(true);
 
     updateHwCount();
 
@@ -419,6 +425,7 @@
   V.unmountBoard = function () {
     if (!cur) return;
     flushSave();
+    snapshot(true);           // підсумок уроку — в історію обов'язково
     if (cur.keyHandler) window.removeEventListener('keydown', cur.keyHandler);
     if (cur.beforeUnload) window.removeEventListener('beforeunload', cur.beforeUnload);
     if (cur.pasteHandler) window.removeEventListener('paste', cur.pasteHandler);
@@ -758,12 +765,132 @@
     });
   }
 
+  /* ---- Історія дошки -----------------------------------------------------
+
+     Знімок лягає в браузер поруч із самою дошкою й ні від чого не залежить:
+     ні від мережі, ні від входу в акаунт. Це остання лінія — коли зникло
+     просто так, повернути можна самому й одразу, не чекаючи нічиєї допомоги.
+
+     Не частіше ніж раз на хвилину: інакше сорок місць в історії з'їв би
+     один урок, і в ній не лишилося б нічого, крім останніх п'яти хвилин. */
+  var SNAP_MS = 60000;
+
+  /** Повертає обіцянку: знімок уже в сховищі. Потрібно тим, хто одразу читає список. */
+  function snapshot(force) {
+    if (!cur || !window.BoardHistory || !BoardHistory.available()) return Promise.resolve(false);
+    var now = Date.now();
+    if (!force && cur.snapAt && now - cur.snapAt < SNAP_MS) return Promise.resolve(false);
+    cur.snapAt = now;
+    return BoardHistory.save(cur.lessonId, cur.board);
+  }
+
+  /** Список збережених версій із можливістю повернутись до будь-якої. */
+  function historyDialog() {
+    if (!cur) return;
+    if (!window.BoardHistory || !BoardHistory.available()) {
+      U.toast('Цей браузер не вміє зберігати історію дошки', 'err');
+      return;
+    }
+
+    flushSave();
+    /* Спершу записуємо те, що зараз на екрані, і лише потім читаємо список.
+       Інакше читання встигало б раніше за запис — і власна щойно збережена
+       версія у списку не з'являлась. */
+    var boardKey = cur.lessonId;
+    var ready = snapshot(true);
+
+    C.modal({
+      title: 'Історія дошки',
+      sub: 'Версії зберігаються у цьому браузері',
+      wide: true,
+      body:
+        '<p style="line-height:1.65;color:var(--ink-2);margin:4px 0 14px">' +
+        'Знімок робиться при відкритті дошки, далі — не частіше ніж раз на хвилину, ' +
+        'і обов’язково при виході. Зберігаються останні 40 версій кожної дошки. ' +
+        'Перед поверненням поточний стан теж записується, тож відкат можна відкотити.</p>' +
+        '<div data-hist class="muted" style="padding:8px 0">Читаю історію…</div>',
+      buttons: [{ label: 'Закрити', kind: 'btn--ghost', act: 'cancel' }],
+      onMount: function (wrap, close) {
+        var box = wrap.querySelector('[data-hist]');
+
+        ready.then(function () { return BoardHistory.list(boardKey); }).then(function (rows) {
+          if (!rows.length) {
+            box.className = '';
+            box.innerHTML = C.empty('clock', 'Версій поки немає',
+              'Перша з’явиться, щойно ви щось намалюєте.');
+            return;
+          }
+
+          box.className = '';
+          box.innerHTML = '<div class="list">' + rows.map(function (r, i) {
+            return '<div class="list__item">' +
+              '<div style="flex:1;min-width:0">' +
+              '<div class="truncate"><b>' + U.esc(U.fmtDateTime(r.at)) + '</b>' +
+              (i === 0 ? ' ' + C.badge('зараз', 'badge--green') : '') + '</div>' +
+              '<div class="muted" style="font-size:12px">' +
+              U.pl(r.slides, 'слайд', 'слайди', 'слайдів') + ' · ' +
+              U.pl(r.items, 'об’єкт', 'об’єкти', 'об’єктів') +
+              (r.images ? ' · ' + U.pl(r.images, 'картинка', 'картинки', 'картинок') : '') +
+              '</div></div>' +
+              (i === 0 ? '' :
+                '<button class="btn btn--ghost btn--sm" data-restore="' + r.id + '">' +
+                'Повернути</button>') +
+              '</div>';
+          }).join('') + '</div>';
+
+          U.$$('[data-restore]', box).forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              var id = Number(btn.getAttribute('data-restore'));
+              btn.disabled = true;
+              BoardHistory.get(id).then(function (snap) {
+                if (!snap || !snap.slides || !snap.slides.length) {
+                  U.toast('Цю версію не вдалося прочитати', 'err');
+                  btn.disabled = false;
+                  return;
+                }
+                restoreVersion(snap);
+                close();
+              });
+            });
+          });
+        });
+      }
+    });
+  }
+
+  /**
+   * Повернути дошку до збереженої версії.
+   *
+   * Замінюємо тільки вміст: сама дошка, її ідентифікатор і посилання для учня
+   * лишаються теперішніми. Інакше відкат воскрешав би старий токен — і учень
+   * опинявся б на сторінці, якої вже немає.
+   */
+  function restoreVersion(snap) {
+    snapshot(true);                             // щоб і сам відкат можна було відкотити
+    cur.board.slides = snap.slides;
+    cur.index = 0;
+    cur.thumbs = {};
+    cur.snapAt = 0;                             // нова версія має потрапити в історію
+    cur.engine.setSlide(cur.board.slides[0]);
+    markDirty();
+    flushSave();
+    renderRail();
+    updateZoom();
+    refreshEmpty();
+    refreshUndo();
+    updateSlideName();
+    updateSelBar();
+    scheduleThumb();
+    U.toast('Дошку повернуто до збереженої версії', 'ok');
+  }
+
   function flushSave() {
     if (!cur || !cur.dirty) return;
     if (cur.saveTimer) { clearTimeout(cur.saveTimer); cur.saveTimer = null; }
     try {
       S.saveBoard(cur.board);
       cur.dirty = false;
+      snapshot(false);
       scheduleRepublish();
       var el = document.querySelector('[data-saved]');
       if (el) { el.classList.remove('is-dirty'); el.innerHTML = icon('check', 15) + 'Збережено'; }
@@ -1593,6 +1720,7 @@
         U.toast('Цей вигляд слайда стане початковим', 'ok');
       }
     },
+    'board-history': function () { historyDialog(); },
     'board-measures': function () { toggleMeasures(); },
     'board-copy': function () {
       var n = cur.engine.copySelection();

@@ -927,6 +927,7 @@
     db.desk = (db.desk || []).filter(function (d) { return d.id !== id; });
     S.save();
     S.gcImages();
+    if (window.BoardHistory) BoardHistory.drop(id);
     return true;
   };
 
@@ -996,7 +997,11 @@
 
   S.removeBoard = function (lessonId) {
     var i = db.boards.findIndex(function (b) { return b.lessonId === lessonId; });
-    if (i >= 0) { db.boards.splice(i, 1); S.save(); S.gcImages(); return true; }
+    if (i >= 0) {
+      db.boards.splice(i, 1); S.save(); S.gcImages();
+      if (window.BoardHistory) BoardHistory.drop(lessonId);
+      return true;
+    }
     return false;
   };
 

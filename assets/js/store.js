@@ -1052,6 +1052,7 @@
     S.save();
     S.gcImages();
     if (window.BoardHistory) BoardHistory.drop(id);
+    if (window.BoardOps) BoardOps.drop(id);
     if (window.BoardSync) BoardSync.remove(id);
     return true;
   };
@@ -1174,6 +1175,7 @@
     if (i >= 0) {
       db.boards.splice(i, 1); boardsDirty = true; S.save(); S.gcImages();
       if (window.BoardHistory) BoardHistory.drop(lessonId);
+      if (window.BoardOps) BoardOps.drop(lessonId);
       if (window.BoardSync) BoardSync.remove(lessonId);
       return true;
     }

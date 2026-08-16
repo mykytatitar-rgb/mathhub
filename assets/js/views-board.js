@@ -209,7 +209,10 @@
     updateHwCount();
 
     // поки дошка відкрита — забираємо те, що пише учень за посиланням
-    cur.pullTimer = setInterval(pullContributions, PULL_MS);
+    cur.pullTimer = setInterval(function () {
+      pullContributions();
+      pullOps();
+    }, PULL_MS);
 
     /* Урок, опублікований старішою версією програми, оновлюємо мовчки: учень
        має бачити те саме, що й ми, а сам він на це вплинути не може — у нього
@@ -744,6 +747,30 @@
     return Promise.all(jobs).then(function () { return touched; });
   }
 
+  /**
+   * Забрати дії, зроблені деінде, і показати їх тут.
+   *
+   * Не влазимо посеред штриха чи рамки виділення: інакше лінія обірветься
+   * просто під рукою. Дії нікуди не подінуться — заберемо їх наступного
+   * разу, за три секунди.
+   */
+  function pullOps() {
+    if (!cur || !window.BoardOps) return;
+    if (cur.engine.draft || cur.engine.band) return;
+
+    var lessonId = cur.lessonId;
+    BoardOps.pull(lessonId, cur.board).then(function (n) {
+      if (!n || !cur || cur.lessonId !== lessonId) return;
+
+      S.saveBoard(cur.board);
+      if (cur.index >= cur.board.slides.length) cur.index = cur.board.slides.length - 1;
+      cur.engine.setSlide(cur.board.slides[cur.index], true);   // true — лишити масштаб
+      renderRail();
+      refreshEmpty();
+      updateSlideName();
+    });
+  }
+
   function pullContributions() {
     if (!cur || !cur.board.share) return;
     if (!(window.Cloud && Cloud.available() && Cloud.signedIn())) return;
@@ -929,6 +956,10 @@
       S.saveBoard(cur.board);
       cur.dirty = false;
       snapshot(false);
+      /* Журнал дій — те саме збереження, але словами «що саме змінилось».
+         Знімок дошки лишається для швидкого відкриття, а правда про кожен
+         рух лежить у журналі, який уміє тільки дописувати. */
+      if (window.BoardOps) BoardOps.record(cur.lessonId, cur.board);
       scheduleRepublish();
       var el = document.querySelector('[data-saved]');
       if (el) { el.classList.remove('is-dirty'); el.innerHTML = icon('check', 15) + 'Збережено'; }

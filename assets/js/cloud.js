@@ -758,6 +758,18 @@
           handled = !!(window.V && window.V.boardReload && window.V.boardReload());
         } catch (e) { handled = false; }
         if (!handled && window.App && window.App.render) window.App.render();
+
+        /* Документ дошок більше не містить — вони мають власну таблицю.
+           Поки на інших пристроях лишається стара версія програми, їхній
+           документ ще може принести давні дошки; правду беремо з таблиці. */
+        if (window.BoardSync) {
+          BoardSync.pullAll().then(function (n) {
+            if (!n) return;
+            try {
+              if (!(window.V && V.boardReload && V.boardReload()) && window.App) App.render();
+            } catch (e) { /* нічого страшного: дані вже на місці */ }
+          });
+        }
       });
   }
 
@@ -1227,6 +1239,7 @@
     if (!Cloud.signedIn()) { setState('signedout'); return; }
 
     Cloud.syncNow();
+    if (window.BoardSync) BoardSync.start();
   };
 
   window.Cloud = Cloud;

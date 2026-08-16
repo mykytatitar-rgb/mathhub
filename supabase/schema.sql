@@ -733,3 +733,105 @@ revoke all on function public.portal_rev(text)        from public;
 grant execute on function public.portal_gate(text)       to anon, authenticated;
 grant execute on function public.portal_read(text, text) to anon, authenticated;
 grant execute on function public.portal_rev(text)        to anon, authenticated;
+
+
+/* ============================================================
+   Дошки — кожна окремим рядком
+   ============================================================
+
+   Досі вся база їхала одним документом, і дошки були його частиною. Через
+   це запис дошки означав «перепиши все цілком»: помилка в будь-якому
+   іншому місці забирала дошку заразом, а пристрій із давніми даними
+   приносив старе про все одразу.
+
+   Тепер у кожної дошки власний рядок і власний номер версії. Запис дошки
+   не торкається учнів і фінансів, а запис бази не торкається дошок. */
+
+create table if not exists public.boards (
+  owner      uuid        not null default auth.uid() references auth.users(id) on delete cascade,
+  board_id   text        not null,          -- ідентифікатор уроку або власної справи
+  rev        bigint      not null default 1,
+  data       jsonb       not null,
+  updated_at timestamptz not null default now(),
+  device     text,
+  primary key (owner, board_id)
+);
+
+alter table public.boards enable row level security;
+
+drop policy if exists boards_own on public.boards;
+create policy boards_own on public.boards
+  for all to authenticated
+  using (owner = auth.uid())
+  with check (owner = auth.uid());
+
+/* Скільки об'єктів на дошці. Потрібно, щоб відрізнити свідоме стирання
+   від запису, який просто приїхав із давнього пристрою. */
+create or replace function public.board_items(p_data jsonb)
+returns bigint
+language sql
+immutable
+as $$
+  select coalesce(sum(jsonb_array_length(coalesce(s->'items', '[]'::jsonb))), 0)
+  from jsonb_array_elements(coalesce(p_data->'slides', '[]'::jsonb)) as s;
+$$;
+
+/**
+ * Зберегти дошку.
+ *
+ * Повертає новий номер версії, або:
+ *   -1 — на сервері вже новіша версія (хтось зберіг з іншого пристрою);
+ *   -2 — запис знищив би наявні об'єкти, а дозволу на це не давали.
+ *
+ * Друга перевірка — головна. Саме вона робить неможливим те, через що
+ * дошки зникали: тихий запис поверх повної версії порожньою.
+ */
+create or replace function public.save_board(
+  p_board  text,
+  p_rev    bigint,
+  p_data   jsonb,
+  p_device text default null,
+  p_force  boolean default false
+) returns bigint
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  cur     public.boards%rowtype;
+  new_rev bigint;
+begin
+  if auth.uid() is null then
+    raise exception 'Потрібен вхід';
+  end if;
+
+  select * into cur from public.boards
+   where owner = auth.uid() and board_id = p_board;
+
+  if not found then
+    insert into public.boards (owner, board_id, rev, data, device)
+    values (auth.uid(), p_board, 1, p_data, p_device);
+    return 1;
+  end if;
+
+  if cur.rev <> p_rev then
+    return -1;
+  end if;
+
+  if not p_force
+     and public.board_items(cur.data) > 0
+     and public.board_items(p_data) < public.board_items(cur.data) then
+    return -2;
+  end if;
+
+  new_rev := cur.rev + 1;
+  update public.boards
+     set data = p_data, rev = new_rev, updated_at = now(), device = p_device
+   where owner = auth.uid() and board_id = p_board;
+
+  return new_rev;
+end;
+$$;
+
+revoke all on function public.save_board(text, bigint, jsonb, text, boolean) from public;
+grant execute on function public.save_board(text, bigint, jsonb, text, boolean) to authenticated;

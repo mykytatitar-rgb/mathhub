@@ -3,6 +3,15 @@
   'use strict';
 
   var KEY = 'mathhub.db.v1';
+
+  /* Дошки лежать окремо від решти бази — і тут, і на сервері.
+
+     Раніше все було одним документом: кожен штрих на дошці означав «перепиши
+     всю базу цілком». Через це помилка в будь-якому іншому місці забирала
+     дошку заразом, а пристрій із давніми даними приносив старе про все одразу.
+     Тепер запис дошки не торкається учнів і фінансів, а запис бази не
+     торкається дошок. */
+  var BOARDS_KEY = 'mathhub.boards.v1';
   var U = window.U;
 
   var S = {};
@@ -132,6 +141,7 @@
         db = JSON.parse(raw);
         var b = blank();
         Object.keys(b).forEach(function (k) { if (db[k] === undefined) db[k] = b[k]; });
+        adoptBoardsStore(db);
         return db;
       }
     } catch (e) {
@@ -149,6 +159,38 @@
     return db;
   };
 
+  /**
+   * Підставити дошки з їхнього власного сховища.
+   *
+   * Якщо окремого сховища ще немає — це перше відкриття після поділу:
+   * забираємо дошки з документа й одразу відкладаємо їх на нове місце.
+   * Ті, що лишилися в документі, не чіпаємо: вони знадобляться, якщо
+   * доведеться відкрити цю базу старою версією програми.
+   */
+  function adoptBoardsStore(doc) {
+    var stored = null;
+    try {
+      var raw = localStorage.getItem(BOARDS_KEY);
+      if (raw) {
+        var arr = JSON.parse(raw);
+        if (Array.isArray(arr)) stored = arr;
+      }
+    } catch (e) {
+      console.warn('Не вдалося прочитати дошки:', e);
+    }
+
+    if (stored) { doc.boards = stored; return; }
+    doc.boards = Array.isArray(doc.boards) ? doc.boards : [];
+    boardsDirty = true;                       // перенесення запишеться найближчим збереженням
+  }
+
+  /* Дошки серіалізуються окремо й лише коли справді змінилися: інакше
+     збереження одного учня щоразу переписувало б усі дошки цілком. */
+  var boardsDirty = false;
+
+  /** Сказати сховищу, що дошки змінилися повз S.saveBoard. */
+  S.touchBoards = function () { boardsDirty = true; };
+
   /* Хто хоче знати про зміни в базі. Потрібно тому, що портал учня —
      це знімок даних на сервері, і його треба переробляти сам, а не
      чекати, поки репетитор згадає натиснути «Оновити». */
@@ -157,7 +199,13 @@
 
   S.save = function () {
     try {
-      localStorage.setItem(KEY, JSON.stringify(db));
+      var doc = {};
+      Object.keys(db).forEach(function (k) { if (k !== 'boards') doc[k] = db[k]; });
+      localStorage.setItem(KEY, JSON.stringify(doc));
+      if (boardsDirty) {
+        localStorage.setItem(BOARDS_KEY, JSON.stringify(db.boards));
+        boardsDirty = false;
+      }
     } catch (e) {
       U.toast('Не вдалося зберегти дані: ' + e.message, 'err');
     }
@@ -170,23 +218,43 @@
   S.db = function () { return db; };
 
   S.reset = function () {
-    db = seed(); S.save();
+    db = seed(); boardsDirty = true; S.save();
     if (window.ImgStore && window.ImgStore.available()) window.ImgStore.gc([]);
   };
 
   S.wipe = function () {
-    db = blank(); S.save();
+    db = blank(); boardsDirty = true; S.save();
     if (window.ImgStore && window.ImgStore.available()) window.ImgStore.gc([]);
   };
 
   S.exportJSON = function () { return JSON.stringify(db, null, 2); };
 
-  S.importJSON = function (text) {
+  /**
+   * Замінити базу вмістом документа.
+   *
+   * keepBoards — для синхронізації. Документ на сервері дошок більше не
+   * містить: вони їдуть окремо. Без цього прапорця прийняття версії з
+   * іншого пристрою стирало б усі дошки, бо в документі їх просто немає.
+   * Файл резервної копії, навпаки, дошки містить — і має право їх замінити.
+   */
+  S.importJSON = function (text, opts) {
     var parsed = JSON.parse(text);
     if (!parsed || !Array.isArray(parsed.students)) throw new Error('Файл не схожий на резервну копію mathhub');
+
+    /* Порожній список дошок у документі означає не «дошок немає», а
+       «цей документ про дошки не знає». Так виглядає документ, збережений
+       версією програми до поділу сховищ: вона просто не бачила дошок на
+       новому місці. Прийняти таке за правду означало б стерти все
+       намальоване — тобто рівно ту втрату, від якої весь цей поділ. */
+    var incoming = (Array.isArray(parsed.boards) && parsed.boards.length) ? parsed.boards : null;
+    var keep = !!(opts && opts.keepBoards);
+
     var b = blank();
     Object.keys(b).forEach(function (k) { if (parsed[k] === undefined) parsed[k] = b[k]; });
+
+    parsed.boards = (keep || !incoming) ? ((db && db.boards) || []) : incoming;
     db = parsed;
+    boardsDirty = !keep && !!incoming;
     S.save();
   };
 
@@ -664,6 +732,7 @@
       updatedAt: new Date().toISOString()
     };
     db.boards.push(b);
+    boardsDirty = true;
     S.save();
     return b;
   };
@@ -672,7 +741,9 @@
     board.updatedAt = new Date().toISOString();
     var i = db.boards.findIndex(function (b) { return b.id === board.id; });
     if (i < 0) db.boards.push(board);
+    boardsDirty = true;
     S.save();
+    if (window.BoardSync) BoardSync.mark(board.lessonId);
   };
 
   /** Скільки слайдів і об'єктів на дошці уроку (для індикаторів у списках). */
@@ -923,11 +994,12 @@
   /** Дошка справи разом із самою справою — щоб не лишалося сиріт. */
   S.removeDeskItem = function (id) {
     var b = db.boards.filter(function (x) { return x.lessonId === id; })[0];
-    if (b) db.boards = db.boards.filter(function (x) { return x !== b; });
+    if (b) { db.boards = db.boards.filter(function (x) { return x !== b; }); boardsDirty = true; }
     db.desk = (db.desk || []).filter(function (d) { return d.id !== id; });
     S.save();
     S.gcImages();
     if (window.BoardHistory) BoardHistory.drop(id);
+    if (window.BoardSync) BoardSync.remove(id);
     return true;
   };
 
@@ -998,8 +1070,9 @@
   S.removeBoard = function (lessonId) {
     var i = db.boards.findIndex(function (b) { return b.lessonId === lessonId; });
     if (i >= 0) {
-      db.boards.splice(i, 1); S.save(); S.gcImages();
+      db.boards.splice(i, 1); boardsDirty = true; S.save(); S.gcImages();
       if (window.BoardHistory) BoardHistory.drop(lessonId);
+      if (window.BoardSync) BoardSync.remove(lessonId);
       return true;
     }
     return false;

@@ -535,7 +535,7 @@
      які уроки треба перевидати.
 
      Підіймати щоразу, коли міняється VIEWER_SCRIPT або розмітка переглядача. */
-  var VIEWER_VERSION = 3;
+  var VIEWER_VERSION = 4;
 
   /**
    * Показати, що зараз із копією учня.
@@ -3406,6 +3406,46 @@ VIEWER_SCRIPT +
 
 'var picInp=document.getElementById("picinp");',
 'if(picInp)picInp.onchange=function(){addPics(picInp.files);picInp.value="";};',
+
+/* Дії репетитора, що приходять наживо.
+
+   Досі учень бачив урок лише таким, яким його востаннє перевидали. Через
+   це й існувала ціла категорія «учень бачить старе»: перевидання могло не
+   дійти, а помітити це було нічим.
+
+   Тепер сторінка-обгортка читає журнал дій і передає їх сюди, а тут вони
+   лягають на слайди — без перезавантаження й без перевидання.
+
+   Межа проведена свідомо. Наживо застосовуємо те, що стосується об'єктів
+   на наявних слайдах. Поява чи зникнення цілого слайда і нова картинка
+   вимагають повного оновлення: у першому випадку треба перебудувати
+   стрічку, у другому — привезти сам файл, якого в цієї сторінки немає.
+   Тоді просимо обгортку принести урок цілком. */
+'function slById(id){for(var i=0;i<DATA.slides.length;i++)if(DATA.slides[i].id===id)return DATA.slides[i];return null;}',
+'var NEEDFULL=false;',
+'function applyOp(op){if(!op)return false;',
+'if(op.t==="s+"||op.t==="s-"){NEEDFULL=true;return false;}',
+'var sl=slById(op.s);if(!sl)return false;sl.items=sl.items||[];',
+'if(op.t==="s~"){var p=op.p||{};Object.keys(p).forEach(function(k){sl[k]=p[k];});return true;}',
+'if(op.t==="i-"){var kill={};(op.ids||[]).forEach(function(x){kill[x]=1;});',
+'var n0=sl.items.length;sl.items=sl.items.filter(function(it){return !kill[it&&it.id];});',
+'return sl.items.length!==n0;}',
+'if(op.t==="i+"||op.t==="i~"){var it=op.it;if(!it||!it.id)return false;',
+'if(it.t==="i"&&it.k&&!IMGS[it.k]){NEEDFULL=true;return false;}',
+'var at=-1;for(var q=0;q<sl.items.length;q++)if(sl.items[q]&&sl.items[q].id===it.id)at=q;',
+'if(at>=0)sl.items[at]=it;else sl.items.push(it);return true;}',
+'return false;}',
+
+'window.addEventListener("message",function(e){var d=e.data;if(!d||d.mathhub!=="ops")return;',
+'NEEDFULL=false;var ch=0;',
+'(d.ops||[]).forEach(function(op){if(applyOp(op))ch++;});',
+/* Своє, ще не влите репетитором, могло щойно приїхати назад уже його
+   рукою. Лишати обидві копії не можна — на дошці двоїлося б. */
+'if(ch){var have={};DATA.slides.forEach(function(s){(s.items||[]).forEach(function(it){if(it.id)have[it.id]=1;});});',
+'Object.keys(MY).forEach(function(k){MY[k]=(MY[k]||[]).filter(function(it){return it&&it.id&&!have[it.id];});',
+'if(!MY[k].length)delete MY[k];});saveMine();',
+'go(idx,true);}',
+'if(NEEDFULL)say({mathhub:"need-full"});});',
 
 'window.addEventListener("message",function(e){var d=e.data;if(!d||d.mathhub!=="pic-done")return;',
 'if(d.error||!d.items||!d.items.length){flash("Не вдалося надіслати фото");return;}',

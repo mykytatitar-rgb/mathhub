@@ -322,31 +322,14 @@
     var diff = (prev.uah && !prev.partial && !now.partial)
       ? Math.round((now.uah - prev.uah) / prev.uah * 100) : null;
 
-    /* Розділ на кожну валюту, у якій цього місяця справді щось отримано.
-       Найбільша сума йде першою. */
-    var codes = Object.keys(map).filter(function (k) { return Math.abs(map[k]) > 0.005; });
-    codes.sort(function (a, b) { return Math.abs(map[b]) - Math.abs(map[a]); });
+    /* З чого склалася сума — щоб число не виглядало як здогад.
 
-    var cells = codes.map(function (c, i) {
-      return (i ? '<div class="tot__sep"></div>' : '') +
-        '<div class="tot__cell">' +
-          '<div class="tot__k">' + U.esc(inWords(c)) + '</div>' +
-          '<div class="tot__v">' + U.esc(U.money(map[c], c)) + '</div>' +
-        '</div>';
-    }).join('');
-
-    /* Зведена сума — під розділами, а не замість них. Коли валюта одна,
-       переказ у неї ж саму нічого не додає, тож показуємо лише другу мірку. */
-    var one = codes.length === 1 ? codes[0] : null;   // валюту, що вже показана, не повторюємо
-    var both = [];
-    if (one !== 'UAH') both.push(U.money(Math.round(now.uah), 'UAH'));
-    if (inUsd != null && one !== 'USD') both.push(U.money(Math.round(inUsd), 'USD'));
-
-    var together = both.length
-      ? '<div class="tot__parts">' +
-        (one ? 'Це ж за курсом: ' : 'Разом за курсом: ') +
-        U.esc(both.join(' · ')) + '</div>'
-      : '';
+       Пробував виносити цей поділ у великі числа, а зведену суму лишати
+       рядком. Вийшло гірше: заголовок питає «скільки за місяць», а великим
+       стояла частина відповіді. Повне число має бути великим, а поділ —
+       поясненням під ним. */
+    var parts = U.mapSize(map) > 1
+      ? '<div class="tot__parts">' + U.moneyMap(map) + '</div>' : '';
 
     var note;
     if (now.partial) {
@@ -370,13 +353,22 @@
           (diff >= 0 ? '↑ ' : '↓ ') + Math.abs(diff) + '% до минулого</span>'
         : '') +
       '</div>' +
-      /* По розділу на кожну валюту, і в кожному — те, що справді в ній
-         отримано. Раніше тут стояла одна й та сама сума двічі: загальна в
-         гривнях і вона ж у доларах. Формально чесно, бо підпис казав «усі
-         валюти разом», але читалося як два різні заробітки, а справжній
-         поділ тулився дрібним рядком під ними. */
-      '<div class="tot__row">' + cells + '</div>' +
-      together + note +
+      /* Два рівноправні розділи, а не головне число й приписка збоку:
+         дохід той самий, просто виміряний двома мірками. */
+      '<div class="tot__row">' +
+        '<div class="tot__cell">' +
+          '<div class="tot__k">У гривнях</div>' +
+          '<div class="tot__v">' + U.esc(U.money(Math.round(now.uah), 'UAH')) + '</div>' +
+        '</div>' +
+        (inUsd != null
+          ? '<div class="tot__sep"></div>' +
+            '<div class="tot__cell">' +
+              '<div class="tot__k">У доларах</div>' +
+              '<div class="tot__v">' + U.esc(U.money(Math.round(inUsd), 'USD')) + '</div>' +
+            '</div>'
+          : '') +
+      '</div>' +
+      parts + note +
       '</div>';
   }
 
@@ -397,8 +389,16 @@
     return R.toUAH(amount, code);
   }
 
-  function financePies(mStart, mEnd) {
-    var uah = function (v) { return U.money(Math.round(v), 'UAH'); };
+  function financePies(mStart, mEnd, code) {
+    /* Рахуємо в гривнях — інакше сектори різних валют не порівняти між
+       собою. Показуємо в тій валюті, яку обрано перемикачем: частки від
+       цього не змінюються, змінюється лише підпис. Якщо курсу обраної
+       валюти немає, чесніше лишитися в гривнях, ніж ділити на здогад. */
+    var RP = window.Rates;
+    var shown = (code === 'UAH' || (RP && RP.get(code))) ? code : 'UAH';
+    var rate = shown === 'UAH' ? 1 : RP.get(shown);
+    var uah = function (v) { return U.money(Math.round(v / rate), shown); };
+    var inCur = inWords(shown).toLowerCase();
 
     /* 1. Хто приносить дохід */
     var byStudent = {};
@@ -441,7 +441,7 @@
     if (p1) {
       cards.push('<div class="card">' +
         '<div class="card-head"><div><h3 class="card-title">Хто приносить дохід</h3>' +
-        '<div class="card-sub">оплати цього місяця, у гривнях за курсом</div></div></div>' +
+        '<div class="card-sub">оплати цього місяця, ' + U.esc(inCur) + ' за курсом</div></div></div>' +
         p1 + '</div>');
     }
 
@@ -461,7 +461,7 @@
     if (p3) {
       cards.push('<div class="card">' +
         '<div class="card-head"><div><h3 class="card-title">Хто винен</h3>' +
-        '<div class="card-sub">поточна заборгованість, у гривнях за курсом</div></div></div>' +
+        '<div class="card-sub">поточна заборгованість, ' + U.esc(inCur) + ' за курсом</div></div></div>' +
         p3 + '</div>');
     }
 
@@ -599,7 +599,7 @@
           'за урок', 'chart', 'violet') +
       '</div>' +
 
-      financePies(mStart, mEnd) +
+      financePies(mStart, mEnd, code) +
 
       '<div class="grid grid--main mb-3">' +
         '<div class="card">' +

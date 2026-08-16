@@ -956,6 +956,68 @@
      щоб питання «чи все на місці» мало відповідь до того, як щось зникне,
      а не після. */
 
+  /* ============================================================
+     Нагадування в Telegram
+     ============================================================
+
+     Картка навмисно нічого не питає й не налаштовує. Створення бота й його
+     токен — те, що робиться руками один раз і чого програма не має бачити
+     взагалі: токен дає повний доступ до бота, і йому не місце ні в коді,
+     ні в браузері. Тут лише видно, чи все живе, і є чим це перевірити. */
+
+  V.telegramCard = function () {
+    return '<div class="card mt-3">' +
+      '<div class="card-head"><div><h3 class="card-title">Нагадування в Telegram</h3>' +
+      '<div class="card-sub">про уроки — вам, у ваш чат із ботом</div></div></div>' +
+      '<div data-tg class="muted">Перевіряю…</div>' +
+      '</div>';
+  };
+
+  V.fillTelegramAsync = function () {
+    var box = document.querySelector('[data-tg]');
+    if (!box) return;
+
+    if (!window.Cloud || !Cloud.available() || !Cloud.signedIn()) {
+      box.innerHTML = '<div class="field__hint">Спершу потрібна синхронізація: ' +
+        'нагадування шле сервер, а не браузер.</div>';
+      return;
+    }
+
+    Cloud.request('/rest/v1/rpc/tg_status', { method: 'POST', body: '{}' })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (rows) {
+        var st = rows && rows[0];
+        box.className = '';
+
+        if (!st) {
+          /* Різниці між «функції ще немає» і «рядок не заповнено» для людини
+             тут немає: обидва означають «ще не під'єднано». */
+          box.innerHTML =
+            '<div class="guard guard--warn"><span class="guard__dot"></span>' +
+            '<span>Ще не підʼєднано. Це робиться один раз і займає хвилин пʼять — ' +
+            'скажіть мені, і я дам покроково.</span></div>';
+          return;
+        }
+
+        box.innerHTML =
+          '<div class="guard ' + (st.enabled ? 'guard--on' : 'guard--warn') + '">' +
+          '<span class="guard__dot"></span><span>' +
+          (st.enabled
+            ? 'Працюють. Попередження за ' + U.pl(st.hours_ahead, 'годину', 'години', 'годин') +
+              ' до уроку, підсумок дня о ' + st.daily_at + ':00.'
+            : 'Підʼєднано, але вимкнено.') +
+          '</span></div>' +
+          '<div class="field__hint mt-2">Надіслано ' + (st.sent || 0) +
+          ', чекає в черзі ' + (st.queued || 0) + '.</div>' +
+          '<div class="mt-2"><button class="btn btn--ghost btn--sm" data-act="tg-test">' +
+          'Надіслати пробне</button></div>';
+      })
+      .catch(function () {
+        box.className = '';
+        box.innerHTML = '<div class="field__hint">Не вдалося спитати сервер про нагадування.</div>';
+      });
+  };
+
   V.healthCard = function () {
     return '<div class="card">' +
       '<div class="card-head"><div><h3 class="card-title">Чи все ціле</h3>' +
@@ -1379,6 +1441,7 @@
           '</div>' +
 
           V.healthCard() +
+          V.telegramCard() +
 
           '<div class="card">' +
             '<div class="card-head"><div><h3 class="card-title">Що зараз у базі</h3></div></div>' +
@@ -1458,6 +1521,7 @@
       V.fillSyncAsync();
       V.fillVaultAsync();
       V.fillHealthAsync();
+      V.fillTelegramAsync();
     }
     V.hydratePhotos();
     if (V.scrollScheduleToWork) V.scrollScheduleToWork();

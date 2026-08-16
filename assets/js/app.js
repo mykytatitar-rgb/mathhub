@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v23';
+  App.BUILD = 'v24';
   window.APP_BUILD = App.BUILD;
 
   var NAV = [
@@ -549,6 +549,22 @@
         else U.toast('Не вдалося відправити: ' + lastErr, 'err');
         if (V.fillHealthAsync) V.fillHealthAsync();
       });
+    },
+
+    'tg-test': function (_a, el) {
+      if (el) { el.disabled = true; el.textContent = 'Надсилаю…'; }
+      window.Cloud.request('/rest/v1/rpc/tg_test', { method: 'POST', body: '{}' })
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(function (r) {
+          if (el) { el.disabled = false; el.textContent = 'Надіслати пробне'; }
+          if (r === 'надіслано') U.toast('Надіслано — подивіться в Telegram', 'ok');
+          else U.toast('Нагадування ще не підʼєднані', 'err');
+          if (V.fillTelegramAsync) V.fillTelegramAsync();
+        })
+        .catch(function (e) {
+          if (el) { el.disabled = false; el.textContent = 'Надіслати пробне'; }
+          U.toast('Не вийшло: ' + (e && e.message ? e.message : e), 'err');
+        });
     },
 
     'check-images': function (_a, el) {

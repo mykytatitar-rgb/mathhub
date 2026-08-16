@@ -1043,6 +1043,20 @@
           (s.dirty ? '. Є зміни, які зараз відправляються.' : '.'));
       }
 
+      /* 1б. Скільки кого в базі.
+
+         Збоку рахуються лише активні учні, а в копіях і на сервері — усі.
+         Через це «7» проти «4» виглядало як пропажа трьох, хоча троє просто
+         в архіві. Тут числа стоять поруч і питання не виникає. */
+      var all = db.students.length;
+      var arch = db.students.filter(function (x) { return x.archived; }).length;
+      out += healthRow('on', 'У базі ' + U.pl(all, 'учень', 'учні', 'учнів'),
+        (arch ? U.pl(arch, 'з них в архіві', 'з них в архіві', 'з них в архіві') +
+                ' — у списку збоку їх немає, але дані й гроші по них цілі. ' : '') +
+        U.pl(db.lessons.length, 'урок', 'уроки', 'уроків') + ', ' +
+        U.pl(db.payments.length, 'оплата', 'оплати', 'оплат') + ', ' +
+        U.pl(db.boards.length, 'дошка', 'дошки', 'дошок') + '.');
+
       /* 2. Історія дошок — та сама, з якої можна повернути втрачене. */
       var filled = db.boards.filter(function (b) {
         return (b.slides || []).some(function (sl) { return (sl.items || []).length; });
@@ -1204,7 +1218,10 @@
       list.map(function (b) {
         return '<div class="snap-row">' +
           '<span class="small">' + U.esc(U.fmtDateTime(new Date(b.at))) + '</span>' +
+          /* Архівні учні рахуються теж — інакше «7 учнів» у копії проти
+             чотирьох на видноті читалося б як пропажа трьох. */
           '<span class="small muted">' + U.pl(b.students, 'учень', 'учні', 'учнів') +
+          (b.archived ? ' (' + b.archived + ' в архіві)' : '') +
           ', ' + b.total + ' записів</span>' +
           '<button class="btn btn--ghost btn--sm spacer" data-act="sync-restore-local" ' +
           'data-arg="' + b.i + '">Повернути</button>' +

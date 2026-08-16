@@ -257,13 +257,15 @@
   Cloud.backups = function () {
     try {
       return JSON.parse(localStorage.getItem(BACKUP) || '[]').map(function (b, i) {
-        var students = 0, total = 0;
+        var students = 0, archived = 0, total = 0;
         try {
           var parsed = JSON.parse(b.data);
           students = (parsed.students || []).length;
+          archived = (parsed.students || []).filter(function (x) { return x && x.archived; }).length;
           total = countRecords(parsed);
         } catch (e) {}
-        return { i: i, at: b.at, reason: b.reason, students: students, total: total, bytes: b.data.length };
+        return { i: i, at: b.at, reason: b.reason, students: students, archived: archived,
+                 total: total, bytes: b.data.length };
       });
     } catch (e) { return []; }
   };
@@ -280,18 +282,41 @@
    * відрізняється від теперішнього. Зайвий рядок в інтерфейсі — дрібниця
    * поряд із втраченими даними.
    */
+  /**
+   * Копії, у яких чогось більше, ніж зараз, — тільки такі варто показувати.
+   *
+   * Раніше умовою було «відрізняється від теперішнього». Але відрізняється
+   * воно після будь-якої зміни, тож тривожна панель «якщо чогось не
+   * вистачає» висіла постійно й лякала на порожньому місці.
+   *
+   * Порівнюємо по колекціях і лише ті, що є в обох. Це важливо: дошки з
+   * документа переїхали, і в старих копіях вони ще є, а в теперішньому вже
+   * немає — за загальним числом записів кожна копія назавжди виглядала б
+   * «повнішою».
+   */
   Cloud.backupsWorthShowing = function () {
-    var cur = '';
-    try { cur = localJSON(); } catch (e) {}
-    var curHash = hash(cur || '');
+    var now;
+    try { now = JSON.parse(localJSON()); } catch (e) { return []; }
+
     var raw;
     try { raw = JSON.parse(localStorage.getItem(BACKUP) || '[]'); } catch (e) { raw = []; }
+
     return Cloud.backups().filter(function (b, i) {
       if (!b.total) return false;                       // порожня копія нічого не врятує
       var data = raw[i] && raw[i].data;
-      return !data || hash(data) !== curHash;           // збігається з теперішнім — показувати нема сенсу
+      if (!data) return false;
+
+      var was;
+      try { was = JSON.parse(data); } catch (e) { return false; }
+
+      return COUNTED.some(function (k) {
+        if (!Array.isArray(was[k]) || !Array.isArray(now[k])) return false;
+        return was[k].length > now[k].length;
+      });
     });
   };
+
+  var COUNTED = ['students', 'lessons', 'boards', 'homeworks', 'payments', 'notes', 'materials'];
 
   Cloud.restoreBackup = function (i) {
     var list;

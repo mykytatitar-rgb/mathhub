@@ -299,6 +299,7 @@
     var lessonIds = db.lessons.filter(function (l) { return l.studentId === id; })
       .map(function (l) { return l.id; });
     db.boards = db.boards.filter(function (b) { return lessonIds.indexOf(b.lessonId) < 0; });
+    boardsDirty = true;                 // інакше дошки зникали з пам'яті, але лишались у сховищі
     ['lessons', 'homeworks', 'payments', 'progress', 'roadmap', 'notes'].forEach(function (name) {
       db[name] = db[name].filter(function (x) { return x.studentId !== id; });
     });
@@ -1003,10 +1004,59 @@
     return true;
   };
 
-  /** Прибрати з IndexedDB картинки, які вже нікому не потрібні. */
-  S.gcImages = function () {
+  /**
+   * Картинки, на які вже ніхто не посилається.
+   *
+   * Лише рахує. Нічого не видаляє — і в цьому суть.
+   *
+   * Раніше це саме місце стирало «зайві» файли одразу після збереження ДЗ,
+   * видалення матеріалу чи учня. Поки список дошок читався правильно, все
+   * було добре. Але варто було програмі побачити нуль дошок — і всі
+   * картинки з усіх дошок ставали «нікому не потрібні» й зникали.
+   *
+   * Саме так і сталося: після переїзду дошок в окреме сховище стара версія
+   * програми, ще жива в кеші браузера, шукала дошки на старому місці, не
+   * знаходила жодної й стирала фотографії з уроків.
+   *
+   * Ціна помилки тут несиметрична. Зайвий мегабайт на диску не коштує
+   * нічого — місця в IndexedDB гігабайти. Стерта фотографія з уроку не
+   * повертається ніяк. Тому автоматичного стирання більше немає взагалі:
+   * прибирання лишилося, але тільки як свідома дія в Налаштуваннях.
+   */
+  S.unusedImages = function () {
+    if (!window.ImgStore || !window.ImgStore.available()) return Promise.resolve([]);
+    var used = {};
+    S.usedImageKeys().forEach(function (k) { used[k] = 1; });
+    return window.ImgStore.keys().then(function (keys) {
+      return (keys || []).filter(function (k) { return !used[k]; });
+    }).catch(function () { return []; });
+  };
+
+  /* Лишається під старою назвою: місць виклику багато, і кожне з них
+     розраховувало саме на «після цієї дії підчисти». Тепер вони не роблять
+     нічого руйнівного. */
+  S.gcImages = function () { return Promise.resolve(0); };
+
+  /**
+   * Справді стерти непотрібні картинки. Тільки з Налаштувань, тільки руками.
+   *
+   * Перед стиранням переконуємось, що список дошок прочитано повністю: якщо
+   * у сховищі дошки є, а в пам'яті їх нема, значить програма бачить не все —
+   * і будь-яке прибирання зараз стерло б потрібне.
+   */
+  S.purgeUnusedImages = function () {
     if (!window.ImgStore || !window.ImgStore.available()) return Promise.resolve(0);
-    return window.ImgStore.gc(S.usedImageKeys());
+
+    var stored = [];
+    try { stored = JSON.parse(localStorage.getItem(BOARDS_KEY) || '[]') || []; } catch (e) { stored = []; }
+    if (stored.length && !(db.boards || []).length) {
+      return Promise.reject(new Error('Дошки прочитані не повністю — прибирання скасовано'));
+    }
+
+    return S.unusedImages().then(function (dead) {
+      return Promise.all(dead.map(function (k) { return window.ImgStore.del(k); }))
+        .then(function () { return dead.length; });
+    });
   };
 
   /**

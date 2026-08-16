@@ -48,7 +48,8 @@
   }
 
   function ready() {
-    return !!(window.Cloud && Cloud.available() && Cloud.signedIn());
+    return !!(window.Cloud && Cloud.available() && Cloud.signedIn() &&
+      !(Cloud.writesBlocked && Cloud.writesBlocked()));
   }
 
   /** Скільки об'єктів на дошці — тією ж міркою, що й на сервері. */

@@ -76,6 +76,53 @@
 
   Cloud.onChange = function (fn) { listeners.push(fn); };
 
+  /* ============================================================
+     Версійний замок
+     ============================================================
+
+     Стара вкладка — повноправний письменник у живу базу. Саме через це
+     зникли фотографії з уроку: код із кеша браузера шукав дошки на старому
+     місці, не знаходив жодної й вирішив, що їхні картинки нікому не
+     потрібні.
+
+     Тому вкладка, що виконує старіший код, ніж лежить на сервері, втрачає
+     право писати НА СЕРВЕР. Локально вона працює як раніше — нічого з
+     набраного не пропадає, — а щойно людина перезавантажить сторінку,
+     усе накопичене поїде вже свіжим кодом.
+
+     Перевірка навмисно провалюється в бік «дозволити»: якщо версію не
+     вдалося прочитати, програма працює як завжди. Замок має захищати від
+     старого коду, а не від поганого інтернету. */
+
+  var blocked = false;
+  var blockedDetail = '';
+
+  Cloud.writesBlocked = function () { return blocked; };
+  Cloud.blockedDetail = function () { return blockedDetail; };
+
+  function versionNumber(v) {
+    var m = String(v || '').match(/v(\d+)/);
+    return m ? Number(m[1]) : null;
+  }
+
+  function checkVersion() {
+    var here = versionNumber(window.APP_BUILD);
+    if (here == null) return Promise.resolve();
+
+    return fetch('sw.js?v=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.text() : ''; })
+      .then(function (t) {
+        var there = versionNumber((t.match(/vektor-v\d+/) || [])[0]);
+        if (there == null || there <= here) return;
+
+        blocked = true;
+        blockedDetail = 'ця вкладка працює на v' + here + ', на сервері вже v' + there;
+        setState(state, blockedDetail);
+        if (window.App && App.staleCodeBar) App.staleCodeBar(here, there);
+      })
+      .catch(function () { /* не дізналися — працюємо як завжди */ });
+  }
+
   Cloud.status = function () {
     /* Стан виводимо, а не читаємо зі змінної: вона могла лишитися 'off' від
        самого запуску, якщо картку відмалювали раніше, ніж Cloud.start().
@@ -135,6 +182,28 @@
   /* Авторитетне джерело — сховище, а НЕ копія в пам'яті вкладки.
      Причина: вкладок може бути кілька, у кожної власна копія бази в пам'яті,
      і застаріла вкладка інакше відправила б на сервер свій старий стан. */
+  /**
+   * Прибрати з документа те, що тепер їде окремими рядками.
+   *
+   * Інакше лишався б другий шлях до тих самих даних — суцільний документ,
+   * який завжди означає «хай стане ось так». Саме він і стирав: одного
+   * такого запису з неповного пристрою вистачало, щоб забрати все.
+   *
+   * Документ лишається — у ньому налаштування, і він же служить копією
+   * про всяк випадок. Але правда про учнів, уроки й гроші тепер не тут.
+   */
+  function withoutRecords(json) {
+    if (!window.RecSync) return json;
+    try {
+      var doc = JSON.parse(json);
+      RecSync.KINDS.forEach(function (k) { delete doc[k]; });
+      delete doc.boards;
+      return JSON.stringify(doc);
+    } catch (e) {
+      return json;               // не розібрали — краще відправити як є
+    }
+  }
+
   function localJSON() {
     try {
       var raw = localStorage.getItem(DB_KEY);
@@ -778,7 +847,8 @@
      ============================================================ */
 
   function push() {
-    var data = localJSON();          // зі сховища, не з пам'яті вкладки
+    if (blocked) return Promise.resolve();   // стара вкладка на сервер не пише
+    var data = withoutRecords(localJSON());  // зі сховища, не з пам'яті вкладки
     var h = hash(data);
 
     // нічого не змінилося з останнього разу — не турбуємо мережу
@@ -1235,11 +1305,23 @@
       else Cloud.syncNow();
     });
 
+    /* Версію питаємо завжди — навіть без налаштованої синхронізації й без
+       входу. Застаріла вкладка лишається застарілою незалежно від того,
+       чи має вона куди писати, і людина має дізнатися про це одразу, а не
+       після того, як попрацює годину. */
+    var version = checkVersion();
+
     if (!Cloud.available()) { setState('off'); return; }
     if (!Cloud.signedIn()) { setState('signedout'); return; }
 
-    Cloud.syncNow();
-    if (window.BoardSync) BoardSync.start();
+    /* Обмін — лише після відповіді про версію. Інакше стара вкладка
+       встигла б записати до того, як дізналася, що вона стара. */
+    version.then(function () {
+      if (blocked) return;
+      Cloud.syncNow();
+      if (window.BoardSync) BoardSync.start();
+      if (window.RecSync) RecSync.start();
+    });
   };
 
   window.Cloud = Cloud;

@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v16';
+  App.BUILD = 'v17';
   window.APP_BUILD = App.BUILD;
 
   var NAV = [
@@ -726,6 +726,37 @@
   /* Оновлення застосунку. Файли з кешу віддаються миттєво, а свіжі
      підтягуються у фоні — тож без цієї смужки зміни з'являлися б аж
      наступного разу, і здавалося б, що їх немає. */
+  /**
+   * Смуга «ця вкладка стара». На відміну від звичайного повідомлення про
+   * оновлення, її не можна закрити: поки вона висить, зміни не їдуть на
+   * сервер, і людина має про це знати, а не гадати, чому інший пристрій
+   * нічого не бачить.
+   */
+  App.staleCodeBar = function (here, there) {
+    if (document.querySelector('.update-bar--stale')) return;
+    var bar = document.createElement('div');
+    bar.className = 'update-bar update-bar--stale';
+    bar.innerHTML =
+      '<span><b>Ця вкладка працює на старому коді</b> (v' + here + ', на сервері v' + there + '). ' +
+      'Усе набране зберігається тут, але на сервер не їде, поки не оновите.</span>' +
+      '<button class="btn btn--primary btn--sm" data-reload>Оновити зараз</button>';
+    document.body.appendChild(bar);
+    bar.querySelector('[data-reload]').onclick = function () {
+      var jobs = [];
+      if (window.caches && caches.keys) {
+        jobs.push(caches.keys().then(function (ks) {
+          return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+        }).catch(function () {}));
+      }
+      if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+        jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+          return Promise.all(rs.map(function (r) { return r.unregister(); }));
+        }).catch(function () {}));
+      }
+      Promise.all(jobs).then(function () { location.reload(); });
+    };
+  };
+
   function updateBar() {
     if (document.querySelector('.update-bar')) return;
     var bar = document.createElement('div');

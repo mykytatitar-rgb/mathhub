@@ -241,20 +241,33 @@
     var parsed = JSON.parse(text);
     if (!parsed || !Array.isArray(parsed.students)) throw new Error('Файл не схожий на резервну копію mathhub');
 
-    /* Порожній список дошок у документі означає не «дошок немає», а
-       «цей документ про дошки не знає». Так виглядає документ, збережений
-       версією програми до поділу сховищ: вона просто не бачила дошок на
-       новому місці. Прийняти таке за правду означало б стерти все
-       намальоване — тобто рівно ту втрату, від якої весь цей поділ. */
-    var incoming = (Array.isArray(parsed.boards) && parsed.boards.length) ? parsed.boards : null;
+    /* Порожній чи відсутній список означає не «записів немає», а «цей
+       документ про них не знає».
+
+       Так виглядає документ, збережений версією програми до того, як дошки
+       й записи переїхали у власні сховища: вона просто не бачила їх на
+       новому місці. Прийняти таке за правду означало б стерти все — тобто
+       рівно ту втрату, заради якої переїзд і робився.
+
+       Файл резервної копії — інша річ: там списки справжні, і він має
+       право замінювати. Тому порожнеча ігнорується, а вміст ні. */
+    var OWN_STORE = ['boards'].concat(window.RecSync ? RecSync.KINDS : []);
     var keep = !!(opts && opts.keepBoards);
+
+    var incoming = {};
+    OWN_STORE.forEach(function (k) {
+      incoming[k] = (Array.isArray(parsed[k]) && parsed[k].length) ? parsed[k] : null;
+    });
 
     var b = blank();
     Object.keys(b).forEach(function (k) { if (parsed[k] === undefined) parsed[k] = b[k]; });
 
-    parsed.boards = (keep || !incoming) ? ((db && db.boards) || []) : incoming;
+    OWN_STORE.forEach(function (k) {
+      parsed[k] = (keep || !incoming[k]) ? ((db && db[k]) || []) : incoming[k];
+    });
+
     db = parsed;
-    boardsDirty = !keep && !!incoming;
+    boardsDirty = !keep && !!incoming.boards;
     S.save();
   };
 
@@ -270,11 +283,18 @@
     return null;
   };
 
+  /* Кожна зміна називає себе поіменно: «оновився цей учень», «видалено цю
+     оплату». Раніше зміна будь-чого означала «відправ усю базу», і саме
+     той запис умів стирати сусіднє. */
+  function sync(name, id) { if (window.RecSync) RecSync.mark(name, id); }
+  function syncDel(name, id) { if (window.RecSync) RecSync.markDeleted(name, id); }
+
   S.add = function (name, obj) {
     obj.id = obj.id || U.uid(name.slice(0, 3));
     obj.createdAt = obj.createdAt || new Date().toISOString();
     coll(name).push(obj);
     S.save();
+    sync(name, obj.id);
     return obj;
   };
 
@@ -284,15 +304,23 @@
     Object.keys(patch).forEach(function (k) { item[k] = patch[k]; });
     item.updatedAt = new Date().toISOString();
     S.save();
+    sync(name, id);
     return item;
   };
 
   S.remove = function (name, id) {
     var list = coll(name);
     var i = list.findIndex(function (x) { return x.id === id; });
-    if (i >= 0) { list.splice(i, 1); S.save(); return true; }
+    if (i >= 0) { list.splice(i, 1); S.save(); syncDel(name, id); return true; }
     return false;
   };
+
+  /* Видалення пачкою — коли прибирають учня разом з усім, що на ньому
+     висіло. Кожен запис має назвати себе окремо, інакше на сервері
+     лишаться сироти: уроки без учня, оплати без уроку. */
+  function syncDelMany(name, list) {
+    (list || []).forEach(function (x) { if (x && x.id) syncDel(name, x.id); });
+  }
 
   /** Видалити учня разом з усім, що на нього зав'язано. */
   S.removeStudent = function (id) {
@@ -301,9 +329,12 @@
     db.boards = db.boards.filter(function (b) { return lessonIds.indexOf(b.lessonId) < 0; });
     boardsDirty = true;                 // інакше дошки зникали з пам'яті, але лишались у сховищі
     ['lessons', 'homeworks', 'payments', 'progress', 'roadmap', 'notes'].forEach(function (name) {
+      var gone = db[name].filter(function (x) { return x.studentId === id; });
       db[name] = db[name].filter(function (x) { return x.studentId !== id; });
+      syncDelMany(name, gone);
     });
     db.students = db.students.filter(function (x) { return x.id !== id; });
+    syncDel('students', id);
     S.save();
     S.gcImages();
   };

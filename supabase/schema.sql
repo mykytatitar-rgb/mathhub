@@ -835,3 +835,144 @@ $$;
 
 revoke all on function public.save_board(text, bigint, jsonb, text, boolean) from public;
 grant execute on function public.save_board(text, bigint, jsonb, text, boolean) to authenticated;
+
+
+/* ============================================================
+   Записи — кожен окремим рядком
+   ============================================================
+
+   Досі вся база їхала одним документом. Такий запис завжди означає «хай
+   стане ось так», а отже вміє стирати: якщо програма чогось не побачила,
+   воно зникало разом із записом. Саме так втрачалися учні й дошки.
+
+   Тут кожен запис — власний рядок. «Онови цього учня» фізично не може
+   зачепити сусіднього. Два пристрої, що правлять різних учнів, більше не
+   конфліктують взагалі.
+
+   Одна таблиця на всі види, а не окрема на кожен: програма зберігає
+   звичайні об'єкти з полем id і фільтрує їх у себе в пам'яті, а не
+   запитами. Окремі таблиці дали б стовпці, якими ніхто не користується,
+   і десяток однакових наборів правил доступу.
+
+   Видалення — позначка, а не стирання. Помилкове видалення повертається,
+   і жоден рядок ніколи не зникає з бази фізично. */
+
+create table if not exists public.records (
+  owner      uuid        not null default auth.uid() references auth.users(id) on delete cascade,
+  kind       text        not null,      -- students | lessons | payments | homeworks | ...
+  id         text        not null,
+  data       jsonb       not null,
+  rev        bigint      not null default 1,
+  deleted    boolean     not null default false,
+  updated_at timestamptz not null default now(),
+  device     text,
+  primary key (owner, kind, id)
+);
+
+create index if not exists records_owner_updated on public.records (owner, updated_at);
+
+alter table public.records enable row level security;
+
+drop policy if exists records_own on public.records;
+create policy records_own on public.records
+  for all to authenticated
+  using (owner = auth.uid())
+  with check (owner = auth.uid());
+
+/**
+ * Записати один запис. Повертає новий номер версії.
+ *
+ * Свідомо «перемагає той, хто пише останнім» — але в межах одного запису.
+ * Це і є вся різниця: раніше останній запис забирав усю базу, тепер лише
+ * той рядок, який справді редагували.
+ */
+create or replace function public.save_record(
+  p_kind   text,
+  p_id     text,
+  p_data   jsonb,
+  p_device text default null
+) returns bigint
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  new_rev bigint;
+begin
+  if auth.uid() is null then
+    raise exception 'Потрібен вхід';
+  end if;
+
+  insert into public.records (owner, kind, id, data, rev, deleted, device)
+  values (auth.uid(), p_kind, p_id, p_data, 1, false, p_device)
+  on conflict (owner, kind, id) do update
+    set data       = excluded.data,
+        rev        = public.records.rev + 1,
+        deleted    = false,          -- редагування воскрешає помилково видалене
+        updated_at = now(),
+        device     = excluded.device
+  returning rev into new_rev;
+
+  return new_rev;
+end;
+$$;
+
+/**
+ * Видалити запис — тобто позначити видаленим.
+ *
+ * Дані лишаються в базі назавжди. Так помилкове видалення (моє чи ваше)
+ * перестає бути втратою: рядок на місці, його видно й можна повернути.
+ */
+create or replace function public.delete_record(
+  p_kind   text,
+  p_id     text,
+  p_device text default null
+) returns bigint
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  new_rev bigint;
+begin
+  if auth.uid() is null then
+    raise exception 'Потрібен вхід';
+  end if;
+
+  update public.records
+     set deleted = true, rev = rev + 1, updated_at = now(), device = p_device
+   where owner = auth.uid() and kind = p_kind and id = p_id
+  returning rev into new_rev;
+
+  return coalesce(new_rev, 0);
+end;
+$$;
+
+/** Повернути помилково видалене. */
+create or replace function public.undelete_record(p_kind text, p_id text)
+returns bigint
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  new_rev bigint;
+begin
+  if auth.uid() is null then
+    raise exception 'Потрібен вхід';
+  end if;
+  update public.records
+     set deleted = false, rev = rev + 1, updated_at = now()
+   where owner = auth.uid() and kind = p_kind and id = p_id
+  returning rev into new_rev;
+  return coalesce(new_rev, 0);
+end;
+$$;
+
+revoke all on function public.save_record(text, text, jsonb, text)   from public;
+revoke all on function public.delete_record(text, text, text)        from public;
+revoke all on function public.undelete_record(text, text)            from public;
+
+grant execute on function public.save_record(text, text, jsonb, text) to authenticated;
+grant execute on function public.delete_record(text, text, text)      to authenticated;
+grant execute on function public.undelete_record(text, text)          to authenticated;

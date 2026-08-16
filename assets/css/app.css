@@ -1563,3 +1563,8 @@ a { color: inherit; text-decoration: none; }
 .sync-more > summary::before { content: '▸ '; }
 .sync-more[open] > summary::before { content: '▾ '; }
 .sync-more > summary:hover { color: var(--blue-600); }
+
+/* Смуга «ця вкладка стара»: закрити не можна, бо поки вона є —
+   зміни не їдуть на сервер, і мовчати про це не можна. */
+.update-bar--stale { background: var(--red-bg); color: #9E2A32; border-color: #F3C4C6; }
+.update-bar--stale b { color: #8E1F27; }

@@ -300,6 +300,12 @@
 
      Якщо курсу якоїсь валюти немає, чесно кажемо, що сума неповна, а не
      мовчки її занижуємо. */
+  /** «У гривнях», «У доларах» — щоб підпис читався, а не був кодом. */
+  var IN_WORDS = { UAH: 'У гривнях', USD: 'У доларах', EUR: 'У євро', PLN: 'У злотих',
+                   GBP: 'У фунтах', CZK: 'У кронах', CAD: 'У канадських доларах',
+                   AUD: 'В австралійських доларах' };
+  function inWords(code) { return IN_WORDS[code] || ('У валюті ' + code); }
+
   function totalIncomeCard(mStart, mEnd, pStart, pEnd) {
     var R = window.Rates;
     if (!R) return '';
@@ -316,9 +322,31 @@
     var diff = (prev.uah && !prev.partial && !now.partial)
       ? Math.round((now.uah - prev.uah) / prev.uah * 100) : null;
 
-    // з чого склалася сума — щоб число не виглядало як здогад
-    var parts = U.mapSize(map) > 1
-      ? '<div class="tot__parts">' + U.moneyMap(map) + '</div>' : '';
+    /* Розділ на кожну валюту, у якій цього місяця справді щось отримано.
+       Найбільша сума йде першою. */
+    var codes = Object.keys(map).filter(function (k) { return Math.abs(map[k]) > 0.005; });
+    codes.sort(function (a, b) { return Math.abs(map[b]) - Math.abs(map[a]); });
+
+    var cells = codes.map(function (c, i) {
+      return (i ? '<div class="tot__sep"></div>' : '') +
+        '<div class="tot__cell">' +
+          '<div class="tot__k">' + U.esc(inWords(c)) + '</div>' +
+          '<div class="tot__v">' + U.esc(U.money(map[c], c)) + '</div>' +
+        '</div>';
+    }).join('');
+
+    /* Зведена сума — під розділами, а не замість них. Коли валюта одна,
+       переказ у неї ж саму нічого не додає, тож показуємо лише другу мірку. */
+    var one = codes.length === 1 ? codes[0] : null;   // валюту, що вже показана, не повторюємо
+    var both = [];
+    if (one !== 'UAH') both.push(U.money(Math.round(now.uah), 'UAH'));
+    if (inUsd != null && one !== 'USD') both.push(U.money(Math.round(inUsd), 'USD'));
+
+    var together = both.length
+      ? '<div class="tot__parts">' +
+        (one ? 'Це ж за курсом: ' : 'Разом за курсом: ') +
+        U.esc(both.join(' · ')) + '</div>'
+      : '';
 
     var note;
     if (now.partial) {
@@ -342,22 +370,13 @@
           (diff >= 0 ? '↑ ' : '↓ ') + Math.abs(diff) + '% до минулого</span>'
         : '') +
       '</div>' +
-      /* Два рівноправні розділи, а не головне число й приписка збоку:
-         дохід той самий, просто виміряний двома мірками. */
-      '<div class="tot__row">' +
-        '<div class="tot__cell">' +
-          '<div class="tot__k">У гривнях</div>' +
-          '<div class="tot__v">' + U.esc(U.money(Math.round(now.uah), 'UAH')) + '</div>' +
-        '</div>' +
-        (inUsd != null
-          ? '<div class="tot__sep"></div>' +
-            '<div class="tot__cell">' +
-              '<div class="tot__k">У доларах</div>' +
-              '<div class="tot__v">' + U.esc(U.money(Math.round(inUsd), 'USD')) + '</div>' +
-            '</div>'
-          : '') +
-      '</div>' +
-      parts + note +
+      /* По розділу на кожну валюту, і в кожному — те, що справді в ній
+         отримано. Раніше тут стояла одна й та сама сума двічі: загальна в
+         гривнях і вона ж у доларах. Формально чесно, бо підпис казав «усі
+         валюти разом», але читалося як два різні заробітки, а справжній
+         поділ тулився дрібним рядком під ними. */
+      '<div class="tot__row">' + cells + '</div>' +
+      together + note +
       '</div>';
   }
 
@@ -497,11 +516,15 @@
       var isCur = idx === months.length - 1;
       // Для дрібних валют «к» не має сенсу — показуємо число як є
       var cap = !m.value ? '' : (maxM >= 3000 ? Math.round(m.value / 1000) + 'к' : Math.round(m.value));
+      /* Місяць без доходу малювався такою ж смужкою, як і місяць з дрібною
+         сумою, — виходило «щось було», хоча не було нічого. Порожній місяць
+         тепер ледь помітна риска, і сплутати їх не можна. */
+      var empty = !m.value;
       return '<div class="chart__col">' +
         '<div class="chart__top">' + cap + '</div>' +
-        '<div class="chart__bar" style="height:' + Math.max(4, (m.value / maxM) * 100) + '%' +
-        (isCur ? '' : ';background:linear-gradient(180deg,#9CC0FF,#6E9DFF)') + '"></div>' +
-        '<div class="chart__cap">' + m.label + '</div></div>';
+        '<div class="chart__bar" style="height:' + (empty ? 3 : Math.max(6, (m.value / maxM) * 100)) + '%' +
+        (empty ? ';background:var(--line)' : (isCur ? '' : ';background:linear-gradient(180deg,#9CC0FF,#6E9DFF)')) + '"></div>' +
+        '<div class="chart__cap"' + (empty ? ' style="color:var(--muted-2)"' : '') + '>' + m.label + '</div></div>';
     }).join('');
 
     var recent = U.sortBy(S.db().payments.filter(function (p) { return S.paymentCur(p) === code; }),
@@ -556,7 +579,12 @@
       '<div class="grid grid--main mb-3">' +
         '<div class="card">' +
           '<div class="card-head"><div><h3 class="card-title">Дохід за півроку</h3>' +
-          '<div class="card-sub">сума отриманих оплат по місяцях</div></div></div>' +
+          /* Валюту треба назвати. Стовпчики рахують лише вибрану, і без
+             підпису «281» під карткою, де написано «$321», читається як
+             розбіжність, хоча це просто різні речі: тут долари, там усе
+             разом за курсом. */
+          '<div class="card-sub">сума отриманих оплат по місяцях, ' +
+          U.esc(inWords(code).toLowerCase()) + '</div></div></div>' +
           '<div class="chart">' + chart + '</div>' +
         '</div>' +
 

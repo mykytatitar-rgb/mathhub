@@ -749,11 +749,32 @@
     return db.boards.find(function (b) { return b.lessonId === lessonId; }) || null;
   };
 
+  /**
+   * Проставити номери об'єктам, намальованим до того, як номери з'явилися.
+   *
+   * Без номера об'єкт не можна назвати — а отже не можна сказати «пересунули
+   * оцей». Дошки, намальовані раніше, інакше лишилися б поза спільним
+   * малюванням назавжди. Повертає true, якщо щось довелося дописати.
+   */
+  S.ensureItemIds = function (board) {
+    var touched = false;
+    ((board && board.slides) || []).forEach(function (sl) {
+      (sl.items || []).forEach(function (it) {
+        if (it && !it.id) {
+          it.id = U.uid('it');
+          touched = true;
+        }
+      });
+    });
+    return touched;
+  };
+
   /** Дошка уроку; якщо немає — створюється з одним порожнім слайдом. */
   S.ensureBoard = function (lessonId) {
     var b = S.getBoard(lessonId);
     if (b) {
       if (!b.slides || !b.slides.length) b.slides = [S.newSlide()];
+      if (S.ensureItemIds(b)) { boardsDirty = true; S.save(); }
       return b;
     }
     b = {

@@ -976,3 +976,161 @@ revoke all on function public.undelete_record(text, text)            from public
 grant execute on function public.save_record(text, text, jsonb, text) to authenticated;
 grant execute on function public.delete_record(text, text, text)      to authenticated;
 grant execute on function public.undelete_record(text, text)          to authenticated;
+
+
+/* ============================================================
+   Журнал дій на дошці
+   ============================================================
+
+   Дошка й досі зберігається цілком — це швидкий спосіб її відкрити. Але
+   будь-яке збереження цілком означає «хай стане ось так», а отже вміє
+   стирати: досить одному пристроєві мати неповну картину.
+
+   Тут навпаки — тільки дописування. «Додано лінію», «пересунуто фігуру»,
+   «видалено картинку». Рядки ніколи не змінюються й не видаляються.
+
+   Звідси дві речі, яких не було. Перша: два пристрої, що малюють одночасно,
+   більше не забирають роботу один в одного — їхні дії просто лягають поруч.
+   Друга: учень може бачити малювання наживо, бо йому достатньо читати нові
+   рядки, а не чекати перевидання сторінки.
+
+   Знімок у таблиці boards лишається: відкривати дошку з нуля по тисячі
+   дрібних дій довго. Він каже, на якій дії його зроблено, і читати треба
+   лише те, що після неї. */
+
+create table if not exists public.board_ops (
+  id     bigserial   primary key,
+  owner  uuid        not null default auth.uid() references auth.users(id) on delete cascade,
+  board  text        not null,
+  op     jsonb       not null,
+  author text        not null default 'tutor',   -- tutor | student
+  at     timestamptz not null default now()
+);
+
+create index if not exists board_ops_lookup on public.board_ops (owner, board, id);
+
+alter table public.board_ops enable row level security;
+
+drop policy if exists board_ops_own on public.board_ops;
+create policy board_ops_own on public.board_ops
+  for all to authenticated
+  using (owner = auth.uid())
+  with check (owner = auth.uid());
+
+/* На якій дії зроблено знімок дошки. Без цього при відкритті довелося б
+   перечитувати весь журнал від початку часів. */
+alter table public.boards add column if not exists last_op bigint not null default 0;
+
+/**
+ * Дописати дії. Повертає номер останньої.
+ *
+ * Тільки insert — жодного update чи delete. Саме тому цей шлях не вміє
+ * втрачати: щоб щось зникло, потрібен окремий запис «видалено», і він теж
+ * лишиться в журналі назавжди.
+ */
+create or replace function public.append_board_ops(
+  p_board text,
+  p_ops   jsonb            -- масив дій
+) returns bigint
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  last_id bigint;
+begin
+  if auth.uid() is null then
+    raise exception 'Потрібен вхід';
+  end if;
+
+  insert into public.board_ops (owner, board, op, author)
+  select auth.uid(), p_board, value, 'tutor'
+    from jsonb_array_elements(p_ops);
+
+  select max(id) into last_id
+    from public.board_ops
+   where owner = auth.uid() and board = p_board;
+
+  return coalesce(last_id, 0);
+end;
+$$;
+
+revoke all on function public.append_board_ops(text, jsonb) from public;
+grant execute on function public.append_board_ops(text, jsonb) to authenticated;
+
+
+/* ============================================================
+   Дошка наживо для учня
+   ============================================================
+
+   Учень не має входу й не бачить жодної таблиці. Ці дві функції — весь його
+   доступ: читати дії однієї дошки й дописувати свої. Ключ — код у посиланні,
+   той самий, яким відкривається урок.
+
+   Записи учня позначені окремо ('student'), тож на дошці видно, де він, а
+   де репетитор, і його роботу неможливо сплутати зі своєю. */
+
+create or replace function public.share_ops_read(p_token text, p_after bigint default 0)
+returns table (id bigint, op jsonb, author text, at timestamptz)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  s record;
+begin
+  select * into s from public.shares where token = p_token and not revoked;
+  if not found then
+    raise exception 'Посилання недійсне';
+  end if;
+
+  return query
+    select o.id, o.op, o.author, o.at
+      from public.board_ops o
+     where o.owner = s.owner and o.board = s.lesson_id and o.id > coalesce(p_after, 0)
+     order by o.id
+     limit 2000;
+end;
+$$;
+
+create or replace function public.share_ops_write(p_token text, p_ops jsonb)
+returns bigint
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  s record;
+  last_id bigint;
+begin
+  select * into s from public.shares where token = p_token and not revoked;
+  if not found then
+    raise exception 'Посилання недійсне';
+  end if;
+  if not coalesce(s.can_write, false) then
+    raise exception 'На цій дошці можна лише дивитися';
+  end if;
+
+  /* Обмеження на пачку: посилання відкрите будь-кому, хто його має, і
+     єдиний спосіб ним нашкодити — завалити дошку сміттям. */
+  if jsonb_array_length(p_ops) > 200 then
+    raise exception 'Забагато дій за раз';
+  end if;
+
+  insert into public.board_ops (owner, board, op, author)
+  select s.owner, s.lesson_id, value, 'student'
+    from jsonb_array_elements(p_ops);
+
+  select max(id) into last_id
+    from public.board_ops
+   where owner = s.owner and board = s.lesson_id;
+
+  return coalesce(last_id, 0);
+end;
+$$;
+
+revoke all on function public.share_ops_read(text, bigint) from public;
+revoke all on function public.share_ops_write(text, jsonb) from public;
+
+grant execute on function public.share_ops_read(text, bigint) to anon, authenticated;
+grant execute on function public.share_ops_write(text, jsonb) to anon, authenticated;

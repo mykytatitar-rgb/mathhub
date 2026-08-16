@@ -21,6 +21,21 @@
 
   function uid(p) { return p + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
+  /* Стійкий номер у кожного об'єкта на дошці.
+
+     Досі номер був лише у фігур. Поки дошка зберігалася цілком, цього
+     вистачало: запис казав «ось усе, що тепер на слайді». Але такий запис
+     завжди вміє стирати, і двоє одночасно малювати не можуть — другий
+     затирає першого.
+
+     З номером можна сказати «пересунули оцей об'єкт», не згадуючи решти.
+     Тоді дії двох людей просто лягають поруч.
+
+     Копія при вставці дістає новий номер: інакше вона була б тим самим
+     об'єктом, і рухати їх довелося б разом. */
+  function ided(it) { if (it && !it.id) it.id = uid('it'); return it; }
+  function reided(it) { if (it) it.id = uid('it'); return it; }
+
   /* Геометрія побудов (висота, медіана…) не зберігається у файлі, а
      перераховується з батьківської фігури. Тримаємо її поза об'єктом,
      щоб вона не потрапляла ні в localStorage, ні в знімки історії. */
@@ -1025,7 +1040,7 @@
     if (dup) return dup;
 
     this.snapshot();
-    this.slide.items.push(it);
+    this.slide.items.push(ided(it));
     prims.set(it, g);
     this.rememberInitialView();
     this.changed();
@@ -1484,7 +1499,7 @@
       if (d.t !== 'p') keep = Math.hypot(d.a[2] - d.a[0], d.a[3] - d.a[1]) * this.scale > 4;
       if (keep) {
         if (d.t === 'p' && this.smoothing) d.d = smoothStroke(d.d, d.w, this.smoothing);
-        this.slide.items.push(d);
+        this.slide.items.push(ided(d));
         this.rememberInitialView();
       } else {
         this.history.pop();
@@ -1540,7 +1555,7 @@
     this.snapshot();
     var it = { t: 'x', c: this.color, s: this.fontSize,
                p: [round(world.x), round(world.y)], v: value };
-    this.slide.items.push(it);
+    this.slide.items.push(ided(it));
     this.rememberInitialView();
     this.changed();
     return it;
@@ -1578,7 +1593,7 @@
     };
 
     this.snapshot();
-    this.slide.items.push(item);
+    this.slide.items.push(ided(item));
     this.rememberInitialView();
     loadImage(meta.key, this.render.bind(this));
     this.setTool('select');
@@ -1597,7 +1612,7 @@
       t: 'i', k: meta.key, r: meta.w / meta.h,
       a: [round(box.x), round(box.y), round(box.x + box.w), round(box.y + box.h)]
     };
-    this.slide.items.push(item);
+    this.slide.items.push(ided(item));
     loadImage(meta.key, this.render.bind(this));
     return item;
   };
@@ -1635,7 +1650,7 @@
     this.snapshot();
     var self = this;
     copies.forEach(function (it) {
-      self.slide.items.push(it);
+      self.slide.items.push(reided(it));
       if (it.t === 'i' && it.k && !imgCache[it.k]) loadImage(it.k, self.render.bind(self));
     });
     this.setTool('select');
@@ -1652,7 +1667,7 @@
     this.snapshot();
     var self = this;
     copies.forEach(function (it) {
-      self.slide.items.push(it);
+      self.slide.items.push(reided(it));
       if (it.t === 'i' && it.k && !imgCache[it.k]) loadImage(it.k, self.render.bind(self));
     });
     this.setTool('select');

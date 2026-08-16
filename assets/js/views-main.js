@@ -504,18 +504,43 @@
         }).join('') + '</div>'
       : '';
 
-    /* Дохід за 6 місяців */
+    /* Дохід за 6 місяців — усі валюти разом.
+
+       Раніше стовпчик рахував лише вибрану валюту. Через це «дохід за
+       місяць» у діаграмі не збігався з доходом за місяць у картці зверху:
+       там усе разом, тут сама одна валюта. Питання «скільки я заробив у
+       серпні» має одну відповідь, а не по одній на валюту.
+
+       Минулі місяці переводяться за сьогоднішнім курсом — історичних у нас
+       немає. Для «більше чи менше, ніж торік» цього досить, і про це
+       сказано в підписі. */
+    var RT = window.Rates;
+    var chartCur = (RT && (code === 'UAH' || RT.get(code))) ? code : null;
+    var chartPartial = false;
+
+    function monthValue(ms, me) {
+      if (!chartCur) return S.incomeBetween(ms, me, code);   // без курсу — чесно лише своя валюта
+      var sum = RT.sumToUAH(S.incomeMap(ms, me));
+      if (sum.partial) chartPartial = true;
+      if (chartCur === 'UAH') return sum.uah;
+      var rate = RT.get(chartCur);
+      return rate ? sum.uah / rate : 0;
+    }
+
     var months = [];
     for (var i = 5; i >= 0; i--) {
       var ms = new Date(today.getFullYear(), today.getMonth() - i, 1);
       var me = new Date(today.getFullYear(), today.getMonth() - i + 1, 0);
-      months.push({ label: U.MONTHS_NOM[ms.getMonth()].slice(0, 3), value: S.incomeBetween(ms, me, code) });
+      months.push({ label: U.MONTHS_NOM[ms.getMonth()].slice(0, 3), value: monthValue(ms, me) });
     }
     var maxM = Math.max(1, Math.max.apply(null, months.map(function (m) { return m.value; })));
     var chart = months.map(function (m, idx) {
       var isCur = idx === months.length - 1;
-      // Для дрібних валют «к» не має сенсу — показуємо число як є
-      var cap = !m.value ? '' : (maxM >= 3000 ? Math.round(m.value / 1000) + 'к' : Math.round(m.value));
+      /* Раніше великі суми скорочувалися до «14к». Для питання «скільки я
+         заробив» це та сама неповна цифра: округлення до тисяч ховає рівно
+         те, за чим сюди дивляться. Показуємо число повністю, з пробілом між
+         тисячами — воно вміщається. */
+      var cap = !m.value ? '' : U.esc(Math.round(m.value).toLocaleString('uk-UA').replace(/[   ]/g, ' '));
       /* Місяць без доходу малювався такою ж смужкою, як і місяць з дрібною
          сумою, — виходило «щось було», хоча не було нічого. Порожній місяць
          тепер ледь помітна риска, і сплутати їх не можна. */
@@ -583,9 +608,16 @@
              підпису «281» під карткою, де написано «$321», читається як
              розбіжність, хоча це просто різні речі: тут долари, там усе
              разом за курсом. */
-          '<div class="card-sub">сума отриманих оплат по місяцях, ' +
-          U.esc(inWords(code).toLowerCase()) + '</div></div></div>' +
+          '<div class="card-sub">' +
+          (chartCur
+            ? 'усі валюти разом за поточним курсом, ' + U.esc(inWords(chartCur).toLowerCase())
+            : 'сума отриманих оплат по місяцях, ' + U.esc(inWords(code).toLowerCase())) +
+          '</div></div></div>' +
           '<div class="chart">' + chart + '</div>' +
+          (chartPartial
+            ? '<div class="field__hint mt-2">Для якоїсь із валют немає курсу — ці оплати ' +
+              'у стовпчики не входять. Курс можна вписати вручну в Налаштуваннях.</div>'
+            : '') +
         '</div>' +
 
         '<div class="card card--pad0">' +

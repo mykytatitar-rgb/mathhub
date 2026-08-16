@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v20';
+  App.BUILD = 'v21';
   window.APP_BUILD = App.BUILD;
 
   var NAV = [
@@ -521,6 +521,33 @@
 
       Promise.all(jobs).then(function () {
         location.reload();
+      });
+    },
+
+    /* Полагодити «учень бачить старе» одним натисканням.
+
+       Раніше тут писало «відкрийте дошку такого уроку». Це працює, але
+       перекладає роботу на людину саме тоді, коли вона й так дізналася про
+       чужу помилку — і на кожен урок треба окреме відкриття й очікування. */
+    'fix-publish': function (_a, el) {
+      if (!V.staleForStudents) return;
+      var ids = V.staleForStudents();
+      if (!ids.length) { U.toast('Усе вже відправлено', 'ok'); return; }
+
+      if (el) { el.disabled = true; el.textContent = 'Надсилаю…'; }
+      var ok = 0, fail = 0, lastErr = '';
+
+      ids.reduce(function (chain, id) {
+        return chain.then(function () {
+          return V.republishLesson(id).then(function () { ok++; },
+            function (e) { fail++; lastErr = (e && e.message) || 'немає звʼязку'; });
+        });
+      }, Promise.resolve()).then(function () {
+        if (el) { el.disabled = false; el.textContent = 'Надіслати ще раз'; }
+        if (ok && !fail) U.toast('Учні бачать свіже: ' + U.pl(ok, 'урок', 'уроки', 'уроків'), 'ok');
+        else if (ok) U.toast('Відправлено ' + ok + ', не вийшло ' + fail + ': ' + lastErr, 'err');
+        else U.toast('Не вдалося відправити: ' + lastErr, 'err');
+        if (V.fillHealthAsync) V.fillHealthAsync();
       });
     },
 

@@ -2547,6 +2547,46 @@
     return S.db().homeworks.some(function (h) { return h.lessonId === lessonId; });
   };
 
+  /**
+   * Перевидати урок, не відкриваючи дошку.
+   *
+   * Потрібне панелі «Чи все ціле»: якщо відправлення колись не дійшло —
+   * скажімо, тоді скінчилася сесія, — лагодити це має одна кнопка, а не
+   * «відкрийте по черзі кожну дошку й почекайте».
+   *
+   * На відміну від publishLessonBoard, шле беззастережно: тут ми вже
+   * знаємо, що в учня старе, і причина не у версії переглядача.
+   */
+  V.republishLesson = function (lessonId) {
+    var board = S.getBoard(lessonId);
+    if (!board || !board.share || !board.share.token) return Promise.resolve(false);
+    if (!(window.Cloud && Cloud.available() && Cloud.signedIn())) {
+      return Promise.reject(new Error('Немає входу в синхронізацію'));
+    }
+
+    var l = S.get('lessons', lessonId);
+    var st = l ? S.get('students', l.studentId) : null;
+
+    return publishLesson(board, l, st, board.share.token).then(function () {
+      board.share.v = VIEWER_VERSION;
+      board.share.at = new Date().toISOString();
+      S.saveBoard(board);
+      publogSet(lessonId, true);
+      return true;
+    }, function (e) {
+      publogSet(lessonId, false, e && e.message ? e.message : 'немає звʼязку');
+      throw e;
+    });
+  };
+
+  /** Уроки, у яких останнє відправлення учневі не вдалося. */
+  V.staleForStudents = function () {
+    var log = publogAll();
+    return (S.db().boards || []).filter(function (b) {
+      return b.share && b.share.token && log[b.lessonId] && !log[b.lessonId].ok;
+    }).map(function (b) { return b.lessonId; });
+  };
+
   V.publishLessonBoard = function (lessonId) {
     if (!window.Cloud || !Cloud.available() || !Cloud.signedIn()) return Promise.resolve('');
 

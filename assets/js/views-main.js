@@ -1098,8 +1098,8 @@
             return '· ' + U.esc((st ? st.name + ' — ' : '') + (l ? (l.topic || 'урок') : 'урок')) +
               ' <span class="muted">(' + U.esc(r.err || 'не дійшло') + ')</span>';
           }).join('<br>') +
-          '<br><span class="muted">Відкрийте дошку такого уроку — вона відправиться сама, ' +
-          'або натисніть на ній «Надіслати учню».</span>');
+          '<div class="mt-2"><button class="btn btn--primary btn--sm" data-act="fix-publish">' +
+          'Надіслати ще раз</button></div>');
       } else {
         out += healthRow('on', 'Уроки в учнів свіжі',
           U.pl(shared.length, 'урок відправлено', 'уроки відправлено', 'уроків відправлено') +

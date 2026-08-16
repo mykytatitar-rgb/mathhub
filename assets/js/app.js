@@ -5,6 +5,19 @@
   var U = window.U, S = window.S, C = window.C, V = window.V, F = window.F, icon = window.icon;
   var App = {};
 
+  /* Версія коду, який зараз виконується.
+
+     Сайт оновлюється вручну — архівом. Через це буває стан, коли зміни вже
+     на сервері, а сторінка й далі виконує старий код: із кеша браузера або
+     тому, що архів ще не завантажили. Зовні це виглядає як «виправлення не
+     працює», і на з'ясування щоразу йде окреме коло.
+
+     Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
+     порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
+     старе чи на нове» отримує відповідь на місці. */
+  App.BUILD = 'v14';
+  window.APP_BUILD = App.BUILD;
+
   var NAV = [
     { hash: '#/',          icon: 'grid',      label: 'Огляд' },
     { hash: '#/students',  icon: 'users',     label: 'Учні',      count: function () { return S.students().length; } },
@@ -486,6 +499,31 @@
     /* Чесна перевірка картинок: не «є ключ у сховищі», а справжня спроба
        прочитати файл. Читання перехоплене синхронізацією, тож те, що лежить
        на сервері, дорогою підтягнеться до себе — перевірка заразом і лікує. */
+    /* Перезавантаження, яке справді бере свіжий код.
+
+       Звичайне оновлення сторінки цього не гарантує: і кеш браузера, і
+       service worker можуть віддати те саме старе. Тому спершу викидаємо
+       їхні запаси, а вже потім перезавантажуємо. */
+    'hard-reload': function (_a, el) {
+      if (el) { el.disabled = true; el.textContent = 'Оновлюю…'; }
+      var jobs = [];
+
+      if (window.caches && caches.keys) {
+        jobs.push(caches.keys().then(function (ks) {
+          return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+        }).catch(function () {}));
+      }
+      if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+        jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+          return Promise.all(rs.map(function (r) { return r.unregister(); }));
+        }).catch(function () {}));
+      }
+
+      Promise.all(jobs).then(function () {
+        location.reload();
+      });
+    },
+
     'check-images': function (_a, el) {
       if (!window.ImgStore || !ImgStore.available()) return;
       var keys = S.usedImageKeys();

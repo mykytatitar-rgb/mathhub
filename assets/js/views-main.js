@@ -971,6 +971,23 @@
       '<span><b>' + U.esc(title) + '</b><br>' + text + '</span></div>';
   }
 
+  /**
+   * Яка версія лежить на сервері.
+   *
+   * Питаємо sw.js і читаємо з нього рядок версії. Запит навмисно повз кеш:
+   * інакше відповідь прийшла б із того самого сховища, через яке й виникає
+   * проблема, і завжди збігалася б.
+   */
+  function serverBuild() {
+    return fetch('sw.js?v=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.text() : ''; })
+      .then(function (t) {
+        var m = t.match(/vektor-(v\d+)/);
+        return m ? m[1] : null;
+      })
+      .catch(function () { return null; });
+  }
+
   V.fillHealthAsync = function () {
     var box = document.querySelector('[data-health]');
     if (!box) return;
@@ -980,12 +997,34 @@
       window.BoardHistory && BoardHistory.available()
         ? BoardHistory.stats() : Promise.resolve(null),
       window.ImgStore && ImgStore.available()
-        ? ImgStore.keys() : Promise.resolve(null)
+        ? ImgStore.keys() : Promise.resolve(null),
+      serverBuild()
     ];
 
     Promise.all(jobs).then(function (res) {
-      var hist = res[0], localKeys = res[1];
+      var hist = res[0], localKeys = res[1], onServer = res[2];
       var out = '';
+
+      /* 0. Чи це взагалі свіжий код.
+
+         Сайт оновлюється вручну архівом, тож регулярно виходить так: зміни
+         вже на сервері, а сторінка виконує старе — з кеша або тому, що
+         архів ще не завантажили. Зовні це не відрізнити від «виправлення
+         не працює», і кожен раз з'ясування коштує окремого кола. */
+      var here = window.APP_BUILD || '?';
+      if (!onServer) {
+        out += healthRow('warn', 'Версію перевірити не вдалося',
+          'Ця сторінка працює на збірці ' + U.esc(here) + '.');
+      } else if (onServer !== here) {
+        out += healthRow('off', 'Сторінка працює на старому коді',
+          'Тут ' + U.esc(here) + ', а на сервері вже ' + U.esc(onServer) + '. ' +
+          'Саме через це нові виправлення можуть не діяти.' +
+          '<div class="mt-2"><button class="btn btn--ghost btn--sm" data-act="hard-reload">' +
+          'Перезавантажити зі свіжим кодом</button></div>');
+      } else {
+        out += healthRow('on', 'Свіжа версія програми',
+          'Збірка ' + U.esc(here) + ' — така сама, як на сервері.');
+      }
 
       /* 1. Синхронізація. Тут коротко й по суті: подробиці — вище в картці
          синхронізації, сюди людина йде по відповідь «так чи ні». */

@@ -1014,6 +1014,11 @@
     db.materials.forEach(function (m) {
       (m.files || []).forEach(function (f) { add(f && f.key); });
     });
+    /* Вкладення власних справ. Без цього вони не потрапляли б у
+       синхронізацію картинок — тобто лишалися б тільки на цьому пристрої. */
+    (db.desk || []).forEach(function (d) {
+      (d.files || []).forEach(function (f) { add(f && f.key); });
+    });
     return keys;
   };
 
@@ -1040,7 +1045,9 @@
       title: (data && data.title) || '',
       note: (data && data.note) || '',
       tag: (data && data.tag) || '',
-      status: (data && data.status) || 'open'
+      status: (data && data.status) || 'open',
+      links: (data && data.links) || [],
+      files: (data && data.files) || []
     });
   };
 

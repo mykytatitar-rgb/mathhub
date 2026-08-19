@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v24';
+  App.BUILD = 'v25';
   window.APP_BUILD = App.BUILD;
 
   var NAV = [
@@ -549,6 +549,27 @@
         else U.toast('Не вдалося відправити: ' + lastErr, 'err');
         if (V.fillHealthAsync) V.fillHealthAsync();
       });
+    },
+
+    /* Відкрити вкладення справи. Файл лежить у сховищі браузера, тож
+       спершу дістаємо його, і лише потім віддаємо системі. */
+    'desk-file': function (key) {
+      if (!window.ImgStore || !key) return;
+      ImgStore.get(key).then(function (blob) {
+        if (!blob) { U.toast('Файл не знайшовся', 'err'); return; }
+
+        var name = 'файл';
+        (S.deskItems() || []).forEach(function (d) {
+          (d.files || []).forEach(function (f) { if (f.key === key && f.name) name = f.name; });
+        });
+
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      }).catch(function () { U.toast('Не вдалося відкрити файл', 'err'); });
     },
 
     'tg-test': function (_a, el) {

@@ -842,6 +842,69 @@
     render();
   }
 
+  /* ============================================================
+     Посилання
+     ============================================================
+
+     Матеріал має одне поле адреси, бо матеріал — це і є одне посилання.
+     Справі ж їх потрібно кілька: розділ підручника, відео, обговорення на
+     форумі. Тому тут окремий список, а не поле. */
+
+  function linkStripHtml() {
+    return '<div class="file-strip" data-lstrip>' +
+      '<div class="row" style="gap:8px;width:100%">' +
+        '<input class="input" data-link-url type="url" ' +
+        'placeholder="https://… — вставте і натисніть «Додати»" style="flex:1">' +
+        '<button type="button" class="btn btn--ghost btn--sm" data-link-add>' +
+        icon('plus', 15) + 'Додати</button>' +
+      '</div>' +
+      '</div>';
+  }
+
+  /** links — масив {url,title}, змінюється на місці. */
+  function mountLinkStrip(root, links) {
+    var strip = root.querySelector('[data-lstrip]');
+    if (!strip) return;
+    var input = strip.querySelector('[data-link-url]');
+    var row = strip.querySelector('.row');
+
+    function render() {
+      U.$$('.file-row', strip).forEach(function (x) { x.remove(); });
+      links.forEach(function (l, i) {
+        var el = document.createElement('div');
+        el.className = 'file-row';
+        el.innerHTML = '<span class="file-row__i">' + icon('link', 16) + '</span>' +
+          '<span class="file-row__n truncate">' + U.esc(l.title || l.url) + '</span>' +
+          '<button type="button" class="icon-btn spacer" data-ldel="' + i +
+          '" title="Прибрати">' + icon('x', 15) + '</button>';
+        strip.insertBefore(el, row);
+      });
+    }
+
+    function add() {
+      var v = (input.value || '').trim();
+      if (!v) return;
+      // без схеми браузер вважає адресу відносною й посилання веде в нікуди
+      if (!/^https?:\/\//i.test(v)) v = 'https://' + v;
+      links.push({ url: v, title: '' });
+      input.value = '';
+      render();
+    }
+
+    strip.addEventListener('click', function (e) {
+      if (e.target.closest('[data-link-add]')) { e.preventDefault(); add(); return; }
+      var del = e.target.closest('[data-ldel]');
+      if (del) { e.preventDefault(); links.splice(Number(del.dataset.ldel), 1); render(); }
+    });
+
+    // Enter у полі адреси — те саме, що «Додати», а не «зберегти форму»
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); add(); }
+    });
+
+    render();
+  }
+
   F.material = function (id) {
     var m = id ? S.get('materials', id) : null;
     var isNew = !m;
@@ -954,6 +1017,13 @@
     var isNew = !d;
     var data = d || { title: '', note: '', tag: '', status: 'open' };
 
+    /* Копії, а не самі масиви: поки не натиснуто «Зберегти», у базі не має
+       змінитися нічого. Інакше «Скасувати» скасовувало б лише текст. */
+    var links = ((data.links || [])).map(function (l) { return { url: l.url, title: l.title || '' }; });
+    var files = ((data.files || [])).map(function (x) {
+      return { key: x.key, name: x.name, size: x.size, type: x.type };
+    });
+
     // теми, які вже вживалися — щоб не вигадувати назву щоразу
     var tags = [];
     S.deskItems().forEach(function (x) { if (x.tag && tags.indexOf(x.tag) < 0) tags.push(x.tag); });
@@ -977,7 +1047,13 @@
             }))) +
         '</div>' +
         C.field('Нотатка', C.textarea('note', data.note,
-          'placeholder="Що саме незрозуміло, де застряг, що вже пробував"')),
+          'placeholder="Що саме незрозуміло, де застряг, що вже пробував"')) +
+        C.field('Посилання', linkStripHtml()) +
+        C.field('Файли', fileStripHtml()),
+      onMount: function (root) {
+        mountLinkStrip(root, links);
+        mountFileStrip(root, files);
+      },
       buttons: [
         !isNew ? { label: 'Видалити', kind: 'btn--danger', act: 'del', close: true, onClick: function () {
           C.confirm('Видалити справу?',
@@ -994,6 +1070,8 @@
           onClick: function (root) {
             var v = C.readForm(root);
             if (!v.title) { U.toast('Впишіть, про що справа', 'err'); return false; }
+            v.links = links;
+            v.files = files;
             if (isNew) {
               var made = S.addDeskItem(v);
               /* Одразу на дошку: справу створюють, щоб розбиратися, а не

@@ -734,6 +734,25 @@
             'title="Редагувати">' + icon('edit', 16) + '</button>' +
         '</div>' +
         (d.note ? '<div class="desk__n">' + U.esc(d.note) + '</div>' : '') +
+
+        /* Посилання й файли просто в картці, а не за ще одним натисканням:
+           до справи повертаються саме по них — відкрити розділ підручника
+           чи перечитати конспект. */
+        ((d.links || []).length || (d.files || []).length
+          ? '<div class="file-strip mt-2" style="border:0;padding:0">' +
+            (d.links || []).map(function (l) {
+              return '<a class="file-row" href="' + U.esc(l.url) + '" target="_blank" rel="noopener">' +
+                '<span class="file-row__i">' + icon('link', 15) + '</span>' +
+                '<span class="file-row__n truncate">' + U.esc(l.title || l.url) + '</span></a>';
+            }).join('') +
+            (d.files || []).map(function (fl) {
+              return '<button class="file-row" data-act="desk-file" data-arg="' + U.esc(fl.key) + '">' +
+                '<span class="file-row__i">' + icon('file', 15) + '</span>' +
+                '<span class="file-row__n truncate">' + U.esc(fl.name || 'файл') + '</span></button>';
+            }).join('') +
+            '</div>'
+          : '') +
+
         '<button class="btn btn--soft btn--block mt-2" data-act="desk-open" data-arg="' + d.id + '">' +
           icon('board', 16) + 'Розбиратися на дошці</button>' +
       '</div>';

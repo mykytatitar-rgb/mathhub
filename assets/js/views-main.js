@@ -704,20 +704,37 @@
      Вікно для цього затісне, і його не надрукуєш. */
 
   V.sheet = function (id) {
-    var m = S.get('materials', id);
-    if (!m) {
+    /* Усі аркуші разом — це довідник, а не двадцять окремих сторінок. Тому
+       ліворуч завжди повний перелік тем, і перемикання між ними не веде
+       назад у бібліотеку: посеред уроку згадують не «де лежав аркуш», а
+       «де там про логарифми». */
+    var all = S.db().materials.filter(function (m) { return m.type === 'theory'; });
+
+    if (!all.length) {
       return '<div class="page"><div class="card">' +
-        C.empty('alert', 'Аркуш не знайдено', 'Можливо, його видалили.',
-          '<button class="btn btn--primary" data-act="nav" data-arg="#/materials">До матеріалів</button>') +
+        C.empty('book', 'Довідника ще немає',
+          'Він заводиться одним натисканням: теми, розділи, формули, приклади.',
+          '<button class="btn btn--primary" data-act="mat-add-theory">' +
+          icon('book', 16) + 'Завантажити довідник</button>') +
         '</div></div>';
     }
+
+    var m = (id && S.get('materials', id)) || all[0];
+    if (m.type !== 'theory') m = all[0];
+
+    var nav = all.map(function (x, n) {
+      return '<button class="ref__t' + (x.id === m.id ? ' is-on' : '') +
+        '" data-act="sheet-open" data-arg="' + x.id + '">' +
+        '<span class="ref__n">' + (n + 1) + '.</span>' +
+        '<span class="truncate">' + U.esc(x.title || 'Без назви') + '</span>' +
+        icon('chevronR', 14) + '</button>';
+    }).join('');
 
     var rules = m.rules || [];
 
     /* Правила згруповані так само, як їх і читають: «Властивості степеня»,
-       «Особливі випадки». Група — це картка з синьою шапкою, всередині
-       блоки. Порядок груп — той, у якому їх вписали, а не абетковий:
-       теорію викладають послідовно. */
+       «Особливі випадки». Група — картка з шапкою, всередині блоки.
+       Порядок груп той, у якому їх вписали: теорію викладають послідовно. */
     var groups = [];
     var byName = {};
     rules.forEach(function (r) {
@@ -731,7 +748,7 @@
     function block(r) {
       var k = r.kind || 'rule';
 
-      /* Пари — це рядок таблиці: похідна, первісна, період. Ліворуч те, що
+      /* Пари — рядок таблиці: похідна, первісна, період. Ліворуч те, що
          шукають, праворуч відповідь. */
       if (k === 'pair') {
         return '<div class="blk-pair"><div>' + fx(r.formula) + '</div>' +
@@ -749,7 +766,6 @@
                '<span>' + U.esc(r.note || '') + '</span></div>';
       }
 
-      // звичайне правило: підпис, формула, приклад
       return (r.title ? '<div class="blk-h">' + U.esc(r.title) + '</div>' : '') +
         (r.note ? '<div class="blk-text">' + U.esc(r.note) + '</div>' : '') +
         (r.formula ? '<div class="blk-f">' + fx(r.formula) + '</div>' : '') +
@@ -763,32 +779,29 @@
         '</div>';
     }).join('');
 
-    return C.hero({
-      short: true,
-      title: m.title || 'Аркуш теорії',
-      sub: (m.topic || '') +
-           (groups.length ? ' · ' + U.pl(groups.length, 'розділ', 'розділи', 'розділів') : '') +
-           (rules.length ? ' · ' + U.pl(rules.length, 'блок', 'блоки', 'блоків') : ''),
-      actions: [
-        { label: 'Друк', icon: 'download', act: 'sheet-print' },
-        { label: 'Редагувати', icon: 'edit', act: 'mat-edit', arg: m.id, solid: true }
-      ]
-    }) +
-    '<div class="page">' +
-      (m.note ? '<div class="card mb-3"><div class="pre-wrap" style="line-height:1.6">' +
-        U.esc(m.note) + '</div></div>' : '') +
+    return '<div class="ref">' +
+      '<div class="ref__bar">' +
+        '<div class="ref__title">Довідник</div>' +
+        '<div class="ref__count">' + U.pl(all.length, 'тема', 'теми', 'тем') + '</div>' +
+        '<button class="btn btn--ghost btn--sm" data-act="sheet-print">' +
+          icon('download', 15) + 'Друк</button>' +
+        '<button class="btn btn--ghost btn--sm" data-act="mat-edit" data-arg="' + m.id + '">' +
+          icon('edit', 15) + 'Редагувати</button>' +
+      '</div>' +
 
-      /* Де саме натиснути, щоб аркуш побачив учень. Механіка не нова —
-         аркуш прикріплюється як будь-який матеріал, — але шукати її по
-         інших екранах ніхто не зобов'язаний. */
-      '<div class="field__hint mb-3">Щоб показати учневі: відкрийте дошку його уроку, ' +
-      'натисніть «Надіслати учню» і позначте цей аркуш у списку матеріалів. ' +
-      'Формули приїдуть до нього вже намальованими.</div>' +
-      (rules.length
-        ? '<div class="sheet">' + cards + '</div>'
-        : '<div class="card">' + C.empty('book', 'Правил ще немає',
-            'Відкрийте редагування й додайте перше — назва, формула, приклад.') + '</div>') +
-    '</div>';
+      '<div class="ref__body">' +
+        '<nav class="ref__nav">' + nav + '</nav>' +
+        '<div class="ref__main">' +
+          '<div class="ref__h">' + U.esc(m.title || '') +
+            (m.topic ? '<span class="ref__sub">' + U.esc(m.topic) + '</span>' : '') + '</div>' +
+          (m.note ? '<div class="blk-text mb-3">' + U.esc(m.note) + '</div>' : '') +
+          (groups.length
+            ? '<div class="sheet">' + cards + '</div>'
+            : '<div class="card">' + C.empty('book', 'Правил ще немає',
+                'Відкрийте редагування й додайте перше.') + '</div>') +
+        '</div>' +
+      '</div>' +
+      '</div>';
   };
 
   V.desk = function (query) {

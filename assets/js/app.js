@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v28';
+  App.BUILD = 'v29';
   window.APP_BUILD = App.BUILD;
 
   var NAV = [
@@ -25,6 +25,10 @@
         return S.lessonsOnDay(U.today()).filter(function (l) { return l.status === 'planned'; }).length; } },
     { hash: '#/finance',   icon: 'wallet',    label: 'Фінанси' },
     { hash: '#/materials', icon: 'folder',    label: 'Матеріали' },
+    /* Довідник окремим пунктом, а не всередині матеріалів: до нього
+       заглядають посеред уроку, і зайвий крок тут дорого коштує. */
+    { hash: '#/reference', icon: 'book',      label: 'Довідник',  count: function () {
+        return S.db().materials.filter(function (m) { return m.type === 'theory'; }).length; } },
     /* Власна математика окремо від учнівської: те, у чому розбираєшся сам,
        не має домішуватися в розклад, фінанси й портали. */
     { hash: '#/desk',      icon: 'compass',   label: 'Моє',       count: function () {
@@ -215,6 +219,7 @@
         case 'materials':
           html = V.materials(route.query); break;
         case 'sheet':
+        case 'reference':
           html = V.sheet(route.parts[1]); break;
         case 'desk':
           html = V.desk(route.query); break;

@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v34';
+  App.BUILD = 'v35';
   window.APP_BUILD = App.BUILD;
 
   var NAV = [
@@ -567,6 +567,9 @@
 
     /* Видалення теми питає підтвердження й називає її поіменно: у довіднику
        теми схожі, і «ви впевнені?» без назви тут нічого не означає. */
+    'sheet-refresh': function (id) { F.refreshSheet(id); },
+    'sheets-refresh-all': function () { F.refreshAllSheets(); },
+
     'sheet-del': function (id) {
       var m = S.get('materials', id);
       if (!m) return;

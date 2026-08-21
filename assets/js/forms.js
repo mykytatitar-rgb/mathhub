@@ -931,6 +931,12 @@
       var p = el.querySelector('[data-prev]');
       var k = r.kind || 'rule';
 
+      if (k === 'plot') {
+        var svg = window.MathFmt ? MathFmt.plot((r.formula || '').trim()) : '';
+        p.innerHTML = svg || '<span class="muted small">назва схеми: ' +
+          (window.MathFmt ? MathFmt.plots().join(', ') : '') + '</span>';
+        return;
+      }
       if (k === 'text' || k === 'warn' || k === 'item' || k === 'info') {
         p.innerHTML = r.note
           ? U.esc(r.note)
@@ -953,7 +959,8 @@
       { value: 'warn', label: 'Увага' },
       { value: 'info', label: 'Довідка' },
       { value: 'item', label: 'Пункт списку' },
-      { value: 'pair', label: 'Рядок таблиці' }
+      { value: 'pair', label: 'Рядок таблиці' },
+      { value: 'plot', label: 'Схема графіка' }
     ];
 
     function row(r, i) {
@@ -1059,6 +1066,70 @@
        «Додати», і показати їй треба те, що з'явилося. */
     if (first) { location.hash = '#/sheet/' + first; }
     if (window.App && App.render) App.render();
+  };
+
+  /** Взяти зміст теми з готового довідника. */
+  function freshFor(title) {
+    var k = String(title || '').toLowerCase().trim();
+    var out = null;
+    (window.SHEETS_DATA || []).forEach(function (sh) {
+      if ((sh.title || '').toLowerCase().trim() === k) out = sh;
+    });
+    return out;
+  }
+
+  function applyFresh(m, sh) {
+    S.update('materials', m.id, {
+      topic: sh.topic || m.topic,
+      rules: sh.rules.map(function (x) {
+        return { group: x.group || '', kind: x.kind || 'rule', title: x.title || '',
+                 formula: x.formula || '', example: x.example || '', note: x.note || '' };
+      })
+    });
+  }
+
+  /**
+   * Оновити одну тему.
+   *
+   * Питаємо обовʼязково: зміст заміниться цілком, і якщо тему правили під
+   * себе, ті правки зникнуть. Тихо перезаписувати чуже не можна навіть тоді,
+   * коли нове очевидно повніше.
+   */
+  F.refreshSheet = function (id) {
+    var m = S.get('materials', id);
+    if (!m) return;
+    var sh = freshFor(m.title);
+    if (!sh) { U.toast('У готовому довіднику такої теми немає', 'err'); return; }
+
+    C.confirm('Оновити «' + m.title + '»?',
+      'Зміст теми буде замінено на готовий: стане ' +
+      U.pl(sh.rules.length, 'блок', 'блоки', 'блоків') + ' замість ' + (m.rules || []).length +
+      '. Якщо ви правили цю тему під себе — правки зникнуть.',
+      function () {
+        applyFresh(m, sh);
+        U.toast('Тему оновлено', 'ok');
+        if (window.App && App.render) App.render();
+      },
+      'Оновити');
+  };
+
+  /** Те саме для всіх тем, що відстали. */
+  F.refreshAllSheets = function () {
+    var list = S.db().materials.filter(function (m) {
+      if (m.type !== 'theory') return false;
+      var sh = freshFor(m.title);
+      return sh && sh.rules.length > (m.rules || []).length;
+    });
+    if (!list.length) { U.toast('Усе вже свіже', 'ok'); return; }
+
+    C.confirm('Оновити ' + U.pl(list.length, 'тему', 'теми', 'тем') + '?',
+      'Зміст цих тем буде замінено на готовий. Якщо ви правили їх під себе — правки зникнуть.',
+      function () {
+        list.forEach(function (m) { applyFresh(m, freshFor(m.title)); });
+        U.toast('Оновлено ' + U.pl(list.length, 'тему', 'теми', 'тем'), 'ok');
+        if (window.App && App.render) App.render();
+      },
+      'Оновити');
   };
 
   F.material = function (id) {

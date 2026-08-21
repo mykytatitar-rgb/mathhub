@@ -773,6 +773,23 @@
       return !seen[(sh.title || '').toLowerCase().trim()];
     });
 
+    /* Тема могла не зʼявитися, а доповнитися: у готовому довіднику додалися
+       схеми графіків, а копія в бібліотеці лишилась як була. Порівнюємо за
+       кількістю блоків — цього досить, щоб помітити поповнення, і при цьому
+       не чіпаємо теми, які ви правили самі під себе. */
+    var builtin = {};
+    (window.SHEETS_DATA || []).forEach(function (sh) {
+      builtin[(sh.title || '').toLowerCase().trim()] = sh;
+    });
+
+    var fresh = builtin[(m.title || '').toLowerCase().trim()];
+    var canRefresh = !!(fresh && (fresh.rules || []).length > (m.rules || []).length);
+
+    var grown = all.filter(function (x) {
+      var b = builtin[(x.title || '').toLowerCase().trim()];
+      return b && (b.rules || []).length > (x.rules || []).length;
+    });
+
     var rules = m.rules || [];
 
     /* Правила згруповані так само, як їх і читають: «Властивості степеня»,
@@ -817,6 +834,15 @@
         return '<div class="blk-item">' + icon('chevronR', 13) +
                '<span>' + U.esc(r.note || '') + '</span></div>';
       }
+      /* Схема графіка. Назва форми лежить у полі формули: там уже є поле,
+         і заводити ще одне заради одного слова не варто. */
+      if (k === 'plot') {
+        var svg = window.MathFmt ? MathFmt.plot((r.formula || '').trim()) : '';
+        if (!svg) return '';
+        return '<div class="blk-plot">' + svg +
+               (r.note ? '<div class="blk-plot__c">' + U.esc(r.note) + '</div>' : '') +
+               '</div>';
+      }
 
       return (r.title ? '<div class="blk-h">' + U.esc(r.title) + '</div>' : '') +
         (r.note ? '<div class="blk-text">' + U.esc(r.note) + '</div>' : '') +
@@ -841,6 +867,10 @@
           icon('download', 15) + 'Друк</button>' +
         '<button class="btn btn--ghost btn--sm" data-act="mat-edit" data-arg="' + m.id + '">' +
           icon('edit', 15) + 'Редагувати</button>' +
+        (canRefresh
+          ? '<button class="btn btn--ghost btn--sm" data-act="sheet-refresh" data-arg="' + m.id + '">' +
+            icon('refresh', 15) + 'Оновити тему</button>'
+          : '') +
         '<button class="btn btn--ghost btn--sm" data-act="sheet-del" data-arg="' + m.id + '">' +
           icon('trash', 15) + 'Видалити тему</button>' +
       '</div>' +
@@ -866,6 +896,19 @@
               '</div>' +
               '<button class="btn btn--primary btn--sm" data-act="mat-add-theory">' +
               icon('plus', 15) + 'Додати</button>' +
+              '</div>'
+            : '') +
+
+          (grown.length
+            ? '<div class="ref__new">' +
+              '<div style="flex:1;min-width:0">' +
+                '<b>' + U.pl(grown.length, 'тема доповнилась', 'теми доповнились', 'тем доповнились') +
+                ' у готовому довіднику</b><br>' +
+                U.esc(grown.map(function (x) { return x.title; }).slice(0, 6).join(', ')) +
+                (grown.length > 6 ? ' та інші' : '') +
+              '</div>' +
+              '<button class="btn btn--primary btn--sm" data-act="sheets-refresh-all">' +
+              icon('refresh', 15) + 'Оновити всі</button>' +
               '</div>'
             : '') +
           (dupNow

@@ -16,7 +16,8 @@
      text — абзац пояснення
      warn — те, на чому найчастіше помиляються
      item — пункт списку
-     pair — рядок таблиці: ліворуч питання, праворуч відповідь */
+     pair — рядок таблиці: ліворуч питання, праворуч відповідь
+     plot — схема графіка: у полі формули назва форми */
 
 (function () {
   'use strict';
@@ -29,6 +30,8 @@
   function w(group, note)  { return { group: group, kind: 'warn', note: note }; }
   function i(group, note)  { return { group: group, kind: 'item', note: note }; }
   function p(group, a, b)  { return { group: group, kind: 'pair', formula: a, example: b }; }
+  /* Схема графіка: у полі формули лежить назва форми. */
+  function g(group, name, note) { return { group: group, kind: 'plot', formula: name, note: note || '' }; }
 
   var SHEETS = [];
 
@@ -120,7 +123,9 @@
     w('Linear Function', 'The graph of a linear function is a straight line.'),
 
     r('Increasing or Decreasing?', 'Increasing', '', '', 'Acute angle with positive x-axis direction'),
+    g('Increasing or Decreasing?', 'line-up', 'k > 0'),
     r('Increasing or Decreasing?', 'Decreasing', '', '', 'Obtuse angle with positive x-axis direction'),
+    g('Increasing or Decreasing?', 'line-down', 'k < 0'),
 
     r('Direct Proportionality', 'General form', 'y = kx', '', 'Direct proportionality is a linear function where b = 0.'),
     w('Direct Proportionality', 'The graph always passes through the origin.'),
@@ -159,8 +164,10 @@
     t("Solving with Vieta's Theorem", 'Find two integers whose product equals c and whose sum equals −b.'),
 
     r('Quadratic Function', '', 'y = ax^2 + bx + c', '', 'The graph of a quadratic function is a parabola.'),
-    r('Quadratic Function', 'a > 0', '', '', 'Opens upward ∪'),
-    r('Quadratic Function', 'a < 0', '', '', 'Opens downward ∩'),
+    r('Quadratic Function', 'a > 0', '', '', 'Opens upward'),
+    g('Quadratic Function', 'parabola-up', 'a > 0'),
+    r('Quadratic Function', 'a < 0', '', '', 'Opens downward'),
+    g('Quadratic Function', 'parabola-down', 'a < 0'),
     t('Quadratic Function', 'The value of c is the y-intercept — where the graph meets the y-axis.'),
 
     r('Elements of a Parabola', 'Vertex', 'x_v = -\\frac{b}{2a}', '', 'To find the y-coordinate, substitute x_v into the function.'),
@@ -209,6 +216,7 @@
     r('Properties', 'Absolute value of a quotient', '|\\frac{a}{b}| = \\frac{|a|}{|b|}'),
 
     r('Absolute Value Function', 'General form', 'y = |x|'),
+    g('Absolute Value Function', 'abs', 'y = |x|'),
     i('Absolute Value Function', 'Passes through the origin (0; 0)'),
     i('Absolute Value Function', 'Bisects quadrants I and II'),
     i('Absolute Value Function', 'Is an even function'),
@@ -234,6 +242,7 @@
     t('Different Denominators', 'Multiply one fraction — both numerator and denominator — to make denominators equal, then add or subtract.'),
 
     r('Function y = k/x', '', 'y = \\frac{k}{x}', '', 'The graph is a hyperbola.'),
+    g('Function y = k/x', 'hyperbola', 'hyperbola'),
     i('Function y = k/x', 'Does not cross the coordinate axes'),
     i('Function y = k/x', 'Is an odd function'),
     i('Function y = k/x', 'D(y) = (−∞; 0) ∪ (0; +∞)'),
@@ -268,6 +277,7 @@
     i('Irrational Denominator', 'If the denominator is an expression → multiply by its conjugate.'),
     t('Irrational Denominator', 'Conjugate expression — the same expression with the opposite sign.'),
 
+    g('Root Function', 'sqrt', 'y = \u221Ax'),
     i('Root Function', 'D(y) = [0; +∞), E(y) = [0; +∞)'),
     i('Root Function', 'Zero of function: y = 0 when x = 0'),
     i('Root Function', 'Increasing on [0; +∞)')
@@ -282,6 +292,7 @@
     i('Exponential Function', 'D(y) = ℝ, E(y) = (0; +∞)'),
 
     r('Function y = x³', '', 'y = x^3'),
+    g('Function y = x³', 'cubic', 'y = x\u00B3'),
     i('Function y = x³', 'Passes through the origin'),
     i('Function y = x³', 'Is an odd function'),
     i('Function y = x³', 'Is an increasing function'),
@@ -289,7 +300,9 @@
 
     t('Graph of the Function', 'The shape depends on the base a:'),
     r('Graph of the Function', 'a > 1', '', '', 'Increasing — exponential growth'),
+    g('Graph of the Function', 'exp-up', 'a > 1'),
     r('Graph of the Function', '0 < a < 1', '', '', 'Decreasing — exponential decay'),
+    g('Graph of the Function', 'exp-down', '0 < a < 1'),
 
     t('Exponential Equations', 'An exponential equation has the unknown in the exponent.'),
     r('Exponential Equations', '', 'a^x = b, \\quad a > 0, \\quad a \\ne 1'),
@@ -408,10 +421,12 @@
     r('Function y = sin x', '', 'D(\\sin x) = ℝ, \\quad E(\\sin x) = [-1; 1]'),
     i('Function y = sin x', 'Odd: sin(−x) = −sin x, symmetric about the origin'),
     r('Function y = sin x', 'Period', 'T = 2\\pi: \\quad \\sin(x + 2\\pi) = \\sin x'),
+    g('Function y = sin x', 'sin', 'y = sin x'),
 
     r('Function y = cos x', '', 'D(\\cos x) = ℝ, \\quad E(\\cos x) = [-1; 1]'),
     i('Function y = cos x', 'Even: cos(−x) = cos x, symmetric about the y-axis'),
     r('Function y = cos x', 'Period', 'T = 2\\pi: \\quad \\cos(x + 2\\pi) = \\cos x'),
+    g('Function y = cos x', 'cos', 'y = cos x'),
 
     r('Function y = tg x', '', 'D(\\tg x) = x \\ne \\frac{\\pi}{2} + \\pi n, \\quad n \\in ℤ'),
     r('Function y = tg x', '', 'E(\\tg x) = ℝ'),

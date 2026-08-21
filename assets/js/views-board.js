@@ -535,7 +535,7 @@
      які уроки треба перевидати.
 
      Підіймати щоразу, коли міняється VIEWER_SCRIPT або розмітка переглядача. */
-  var VIEWER_VERSION = 7;
+  var VIEWER_VERSION = 8;
 
   /**
    * Показати, що зараз із копією учня.
@@ -2897,7 +2897,10 @@
             return {
               title: r.title || '',
               note: r.note || '',
-              f: MathFmt.render(r.formula),
+              kind: r.kind || 'rule',
+              // схема малюється тут-таки: до учня їде готовий SVG
+              plot: r.kind === 'plot' ? MathFmt.plot((r.formula || '').trim()) : '',
+              f: r.kind === 'plot' ? '' : MathFmt.render(r.formula),
               ex: MathFmt.render(r.example)
             };
           })
@@ -3055,6 +3058,8 @@
 '.rule__n{font-size:11.5px;color:#6B6982;line-height:1.5;margin-bottom:6px}\n' +
 '.rule__f{text-align:center;font-size:17px;padding:9px 8px;background:#F7F6FD;border-radius:9px;overflow-x:auto}\n' +
 '.rule__e{text-align:center;font-size:13px;padding:6px 8px;margin-top:6px;background:#E9F8F0;border-radius:9px;overflow-x:auto}\n' +
+'.rule__p{text-align:center;padding:6px 0;color:#3A31B0}\n' +
+'.rule__p svg{max-width:100%;height:auto}\n' +
 '.mf{font-family:"Source Serif 4","Cambria Math",Georgia,"Times New Roman",serif;font-weight:600;line-height:1.32;color:#101010;white-space:normal;overflow-wrap:normal}\n' +
 '.mf .mf-v{font-style:italic}\n' +
 '.mf sup,.mf sub{font-size:.66em;line-height:1}\n' +
@@ -3125,6 +3130,7 @@
               return '<div class="rule">' +
                 '<div class="rule__h">' + U.esc(r.title || 'Правило') + '</div>' +
                 (r.note ? '<div class="rule__n">' + U.esc(r.note) + '</div>' : '') +
+                (r.plot ? '<div class="rule__p">' + r.plot + '</div>' : '') +
                 (r.f ? '<div class="rule__f">' + r.f + '</div>' : '') +
                 (r.ex ? '<div class="rule__e">' + r.ex + '</div>' : '') +
                 '</div>';

@@ -535,7 +535,7 @@
      які уроки треба перевидати.
 
      Підіймати щоразу, коли міняється VIEWER_SCRIPT або розмітка переглядача. */
-  var VIEWER_VERSION = 4;
+  var VIEWER_VERSION = 5;
 
   /**
    * Показати, що зараз із копією учня.
@@ -2494,14 +2494,17 @@
         return '<div class="mat-pick__h">' + U.esc(t) + '</div>' +
           byTopic[t].map(function (m) {
             var n = (m.files || []).length;
-            /* Матеріал без посилання й без файлів учневі показувати нема сенсу:
-               він побачить назву, під якою нічого не відкривається. Краще
-               попередити тут, ніж щоб учень тицяв у порожнє. */
-            var empty = !n && !m.url;
-            var tail = n
-              ? ' <span class="muted">· ' + U.pl(n, 'файл', 'файли', 'файлів') + '</span>'
-              : m.url ? ' <span class="muted">· посилання</span>'
-                      : ' <span class="mat-pick__empty">· порожній</span>';
+            var nr = (m.type === 'theory' && (m.rules || []).length) || 0;
+            /* Матеріал без посилання, файлів і правил учневі показувати нема
+               сенсу: він побачить назву, під якою нічого не відкривається.
+               Краще попередити тут, ніж щоб учень тицяв у порожнє. */
+            var empty = !n && !m.url && !nr;
+            var tail = nr
+              ? ' <span class="muted">· ' + U.pl(nr, 'правило', 'правила', 'правил') + '</span>'
+              : n
+                ? ' <span class="muted">· ' + U.pl(n, 'файл', 'файли', 'файлів') + '</span>'
+                : m.url ? ' <span class="muted">· посилання</span>'
+                        : ' <span class="mat-pick__empty">· порожній</span>';
             return '<label class="mat-pick__r' + (empty ? ' is-empty' : '') + '"' +
               (empty ? ' title="Ні файлу, ні посилання — учневі нічого відкривати"' : '') + '>' +
               '<input type="checkbox" data-mat="' + m.id + '"' +
@@ -2886,8 +2889,23 @@
     payload.materials = chosen.map(function (mid) {
       var m = S.get('materials', mid);
       if (!m) return null;
+      /* Формули малюємо тут, а не в учня: сторінку збирає репетитор, тож
+         до учня доїжджає готовий HTML. Йому не треба ні набору формул, ні
+         бібліотеки — лише кілька правил оформлення. */
+      var rules = (m.type === 'theory' && window.MathFmt)
+        ? (m.rules || []).map(function (r) {
+            return {
+              title: r.title || '',
+              note: r.note || '',
+              f: MathFmt.render(r.formula),
+              ex: MathFmt.render(r.example)
+            };
+          })
+        : [];
+
       return {
         title: m.title || '', note: m.note || '', url: m.url || '',
+        rules: rules,
         files: (m.files || []).map(function (f) {
           if (matKeys.indexOf(f.key) < 0) matKeys.push(f.key);
           return { key: f.key, name: f.name || 'файл', size: f.size || 0 };
@@ -3028,6 +3046,25 @@
 '.mats{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}\n' +
 '.matf{display:inline-block;border:1.5px solid #E7E5F2;border-radius:10px;padding:8px 14px;font-size:12.5px;font-weight:650;color:#3A31B0;text-decoration:none;background:#fff}\n' +
 '.matf:hover{background:#F1EFFE;border-color:#8FB4FF}\n' +
+
+/* Аркуш теорії. Формули приїжджають уже намальованими, тут лише правила
+   оформлення — щоб дріб стояв рискою, а степінь угорі. */
+'.sheet{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:10px;margin-top:10px}\n' +
+'.rule{border:1px solid #E7E5F2;border-radius:12px;padding:10px;background:#fff}\n' +
+'.rule__h{font-weight:700;font-size:12px;color:#3A31B0;margin-bottom:7px}\n' +
+'.rule__n{font-size:11.5px;color:#6B6982;line-height:1.5;margin-bottom:6px}\n' +
+'.rule__f{text-align:center;font-size:17px;padding:9px 8px;background:#F7F6FD;border-radius:9px;overflow-x:auto}\n' +
+'.rule__e{text-align:center;font-size:13px;padding:6px 8px;margin-top:6px;background:#E9F8F0;border-radius:9px;overflow-x:auto}\n' +
+'.mf{font-family:"Cambria Math","Times New Roman",Georgia,serif;font-style:italic;line-height:1.2;white-space:nowrap}\n' +
+'.mf sup,.mf sub{font-size:.62em;font-style:normal}\n' +
+'.mf .mf-fn{font-style:normal;padding-right:.15em}\n' +
+'.mf-frac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;margin:0 .18em}\n' +
+'.mf-num{padding:0 .35em .06em;border-bottom:1.4px solid currentColor}\n' +
+'.mf-den{padding:.06em .35em 0}\n' +
+'.mf-root{display:inline-flex;align-items:flex-start}\n' +
+'.mf-root .mf-idx{font-size:.58em;font-style:normal;transform:translateY(.15em);margin-right:-.28em}\n' +
+'.mf-root .mf-sign{transform:scaleY(1.15)}\n' +
+'.mf-root .mf-under{border-top:1.4px solid currentColor;padding:.1em .25em 0 .12em;margin-top:.16em}\n' +
 '.addshot.busy span{opacity:.55;border-style:solid}\n' +
 '.shots a.mine{border-color:#8FB4FF}\n' +
 'canvas.pen{cursor:crosshair}\n' +
@@ -3082,6 +3119,16 @@
   ? '  <div class="extra"><h3>Матеріали</h3>\n' + payload.materials.map(function (m) {
       return '    <div class="hw"><b>' + U.esc(m.title) + '</b>' +
         (m.note ? '<div class="desc">' + U.esc(m.note) + '</div>' : '') +
+        ((m.rules || []).length
+          ? '<div class="sheet">' + m.rules.map(function (r) {
+              return '<div class="rule">' +
+                '<div class="rule__h">' + U.esc(r.title || 'Правило') + '</div>' +
+                (r.note ? '<div class="rule__n">' + U.esc(r.note) + '</div>' : '') +
+                (r.f ? '<div class="rule__f">' + r.f + '</div>' : '') +
+                (r.ex ? '<div class="rule__e">' + r.ex + '</div>' : '') +
+                '</div>';
+            }).join('') + '</div>'
+          : '') +
         (m.url ? '<div class="meta" style="margin-top:6px"><a href="' + U.esc(m.url) +
           '" target="_blank" rel="noopener">Відкрити посилання</a></div>' : '') +
         (m.files.length

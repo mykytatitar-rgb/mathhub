@@ -75,6 +75,16 @@
       var c = s.charAt(i);
 
       if (c === '\\') {
+        /* Проміжки й екрановані знаки. Без цього \\, перетворювалося на
+           звичайну кому — і «120\\,000» читалося як «120,000», тобто зовсім
+           інше число. */
+        var nxt = s.charAt(i + 1);
+        if (nxt === ',' || nxt === ':' || nxt === ';') { out += '\u2009'; i += 2; continue; }
+        if (nxt === '!') { i += 2; continue; }
+        if (nxt === '{' || nxt === '}' || nxt === '%' || nxt === '&' || nxt === '\\') {
+          out += esc(nxt); i += 2; continue;
+        }
+
         var m = /^\\([a-zA-Z]+)/.exec(s.slice(i));
         if (!m) { i++; continue; }
         var name = m[1];

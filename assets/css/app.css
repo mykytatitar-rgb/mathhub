@@ -1625,3 +1625,33 @@ a { color: inherit; text-decoration: none; }
 .mat-peek { display: flex; flex-direction: column; gap: 6px; }
 .mat-peek__r { background: var(--bg); border-radius: var(--r-sm); padding: 6px 10px;
                text-align: center; overflow-x: auto; }
+
+/* ============================================================
+   Аркуш: групи як картки
+   ============================================================
+
+   Правила читають розділами, а не суцільним списком: «Властивості
+   степеня», «Особливі випадки». Тому картка = розділ, а всередині блоки. */
+
+.gcard { background: #fff; border: 1px solid var(--line); border-radius: var(--r);
+         box-shadow: var(--sh-1); overflow: hidden; break-inside: avoid; }
+.gcard__h { background: var(--blue-600); color: #fff; font-weight: 700; font-size: 13.5px;
+            padding: 11px 15px; letter-spacing: .2px; }
+.gcard__b { padding: 13px 14px; display: flex; flex-direction: column; gap: 7px; }
+
+.blk-h { font-size: 12.5px; font-weight: 750; color: var(--blue-700); margin-top: 4px; }
+.blk-h:first-child { margin-top: 0; }
+.blk-text { font-size: 12.5px; color: var(--ink-2); line-height: 1.55; }
+.blk-f { text-align: center; font-size: 18px; padding: 10px 12px; background: var(--bg);
+         border: 1px solid var(--line); border-radius: var(--r-sm); overflow-x: auto; }
+.blk-e { text-align: center; font-size: 14px; padding: 7px 12px; background: var(--green-bg);
+         border-radius: var(--r-sm); overflow-x: auto; }
+.blk-warn { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; line-height: 1.55;
+            background: var(--amber-bg); color: #8A5008; padding: 9px 11px; border-radius: var(--r-sm); }
+.blk-warn svg { flex: 0 0 auto; margin-top: 2px; }
+.blk-item { display: flex; gap: 7px; align-items: flex-start; font-size: 12.5px;
+            line-height: 1.55; color: var(--ink-2); }
+.blk-item svg { flex: 0 0 auto; margin-top: 3px; color: var(--blue-600); }
+.blk-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: center; }
+.blk-pair > div { background: var(--bg); border-radius: var(--r-sm); padding: 6px 10px;
+                  text-align: center; overflow-x: auto; }

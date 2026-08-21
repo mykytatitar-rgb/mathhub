@@ -929,34 +929,58 @@
 
     function preview(el, r) {
       var p = el.querySelector('[data-prev]');
-      var f = window.MathFmt ? MathFmt.render(r.formula) : U.esc(r.formula || '');
-      var ex = window.MathFmt ? MathFmt.render(r.example) : U.esc(r.example || '');
+      var k = r.kind || 'rule';
+
+      if (k === 'text' || k === 'warn' || k === 'item') {
+        p.innerHTML = r.note
+          ? U.esc(r.note)
+          : '<span class="muted small">текст</span>';
+        return;
+      }
+
+      var f = window.MathFmt ? MathFmt.render(r.formula) : '';
+      var ex = window.MathFmt ? MathFmt.render(r.example) : '';
       p.innerHTML = (f || '<span class="muted small">формула</span>') +
-        (ex ? '<span class="muted" style="margin:0 8px">·</span>' + ex : '');
+        (ex ? '<span class="muted" style="margin:0 8px">' + (k === 'pair' ? '→' : '·') + '</span>' + ex : '');
     }
+
+    /* Види блоків. Один аркуш складається з різних речей: правило з
+       формулою, попередження, пункт списку, рядок таблиці похідних. Якби
+       все було «правилом», довелося б підробляти одне під інше. */
+    var KINDS = [
+      { value: 'rule', label: 'Правило' },
+      { value: 'text', label: 'Текст' },
+      { value: 'warn', label: 'Увага' },
+      { value: 'item', label: 'Пункт списку' },
+      { value: 'pair', label: 'Рядок таблиці' }
+    ];
 
     function row(r, i) {
       var el = document.createElement('div');
       el.className = 'rule-edit';
       el.innerHTML =
         '<div class="row" style="gap:8px;align-items:center">' +
-          '<input class="input" data-k="title" placeholder="Назва правила" value="' +
-            U.esc(r.title || '') + '" style="flex:1">' +
+          '<input class="input" data-k="group" placeholder="Розділ (спільна шапка)" value="' +
+            U.esc(r.group || '') + '" style="flex:1.2">' +
+          C.select('kind', r.kind || 'rule', KINDS, 'data-k="kind" style="flex:0 0 132px"') +
           '<button type="button" class="icon-btn" data-rule-up title="Вище">' + icon('chevronL', 15) + '</button>' +
           '<button type="button" class="icon-btn" data-rule-del title="Прибрати">' + icon('x', 15) + '</button>' +
         '</div>' +
+        '<input class="input mt-2" data-k="title" placeholder="Підпис блока — необовʼязково" value="' +
+          U.esc(r.title || '') + '">' +
         '<div class="row" style="gap:8px;margin-top:7px">' +
           '<input class="input" data-k="formula" placeholder="a^m · a^n = a^{m+n}" value="' +
             U.esc(r.formula || '') + '" style="flex:1">' +
           '<input class="input" data-k="example" placeholder="5^2 · 5 = 125" value="' +
             U.esc(r.example || '') + '" style="flex:1">' +
         '</div>' +
-        '<input class="input mt-2" data-k="note" placeholder="Пояснення словами — необовʼязково" value="' +
+        '<input class="input mt-2" data-k="note" placeholder="Пояснення словами — воно ж текст попередження" value="' +
           U.esc(r.note || '') + '">' +
         '<div class="rule-edit__p" data-prev></div>';
 
       U.$$('[data-k]', el).forEach(function (inp) {
-        inp.addEventListener('input', function () {
+        var ev = inp.tagName === 'SELECT' ? 'change' : 'input';
+        inp.addEventListener(ev, function () {
           r[inp.dataset.k] = inp.value;
           preview(el, r);
         });
@@ -981,7 +1005,9 @@
 
     box.querySelector('[data-rule-add]').addEventListener('click', function (e) {
       e.preventDefault();
-      rules.push({ title: '', formula: '', example: '', note: '' });
+      var prev = rules[rules.length - 1];
+      rules.push({ group: (prev && prev.group) || '', kind: 'rule',
+                   title: '', formula: '', example: '', note: '' });
       render();
       var last = rows.lastChild;
       if (last) last.querySelector('input').focus();
@@ -991,84 +1017,44 @@
   }
 
   /* ============================================================
-     Готовий аркуш
+     Готовий довідник
      ============================================================
 
-     Порожня форма з проханням «додайте перше правило» — найгірший спосіб
-     показати, навіщо ця річ. Тому новий аркуш заводиться вже наповненим:
-     степені, бо з них починається половина тем і саме їх найчастіше
-     забувають. Далі його правлять під себе або видаляють рядки. */
+     Порожня форма з проханням «додайте перше правило» найгірше пояснює,
+     навіщо ця річ. Тому теорія заводиться одразу цілим довідником — теми,
+     розділи, формули, приклади. Далі його правлять під себе.
 
-  var POWERS = [
-    { title: 'Що таке степінь',
-      formula: 'a^n = a \\cdot a \\cdot \\ldots \\cdot a',
-      note: 'Основа a множиться сама на себе n разів. n — показник.',
-      example: '2^5 = 32' },
-    { title: 'Показник 1 і 0',
-      formula: 'a^1 = a, \\quad a^0 = 1',
-      note: 'Будь-яке число, крім нуля, у нульовому степені дає одиницю.',
-      example: '7^0 = 1' },
-    { title: 'Парний показник',
-      formula: '(-a)^{2k} > 0',
-      note: 'Мінус у парному степені зникає.',
-      example: '(-4)^2 = 16' },
-    { title: 'Непарний показник',
-      formula: '(-a)^{2k+1} < 0',
-      note: 'Мінус у непарному степені лишається.',
-      example: '(-3)^3 = -27' },
-    { title: 'Множення, однакова основа',
-      formula: 'a^m \\cdot a^n = a^{m+n}',
-      note: 'Основи однакові — показники додаються.',
-      example: '5^2 \\cdot 5 = 5^3 = 125' },
-    { title: 'Ділення, однакова основа',
-      formula: '\\frac{a^m}{a^n} = a^{m-n}',
-      note: 'Основи однакові — показники віднімаються.',
-      example: '\\frac{2^{10}}{2^{11}} = 2^{-1} = \\frac{1}{2}' },
-    { title: 'Степінь степеня',
-      formula: '(a^m)^n = a^{m \\cdot n}',
-      note: 'Показники перемножуються.',
-      example: '(2^2)^3 = 2^6 = 64' },
-    { title: 'Степінь добутку',
-      formula: '(a \\cdot b)^n = a^n \\cdot b^n',
-      note: 'Показник розходиться на кожен множник.',
-      example: '(3 \\cdot 4)^2 = 9 \\cdot 16 = 144' },
-    { title: 'Степінь частки',
-      formula: '\\left(\\frac{a}{b}\\right)^n = \\frac{a^n}{b^n}',
-      note: 'Окремо чисельник, окремо знаменник.',
-      example: '\\left(\\frac{1}{2}\\right)^3 = \\frac{1}{8}' },
-    { title: "Від'ємний показник",
-      formula: 'a^{-n} = \\frac{1}{a^n}',
-      note: "Від'ємний показник перевертає число.",
-      example: '3^{-2} = \\frac{1}{9}' },
-    { title: "Дріб у від'ємному степені",
-      formula: '\\left(\\frac{a}{b}\\right)^{-n} = \\left(\\frac{b}{a}\\right)^n',
-      note: 'Дріб перевертається, показник стає додатним.',
-      example: '\\left(\\frac{3}{2}\\right)^{-2} = \\left(\\frac{2}{3}\\right)^2' },
-    { title: 'Дробовий показник',
-      formula: 'a^{m/n} = \\sqrt[n]{a^m}',
-      note: 'Знаменник показника — степінь кореня.',
-      example: '8^{2/3} = \\sqrt[3]{64} = 4' },
-    { title: 'Стандартний вигляд',
-      formula: 'a \\cdot 10^n, \\quad 1 \\le a < 10',
-      note: 'Так записують дуже великі й дуже малі числа.',
-      example: '120000 = 1.2 \\cdot 10^5' }
-  ];
+     Двічі не заводимо: якщо аркуш із такою назвою вже є, пропускаємо. Так
+     кнопку можна натиснути ще раз після оновлення довідника й не
+     отримати двадцять дублів. */
 
-  /** Завести аркуш зі степенями й одразу його відкрити. */
-  F.theoryStarter = function () {
-    var m = S.add('materials', {
-      title: 'Степені',
-      type: 'theory',
-      topic: 'Числа і вирази',
-      note: '',
-      url: '',
-      files: [],
-      rules: POWERS.map(function (r) {
-        return { title: r.title, formula: r.formula, note: r.note, example: r.example };
-      })
+  F.importSheets = function () {
+    var data = window.SHEETS_DATA || [];
+    if (!data.length) { U.toast('Довідник не завантажився', 'err'); return; }
+
+    var have = {};
+    S.db().materials.forEach(function (m) {
+      if (m.type === 'theory' && m.title) have[m.title.toLowerCase()] = 1;
     });
-    U.toast('Аркуш створено — правте під себе', 'ok');
-    location.hash = '#/sheet/' + m.id;
+
+    var added = 0, first = null;
+    data.forEach(function (sh) {
+      if (have[(sh.title || '').toLowerCase()]) return;
+      var m = S.add('materials', {
+        title: sh.title, type: 'theory', topic: sh.topic || 'Загальне',
+        note: '', url: '', files: [],
+        rules: sh.rules.map(function (x) {
+          return { group: x.group || '', kind: x.kind || 'rule', title: x.title || '',
+                   formula: x.formula || '', example: x.example || '', note: x.note || '' };
+        })
+      });
+      if (!first) first = m.id;
+      added++;
+    });
+
+    if (!added) { U.toast('Усі теми вже є в бібліотеці', 'ok'); return; }
+    U.toast('Додано ' + U.pl(added, 'тему', 'теми', 'тем') + ' — правте під себе', 'ok');
+    if (first) location.hash = '#/sheet/' + first;
   };
 
   F.material = function (id) {
@@ -1077,7 +1063,8 @@
     var data = m || { title: '', type: 'link', url: '', topic: 'Загальне', note: '', files: [] };
     var files = (data.files || []).slice();
     var rules = (data.rules || []).map(function (r) {
-      return { title: r.title, formula: r.formula, example: r.example, note: r.note };
+      return { group: r.group || '', kind: r.kind || 'rule', title: r.title,
+               formula: r.formula, example: r.example, note: r.note };
     });
 
     // підтеми беремо з уже наявних, щоб не плодити майже однакові назви
@@ -1123,7 +1110,9 @@
             if (!v.topic) v.topic = 'Загальне';
             v.files = files.slice();
             // порожні правила не зберігаємо: людина додала рядок і передумала
-            v.rules = rules.filter(function (r) { return (r.title || '').trim() || (r.formula || '').trim(); });
+            v.rules = rules.filter(function (r) {
+              return (r.title || '').trim() || (r.formula || '').trim() || (r.note || '').trim();
+            });
             if (isNew) S.add('materials', v); else S.update('materials', id, v);
             S.gcImages();
             U.toast('Збережено', 'ok'); refresh();

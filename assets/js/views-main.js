@@ -713,23 +713,62 @@
     }
 
     var rules = m.rules || [];
-    var cards = rules.map(function (r) {
-      return '<div class="rule">' +
-        '<div class="rule__h">' + icon('check', 15) +
-        '<span>' + U.esc(r.title || 'Правило') + '</span></div>' +
-        (r.note ? '<div class="rule__note">' + U.esc(r.note) + '</div>' : '') +
-        (window.MathFmt ? MathFmt.block(r.formula) : '') +
-        (r.example
-          ? '<div class="rule__ex"><div class="rule__ex-l">Приклад</div>' +
-            '<div class="rule__ex-v">' + (window.MathFmt ? MathFmt.render(r.example) : '') + '</div></div>'
-          : '') +
+
+    /* Правила згруповані так само, як їх і читають: «Властивості степеня»,
+       «Особливі випадки». Група — це картка з синьою шапкою, всередині
+       блоки. Порядок груп — той, у якому їх вписали, а не абетковий:
+       теорію викладають послідовно. */
+    var groups = [];
+    var byName = {};
+    rules.forEach(function (r) {
+      var g = r.group || '';
+      if (!byName[g]) { byName[g] = { name: g, items: [] }; groups.push(byName[g]); }
+      byName[g].items.push(r);
+    });
+
+    function fx(v) { return window.MathFmt ? MathFmt.render(v) : ''; }
+
+    function block(r) {
+      var k = r.kind || 'rule';
+
+      /* Пари — це рядок таблиці: похідна, первісна, період. Ліворуч те, що
+         шукають, праворуч відповідь. */
+      if (k === 'pair') {
+        return '<div class="blk-pair"><div>' + fx(r.formula) + '</div>' +
+               '<div>' + fx(r.example) + '</div></div>';
+      }
+      if (k === 'warn') {
+        return '<div class="blk-warn">' + icon('alert', 15) +
+               '<span>' + U.esc(r.note || '') + '</span></div>';
+      }
+      if (k === 'text') {
+        return '<div class="blk-text">' + U.esc(r.note || '') + '</div>';
+      }
+      if (k === 'item') {
+        return '<div class="blk-item">' + icon('chevronR', 13) +
+               '<span>' + U.esc(r.note || '') + '</span></div>';
+      }
+
+      // звичайне правило: підпис, формула, приклад
+      return (r.title ? '<div class="blk-h">' + U.esc(r.title) + '</div>' : '') +
+        (r.note ? '<div class="blk-text">' + U.esc(r.note) + '</div>' : '') +
+        (r.formula ? '<div class="blk-f">' + fx(r.formula) + '</div>' : '') +
+        (r.example ? '<div class="blk-e">' + fx(r.example) + '</div>' : '');
+    }
+
+    var cards = groups.map(function (g) {
+      return '<div class="gcard">' +
+        (g.name ? '<div class="gcard__h">' + U.esc(g.name) + '</div>' : '') +
+        '<div class="gcard__b">' + g.items.map(block).join('') + '</div>' +
         '</div>';
     }).join('');
 
     return C.hero({
       short: true,
       title: m.title || 'Аркуш теорії',
-      sub: (m.topic || '') + (rules.length ? ' · ' + U.pl(rules.length, 'правило', 'правила', 'правил') : ''),
+      sub: (m.topic || '') +
+           (groups.length ? ' · ' + U.pl(groups.length, 'розділ', 'розділи', 'розділів') : '') +
+           (rules.length ? ' · ' + U.pl(rules.length, 'блок', 'блоки', 'блоків') : ''),
       actions: [
         { label: 'Друк', icon: 'download', act: 'sheet-print' },
         { label: 'Редагувати', icon: 'edit', act: 'mat-edit', arg: m.id, solid: true }
@@ -929,7 +968,7 @@
       title: 'Матеріали',
       sub: U.pl(all.length, 'матеріал', 'матеріали', 'матеріалів') + ' у бібліотеці',
       actions: [
-        { label: 'Аркуш теорії', icon: 'book', act: 'mat-add-theory' },
+        { label: 'Завантажити довідник', icon: 'book', act: 'mat-add-theory' },
         { label: 'Додати матеріал', icon: 'plus', act: 'mat-add', solid: true }
       ]
     }) +

@@ -535,7 +535,7 @@
      які уроки треба перевидати.
 
      Підіймати щоразу, коли міняється VIEWER_SCRIPT або розмітка переглядача. */
-  var VIEWER_VERSION = 5;
+  var VIEWER_VERSION = 6;
 
   /**
    * Показати, що зараз із копією учня.
@@ -3055,16 +3055,17 @@
 '.rule__n{font-size:11.5px;color:#6B6982;line-height:1.5;margin-bottom:6px}\n' +
 '.rule__f{text-align:center;font-size:17px;padding:9px 8px;background:#F7F6FD;border-radius:9px;overflow-x:auto}\n' +
 '.rule__e{text-align:center;font-size:13px;padding:6px 8px;margin-top:6px;background:#E9F8F0;border-radius:9px;overflow-x:auto}\n' +
-'.mf{font-family:"Cambria Math","Times New Roman",Georgia,serif;font-style:italic;line-height:1.2;white-space:nowrap}\n' +
-'.mf sup,.mf sub{font-size:.62em;font-style:normal}\n' +
-'.mf .mf-fn{font-style:normal;padding-right:.15em}\n' +
-'.mf-frac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;margin:0 .18em}\n' +
-'.mf-num{padding:0 .35em .06em;border-bottom:1.4px solid currentColor}\n' +
-'.mf-den{padding:.06em .35em 0}\n' +
+'.mf{font-family:"Source Serif 4","Cambria Math",Georgia,"Times New Roman",serif;font-weight:600;line-height:1.08;color:#101010;white-space:nowrap}\n' +
+'.mf .mf-v{font-style:italic}\n' +
+'.mf sup,.mf sub{font-size:.66em;line-height:1}\n' +
+'.mf .mf-fn{padding-right:.18em}\n' +
+'.mf-frac{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;margin:0 .2em}\n' +
+'.mf-num{padding:0 .3em 1px}\n' +
+'.mf-den{padding:1px .3em 0;border-top:2px solid currentColor}\n' +
 '.mf-root{display:inline-flex;align-items:flex-start}\n' +
-'.mf-root .mf-idx{font-size:.58em;font-style:normal;transform:translateY(.15em);margin-right:-.28em}\n' +
-'.mf-root .mf-sign{transform:scaleY(1.15)}\n' +
-'.mf-root .mf-under{border-top:1.4px solid currentColor;padding:.1em .25em 0 .12em;margin-top:.16em}\n' +
+'.mf-root .mf-idx{font-size:.6em;transform:translateY(.12em);margin-right:-.3em}\n' +
+'.mf-root .mf-sign{transform:scaleY(1.2)}\n' +
+'.mf-root .mf-under{border-top:2px solid currentColor;padding:2px .25em 0 .12em;margin-top:.14em}\n' +
 '.addshot.busy span{opacity:.55;border-style:solid}\n' +
 '.shots a.mine{border-color:#8FB4FF}\n' +
 'canvas.pen{cursor:crosshair}\n' +

@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v33';
+  App.BUILD = 'v34';
   window.APP_BUILD = App.BUILD;
 
   var NAV = [
@@ -54,6 +54,8 @@
     var parts = h.split('/').filter(Boolean);
     return { parts: parts, query: query, path: h };
   }
+
+  App.setQuery = function (patch) { setQuery(patch); };
 
   function setQuery(patch) {
     var r = parseRoute();
@@ -220,7 +222,7 @@
           html = V.materials(route.query); break;
         case 'sheet':
         case 'reference':
-          html = V.sheet(route.parts[1]); break;
+          html = V.sheet(route.parts[1], route.query); break;
         case 'desk':
           html = V.desk(route.query); break;
         case 'settings':

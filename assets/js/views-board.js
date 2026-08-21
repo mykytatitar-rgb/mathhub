@@ -535,7 +535,7 @@
      які уроки треба перевидати.
 
      Підіймати щоразу, коли міняється VIEWER_SCRIPT або розмітка переглядача. */
-  var VIEWER_VERSION = 6;
+  var VIEWER_VERSION = 7;
 
   /**
    * Показати, що зараз із копією учня.
@@ -3055,14 +3055,14 @@
 '.rule__n{font-size:11.5px;color:#6B6982;line-height:1.5;margin-bottom:6px}\n' +
 '.rule__f{text-align:center;font-size:17px;padding:9px 8px;background:#F7F6FD;border-radius:9px;overflow-x:auto}\n' +
 '.rule__e{text-align:center;font-size:13px;padding:6px 8px;margin-top:6px;background:#E9F8F0;border-radius:9px;overflow-x:auto}\n' +
-'.mf{font-family:"Source Serif 4","Cambria Math",Georgia,"Times New Roman",serif;font-weight:600;line-height:1.08;color:#101010;white-space:nowrap}\n' +
+'.mf{font-family:"Source Serif 4","Cambria Math",Georgia,"Times New Roman",serif;font-weight:600;line-height:1.32;color:#101010;white-space:normal;overflow-wrap:normal}\n' +
 '.mf .mf-v{font-style:italic}\n' +
 '.mf sup,.mf sub{font-size:.66em;line-height:1}\n' +
 '.mf .mf-fn{padding-right:.18em}\n' +
-'.mf-frac{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;margin:0 .2em}\n' +
+'.mf-frac{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;margin:0 .2em;line-height:1.08}\n' +
 '.mf-num{padding:0 .3em 1px}\n' +
 '.mf-den{padding:1px .3em 0;border-top:2px solid currentColor}\n' +
-'.mf-root{display:inline-flex;align-items:flex-start}\n' +
+'.mf-root{display:inline-flex;align-items:flex-start;line-height:1.08}\n' +
 '.mf-root .mf-idx{font-size:.6em;transform:translateY(.12em);margin-right:-.3em}\n' +
 '.mf-root .mf-sign{transform:scaleY(1.2)}\n' +
 '.mf-root .mf-under{border-top:2px solid currentColor;padding:2px .25em 0 .12em;margin-top:.14em}\n' +

@@ -703,7 +703,7 @@
      згадують правило посеред уроку, його показують учневі, його друкують.
      Вікно для цього затісне, і його не надрукуєш. */
 
-  V.sheet = function (id) {
+  V.sheet = function (id, query) {
     /* Усі аркуші разом — це довідник, а не двадцять окремих сторінок. Тому
        ліворуч завжди повний перелік тем, і перемикання між ними не веде
        назад у бібліотеку: посеред уроку згадують не «де лежав аркуш», а
@@ -721,6 +721,26 @@
 
     var m = (id && S.get('materials', id)) || all[0];
     if (m.type !== 'theory') m = all[0];
+
+    /* Пошук по всьому довіднику, а не по відкритій темі.
+
+       Посеред уроку потрібне не «гортати двадцять одну тему», а «де там
+       різниця квадратів». Тому шукаємо в назвах розділів, підписах,
+       поясненнях і в самому записі формули: «a^2 - b^2» знаходиться так
+       само, як і «difference of squares». */
+    var q = String((query && query.q) || '').trim();
+    var ql = q.toLowerCase();
+
+    var found = [];
+    if (ql.length > 1) {
+      all.forEach(function (sh) {
+        (sh.rules || []).forEach(function (r) {
+          var hay = [r.group, r.title, r.note, r.formula, r.example, sh.title]
+            .join(' ').toLowerCase();
+          if (hay.indexOf(ql) >= 0) found.push({ sheet: sh, rule: r });
+        });
+      });
+    }
 
     /* Однакові назви позначаємо. Тема-близнюк у переліку — це майже завжди
        залишок: щось завели двічі, потім правили лише одну копію, а друга
@@ -815,6 +835,8 @@
       '<div class="ref__bar">' +
         '<div class="ref__title">Довідник</div>' +
         '<div class="ref__count">' + U.pl(all.length, 'тема', 'теми', 'тем') + '</div>' +
+        '<input class="ref__q" data-ref-q type="search" placeholder="Знайти правило…" ' +
+          'value="' + U.esc(q) + '" autocomplete="off">' +
         '<button class="btn btn--ghost btn--sm" data-act="sheet-print">' +
           icon('download', 15) + 'Друк</button>' +
         '<button class="btn btn--ghost btn--sm" data-act="mat-edit" data-arg="' + m.id + '">' +
@@ -826,8 +848,13 @@
       '<div class="ref__body">' +
         '<nav class="ref__nav">' + nav + '</nav>' +
         '<div class="ref__main">' +
-          '<div class="ref__h">' + U.esc(m.title || '') +
-            (m.topic ? '<span class="ref__sub">' + U.esc(m.topic) + '</span>' : '') + '</div>' +
+          '<div class="ref__h">' +
+            (ql.length > 1
+              ? U.esc(q) + '<span class="ref__sub">' +
+                U.pl(found.length, 'знахідка', 'знахідки', 'знахідок') + '</span>'
+              : U.esc(m.title || '') +
+                (m.topic ? '<span class="ref__sub">' + U.esc(m.topic) + '</span>' : '')) +
+          '</div>' +
           (missing.length
             ? '<div class="ref__new">' +
               '<div style="flex:1;min-width:0">' +
@@ -847,10 +874,27 @@
               'кнопка «Видалити тему» вгорі.</span></div>'
             : '') +
           (m.note ? '<div class="blk-text mb-3">' + U.esc(m.note) + '</div>' : '') +
-          (groups.length
-            ? '<div class="sheet">' + cards + '</div>'
-            : '<div class="card">' + C.empty('book', 'Правил ще немає',
-                'Відкрийте редагування й додайте перше.') + '</div>') +
+          (ql.length > 1
+            ? (found.length
+                ? '<div class="sheet">' +
+                  found.slice(0, 60).map(function (x) {
+                    return '<div class="gcard">' +
+                      '<button class="gcard__h gcard__h--go" data-act="sheet-open" data-arg="' +
+                        x.sheet.id + '">' + U.esc(x.sheet.title) +
+                        '<span class="gcard__grp">' + U.esc(x.rule.group || '') + '</span></button>' +
+                      '<div class="gcard__b">' + block(x.rule) + '</div>' +
+                      '</div>';
+                  }).join('') + '</div>' +
+                  (found.length > 60
+                    ? '<div class="blk-text mt-2">Показано перші 60 із ' + found.length +
+                      '. Уточніть запит.</div>' : '')
+                : '<div class="card">' + C.empty('search', 'Нічого не знайшлося',
+                    'Спробуйте коротший запит — шукається і в тексті, і в самому записі формули.') +
+                  '</div>')
+            : groups.length
+              ? '<div class="sheet">' + cards + '</div>'
+              : '<div class="card">' + C.empty('book', 'Правил ще немає',
+                  'Відкрийте редагування й додайте перше.') + '</div>') +
         '</div>' +
       '</div>' +
       '</div>';
@@ -1711,6 +1755,31 @@
     });
   };
 
+  /* Пошук у довіднику. Запит живе в адресі, а не в змінній: так його можна
+     лишити відкритим, перезавантажити сторінку й побачити те саме, а ще
+     повернутися до результатів кнопкою «назад». */
+  function bindRefSearch() {
+    var q = document.querySelector('[data-ref-q]');
+    if (!q || !window.App || !App.setQuery) return;
+
+    var timer = null;
+    q.addEventListener('input', function () {
+      if (timer) clearTimeout(timer);
+      // не перемальовуємо на кожну літеру: двадцять одна тема — це відчутно
+      timer = setTimeout(function () { App.setQuery({ q: q.value.trim() }); }, 220);
+    });
+    q.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { q.value = ''; App.setQuery({ q: '' }); }
+    });
+
+    /* Курсор повертаємо в кінець рядка: перемальовування замінює поле, і без
+       цього кожна літера викидала б курсор на початок. */
+    if (document.activeElement !== q && q.value) {
+      q.focus();
+      q.setSelectionRange(q.value.length, q.value.length);
+    }
+  }
+
   /** Спільний хук після кожного рендеру. */
   V.afterRender = function (route) {
     if (route && route.parts && route.parts[0] === 'settings') {
@@ -1720,6 +1789,7 @@
       V.fillHealthAsync();
       V.fillTelegramAsync();
     }
+    bindRefSearch();
     V.hydratePhotos();
     if (V.scrollScheduleToWork) V.scrollScheduleToWork();
 

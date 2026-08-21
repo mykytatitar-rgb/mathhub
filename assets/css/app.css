@@ -1586,20 +1586,30 @@ a { color: inherit; text-decoration: none; }
    відстані, під час пояснення. Тонка риска дробу з тієї ж відстані просто
    зникає, тому вона в два пікселі й майже чорна. */
 
+/* Перенос по пробілах, а не прокрутка вбік.
+
+   Раніше формула була нерозривною, і довгий вираз у вузькій колонці
+   доводилося тягнути пальцем. Формулу, яку не видно цілком, читати
+   неможливо — а саме заради читання все й робилось.
+
+   Рватися вона може лише там, де стоїть пробіл: дріб, корінь і степінь —
+   суцільні шматки, всередині них розриву не буде. */
 .mf { font-family: 'Source Serif 4', 'Cambria Math', Georgia, 'Times New Roman', serif;
-      font-weight: 600; font-size: 1.06em; line-height: 1.08;
-      color: #101010; white-space: nowrap;
+      font-weight: 600; font-size: 1.06em; line-height: 1.32;
+      color: #101010; white-space: normal; overflow-wrap: normal;
       font-variant-numeric: lining-nums; }
 .mf .mf-v { font-style: italic; }
 .mf sup, .mf sub { font-size: .66em; line-height: 1; }
 .mf .mf-fn { padding-right: .18em; }
 
+/* Сам дріб лишається щільним: 1.32 потрібне тільки між перенесеними
+   рядками, а чисельник із знаменником мають стояти впритул. */
 .mf-frac { display: inline-flex; flex-direction: column; align-items: center;
-           vertical-align: middle; margin: 0 .2em; }
+           vertical-align: middle; margin: 0 .2em; line-height: 1.08; }
 .mf-num { padding: 0 .3em 1px; }
 .mf-den { padding: 1px .3em 0; border-top: 2px solid currentColor; }
 
-.mf-root { display: inline-flex; align-items: flex-start; }
+.mf-root { display: inline-flex; align-items: flex-start; line-height: 1.08; }
 .mf-root .mf-idx { font-size: .6em; transform: translateY(.12em); margin-right: -.3em; }
 .mf-root .mf-sign { transform: scaleY(1.2); }
 .mf-root .mf-under { border-top: 2px solid currentColor; padding: 2px .25em 0 .12em; margin-top: .14em; }
@@ -1778,3 +1788,19 @@ a { color: inherit; text-decoration: none; }
             background: var(--sky-soft, #E0F2FE); color: #0C4A6E; font-size: 13.5px; line-height: 1.5; }
 .ref__new b { color: #0284C7; }
 .ref__new .btn { flex: 0 0 auto; }
+
+/* Поле пошуку в смузі довідника */
+.ref__q { flex: 0 0 260px; height: 34px; padding: 0 12px; border-radius: 9px;
+          border: 1px solid rgba(255,255,255,.35); background: rgba(255,255,255,.16);
+          color: #fff; font: inherit; font-size: 13.5px; outline: none; }
+.ref__q::placeholder { color: rgba(255,255,255,.72); }
+.ref__q:focus { background: rgba(255,255,255,.26); border-color: rgba(255,255,255,.6); }
+
+/* Шапка знахідки: клікабельна, з назвою теми й розділу */
+.gcard__h--go { width: 100%; border: 0; cursor: pointer; font: inherit; text-align: left;
+                display: flex; align-items: center; gap: 9px; }
+.gcard__h--go:hover { background: var(--sky-dark, #0284C7); }
+.gcard__grp { margin-left: auto; font-weight: 600; font-size: 12px; opacity: .8;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50%; }
+
+@media (max-width: 1000px) { .ref__q { flex: 1 1 auto; min-width: 0; } }

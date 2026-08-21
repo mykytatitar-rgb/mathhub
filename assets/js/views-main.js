@@ -722,13 +722,28 @@
     var m = (id && S.get('materials', id)) || all[0];
     if (m.type !== 'theory') m = all[0];
 
+    /* Однакові назви позначаємо. Тема-близнюк у переліку — це майже завжди
+       залишок: щось завели двічі, потім правили лише одну копію, а друга
+       так і лежить і збиває з пантелику. Мовчки прибирати не можна — раптом
+       вони різні всередині, — але сказати про це варто. */
+    var seen = {};
+    all.forEach(function (x) {
+      var k = (x.title || '').toLowerCase().trim();
+      seen[k] = (seen[k] || 0) + 1;
+    });
+
     var nav = all.map(function (x, n) {
+      var dup = seen[(x.title || '').toLowerCase().trim()] > 1;
       return '<button class="ref__t' + (x.id === m.id ? ' is-on' : '') +
-        '" data-act="sheet-open" data-arg="' + x.id + '">' +
+        '" data-act="sheet-open" data-arg="' + x.id + '"' +
+        (dup ? ' title="Така сама назва є ще в іншої теми"' : '') + '>' +
         '<span class="ref__n">' + (n + 1) + '.</span>' +
         '<span class="truncate">' + U.esc(x.title || 'Без назви') + '</span>' +
+        (dup ? '<span class="ref__dup" title="Повтор назви">2</span>' : '') +
         icon('chevronR', 14) + '</button>';
     }).join('');
+
+    var dupNow = seen[(m.title || '').toLowerCase().trim()] > 1;
 
     var rules = m.rules || [];
 
@@ -787,6 +802,8 @@
           icon('download', 15) + 'Друк</button>' +
         '<button class="btn btn--ghost btn--sm" data-act="mat-edit" data-arg="' + m.id + '">' +
           icon('edit', 15) + 'Редагувати</button>' +
+        '<button class="btn btn--ghost btn--sm" data-act="sheet-del" data-arg="' + m.id + '">' +
+          icon('trash', 15) + 'Видалити тему</button>' +
       '</div>' +
 
       '<div class="ref__body">' +
@@ -794,6 +811,11 @@
         '<div class="ref__main">' +
           '<div class="ref__h">' + U.esc(m.title || '') +
             (m.topic ? '<span class="ref__sub">' + U.esc(m.topic) + '</span>' : '') + '</div>' +
+          (dupNow
+            ? '<div class="blk-warn mb-3">' + icon('alert', 15) +
+              '<span>Тема з такою назвою є ще раз. Порівняйте їх і зайву приберіть — ' +
+              'кнопка «Видалити тему» вгорі.</span></div>'
+            : '') +
           (m.note ? '<div class="blk-text mb-3">' + U.esc(m.note) + '</div>' : '') +
           (groups.length
             ? '<div class="sheet">' + cards + '</div>'

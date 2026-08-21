@@ -1055,7 +1055,10 @@
 
     if (!added) { U.toast('Усі теми вже є в бібліотеці', 'ok'); return; }
     U.toast('Додано ' + U.pl(added, 'тему', 'теми', 'тем') + ' — правте під себе', 'ok');
-    if (first) location.hash = '#/sheet/' + first;
+    /* Відкриваємо саме додане, а не перше в списку: людина натиснула
+       «Додати», і показати їй треба те, що з'явилося. */
+    if (first) { location.hash = '#/sheet/' + first; }
+    if (window.App && App.render) App.render();
   };
 
   F.material = function (id) {

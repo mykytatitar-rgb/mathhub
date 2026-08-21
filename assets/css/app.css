@@ -1770,3 +1770,11 @@ a { color: inherit; text-decoration: none; }
 .blk-info { font-size: 13.5px; line-height: 1.6; background: var(--sky-soft, #E0F2FE);
             color: #334155; padding: 11px 13px; border-radius: 10px; }
 .blk-info b { color: #0284C7; font-weight: 750; }
+
+/* Смужка «у готовому довіднику є нове». Не попередження й не помилка —
+   тому синя, а не жовта: нічого не зламалось, просто зʼявилось. */
+.ref__new { display: flex; align-items: center; gap: 14px; margin-bottom: 16px;
+            padding: 13px 15px; border-radius: 12px;
+            background: var(--sky-soft, #E0F2FE); color: #0C4A6E; font-size: 13.5px; line-height: 1.5; }
+.ref__new b { color: #0284C7; }
+.ref__new .btn { flex: 0 0 auto; }

@@ -745,6 +745,14 @@
 
     var dupNow = seen[(m.title || '').toLowerCase().trim()] > 1;
 
+    /* Готовий довідник поповнюється з оновленнями програми, а бібліотека —
+       ні: вона ваша, і мовчки дописувати в неї не можна. Але й мовчати теж
+       не можна. Раніше про нову тему дізнавалися, лише повторно натиснувши
+       «Завантажити довідник», — тобто випадково. */
+    var missing = (window.SHEETS_DATA || []).filter(function (sh) {
+      return !seen[(sh.title || '').toLowerCase().trim()];
+    });
+
     var rules = m.rules || [];
 
     /* Правила згруповані так само, як їх і читають: «Властивості степеня»,
@@ -820,6 +828,19 @@
         '<div class="ref__main">' +
           '<div class="ref__h">' + U.esc(m.title || '') +
             (m.topic ? '<span class="ref__sub">' + U.esc(m.topic) + '</span>' : '') + '</div>' +
+          (missing.length
+            ? '<div class="ref__new">' +
+              '<div style="flex:1;min-width:0">' +
+                '<b>' + (missing.length === 1
+                  ? 'Нова тема у готовому довіднику'
+                  : 'У готовому довіднику ' + U.pl(missing.length, 'нова тема', 'нові теми', 'нових тем')) +
+                '</b><br>' +
+                U.esc(missing.map(function (x) { return x.title; }).join(', ')) +
+              '</div>' +
+              '<button class="btn btn--primary btn--sm" data-act="mat-add-theory">' +
+              icon('plus', 15) + 'Додати</button>' +
+              '</div>'
+            : '') +
           (dupNow
             ? '<div class="blk-warn mb-3">' + icon('alert', 15) +
               '<span>Тема з такою назвою є ще раз. Порівняйте їх і зайву приберіть — ' +

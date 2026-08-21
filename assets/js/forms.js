@@ -931,7 +931,7 @@
       var p = el.querySelector('[data-prev]');
       var k = r.kind || 'rule';
 
-      if (k === 'text' || k === 'warn' || k === 'item') {
+      if (k === 'text' || k === 'warn' || k === 'item' || k === 'info') {
         p.innerHTML = r.note
           ? U.esc(r.note)
           : '<span class="muted small">текст</span>';
@@ -951,6 +951,7 @@
       { value: 'rule', label: 'Правило' },
       { value: 'text', label: 'Текст' },
       { value: 'warn', label: 'Увага' },
+      { value: 'info', label: 'Довідка' },
       { value: 'item', label: 'Пункт списку' },
       { value: 'pair', label: 'Рядок таблиці' }
     ];

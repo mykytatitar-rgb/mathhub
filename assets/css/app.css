@@ -1751,3 +1751,9 @@ a { color: inherit; text-decoration: none; }
 .ref__dup { flex: 0 0 auto; font-size: 10.5px; font-weight: 800; line-height: 1;
             background: #FEF3C7; color: #92400E; border-radius: 999px; padding: 3px 6px; }
 .ref__t.is-on .ref__dup { background: rgba(255,255,255,.28); color: #fff; }
+
+/* Довідка: те саме поле, що й попередження, але без знаку оклику.
+   Попередження каже «тут помиляються», довідка просто уточнює. */
+.blk-info { font-size: 13.5px; line-height: 1.6; background: var(--sky-soft, #E0F2FE);
+            color: #334155; padding: 11px 13px; border-radius: 10px; }
+.blk-info b { color: #0284C7; font-weight: 750; }

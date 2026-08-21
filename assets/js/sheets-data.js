@@ -547,5 +547,36 @@
     r('Combinations', '', 'C_n^m = \\frac{n!}{m!(n-m)!}', '', 'n — total elements, m — elements to choose')
   ]});
 
+  /* --------------------------------------------------------------- 21 */
+  SHEETS.push({ title: 'Probability & Statistics', topic: 'Комбінаторика, ймовірність, статистика', rules: [
+    t('Probability Theory', 'Probability Theory is the branch of mathematics that studies the patterns of random events.'),
+    t('Probability Theory', 'Probability is the degree of likelihood that an event will occur. The probability of event A is written P(A).'),
+    r('Probability Theory', '', '0 \\le P(A) \\le 1'),
+    r('Probability Theory', 'Properties', ''),
+    i('Probability Theory', 'Probability of a certain event = 1'),
+    i('Probability Theory', 'Probability of an impossible event = 0'),
+    i('Probability Theory', 'Probability of a random event is between 0 and 1'),
+
+    r('Probability Formula', '', 'P(A) = \\frac{m}{n}'),
+    i('Probability Formula', 'n — total number of outcomes'),
+    i('Probability Formula', 'm — number of favorable outcomes'),
+
+    t('Statistics', 'Statistics is the branch of mathematics dealing with collecting, organizing, and analyzing data.'),
+    t('Statistics', 'A specific set of data used in statistics is called a sample.'),
+    r('Statistics', 'Characteristics of a Sample', ''),
+    i('Statistics', 'Sample size — the number of elements.'),
+    i('Statistics', 'Range — the difference between the largest and smallest elements.'),
+    i('Statistics', 'Mean (average) — sum of all elements divided by their count.'),
+    i('Statistics', 'Mode — the element that appears most often.'),
+    i('Statistics', 'Median — the middle element of an ordered sample.'),
+    w('Statistics', 'Pay attention to the number of elements. The sample must be ordered.'),
+
+    t('How to Find the Median', 'An ordered sample has elements arranged in ascending or descending order.'),
+    { group: 'How to Find the Median', kind: 'info', title: 'Odd number of elements',
+      note: 'the median is simply the middle element.' },
+    { group: 'How to Find the Median', kind: 'info', title: 'Even number of elements',
+      note: 'find the arithmetic mean of the two middle elements.' }
+  ]});
+
   window.SHEETS_DATA = SHEETS;
 })();

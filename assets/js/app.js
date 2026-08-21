@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v25';
+  App.BUILD = 'v26';
   window.APP_BUILD = App.BUILD;
 
   var NAV = [
@@ -214,6 +214,8 @@
           html = V.finance(route.query); break;
         case 'materials':
           html = V.materials(route.query); break;
+        case 'sheet':
+          html = V.sheet(route.parts[1]); break;
         case 'desk':
           html = V.desk(route.query); break;
         case 'settings':
@@ -297,6 +299,7 @@
     'note-edit': function (arg) { F.note(arg); },
 
     'mat-add': function () { F.material(null); },
+    'mat-add-theory': function () { F.theoryStarter(); },
     'mat-edit': function (arg) { F.material(arg); },
 
     'progress-edit': function (arg) { F.progress(arg); },
@@ -553,6 +556,9 @@
 
     /* Відкрити вкладення справи. Файл лежить у сховищі браузера, тож
        спершу дістаємо його, і лише потім віддаємо системі. */
+    'sheet-open': function (id) { location.hash = '#/sheet/' + id; },
+    'sheet-print': function () { window.print(); },
+
     'desk-file': function (key) {
       if (!window.ImgStore || !key) return;
       ImgStore.get(key).then(function (blob) {

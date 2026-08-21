@@ -695,6 +695,56 @@
     App.render();
   };
 
+  /* ============================================================
+     Аркуш теорії
+     ============================================================
+
+     Окремий екран, а не вікно поверх списку. Аркуш читають: із нього
+     згадують правило посеред уроку, його показують учневі, його друкують.
+     Вікно для цього затісне, і його не надрукуєш. */
+
+  V.sheet = function (id) {
+    var m = S.get('materials', id);
+    if (!m) {
+      return '<div class="page"><div class="card">' +
+        C.empty('alert', 'Аркуш не знайдено', 'Можливо, його видалили.',
+          '<button class="btn btn--primary" data-act="nav" data-arg="#/materials">До матеріалів</button>') +
+        '</div></div>';
+    }
+
+    var rules = m.rules || [];
+    var cards = rules.map(function (r) {
+      return '<div class="rule">' +
+        '<div class="rule__h">' + icon('check', 15) +
+        '<span>' + U.esc(r.title || 'Правило') + '</span></div>' +
+        (r.note ? '<div class="rule__note">' + U.esc(r.note) + '</div>' : '') +
+        (window.MathFmt ? MathFmt.block(r.formula) : '') +
+        (r.example
+          ? '<div class="rule__ex"><div class="rule__ex-l">Приклад</div>' +
+            '<div class="rule__ex-v">' + (window.MathFmt ? MathFmt.render(r.example) : '') + '</div></div>'
+          : '') +
+        '</div>';
+    }).join('');
+
+    return C.hero({
+      short: true,
+      title: m.title || 'Аркуш теорії',
+      sub: (m.topic || '') + (rules.length ? ' · ' + U.pl(rules.length, 'правило', 'правила', 'правил') : ''),
+      actions: [
+        { label: 'Друк', icon: 'download', act: 'sheet-print' },
+        { label: 'Редагувати', icon: 'edit', act: 'mat-edit', arg: m.id, solid: true }
+      ]
+    }) +
+    '<div class="page">' +
+      (m.note ? '<div class="card mb-3"><div class="pre-wrap" style="line-height:1.6">' +
+        U.esc(m.note) + '</div></div>' : '') +
+      (rules.length
+        ? '<div class="sheet">' + cards + '</div>'
+        : '<div class="card">' + C.empty('book', 'Правил ще немає',
+            'Відкрийте редагування й додайте перше — назва, формула, приклад.') + '</div>') +
+    '</div>';
+  };
+
   V.desk = function (query) {
     var tag = (query && query.tag) || '';
     var all = S.deskItems();
@@ -792,8 +842,8 @@
           U.esc(t) + '">' + U.esc(t) + '</button>';
       }).join('');
 
-    var typeIcon = { link: 'link', file: 'file', note: 'note' };
-    var typeLabel = { link: 'Посилання', file: 'Файл', note: 'Нотатка' };
+    var typeIcon = { link: 'link', file: 'file', note: 'note', theory: 'book' };
+    var typeLabel = { link: 'Посилання', file: 'Файл', note: 'Нотатка', theory: 'Аркуш теорії' };
 
     function fileSize(n) {
       if (!n) return '';
@@ -825,6 +875,20 @@
               '</button>';
             }).join('') + '</div>'
           : '') +
+        /* Аркуш показуємо не списком назв, а тим, заради чого його й
+           заводили, — самими формулами. Три перші вистачає, щоб упізнати. */
+        (m.type === 'theory' && (m.rules || []).length
+          ? '<div class="mat-peek">' +
+            (m.rules || []).slice(0, 3).map(function (r) {
+              return '<div class="mat-peek__r">' + (window.MathFmt ? MathFmt.render(r.formula) : '') + '</div>';
+            }).join('') +
+            ((m.rules || []).length > 3
+              ? '<div class="small muted">і ще ' + ((m.rules || []).length - 3) + '</div>' : '') +
+            '</div>' +
+            '<button class="btn btn--soft btn--sm" data-act="sheet-open" data-arg="' + m.id + '" ' +
+            'style="align-self:flex-start">' + icon('board', 15) + 'Відкрити аркуш</button>'
+          : '') +
+
         (m.url ? '<a class="btn btn--soft btn--sm" href="' + U.esc(m.url) + '" target="_blank" rel="noopener" ' +
           'style="align-self:flex-start">' + icon('link', 15) + 'Відкрити</a>' : '') +
         '</div>';
@@ -857,7 +921,10 @@
       short: true,
       title: 'Матеріали',
       sub: U.pl(all.length, 'матеріал', 'матеріали', 'матеріалів') + ' у бібліотеці',
-      actions: [{ label: 'Додати матеріал', icon: 'plus', act: 'mat-add', solid: true }]
+      actions: [
+        { label: 'Аркуш теорії', icon: 'book', act: 'mat-add-theory' },
+        { label: 'Додати матеріал', icon: 'plus', act: 'mat-add', solid: true }
+      ]
     }) +
 
     '<div class="page">' +

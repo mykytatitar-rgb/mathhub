@@ -685,7 +685,16 @@
             if (!v.amount) { U.toast('Вкажіть суму', 'err'); return false; }
             if (preset.lockStudent) v.studentId = data.studentId;
             v.currency = S.curOf(v.studentId);
-            if (isNew) { S.add('payments', v); U.toast('Оплату записано', 'ok'); }
+            if (isNew) {
+              /* Курс на дату оплати — щоб сума в гривнях більше не мінялась
+                 разом із сьогоднішнім курсом. */
+              var pc = v.currency || S.curOf(v.studentId);
+              if (pc && pc !== 'UAH' && window.Rates && Rates.forDate) {
+                var pr = Rates.forDate(pc, v.date);
+                if (pr > 0) v.rate = pr;
+              }
+              S.add('payments', v); U.toast('Оплату записано', 'ok');
+            }
             else { S.update('payments', id, v); U.toast('Збережено', 'ok'); }
             refresh();
           } }

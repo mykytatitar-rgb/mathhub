@@ -49,29 +49,54 @@
    * а в підказці видно, чого саме бракує.
    */
   function dayEarnings(lessons) {
-    var done = {}, plan = {};
+    /* Кожен урок рахуємо за курсом СВОГО дня, а не сьогоднішнім.
+
+       Заняття 17 серпня оплатили за курсом 17 серпня. Якщо перераховувати
+       його сьогоднішнім, заробіток за минулий тиждень мінятиметься щодня —
+       хоча гроші давно отримані й більше не змінюються. */
+    var done = { uah: 0, parts: {}, exact: true, missing: [] };
+    var plan = { uah: 0, parts: {}, exact: true, missing: [] };
+
     lessons.forEach(function (l) {
+      if (l.status !== 'done' && l.status !== 'planned') return;
+      var box = l.status === 'done' ? done : plan;
       var c = S.lessonCur(l);
-      if (l.status === 'done') done[c] = (done[c] || 0) + (l.price || 0);
-      else if (l.status === 'planned') plan[c] = (plan[c] || 0) + (l.price || 0);
+      var sum = l.price || 0;
+
+      box.parts[c] = (box.parts[c] || 0) + sum;
+
+      var uah = S.uahOf(l, sum, c);
+      if (uah == null) {
+        box.exact = false;
+        if (box.missing.indexOf(c) < 0) box.missing.push(c);
+        return;
+      }
+      box.uah += uah;
+
+      // курс того дня ще не приїхав — рахуємо поточним і чесно позначаємо
+      if (!(l.rate > 0) && window.Rates && Rates.isHistoric &&
+          !Rates.isHistoric(c, l.date)) box.exact = false;
     });
 
     var R = window.Rates;
 
-    function block(map, isPlan) {
-      if (!U.mapSize(map)) return '';
-      var raw = Object.keys(map).filter(function (c) { return Math.abs(map[c]) > 0.005; })
-        .map(function (c) { return U.money(map[c], c); }).join(' + ');
+    function block(box, isPlan) {
+      if (!U.mapSize(box.parts)) return '';
+      var raw = Object.keys(box.parts).filter(function (c) { return Math.abs(box.parts[c]) > 0.005; })
+        .map(function (c) { return U.money(box.parts[c], c); }).join(' + ');
+
       if (!R) {
         return '<div class="cal-dayhead__money' + (isPlan ? ' is-plan' : '') + '">' +
-          U.moneyMap(map) + '</div>';
+          U.moneyMap(box.parts) + '</div>';
       }
-      var conv = R.sumToUAH(map);
-      var txt = U.money(Math.round(conv.uah), 'UAH');
-      var title = raw + (conv.partial ? ' · немає курсу: ' + conv.missing.join(', ') : '');
+
+      var txt = U.money(Math.round(box.uah), 'UAH');
+      var title = raw + ' · за курсом того дня' +
+        (box.missing.length ? ' · немає курсу: ' + box.missing.join(', ') : '');
+
       return '<div class="cal-dayhead__money' + (isPlan ? ' is-plan' : '') +
         '" title="' + U.esc(title) + '">' +
-        (isPlan ? '~' : '') + (conv.partial ? '≈' : '') + txt + '</div>';
+        (isPlan ? '~' : '') + (box.exact ? '' : '≈') + txt + '</div>';
     }
 
     var d = block(done, false);

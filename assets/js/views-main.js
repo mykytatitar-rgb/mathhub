@@ -313,8 +313,10 @@
     var map = S.incomeMap(mStart, mEnd);
     if (!U.mapSize(map)) return '';
 
-    var now = R.sumToUAH(map);
-    var prev = R.sumToUAH(S.incomeMap(pStart, pEnd));
+    /* Кожна оплата за курсом свого дня: минулі гроші не мають мінятися
+       разом із сьогоднішнім курсом. */
+    var now = S.incomeUAHBetween(mStart, mEnd);
+    var prev = S.incomeUAHBetween(pStart, pEnd);
 
     var usdRate = R.get('USD');
     var inUsd = usdRate ? now.uah / usdRate : null;
@@ -403,7 +405,8 @@
     /* 1. Хто приносить дохід */
     var byStudent = {};
     S.paymentsBetween(mStart, mEnd).forEach(function (p) {
-      var v = toUah(p.amount, S.paymentCur(p));
+      // за курсом дня оплати, а не сьогоднішнім
+      var v = S.uahOf(p, p.amount, S.paymentCur(p));
       if (v == null) return;
       byStudent[p.studentId] = (byStudent[p.studentId] || 0) + v;
     });
@@ -416,7 +419,7 @@
        нараховано за проведені уроки проти отриманих оплат. */
     var earnedUah = 0;
     S.doneLessonsBetween(mStart, mEnd).forEach(function (l) {
-      var v = toUah(l.price || 0, S.lessonCur(l));
+      var v = S.uahOf(l, l.price || 0, S.lessonCur(l));
       if (v != null) earnedUah += v;
     });
     var paidUah = studentSlices.reduce(function (a, s) { return a + s.value; }, 0);
@@ -520,7 +523,7 @@
 
     function monthValue(ms, me) {
       if (!chartCur) return S.incomeBetween(ms, me, code);   // без курсу — чесно лише своя валюта
-      var sum = RT.sumToUAH(S.incomeMap(ms, me));
+      var sum = S.incomeUAHBetween(ms, me);
       if (sum.partial) chartPartial = true;
       if (chartCur === 'UAH') return sum.uah;
       var rate = RT.get(chartCur);
@@ -610,7 +613,7 @@
              разом за курсом. */
           '<div class="card-sub">' +
           (chartCur
-            ? 'усі валюти разом за поточним курсом, ' + U.esc(inWords(chartCur).toLowerCase())
+            ? 'усі валюти разом за курсом свого місяця, ' + U.esc(inWords(chartCur).toLowerCase())
             : 'сума отриманих оплат по місяцях, ' + U.esc(inWords(code).toLowerCase())) +
           '</div></div></div>' +
           '<div class="chart">' + chart + '</div>' +

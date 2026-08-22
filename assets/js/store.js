@@ -744,6 +744,72 @@
   /** Слайди одного рядка, у їхньому порядку. Старі слайди без kind — урок. */
   S.slideKind = function (s) { return s && s.kind === 'hw' ? 'hw' : 'lesson'; };
 
+  /**
+   * Дохід за період у гривнях — кожна оплата за КУРСОМ СВОГО ДНЯ.
+   *
+   * Раніше тут була сума по валютах, переведена сьогоднішнім курсом. Через
+   * це заробіток за минулий місяць мінявся щодня разом із курсом, хоча
+   * гроші отримані давно й більше не змінюються.
+   *
+   * partial означає «щось порахували наближено»: для якоїсь валюти немає
+   * курсу взагалі або архівний за той день ще не приїхав.
+   */
+  S.incomeUAHBetween = function (from, to) {
+    var uah = 0, exact = true, missing = [];
+
+    S.paymentsBetween(from, to).forEach(function (p) {
+      var c = S.paymentCur(p);
+      var v = S.uahOf(p, p.amount, c);
+      if (v == null) {
+        exact = false;
+        if (missing.indexOf(c) < 0) missing.push(c);
+        return;
+      }
+      uah += v;
+      if (c !== 'UAH' && !(p.rate > 0) &&
+          window.Rates && Rates.isHistoric && !Rates.isHistoric(c, p.date)) exact = false;
+    });
+
+    return { uah: uah, partial: !exact, missing: missing };
+  };
+
+  /**
+   * Курс, за яким рахувати цей урок або оплату.
+   *
+   * Спершу той, що записаний у самому записі: його зберігають у мить, коли
+   * урок відмічають проведеним чи вносять оплату, — точнішого джерела не
+   * буває. Далі архів НБУ за той день. І лише як останній варіант —
+   * сьогоднішній курс.
+   *
+   * Це не дрібниця. Раніше заробіток за минулий тиждень мінявся щодня разом
+   * із курсом, хоча гроші давно отримані.
+   */
+  S.rateFor = function (rec, cur) {
+    if (!cur || cur === 'UAH') return 1;
+    if (rec && rec.rate > 0) return rec.rate;
+    var when = rec && (rec.date || rec.createdAt);
+    if (window.Rates && Rates.forDate) return Rates.forDate(cur, when);
+    return (window.Rates && Rates.get(cur)) || 0;
+  };
+
+  /** Сума запису в гривнях за його власним курсом. */
+  S.uahOf = function (rec, amount, cur) {
+    var rate = S.rateFor(rec, cur);
+    return rate > 0 ? (Number(amount) || 0) * rate : null;
+  };
+
+  /**
+   * Запамʼятати курс у записі. Викликається в мить, коли гроші стають
+   * фактом: урок проведено, оплату внесено.
+   */
+  S.freezeRate = function (name, id, cur) {
+    if (!cur || cur === 'UAH') return;
+    var rec = S.get(name, id);
+    if (!rec || rec.rate > 0) return;          // вже заморожено — не чіпаємо
+    var rate = (window.Rates && Rates.get(cur)) || 0;
+    if (rate > 0) S.update(name, id, { rate: rate });
+  };
+
   /** Дошка уроку або null, якщо її ще не створювали. */
   S.getBoard = function (lessonId) {
     return db.boards.find(function (b) { return b.lessonId === lessonId; }) || null;
@@ -954,10 +1020,13 @@
     if (paid) {
       l.paid = 1;
       if (!existing.length) {
+        var pcur = S.lessonCur(l);
         S.add('payments', {
           studentId: l.studentId, lessonId: lessonId,
           date: l.date.slice(0, 10), amount: l.price || 0,
-          currency: S.lessonCur(l), method: 'За урок',
+          currency: pcur, method: 'За урок',
+          // курс беремо з уроку: оплата за нього й отримана тоді ж
+          rate: pcur === 'UAH' ? undefined : (l.rate > 0 ? l.rate : S.rateFor(l, pcur)),
           note: 'Оплата за урок ' + U.fmtDate(l.date)
         });
       }
@@ -974,7 +1043,18 @@
     var l = S.get('lessons', lessonId);
     if (!l) return false;
     l.status = 'done';
+    /* Курс ДНЯ УРОКУ, а не сьогоднішній.
+
+       Урок часто відмічають проведеним не в той самий день: у понеділок
+       провів, у пʼятницю відмітив. Гроші отримані в понеділок, і курс має
+       бути понеділковий. */
+    var cur = S.lessonCur(l);
+    if (cur !== 'UAH' && !(l.rate > 0)) {
+      var rate = S.rateFor(l, cur);
+      if (rate > 0) l.rate = rate;
+    }
     S.save();
+    if (window.RecSync) RecSync.mark('lessons', lessonId);
     S.setLessonPaid(lessonId, paid !== false);
     return true;
   };

@@ -477,6 +477,50 @@
    * Вивантажити файл уроку, якщо його там ще немає. Повертає адресу.
    * folder розділяє картинки дошки ('img') і вкладення матеріалів ('mat').
    */
+  /* ============================================================
+     Календар уроків
+     ============================================================
+
+     Кладемо .ics у те саме публічне сховище, що й сторінки уроків. Адреса
+     містить випадковий код, тож знати її може лише той, кому ви дали
+     посилання, а відкликається вона видаленням файлу.
+
+     Тип обовʼязково text/calendar: із text/plain Google підписку не
+     приймає — каже «не вдалося прочитати» й не пояснює чому. */
+
+  Cloud.calendarUrl = function (token) {
+    var uid = Cloud.userId();
+    if (!uid || !token) return '';
+    return Cloud.base() + '/storage/v1/object/public/shares/' +
+      encodeURIComponent(uid) + '/cal/' + encodeURIComponent(token) + '.ics';
+  };
+
+  Cloud.publishCalendar = function (token, text) {
+    if (!Cloud.available() || !Cloud.signedIn()) {
+      return Promise.reject(new Error('Спершу увімкніть синхронізацію'));
+    }
+    var blob = new Blob([text], { type: 'text/calendar; charset=utf-8' });
+    return api('/storage/v1/object/shares/' + encodeURIComponent(Cloud.userId()) +
+               '/cal/' + encodeURIComponent(token) + '.ics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'x-upsert': 'true' },
+      body: blob
+    }).then(function (res) {
+      if (!res.ok && res.status !== 409) {
+        throw new Error('Календар не завантажився (' + res.status + ')');
+      }
+      return Cloud.calendarUrl(token);
+    });
+  };
+
+  Cloud.revokeCalendar = function (token) {
+    if (!Cloud.available() || !Cloud.signedIn() || !token) return Promise.resolve(false);
+    return api('/storage/v1/object/shares/' + encodeURIComponent(Cloud.userId()) +
+               '/cal/' + encodeURIComponent(token) + '.ics', { method: 'DELETE' })
+      .then(function (res) { return res.ok; })
+      .catch(function () { return false; });
+  };
+
   Cloud.publishShareImage = function (token, key, blob, folder) {
     folder = folder || 'img';
     var url = Cloud.shareImageUrl(token, key, folder);

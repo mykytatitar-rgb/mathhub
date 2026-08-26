@@ -1252,6 +1252,70 @@
      взагалі: токен дає повний доступ до бота, і йому не місце ні в коді,
      ні в браузері. Тут лише видно, чи все живе, і є чим це перевірити. */
 
+  /* ============================================================
+     Календар
+     ============================================================
+
+     Два різні способи, і плутати їх не можна.
+
+     Підписка — це весь розклад одним посиланням: Google перечитує його сам
+     і тримає календар у відповідності. Але перечитує за власним розкладом,
+     зазвичай раз на кілька годин, тож щойно створений урок там зʼявиться
+     не миттєво.
+
+     Кнопка на уроці — навпаки: відкриває Google із заповненою подією, і
+     урок опиняється в календарі за пару секунд, але руками й по одному.
+
+     Тому в картці сказано і про те, і про те: інакше людина чекала б від
+     підписки миттєвості, якої там немає. */
+
+  V.calendarCard = function () {
+    var on = window.ICS && ICS.enabled && ICS.enabled();
+    var url = on ? ICS.url() : '';
+    var n = window.ICS ? ICS.count() : 0;
+
+    var body;
+    if (!window.Cloud || !Cloud.available() || !Cloud.signedIn()) {
+      body = '<div class="field__hint">Спершу потрібна синхронізація: файл календаря ' +
+             'лежить на сервері, звідки його читає Google.</div>';
+    } else if (!on) {
+      body =
+        '<div class="field__hint">Один раз додаєте посилання в Google Календар — і ваші ' +
+        'уроки зʼявляються там самі. Пізніше його можна відкликати одним натисканням.</div>' +
+        '<div class="mt-2"><button class="btn btn--primary btn--sm" data-act="cal-on">' +
+        icon('calendar', 15) + 'Увімкнути</button></div>';
+    } else {
+      body =
+        '<div class="guard guard--on"><span class="guard__dot"></span>' +
+        '<span>Працює. У файлі ' + U.pl(n, 'урок', 'уроки', 'уроків') +
+        ' — від пів року тому до року вперед.</span></div>' +
+
+        '<input class="input mt-2" readonly value="' + U.esc(url) + '" ' +
+        'onclick="this.select()" style="font-size:12px">' +
+
+        '<div class="row row--wrap mt-2" style="gap:8px">' +
+          '<button class="btn btn--primary btn--sm" data-act="cal-copy">' +
+            icon('link', 15) + 'Скопіювати посилання</button>' +
+          '<button class="btn btn--ghost btn--sm" data-act="cal-now">' +
+            icon('refresh', 15) + 'Оновити зараз</button>' +
+          '<button class="btn btn--ghost btn--sm" data-act="cal-off">Вимкнути</button>' +
+        '</div>' +
+
+        '<div class="field__hint mt-2">' +
+        '<b>Куди вставити:</b> календар Google → ліворуч «Інші календарі» → «+» → ' +
+        '«Підписатися за URL‑адресою» → вставити посилання.<br>' +
+        'Google перечитує підписки сам, але за власним розкладом — зазвичай раз на ' +
+        'кілька годин. Якщо урок має бути в календарі просто зараз, натисніть ' +
+        '«У Google Календар» на самому уроці.</div>';
+    }
+
+    return '<div class="card mt-3">' +
+      '<div class="card-head"><div><h3 class="card-title">Google Календар</h3>' +
+      '<div class="card-sub">розклад уроків одним посиланням</div></div></div>' +
+      body +
+      '</div>';
+  };
+
   V.telegramCard = function () {
     return '<div class="card mt-3">' +
       '<div class="card-head"><div><h3 class="card-title">Нагадування в Telegram</h3>' +
@@ -1729,6 +1793,7 @@
 
           V.healthCard() +
           V.telegramCard() +
+          V.calendarCard() +
 
           '<div class="card">' +
             '<div class="card-head"><div><h3 class="card-title">Що зараз у базі</h3></div></div>' +

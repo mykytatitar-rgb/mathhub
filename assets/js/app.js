@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v36';
+  App.BUILD = 'v37';
   window.APP_BUILD = App.BUILD;
 
   var NAV = [
@@ -567,6 +567,54 @@
 
     /* Видалення теми питає підтвердження й називає її поіменно: у довіднику
        теми схожі, і «ви впевнені?» без назви тут нічого не означає. */
+    /* Календар. Вмикання створює код підписки й одразу викладає файл;
+       вимикання видаляє його зі сховища — посилання перестає працювати. */
+    'cal-on': function (_a, el) {
+      if (el) { el.disabled = true; el.textContent = 'Вмикаю…'; }
+      ICS.enable().then(function () {
+        U.toast('Календар готовий — скопіюйте посилання', 'ok');
+        App.render();
+      }).catch(function (e) {
+        if (el) { el.disabled = false; el.textContent = 'Увімкнути'; }
+        U.toast('Не вийшло: ' + (e && e.message ? e.message : e), 'err');
+      });
+    },
+
+    'cal-off': function () {
+      C.confirm('Вимкнути календар?',
+        'Посилання перестане працювати, і підписані календарі більше нічого ' +
+        'не побачать. Уроки в самій програмі лишаться недоторканими.',
+        function () {
+          ICS.disable().then(function () { U.toast('Вимкнено'); App.render(); });
+        },
+        'Вимкнути');
+    },
+
+    'cal-copy': function () {
+      var url = ICS.url();
+      if (!url) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url)
+          .then(function () { U.toast('Посилання скопійовано', 'ok'); })
+          .catch(function () { U.toast('Скопіюйте вручну з поля', 'err'); });
+      }
+    },
+
+    'cal-now': function () {
+      ICS.publish(true).then(function () { U.toast('Календар оновлено', 'ok'); App.render(); })
+        .catch(function (e) { U.toast('Не вийшло: ' + (e && e.message ? e.message : e), 'err'); });
+    },
+
+    /* Разова дія: відкрити Google з уже заповненою подією. Потрібна тоді,
+       коли урок має бути в календарі зараз, а не коли Google перечитає
+       підписку. */
+    'cal-add-one': function (lessonId) {
+      var l = S.get('lessons', lessonId);
+      var url = window.ICS ? ICS.googleUrl(l) : '';
+      if (!url) { U.toast('Не вдалося зібрати подію', 'err'); return; }
+      window.open(url, '_blank', 'noopener');
+    },
+
     'sheet-refresh': function (id) { F.refreshSheet(id); },
     'sheets-refresh-all': function () { F.refreshAllSheets(); },
 
@@ -798,6 +846,8 @@
      трапляються не в момент синхронізації, а тихо, і виявляються за кілька
      днів — коли трьох копій «перед синхронізацією» вже давно немає. */
   try {
+    if (window.ICS && ICS.watch) ICS.watch();
+
     if (window.Vault && Vault.available()) {
       Vault.persist();
 

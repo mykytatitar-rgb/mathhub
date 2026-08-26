@@ -245,6 +245,13 @@
       sub: preset.lockStudent && stud ? stud.name : '',
       body: body,
       buttons: [
+        !isNew ? { label: 'У Google Календар', kind: 'btn--ghost', act: 'gcal', close: false,
+          onClick: function () {
+            var url = window.ICS ? ICS.googleUrl(S.get('lessons', id)) : '';
+            if (url) window.open(url, '_blank', 'noopener');
+            else U.toast('Не вдалося зібрати подію', 'err');
+            return false;                       // вікно уроку лишається відкритим
+          } } : null,
         !isNew ? { label: 'Видалити', kind: 'btn--danger', act: 'del', onClick: function () {
           var bst = S.boardStats(id);
           C.confirm('Видалити урок?',

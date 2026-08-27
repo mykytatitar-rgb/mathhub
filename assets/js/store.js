@@ -1209,13 +1209,28 @@
     if (!keys.length || !window.ImgStore || !window.ImgStore.available()) {
       return Promise.resolve(JSON.stringify(withImages(images), null, 2));
     }
+    /* Дуже важкі файли у копію не вкладаємо.
+
+       Копія — це один JSON, а файл у ньому лежить у base64, тобто на
+       третину більший за себе. Одне відео на сто мегабайтів робить копію
+       непридатною: браузер не збере такий рядок, а якщо збере — не
+       відкриє назад.
+
+       Тому великі лишаються поза копією, але їхні імена в неї потрапляють:
+       краще знати, чого бракує, ніж думати, що збережено все. */
+    var CAP = 20 * 1048576;
+    var skipped = [];
+
     return Promise.all(keys.map(function (k) {
       return window.ImgStore.get(k).then(function (blob) {
         if (!blob) return null;
+        if (blob.size > CAP) { skipped.push({ key: k, size: blob.size }); return null; }
         return window.ImgStore.toDataURL(blob).then(function (url) { images[k] = url; });
       }).catch(function () { return null; });
     })).then(function () {
-      return JSON.stringify(withImages(images), null, 2);
+      var out = withImages(images);
+      if (skipped.length) out._skipped = skipped;
+      return JSON.stringify(out, null, 2);
     });
   };
 

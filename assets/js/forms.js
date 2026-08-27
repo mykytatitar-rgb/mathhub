@@ -833,12 +833,31 @@
       if (!window.ImgStore || !window.ImgStore.available()) {
         U.toast('Браузер не дає зберігати файли', 'err'); return;
       }
-      // великі файли не приймаємо: сховище браузера не безмежне
-      var tooBig = picked.filter(function (f) { return f.size > 25 * 1048576; });
+      /* Стеля тут висока навмисно.
+
+         Раніше стояло 25 МБ — число, взяте зі стелі й нічим не обґрунтоване:
+         у браузерному сховищі місця гігабайти. Справжніх обмежень два, і
+         обидва не тут: скільки дозволяє прийняти сервер (це налаштування
+         вашого проєкту, і ми про нього дізнаємось лише з відповіді) і
+         скільки влізе в файл резервної копії.
+
+         Тому великий файл приймаємо, а про наслідки кажемо чесно: він одразу
+         працює тут, а якщо сервер його не візьме — це буде видно в
+         «Чи все ціле», а не мовчки. */
+      var HARD = 200 * 1048576;
+      var HEAVY = 40 * 1048576;
+
+      var tooBig = picked.filter(function (f) { return f.size > HARD; });
       if (tooBig.length) {
-        U.toast('Файл більший за 25 МБ не поміститься: ' + tooBig[0].name, 'err');
-        picked = picked.filter(function (f) { return f.size <= 25 * 1048576; });
+        U.toast('Файл понад 200 МБ браузер не потягне: ' + tooBig[0].name, 'err');
+        picked = picked.filter(function (f) { return f.size <= HARD; });
         if (!picked.length) return;
+      }
+
+      var heavy = picked.filter(function (f) { return f.size > HEAVY; });
+      if (heavy.length) {
+        U.toast('Великий файл (' + fileSize(heavy[0].size) + '). Якщо сервер його не прийме, ' +
+          'він лишиться на цьому пристрої — перевірте в «Чи все ціле»', 'ok');
       }
       U.toast('Зберігаю ' + U.pl(picked.length, 'файл', 'файли', 'файлів') + '…');
       Promise.all(picked.map(function (f) {
@@ -1186,7 +1205,8 @@
             '\cdot, \le. Праворуч від полів одразу видно, як воно виглядатиме.') +
         '</div>' +
         C.field('Файли', fileStripHtml(),
-          'PDF, документи, картинки — усе, що роздаєте учням. До 25 МБ на файл.') +
+          'PDF, документи, картинки, відео — усе, що роздаєте учням. ' +
+          'Великі файли приймаються; якщо сервер не прийме, файл лишиться на цьому пристрої.') +
         C.field('Посилання', C.input('url', data.url, 'placeholder="https://…"')) +
         C.field('Опис', C.textarea('note', data.note, 'placeholder="Коли і кому давати, на що звертати увагу"')),
       buttons: [

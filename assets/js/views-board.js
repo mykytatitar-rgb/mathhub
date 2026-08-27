@@ -20,6 +20,7 @@
     { id: 'shape',   icon: 'shapes',     label: 'Геометричні фігури (S)', opts: 'shape' },
     { id: 'line',    icon: 'shapeLine',  label: 'Лінія (L)',      opts: 'stroke' },
     { id: 'arrow',   icon: 'arrowRight', label: 'Стрілка (A)',    opts: 'stroke' },
+    { id: 'numline', icon: 'ruler',      label: 'Числова вісь (N)', opts: 'stroke' },
     { id: 'hand',    icon: 'hand',       label: 'Рука — рух по полотну (H)' }
   ];
 
@@ -1478,6 +1479,11 @@
           '" data-act="board-toggle-measures" title="Показати або сховати розміри">' +
           icon('checklist', 16) + '</button>' +
         '<span class="sel-bar__sep"></span>';
+    } else if (n === 1 && e.selection[0].t === 'n') {
+      extra =
+        '<button class="sel-bar__btn" data-act="board-numline" title="Діапазон і крок осі">' +
+          icon('target', 16) + '</button>' +
+        '<span class="sel-bar__sep"></span>';
     } else if (e.selection.some(function (i) { return i.t === 'x'; })) {
       extra =
         '<button class="sel-bar__btn" data-act="board-font-down" title="Дрібніший текст">' +
@@ -1730,7 +1736,7 @@
     if (e.altKey) return;
 
     var map = { v: 'select', p: 'pen', e: 'eraser', t: 'text', s: 'shape',
-                l: 'line', a: 'arrow', h: 'hand' };
+                l: 'line', a: 'arrow', n: 'numline', h: 'hand' };
     var kk = e.key.toLowerCase();
     if (map[kk]) { e.preventDefault(); setTool(map[kk]); return; }
     if (kk === 'r') { e.preventDefault(); eng.setShape('rect'); renderOpts(); return; }
@@ -1765,6 +1771,46 @@
      Дії
      ============================================================ */
 
+  /**
+   * Діапазон і крок числової осі.
+   *
+   * Три числа, бо саме їх і міняють: від, до, крок. Решта — підписи,
+   * ділення, стрілка — рахується сама, і питати про це означало б
+   * перекладати на людину роботу програми.
+   */
+  function numlineDialog(it) {
+    C.modal({
+      title: 'Числова вісь',
+      sub: 'діапазон і крок',
+      body:
+        '<div class="field-row field-row--3">' +
+          C.field('Від', C.input('from', it.from, 'type="number" step="any"')) +
+          C.field('До', C.input('to', it.to, 'type="number" step="any"')) +
+          C.field('Крок', C.input('step', it.step, 'type="number" step="any" min="0"')) +
+        '</div>' +
+        '<div class="field__hint">Підписи ставляться через стільки ділень, скільки ' +
+        'вміщається, — щоб числа не наповзали. Стрілка завжди праворуч.</div>',
+      buttons: [
+        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+        { label: 'Застосувати', kind: 'btn--primary', act: 'save', icon: 'check',
+          onClick: function (root) {
+            var v = C.readForm(root);
+            var from = Number(v.from), to = Number(v.to), step = Number(v.step);
+
+            if (!(to > from)) { U.toast('«До» має бути більше за «Від»', 'err'); return false; }
+            if (!(step > 0)) { U.toast('Крок має бути додатним', 'err'); return false; }
+            if ((to - from) / step > 400) {
+              U.toast('Забагато ділень — збільште крок', 'err'); return false;
+            }
+
+            cur.engine.snapshot();
+            it.from = from; it.to = to; it.step = step;
+            cur.engine.changed();
+          } }
+      ]
+    });
+  }
+
   V.boardActions = {
     'board-exit': function () {
       var lid = cur ? cur.lessonId : null;
@@ -1788,6 +1834,10 @@
         flushSave();
         U.toast('Цей вигляд слайда стане початковим', 'ok');
       }
+    },
+    'board-numline': function () {
+      var it = cur && cur.engine.selection[0];
+      if (it && it.t === 'n') numlineDialog(it);
     },
     'board-history': function () { historyDialog(); },
     'board-measures': function () { toggleMeasures(); },

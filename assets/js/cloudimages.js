@@ -62,9 +62,28 @@
       }).then(function (res) {
         // 200 — записано, 409 — вже є (обидва означають «на сервері воно є»)
         if (res.ok || res.status === 409) { synced[key] = true; saveSynced(); return; }
+
+        /* 413 — сервер відмовився через розмір. Це не збій мережі й не
+           мине саме собою, тож повторювати нескінченно нема сенсу: файл
+           лишається лише тут, і про це має бути сказано вголос. */
+        if (res.status === 413) {
+          tooBig[key] = blob.size || 1;
+          saveTooBig();
+          console.warn('Файл завеликий для сервера:', key);
+          return;
+        }
         throw new Error('Сервер відповів ' + res.status);
       });
     });
+  }
+
+  /* Список того, що сервер не бере. Тримаємо між запусками: інакше кожне
+     відкриття програми знову намагалося б відправити той самий файл. */
+  var TOOBIG = 'mathhub.img.toobig';
+  var tooBig = {};
+  try { tooBig = JSON.parse(localStorage.getItem(TOOBIG) || '{}') || {}; } catch (e) { tooBig = {}; }
+  function saveTooBig() {
+    try { localStorage.setItem(TOOBIG, JSON.stringify(tooBig)); } catch (e) {}
   }
 
   function drain() {
@@ -88,12 +107,15 @@
     if (!ready() || !window.S || !S.usedImageKeys) return;
     var used = S.usedImageKeys();
     used.forEach(function (k) {
-      if (!synced[k] && queue.indexOf(k) < 0) queue.push(k);
+      if (!synced[k] && !tooBig[k] && queue.indexOf(k) < 0) queue.push(k);
     });
     drain();
   };
 
   CI.pending = function () { return queue.length + (busy ? 1 : 0); };
+
+  /** Файли, які сервер відмовився прийняти через розмір. */
+  CI.tooBig = function () { return Object.keys(tooBig); };
 
   /* ============================================================
      Підвантаження на вимогу

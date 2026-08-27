@@ -525,6 +525,14 @@
     if (it.t === 'l' || it.t === 'a') {
       return distToSegment(x, y, it.a[0], it.a[1], it.a[2], it.a[3]) <= tol + it.w / 2;
     }
+    /* Вісь ловимо ширшою смугою, ніж лінію: у неї є ділення й підписи під
+       нею, і тицяти треба туди, де вона виглядає, а не в саму риску. */
+    if (it.t === 'n') {
+      var nx1 = Math.min(it.a[0], it.a[2]), nx2 = Math.max(it.a[0], it.a[2]);
+      var band = Math.max(16, (it.w || 3) * 7);
+      return x >= nx1 - tol && x <= nx2 + tol &&
+             y >= it.a[1] - band && y <= it.a[1] + band;
+    }
     if (it.t === 'i' || it.t === 'x') return inBounds(itemBounds(it), x, y, tol);
 
     if (it.t === 'g') {
@@ -551,6 +559,24 @@
       return ev <= 1.15;
     }
     return inBounds(b, x, y, tol);
+  }
+
+  /* Значення осі з розумними запасними: користувач міг зберегти вісь ще до
+     появи якогось із полів, і вона має малюватись, а не зникати. */
+  function numFrom(it) { return typeof it.from === 'number' ? it.from : -5; }
+  function numTo(it)   { return typeof it.to === 'number' ? it.to : 5; }
+  function numStep(it) {
+    var st = Number(it.step);
+    return st > 0 ? st : 1;
+  }
+
+  /* Підпис ділення. Дробовий крок вимагає десяткових, цілий — ні: «0.0»
+     замість «0» на осі виглядає як помилка. */
+  function numLabel(v, step) {
+    var dec = 0;
+    if (step < 1) dec = String(step).split('.')[1] ? String(step).split('.')[1].length : 1;
+    var out = dec ? v.toFixed(dec) : String(Math.round(v));
+    return out === '-0' ? '0' : out;
   }
 
   function moveItem(it, dx, dy) {
@@ -762,6 +788,78 @@
         ctx.moveTo(it.a[2], it.a[3]);
         ctx.lineTo(it.a[2] - head * Math.cos(ang + 0.42), it.a[3] - head * Math.sin(ang + 0.42));
         ctx.stroke();
+      }
+      return;
+    }
+
+    /* Числова вісь.
+
+       Малюємо горизонтально від першої точки до другої, незалежно від того,
+       як тягнули: похила вісь не буває, а тремтіння руки не має ставати
+       частиною побудови. Вертикальна координата береться з початку.
+
+       Ділення рахуються від from до to з кроком step; підписи ставимо не
+       під кожним, а через стільки, скільки влізає — інакше на дрібному
+       кроці числа наповзають одне на одне й не читаються. */
+    if (it.t === 'n') {
+      var x1 = Math.min(it.a[0], it.a[2]), x2 = Math.max(it.a[0], it.a[2]);
+      var y = it.a[1];
+      var from = numFrom(it), to = numTo(it), step = numStep(it);
+      var span = to - from;
+      if (!(span > 0) || x2 - x1 < 4) return;
+
+      var head = Math.max(9, (it.w || 3) * 3.2);
+
+      ctx.beginPath();
+      ctx.moveTo(x1, y);
+      ctx.lineTo(x2, y);
+      ctx.stroke();
+
+      // стрілка праворуч: вісь спрямована в бік зростання
+      ctx.beginPath();
+      ctx.moveTo(x2, y);
+      ctx.lineTo(x2 - head * 0.9, y - head * 0.42);
+      ctx.moveTo(x2, y);
+      ctx.lineTo(x2 - head * 0.9, y + head * 0.42);
+      ctx.stroke();
+
+      var px = (x2 - x1 - head) / span;             // пікселів на одиницю
+      var count = Math.round(span / step);
+      if (count > 400) return;                      // безглуздо дрібний крок
+
+      var fs = Math.max(11, (it.w || 3) * 4.2);
+      var tick = Math.max(5, (it.w || 3) * 2.2);
+
+      ctx.font = '600 ' + fs + 'px "Source Serif 4", Georgia, serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+
+      /* Скільки ділень пропускати між підписами: беремо перше, при якому
+         сусідні числа не торкаються.
+
+         Міряємо найширший підпис, а не розмір шрифту: «1000» удвічі ширше
+         за «5», і осі на кшталт 0…1000 інакше злипаються в суцільну смугу. */
+      var widest = 0;
+      for (var w0 = 0; w0 <= count; w0++) {
+        var lw = ctx.measureText(numLabel(from + w0 * step, step)).width;
+        if (lw > widest) widest = lw;
+      }
+      var need = widest + fs * 0.7;                 // сам підпис плюс просвіт
+
+      var everyN = 1;
+      while (px * step * everyN < need && everyN < count) everyN++;
+
+      for (var k = 0; k <= count; k++) {
+        var v = from + k * step;
+        var tx = x1 + (v - from) * px;
+        var big = (k % everyN) === 0;
+
+        ctx.beginPath();
+        ctx.moveTo(tx, y - (big ? tick : tick * 0.55));
+        ctx.lineTo(tx, y + (big ? tick : tick * 0.55));
+        ctx.stroke();
+
+        if (big) ctx.fillText(numLabel(v, step), tx, y + tick + fs * 0.35);
       }
       return;
     }
@@ -1162,7 +1260,7 @@
   Board.prototype._handles = function () {
     if (this.selection.length !== 1) return null;   // маркери — лише для одного об'єкта
     var it = this.selection[0];
-    if (it.t === 'l' || it.t === 'a') {
+    if (it.t === 'l' || it.t === 'a' || it.t === 'n') {
       return [{ id: 'p1', x: it.a[0], y: it.a[1] }, { id: 'p2', x: it.a[2], y: it.a[3] }];
     }
     if (it.t === 'r' || it.t === 'e' || it.t === 'i' || it.t === 'g') {
@@ -1365,6 +1463,14 @@
       return;
     }
 
+    if (this.tool === 'numline') {
+      this.snapshot();
+      this.draft = { t: 'n', id: uid('nl'), c: this.color, w: this.width,
+                     from: -5, to: 5, step: 1,
+                     a: [round(w.x), round(w.y), round(w.x), round(w.y)] };
+      return;
+    }
+
     var map = { line: 'l', arrow: 'a' };
     if (map[this.tool]) {
       this.snapshot();
@@ -1497,6 +1603,9 @@
       var d = this.draft;
       var keep = true;
       if (d.t !== 'p') keep = Math.hypot(d.a[2] - d.a[0], d.a[3] - d.a[1]) * this.scale > 4;
+      /* Вісь завжди горизонтальна: похилої числової осі не буває, а тягнути
+         мишею рівно неможливо. Вирівнюємо в мить відпускання. */
+      if (d.t === 'n') d.a[3] = d.a[1];
       if (keep) {
         if (d.t === 'p' && this.smoothing) d.d = smoothStroke(d.d, d.w, this.smoothing);
         this.slide.items.push(ided(d));

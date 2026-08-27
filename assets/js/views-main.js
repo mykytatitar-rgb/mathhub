@@ -1537,6 +1537,35 @@
         var fix = '<div class="mt-2"><button class="btn btn--ghost btn--sm" data-act="check-images">' +
           'Перевірити й повернути картинки</button></div>';
 
+        /* Файли, які сервер відмовився прийняти через розмір. Вони працюють
+           тут і зараз, але існують в одному примірнику — і це та річ, про
+           яку треба знати заздалегідь, а не тоді, коли пристрій зникне. */
+        var big = (window.CloudImages && CloudImages.tooBig) ? CloudImages.tooBig() : [];
+        if (big.length) {
+          var names = [];
+          S.db().materials.forEach(function (m) {
+            (m.files || []).forEach(function (fl) {
+              if (big.indexOf(fl.key) >= 0) names.push(fl.name || 'файл');
+            });
+          });
+          (S.deskItems() || []).forEach(function (d) {
+            (d.files || []).forEach(function (fl) {
+              if (big.indexOf(fl.key) >= 0) names.push(fl.name || 'файл');
+            });
+          });
+
+          out += healthRow('warn', U.pl(big.length, 'файл лише на цьому пристрої',
+              'файли лише на цьому пристрої', 'файлів лише на цьому пристрої'),
+            (names.length ? U.esc(names.slice(0, 5).join(', ')) +
+              (names.length > 5 ? ' та інші' : '') + '. ' : '') +
+            (big.length === 1
+              ? 'Сервер не прийняв його через розмір. На інших пристроях його не буде, ' +
+                'і у файл резервної копії воно теж не потрапить. '
+              : 'Сервер не прийняв їх через розмір. На інших пристроях їх не буде, ' +
+                'і у файл резервної копії вони теж не потраплять. ') +
+            'Ліміт піднімається в налаштуваннях сховища Supabase.');
+        }
+
         if (!used.length) {
           out += healthRow('on', 'Картинок ще немає', 'Перевіряти нічого.');
         } else if (!absent.length) {

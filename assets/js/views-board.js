@@ -890,7 +890,15 @@
         'який колись існував на цій дошці. Пошук нічого не змінює — він лише ' +
         'показує, чого зараз бракує.</p>' +
         '<button class="btn btn--ghost btn--sm" data-act-find>Пошукати втрачені слайди</button>' +
-        '<div data-lost style="margin-top:12px"></div>',
+        '<div data-lost style="margin-top:12px"></div>' +
+        '<div style="height:1px;background:var(--line);margin:18px 0 14px"></div>' +
+        '<p style="line-height:1.65;color:var(--ink-2);margin:0 0 10px">' +
+        '<b>Слайда немає ніде, а фото на ньому були?</b><br>' +
+        'Картинки лежать у сховищі окремо від дошок, і їх не видаляє ніщо — ' +
+        'навіть коли слайд зник. Тут показані ті, на які зараз не посилається ' +
+        'жоден слайд, домашнє чи матеріал.</p>' +
+        '<button class="btn btn--ghost btn--sm" data-act-orphans>Пошукати загублені картинки</button>' +
+        '<div data-orphans style="margin-top:12px"></div>',
       buttons: [{ label: 'Закрити', kind: 'btn--ghost', act: 'cancel' }],
       onMount: function (wrap, close) {
         var box = wrap.querySelector('[data-hist]');
@@ -938,8 +946,202 @@
         });
 
         mountLostSlides(wrap, boardKey);
+        mountLostImages(wrap);
       }
     });
+  }
+
+  /**
+   * Картинки, на які вже ніщо не посилається.
+   *
+   * Останній рубіж, коли слайда немає ні в історії, ні в журналі. Сховище
+   * картинок нічого не видаляє саме — тож фото зі зниклого слайда майже
+   * напевно лежить на місці й чекає, поки його впізнають в обличчя.
+   *
+   * Показуємо саме зображення, а не список ключів: ключ нікому нічого не
+   * каже, а по картинці одразу видно, та вона чи ні.
+   */
+  function mountLostImages(wrap) {
+    var btn = wrap.querySelector('[data-act-orphans]');
+    var box = wrap.querySelector('[data-orphans]');
+    if (!btn || !box) return;
+
+    var LIMIT = 60;
+    var urls = [];
+
+    btn.addEventListener('click', function () {
+      if (!window.ImgStore || !ImgStore.available()) {
+        box.innerHTML = '<div class="muted">Цей браузер не дає читати сховище картинок.</div>';
+        return;
+      }
+      btn.disabled = true;
+      box.innerHTML = '<div class="muted">Переглядаю сховище…</div>';
+
+      /* Дивимось і в цей браузер, і на сервер. Картинку могли додати з
+         телефона — тоді тут її немає зовсім, хоч вона й ціла. */
+      var local = S.unusedImages();
+      var remote = (window.CloudImages && CloudImages.listRemote)
+        ? CloudImages.listRemote() : Promise.resolve([]);
+
+      Promise.all([local, remote]).then(function (both) {
+        var used = {};
+        S.usedImageKeys().forEach(function (k) { used[k] = 1; });
+
+        var keys = both[0].slice();
+        both[1].forEach(function (r) {
+          if (!used[r.key] && keys.indexOf(r.key) < 0) keys.push(r.key);
+        });
+        return keys;
+      }).then(function (keys) {
+        btn.disabled = false;
+        if (!keys.length) {
+          box.innerHTML = '<div class="muted">Безхазяйних картинок немає: ' +
+            'усе, що лежить у сховищі, десь використовується.</div>';
+          return;
+        }
+
+        var show = keys.slice(0, LIMIT);
+        return Promise.all(show.map(function (k) {
+          return ImgStore.get(k).then(function (blob) {
+            return blob ? { key: k, blob: blob } : null;
+          }).catch(function () { return null; });
+        })).then(function (found) {
+          var live = found.filter(Boolean);
+          if (!live.length) {
+            box.innerHTML = '<div class="muted">Ключі є, а самих файлів не знайшлося.</div>';
+            return;
+          }
+
+          box.innerHTML =
+            '<div class="muted" style="margin-bottom:10px">' +
+              'Знайдено ' + U.pl(keys.length, 'картинку', 'картинки', 'картинок') +
+              ', на які зараз ніщо не посилається' +
+              (keys.length > LIMIT ? ' — показано перші ' + LIMIT : '') +
+              '. Натисніть на ту, що з того слайда.</div>' +
+            '<div data-grid style="display:grid;gap:10px;' +
+              'grid-template-columns:repeat(auto-fill,minmax(120px,1fr))"></div>' +
+            '<button class="btn btn--primary btn--sm" data-all style="margin-top:12px">' +
+              'Зібрати слайд ДЗ з усіх показаних</button>';
+
+          var grid = box.querySelector('[data-grid]');
+          live.forEach(function (m, i) {
+            var url = URL.createObjectURL(m.blob);
+            urls.push(url);
+
+            var cell = document.createElement('button');
+            cell.type = 'button';
+            cell.className = 'btn btn--ghost';
+            cell.setAttribute('data-put', String(i));
+            cell.style.cssText = 'padding:6px;height:auto;display:block;text-align:center';
+
+            var img = document.createElement('img');
+            img.alt = '';
+            img.style.cssText = 'width:100%;height:88px;object-fit:contain;' +
+              'border-radius:var(--r-sm);background:var(--bg);display:block';
+            /* Заразом дізнаємось справжні розміри: без них картинка лягла б
+               на дошку квадратом, а розтягнутий скріншот не прочитати. */
+            img.addEventListener('load', function () {
+              m.w = img.naturalWidth || 0;
+              m.h = img.naturalHeight || 0;
+            });
+            img.src = url;
+
+            var cap = document.createElement('span');
+            cap.className = 'muted';
+            cap.style.cssText = 'font-size:11px;display:block;margin-top:5px';
+            cap.textContent = m.blob.size < 1048576
+              ? Math.round(m.blob.size / 1024) + ' КБ'
+              : (m.blob.size / 1048576).toFixed(1) + ' МБ';
+
+            cell.appendChild(img);
+            cell.appendChild(cap);
+            grid.appendChild(cell);
+          });
+
+          U.$$('[data-put]', grid).forEach(function (cell) {
+            cell.addEventListener('click', function () {
+              placeImages([live[Number(cell.getAttribute('data-put'))]], false);
+            });
+          });
+          box.querySelector('[data-all]').addEventListener('click', function () {
+            placeImages(live, true);
+          });
+        });
+      }).catch(function () {
+        btn.disabled = false;
+        box.innerHTML = '<div class="muted">Сховище картинок не прочиталося.</div>';
+      });
+    });
+
+    /* Прибираємо посилання на файли, щойно вікно зникає з сторінки: інакше
+       браузер тримає їх у памʼяті до перезавантаження. */
+    if (window.MutationObserver) {
+      var mo = new MutationObserver(function () {
+        if (document.body.contains(wrap)) return;
+        urls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (e) {} });
+        urls = [];
+        mo.disconnect();
+      });
+      mo.observe(document.body, { childList: true, subtree: true });
+    }
+  }
+
+  /**
+   * Покласти знайдені картинки назад на дошку.
+   *
+   * newSlide — зібрати з них окремий слайд ДЗ, тобто відтворити зниклий.
+   * Інакше кладемо на той слайд, що зараз відкритий.
+   */
+  function placeImages(list, newSlide) {
+    if (!cur || !list.length) return;
+    snapshot(true);
+
+    var target = cur.index;
+    if (newSlide) {
+      var s = S.newSlide('Домашнє завдання', 'hw');
+      var pos = -1;
+      for (var i = cur.board.slides.length - 1; i >= 0; i--) {
+        if (S.slideKind(cur.board.slides[i]) === 'hw') { pos = i + 1; break; }
+      }
+      if (pos < 0) pos = cur.board.slides.length;
+      cur.board.slides.splice(pos, 0, s);
+      target = pos;
+    }
+
+    var slideTo = cur.board.slides[target];
+    slideTo.items = slideTo.items || [];
+
+    var cols = Math.ceil(Math.sqrt(list.length));
+    var cell = 560, gap = 40;
+
+    /* Кладемо нижче за все, що вже є на слайді, а не поверх: повернення
+       втраченого не має нічого затуляти. */
+    var below = 0;
+    slideTo.items.forEach(function (it) {
+      if (it && it.a) below = Math.max(below, it.a[1], it.a[3]);
+    });
+    var top = slideTo.items.length ? below + gap * 2 : 0;
+
+    list.forEach(function (m, i) {
+      var cx = (i % cols) * (cell + gap);
+      var cy = top + Math.floor(i / cols) * (cell + gap);
+      // справжні пропорції взято з мініатюри; без них скріншот розтягнеться
+      var ratio = (m.w && m.h) ? m.w / m.h : 1;
+      var w = ratio >= 1 ? cell : cell * ratio;
+      var h = ratio >= 1 ? cell / ratio : cell;
+      slideTo.items.push({ t: 'i', id: U.uid('it'), k: m.key, r: ratio,
+                           a: [cx + (cell - w) / 2, cy + (cell - h) / 2,
+                               cx + (cell + w) / 2, cy + (cell + h) / 2] });
+    });
+
+    cur.thumbs = {};
+    markDirty();
+    flushSave();
+    selectSlide(target);
+    if (cur.engine && cur.engine.fit) cur.engine.fit();
+    U.toast(newSlide
+      ? 'Слайд ДЗ зібрано з ' + U.pl(list.length, 'картинки', 'картинок', 'картинок')
+      : U.pl(list.length, 'картинку покладено', 'картинки покладено', 'картинок покладено'), 'ok');
   }
 
   /**

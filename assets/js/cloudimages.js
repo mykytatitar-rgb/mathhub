@@ -117,6 +117,47 @@
   /** Файли, які сервер відмовився прийняти через розмір. */
   CI.tooBig = function () { return Object.keys(tooBig); };
 
+  /**
+   * Усе, що лежить у сховищі на сервері.
+   *
+   * Потрібно для пошуку загублених картинок. Картинку могли додати з іншого
+   * пристрою — тоді в цьому браузері її немає взагалі, і місцевий пошук її
+   * не побачить, хоч вона й ціла.
+   *
+   * Читаємо сторінками: у сховищі можуть бути тисячі файлів, а відповідь
+   * обмежена.
+   */
+  CI.listRemote = function () {
+    if (!ready() || !navigator.onLine) return Promise.resolve([]);
+
+    var prefix = Cloud.userId() + '/';
+    var out = [];
+    var PAGE = 100;
+
+    function page(offset) {
+      return Cloud.request('/storage/v1/object/list/' + BUCKET, {
+        method: 'POST',
+        body: JSON.stringify({ prefix: prefix, limit: PAGE, offset: offset,
+                               sortBy: { column: 'name', order: 'asc' } })
+      }).then(function (res) {
+        if (!res.ok) throw new Error('Сервер відповів ' + res.status);
+        return res.json();
+      }).then(function (rows) {
+        if (!rows || !rows.length) return out;
+        rows.forEach(function (r) {
+          if (!r || !r.name) return;
+          out.push({ key: r.name, size: (r.metadata && r.metadata.size) || 0 });
+        });
+        return rows.length < PAGE ? out : page(offset + rows.length);
+      });
+    }
+
+    return page(0).catch(function (e) {
+      console.warn('Сховище картинок не перелічилось:', e && e.message);
+      return out;
+    });
+  };
+
   /* ============================================================
      Підвантаження на вимогу
      ============================================================ */

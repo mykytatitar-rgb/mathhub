@@ -1653,96 +1653,140 @@ a { color: inherit; text-decoration: none; }
    Довідник
    ============================================================
 
-   Оформлення навмисно ближче до паперової шпаргалки, ніж до решти
-   кабінету: власна блакить замість фірмової синьої, більші поля, більший
-   кегль формул. Причина проста — сюди дивляться під час пояснення, часто
-   з відстані, і читабельність тут важить більше за єдність стилю.
+   Оформлення те саме, що й у решті кабінету: фірмовий індиго, ті самі
+   радіуси, тіні й лінії, той самий градієнт у шапці, що на інших сторінках.
 
-   Кольори живуть окремими змінними в межах .ref: якщо колись знадобиться
-   інша палітра, її міняють в одному місці, не чіпаючи кабінет. */
+   Раніше довідник мав власну блакить — я взяв її з паперового взірця. Поруч
+   із рештою програми це читалося як чужа вставка: людина переходить із
+   розкладу в довідник і бачить інший застосунок.
 
-.ref {
-  --sky:      #0EA5E9;
-  --sky-dark: #0284C7;
-  --sky-soft: #E0F2FE;
-  --paper:    #F8FAFC;
-  --edge:     #E2E8F0;
-  display: flex; flex-direction: column; height: 100%;
+   Структура при цьому лишилась: розділ — картка з кольоровою шапкою,
+   всередині блоки. Змінилися кольори й форми, а не будова. */
+
+.ref { display: flex; flex-direction: column; height: 100%; }
+
+/* --- Шапка: той самий градієнт, що в заголовках інших сторінок --- */
+.ref__bar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 18px 28px;
+  color: #fff;
+  background:
+    radial-gradient(115% 200% at 92% -40%, rgba(147, 51, 234, .40) 0%, rgba(147, 51, 234, 0) 58%),
+    linear-gradient(124deg, #5A4DE8 0%, #4B3FDB 42%, #2E248F 100%);
 }
-
-/* --- Смуга зверху --- */
-.ref__bar { display: flex; align-items: center; gap: 12px;
-            padding: 15px 26px; background: var(--sky); color: #fff; }
-.ref__title { font-weight: 800; font-size: 18px; letter-spacing: -.2px; }
-.ref__count { font-size: 12.5px; opacity: .85; margin-right: auto; }
+.ref__title { font-size: 22px; font-weight: 800; letter-spacing: -.5px; }
+.ref__count { font-size: 12px; font-weight: 600; opacity: .8;
+              text-transform: uppercase; letter-spacing: .4px; margin-right: auto; }
 .ref__bar .btn { background: rgba(255,255,255,.16); border-color: transparent; color: #fff; }
 .ref__bar .btn:hover { background: rgba(255,255,255,.28); }
 
-.ref__body { display: grid; grid-template-columns: 268px 1fr; flex: 1; min-height: 0; }
+.ref__q { flex: 0 0 250px; height: 36px; padding: 0 13px; border-radius: var(--r-sm);
+          border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.16);
+          color: #fff; font: inherit; font-size: 13.5px; outline: none; }
+.ref__q::placeholder { color: rgba(255,255,255,.7); }
+.ref__q:focus { background: rgba(255,255,255,.26); border-color: rgba(255,255,255,.55); }
 
-/* --- Перелік тем --- */
-.ref__nav { border-right: 1px solid var(--edge); background: #fff;
+.ref__body { display: grid; grid-template-columns: 262px 1fr; flex: 1; min-height: 0; }
+
+/* --- Перелік тем: як пункти бічної панелі --- */
+.ref__nav { border-right: 1px solid var(--line); background: var(--surface);
             overflow-y: auto; padding: 10px 8px; }
 .ref__t { display: flex; align-items: center; gap: 10px; width: 100%;
-          padding: 11px 13px; margin-bottom: 2px; border: 0; background: none;
-          cursor: pointer; font: inherit; font-size: 14px; color: #0F172A;
-          text-align: left; border-radius: 10px; transition: background .12s; }
-.ref__t:hover { background: var(--paper); }
+          padding: 10px 12px; margin-bottom: 2px; border: 0; background: none;
+          cursor: pointer; font: inherit; font-size: 13.5px; font-weight: 600;
+          color: var(--ink-2); text-align: left; border-radius: var(--r-sm);
+          transition: background .14s, color .14s; }
+.ref__t:hover { background: var(--blue-50); color: var(--blue-700); }
 .ref__t svg { margin-left: auto; opacity: .3; flex: 0 0 auto; }
-.ref__n { color: #94A3B8; font-size: 13px; font-variant-numeric: tabular-nums;
+.ref__n { color: var(--muted-2); font-size: 12.5px; font-variant-numeric: tabular-nums;
           flex: 0 0 auto; min-width: 20px; }
-.ref__t.is-on { background: var(--sky); color: #fff; font-weight: 700; }
-.ref__t.is-on .ref__n { color: rgba(255,255,255,.8); }
-.ref__t.is-on svg { opacity: .95; }
+.ref__t.is-on { background: var(--blue-600); color: #fff; font-weight: 700; }
+.ref__t.is-on .ref__n { color: rgba(255,255,255,.78); }
+.ref__t.is-on svg { opacity: .9; }
 
 /* --- Зміст --- */
-.ref__main { padding: 22px 26px 40px; overflow-y: auto; background: var(--paper); }
-.ref__h { font-size: 21px; font-weight: 800; letter-spacing: -.3px; margin-bottom: 16px;
-          display: flex; align-items: baseline; gap: 10px; color: #0F172A; }
-.ref__sub { font-size: 13px; font-weight: 600; color: #94A3B8; }
+.ref__main { padding: 22px 26px 40px; overflow-y: auto; background: var(--bg); }
+.ref__h { font-size: 20px; font-weight: 800; letter-spacing: -.4px; margin-bottom: 16px;
+          display: flex; align-items: baseline; gap: 10px; color: var(--ink); }
+.ref__sub { font-size: 12px; font-weight: 700; color: var(--muted);
+            text-transform: uppercase; letter-spacing: .4px; }
 
-/* Колонковий потік замість сітки: розділи різної висоти, і в рядковій
-   сітці під низьким лишалася б діра на пів екрана. */
+/* Смужка «у готовому довіднику є нове» — фірмовий тон, як решта підказок */
+.ref__new { display: flex; align-items: center; gap: 14px; margin-bottom: 16px;
+            padding: 13px 15px; border-radius: var(--r-md);
+            background: var(--blue-50); border: 1px solid var(--blue-100);
+            color: var(--ink-2); font-size: 13.5px; line-height: 1.5; }
+.ref__new b { color: var(--blue-700); }
+.ref__new .btn { flex: 0 0 auto; }
+
+/* Колонковий потік: розділи різної висоти, і в рядковій сітці під низьким
+   лишалася б діра на пів екрана. */
 .sheet { display: block; columns: 3; column-gap: 18px; }
 .sheet .gcard { display: inline-block; width: 100%; margin: 0 0 18px; }
 
-/* --- Картка розділу --- */
-.gcard { background: #fff; border: 1px solid var(--edge); border-radius: 14px;
-         box-shadow: 0 1px 2px rgba(15,23,42,.05); overflow: hidden; break-inside: avoid; }
+/* --- Картка розділу: та сама .card, лише з кольоровою шапкою --- */
+.gcard { background: var(--surface); border: 1px solid var(--line);
+         border-radius: var(--r-md); box-shadow: var(--shadow-sm);
+         overflow: hidden; break-inside: avoid; }
 .gcard__h { display: flex; align-items: center; gap: 9px;
-            background: var(--sky); color: #fff; font-weight: 700; font-size: 14px;
+            background: var(--blue-600); color: #fff; font-weight: 700; font-size: 13.5px;
             padding: 12px 16px; letter-spacing: -.1px; }
-.gcard__h::before { content: '›'; font-size: 19px; line-height: 1; opacity: .85; }
+.gcard__h::before { content: '›'; font-size: 18px; line-height: 1; opacity: .8; }
 .gcard__b { padding: 15px 16px 16px; display: flex; flex-direction: column; gap: 9px; }
 
 /* --- Блоки всередині --- */
-.blk-h { font-size: 13.5px; font-weight: 750; color: var(--sky-dark); margin-top: 6px; }
+.blk-h { font-size: 13px; font-weight: 750; color: var(--blue-700); margin-top: 6px; }
 .blk-h:first-child { margin-top: 0; }
-.blk-text { font-size: 13.5px; color: #64748B; line-height: 1.6; }
-.blk-f { text-align: center; font-size: 19px; padding: 13px 14px; background: var(--paper);
-         border: 1px solid var(--edge); border-radius: 10px; overflow-x: auto; color: #0F172A; }
-.blk-e { text-align: center; font-size: 16px; padding: 11px 14px; background: var(--paper);
-         border: 1px solid var(--edge); border-radius: 10px; overflow-x: auto; color: #334155; }
-.blk-warn { display: flex; gap: 9px; align-items: flex-start; font-size: 13.5px; line-height: 1.6;
-            background: var(--sky-soft); color: #0C4A6E; padding: 11px 13px; border-radius: 10px; }
-.blk-warn svg { flex: 0 0 auto; margin-top: 2px; color: #F97316; }
-.blk-item { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px;
-            line-height: 1.6; color: #475569; }
-.blk-item svg { flex: 0 0 auto; margin-top: 4px; color: var(--sky); }
-.blk-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; align-items: stretch; }
-.blk-pair > div { background: var(--paper); border: 1px solid var(--edge); border-radius: 10px;
-                  padding: 9px 11px; text-align: center; overflow-x: auto;
-                  display: flex; align-items: center; justify-content: center; }
+.blk-text { font-size: 13px; color: var(--ink-2); line-height: 1.6; }
+.blk-f { text-align: center; font-size: 19px; padding: 13px 14px; background: var(--bg);
+         border: 1px solid var(--line); border-radius: var(--r-sm); overflow-x: auto; }
+.blk-e { text-align: center; font-size: 15px; padding: 10px 14px; background: var(--bg);
+         border: 1px solid var(--line); border-radius: var(--r-sm); overflow-x: auto; }
 
-/* Формули в довіднику крупніші: їх читають, а не проглядають */
+/* Попередження жовте, довідка синя — так само, як скрізь у кабінеті:
+   жовтий означає «тут помиляються», синій просто уточнює. */
+.blk-warn { display: flex; gap: 9px; align-items: flex-start; font-size: 13px; line-height: 1.6;
+            background: var(--amber-bg); color: #8A5008;
+            padding: 11px 13px; border-radius: var(--r-sm); }
+.blk-warn svg { flex: 0 0 auto; margin-top: 2px; color: var(--amber); }
+.blk-info { font-size: 13px; line-height: 1.6; background: var(--blue-50);
+            color: var(--ink-2); padding: 11px 13px; border-radius: var(--r-sm); }
+.blk-info b { color: var(--blue-700); font-weight: 750; }
+
+.blk-item { display: flex; gap: 8px; align-items: flex-start; font-size: 13px;
+            line-height: 1.6; color: var(--ink-2); }
+.blk-item svg { flex: 0 0 auto; margin-top: 4px; color: var(--blue-600); }
+.blk-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; align-items: stretch; }
+.blk-pair > div { background: var(--bg); border: 1px solid var(--line);
+                  border-radius: var(--r-sm); padding: 9px 11px; text-align: center;
+                  overflow-x: auto; display: flex; align-items: center; justify-content: center; }
+
+/* Схема графіка */
+.blk-plot { display: flex; flex-direction: column; align-items: center; gap: 5px;
+            padding: 8px 0; color: var(--blue-600); }
+.blk-plot svg { max-width: 100%; height: auto; }
+.blk-plot__c { font-size: 12px; color: var(--muted); text-align: center; }
+
+/* Шапка знахідки в пошуку */
+.gcard__h--go { width: 100%; border: 0; cursor: pointer; font: inherit; text-align: left;
+                display: flex; align-items: center; gap: 9px; }
+.gcard__h--go:hover { background: var(--blue-700); }
+.gcard__grp { margin-left: auto; font-weight: 600; font-size: 12px; opacity: .82;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50%; }
+
+/* Формули в довіднику трохи крупніші: їх читають, а не проглядають */
 .ref .mf { font-size: 1.08em; }
 
 @media (max-width: 1450px) { .sheet { columns: 2; } }
 @media (max-width: 1000px) {
   .sheet { columns: 1; }
   .ref__body { grid-template-columns: 1fr; }
+  .ref__bar { flex-wrap: wrap; padding: 14px 16px; }
+  /* Поле пошуку окремим рядком і без стискання: із flex-shrink кнопки
+     тиснули його до половини ширини, і в поле не влазив запит. */
+  .ref__q { flex: 0 0 100%; order: 3; }
   .ref__nav { display: flex; overflow-x: auto; border-right: 0;
-              border-bottom: 1px solid var(--edge); padding: 8px; gap: 6px; }
+              border-bottom: 1px solid var(--line); padding: 8px; gap: 6px; }
   .ref__t { width: auto; white-space: nowrap; padding: 9px 13px; margin: 0; }
   .ref__t svg { display: none; }
   .ref__main { padding: 16px 14px 32px; }
@@ -1753,14 +1797,20 @@ a { color: inherit; text-decoration: none; }
 .app:has(.ref) { height: 100vh; }
 .app:has(.ref) .main { display: flex; flex-direction: column; overflow: hidden; }
 
-/* Друк: лише сама тема, без переліку й смуги */
+/* Друк: лише сама тема, без переліку й шапки */
 @media print {
-  .ref__bar, .ref__nav { display: none !important; }
+  .ref__bar, .ref__nav, .ref__new { display: none !important; }
   .ref__body { display: block; }
   .ref__main { padding: 0; overflow: visible; background: #fff; }
   .sheet { columns: 2; }
   .gcard { break-inside: avoid; box-shadow: none; }
 }
+
+/* Позначка повтору в переліку тем. Жовтий, як і решта «придивись» у
+   кабінеті: тема-близнюк не помилка, але потребує уваги. */
+.ref__dup { flex: 0 0 auto; font-size: 10.5px; font-weight: 800; line-height: 1;
+            background: var(--amber-bg); color: #8A5008; border-radius: 999px; padding: 3px 6px; }
+.ref__t.is-on .ref__dup { background: rgba(255,255,255,.26); color: #fff; }
 
 /* Редактор правил і зазирання в аркуш зі списку матеріалів */
 .rule-edit { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 11px; margin-top: 9px; }
@@ -1769,44 +1819,3 @@ a { color: inherit; text-decoration: none; }
 .mat-peek { display: flex; flex-direction: column; gap: 6px; }
 .mat-peek__r { background: var(--bg); border-radius: var(--r-sm); padding: 6px 10px;
                text-align: center; overflow-x: auto; }
-
-/* Позначка повтору в переліку тем */
-.ref__dup { flex: 0 0 auto; font-size: 10.5px; font-weight: 800; line-height: 1;
-            background: #FEF3C7; color: #92400E; border-radius: 999px; padding: 3px 6px; }
-.ref__t.is-on .ref__dup { background: rgba(255,255,255,.28); color: #fff; }
-
-/* Довідка: те саме поле, що й попередження, але без знаку оклику.
-   Попередження каже «тут помиляються», довідка просто уточнює. */
-.blk-info { font-size: 13.5px; line-height: 1.6; background: var(--sky-soft, #E0F2FE);
-            color: #334155; padding: 11px 13px; border-radius: 10px; }
-.blk-info b { color: #0284C7; font-weight: 750; }
-
-/* Смужка «у готовому довіднику є нове». Не попередження й не помилка —
-   тому синя, а не жовта: нічого не зламалось, просто зʼявилось. */
-.ref__new { display: flex; align-items: center; gap: 14px; margin-bottom: 16px;
-            padding: 13px 15px; border-radius: 12px;
-            background: var(--sky-soft, #E0F2FE); color: #0C4A6E; font-size: 13.5px; line-height: 1.5; }
-.ref__new b { color: #0284C7; }
-.ref__new .btn { flex: 0 0 auto; }
-
-/* Поле пошуку в смузі довідника */
-.ref__q { flex: 0 0 260px; height: 34px; padding: 0 12px; border-radius: 9px;
-          border: 1px solid rgba(255,255,255,.35); background: rgba(255,255,255,.16);
-          color: #fff; font: inherit; font-size: 13.5px; outline: none; }
-.ref__q::placeholder { color: rgba(255,255,255,.72); }
-.ref__q:focus { background: rgba(255,255,255,.26); border-color: rgba(255,255,255,.6); }
-
-/* Шапка знахідки: клікабельна, з назвою теми й розділу */
-.gcard__h--go { width: 100%; border: 0; cursor: pointer; font: inherit; text-align: left;
-                display: flex; align-items: center; gap: 9px; }
-.gcard__h--go:hover { background: var(--sky-dark, #0284C7); }
-.gcard__grp { margin-left: auto; font-weight: 600; font-size: 12px; opacity: .8;
-              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50%; }
-
-@media (max-width: 1000px) { .ref__q { flex: 1 1 auto; min-width: 0; } }
-
-/* Схема графіка в довіднику */
-.blk-plot { display: flex; flex-direction: column; align-items: center; gap: 5px;
-            padding: 8px 0; color: var(--sky, #0EA5E9); }
-.blk-plot svg { max-width: 100%; height: auto; }
-.blk-plot__c { font-size: 12px; color: #64748B; text-align: center; }

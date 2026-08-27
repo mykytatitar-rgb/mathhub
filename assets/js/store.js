@@ -134,18 +134,55 @@
     };
   }
 
+  /* ============================================================
+     Коли прочитати не вдалося
+     ============================================================
+
+     Головне правило всього сховища: «я не зміг прочитати» ніколи не означає
+     «там порожньо». Раніше означало — і саме через це зникали дошки. Якщо
+     розбір збереженого падав, програма бралася за порожню базу й одразу
+     записувала її поверх нечитаного. Один невдалий запуск — і на пристрої
+     не лишалося нічого, причому назавжди, бо оригінал уже затерто.
+
+     Тепер невдале читання забороняє запис. Дані лишаються на диску такими,
+     якими були, і їх ще можна врятувати. Заборона окрема для документа й
+     для дошок: якщо не прочиталися лише дошки, решта програми має
+     працювати. */
+  var readFailed = { doc: false, boards: false };
+
+  S.readFailed = function () { return { doc: readFailed.doc, boards: readFailed.boards }; };
+
+  var warned = false;
+  function warnBlocked() {
+    if (warned) return;
+    warned = true;
+    if (U && U.toast) {
+      U.toast('Збережені дані не прочиталися. Запис зупинено, щоб не затерти їх. ' +
+        'Не закривайте вкладку — відкрийте «Чи все ціле» в Налаштуваннях.', 'err');
+    }
+  }
+
   S.load = function () {
-    try {
-      var raw = localStorage.getItem(KEY);
-      if (raw) {
+    var raw = null;
+    try { raw = localStorage.getItem(KEY); } catch (e) { raw = null; }
+
+    if (raw) {
+      try {
         db = JSON.parse(raw);
         var b = blank();
         Object.keys(b).forEach(function (k) { if (db[k] === undefined) db[k] = b[k]; });
         adoptBoardsStore(db);
         return db;
+      } catch (e) {
+        /* Запис є, але не читається. Це не порожня база — це пошкоджена,
+           і найгірше, що можна зробити, — записати поверх неї порожню. */
+        console.warn('Збережені дані не прочиталися:', e);
+        readFailed.doc = true;
+        readFailed.boards = true;
+        db = blank();
+        warnBlocked();
+        return db;
       }
-    } catch (e) {
-      console.warn('Не вдалося прочитати збережені дані:', e);
     }
 
     /* Порожній браузер. Демо-дані показуємо лише тоді, коли синхронізації немає:
@@ -168,20 +205,29 @@
    * доведеться відкрити цю базу старою версією програми.
    */
   function adoptBoardsStore(doc) {
-    var stored = null;
-    try {
-      var raw = localStorage.getItem(BOARDS_KEY);
-      if (raw) {
+    var raw = null;
+    try { raw = localStorage.getItem(BOARDS_KEY); } catch (e) { raw = null; }
+
+    if (raw) {
+      /* Запис про дошки є. Далі можливі лише два кінці: або ми його
+         прочитали, або не чіпаємо нічого. Третього — «вважати, що дошок
+         немає» — не існує: саме він і стирав їх усі разом. */
+      try {
         var arr = JSON.parse(raw);
-        if (Array.isArray(arr)) stored = arr;
+        if (Array.isArray(arr)) { doc.boards = arr; return; }
+        throw new Error('очікувався список дошок');
+      } catch (e) {
+        console.warn('Дошки не прочиталися:', e);
+        readFailed.boards = true;
+        doc.boards = [];          // у памʼяті порожньо, але на диск це не поїде
+        warnBlocked();
+        return;
       }
-    } catch (e) {
-      console.warn('Не вдалося прочитати дошки:', e);
     }
 
-    if (stored) { doc.boards = stored; return; }
+    // запису немає взагалі — це справді перший запуск або перенесення зі старого документа
     doc.boards = Array.isArray(doc.boards) ? doc.boards : [];
-    boardsDirty = true;                       // перенесення запишеться найближчим збереженням
+    boardsDirty = true;
   }
 
   /* Дошки серіалізуються окремо й лише коли справді змінилися: інакше
@@ -199,12 +245,20 @@
 
   S.save = function () {
     try {
+      /* Нечитане не перезаписуємо. У памʼяті зараз порожньо не тому, що
+         даних немає, а тому, що ми їх не розібрали, — і запис звідси стер
+         би оригінал остаточно. */
+      if (readFailed.doc) { warnBlocked(); return; }
+
       var doc = {};
       Object.keys(db).forEach(function (k) { if (k !== 'boards') doc[k] = db[k]; });
       localStorage.setItem(KEY, JSON.stringify(doc));
-      if (boardsDirty) {
+
+      if (boardsDirty && !readFailed.boards) {
         localStorage.setItem(BOARDS_KEY, JSON.stringify(db.boards));
         boardsDirty = false;
+      } else if (boardsDirty) {
+        warnBlocked();
       }
     } catch (e) {
       U.toast('Не вдалося зберегти дані: ' + e.message, 'err');

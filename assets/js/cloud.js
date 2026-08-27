@@ -97,8 +97,33 @@
   var blocked = false;
   var blockedDetail = '';
 
-  Cloud.writesBlocked = function () { return blocked; };
-  Cloud.blockedDetail = function () { return blockedDetail; };
+  /**
+   * Чи можна зараз щось відправляти на сервер.
+   *
+   * Крім застарілої вкладки, є ще один випадок, і він страшніший: локальні
+   * дані не прочиталися. У памʼяті тоді порожньо — не тому, що даних немає,
+   * а тому, що ми їх не розібрали. Відправити цю порожнечу означало б
+   * знищити ще й серверну копію, тобто останню.
+   */
+  Cloud.writesBlocked = function () {
+    if (blocked) return true;
+    if (window.S && S.readFailed) {
+      var f = S.readFailed();
+      if (f.doc || f.boards) return true;
+    }
+    return false;
+  };
+
+  Cloud.blockedDetail = function () {
+    if (!blocked && window.S && S.readFailed) {
+      var f = S.readFailed();
+      if (f.doc || f.boards) {
+        return (f.doc ? 'Збережені дані' : 'Дошки') + ' на цьому пристрої не прочиталися. ' +
+          'Відправлення зупинено, щоб порожнеча не поїхала на сервер поверх цілого.';
+      }
+    }
+    return blockedDetail;
+  };
 
   function versionNumber(v) {
     var m = String(v || '').match(/v(\d+)/);
@@ -950,7 +975,8 @@
      ============================================================ */
 
   function push() {
-    if (blocked) return Promise.resolve();   // стара вкладка на сервер не пише
+    // стара вкладка на сервер не пише; так само й вкладка, що не прочитала своє
+    if (Cloud.writesBlocked()) return Promise.resolve();
     var data = syncedJSON();         // зі сховища, не з пам'яті вкладки
     var h = hash(data);
 
@@ -1420,7 +1446,7 @@
     /* Обмін — лише після відповіді про версію. Інакше стара вкладка
        встигла б записати до того, як дізналася, що вона стара. */
     version.then(function () {
-      if (blocked) return;
+      if (Cloud.writesBlocked()) return;
       Cloud.syncNow();
       if (window.BoardSync) BoardSync.start();
       if (window.RecSync) RecSync.start();

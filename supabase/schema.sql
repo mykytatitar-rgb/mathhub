@@ -776,6 +776,21 @@ as $$
   from jsonb_array_elements(coalesce(p_data->'slides', '[]'::jsonb)) as s;
 $$;
 
+/* Скільки слайдів із вмістом.
+   Самих об'єктів недостатньо, і через це зникали ДЗ: слайд із трьома
+   скріншотами домашнього важить три об'єкти, а десяток штрихів олівцем на
+   слайді уроку — десять. Дошка з більшою кількістю ліній вважалася
+   «повнішою» й забирала з собою цілий слайд. Слайди рахуються окремо. */
+create or replace function public.board_slides(p_data jsonb)
+returns bigint
+language sql
+immutable
+as $$
+  select count(*)
+  from jsonb_array_elements(coalesce(p_data->'slides', '[]'::jsonb)) as s
+  where jsonb_array_length(coalesce(s->'items', '[]'::jsonb)) > 0;
+$$;
+
 /**
  * Зберегти дошку.
  *
@@ -820,7 +835,8 @@ begin
 
   if not p_force
      and public.board_items(cur.data) > 0
-     and public.board_items(p_data) < public.board_items(cur.data) then
+     and (public.board_items(p_data) < public.board_items(cur.data)
+       or public.board_slides(p_data) < public.board_slides(cur.data)) then
     return -2;
   end if;
 

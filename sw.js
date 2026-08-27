@@ -7,7 +7,7 @@
 
    Версію треба піднімати щоразу, коли змінюється склад файлів. */
 
-var VERSION = 'vektor-v40';
+var VERSION = 'vektor-v41';
 
 var SHELL = [
   './',

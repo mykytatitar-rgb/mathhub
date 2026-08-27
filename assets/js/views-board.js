@@ -174,6 +174,7 @@
     var board = S.ensureBoard(lessonId);
     var engine = new window.Board(canvas, {
       onChange: function () { markDirty(); refreshUndo(); refreshEmpty(); scheduleThumb(); updateSelBar(); },
+      onShrink: function () { allowShrink(); },
       onViewChange: function () { updateZoom(); updateSelBar(); },
       onSelect: function () { refreshUndo(); updateSelBar(); },
       onToolChange: function (t) { syncToolButtons(t); renderOpts(); },
@@ -508,6 +509,13 @@
   /* ============================================================
      Збереження
      ============================================================ */
+
+  /* Сказати синхронізації, що дошка схудла з волі власника, а не через
+     збій. Без цього захист від втрати відкочував би назад і стерте гумкою,
+     і видалений слайд. */
+  function allowShrink() {
+    if (cur && window.BoardSync && BoardSync.allow) BoardSync.allow(cur.lessonId);
+  }
 
   function markDirty() {
     if (!cur) return;
@@ -874,7 +882,15 @@
         'Знімок робиться при відкритті дошки, далі — не частіше ніж раз на хвилину, ' +
         'і обов’язково при виході. Зберігаються останні 40 версій кожної дошки. ' +
         'Перед поверненням поточний стан теж записується, тож відкат можна відкотити.</p>' +
-        '<div data-hist class="muted" style="padding:8px 0">Читаю історію…</div>',
+        '<div data-hist class="muted" style="padding:8px 0">Читаю історію…</div>' +
+        '<div style="height:1px;background:var(--line);margin:18px 0 14px"></div>' +
+        '<p style="line-height:1.65;color:var(--ink-2);margin:0 0 10px">' +
+        '<b>Слайд зник, а в історії його немає?</b><br>' +
+        'На сервері є журнал: він тільки дописується й памʼятає кожен слайд, ' +
+        'який колись існував на цій дошці. Пошук нічого не змінює — він лише ' +
+        'показує, чого зараз бракує.</p>' +
+        '<button class="btn btn--ghost btn--sm" data-act-find>Пошукати втрачені слайди</button>' +
+        '<div data-lost style="margin-top:12px"></div>',
       buttons: [{ label: 'Закрити', kind: 'btn--ghost', act: 'cancel' }],
       onMount: function (wrap, close) {
         var box = wrap.querySelector('[data-hist]');
@@ -920,7 +936,96 @@
             });
           });
         });
+
+        mountLostSlides(wrap, boardKey);
       }
+    });
+  }
+
+  /**
+   * Пошук слайдів, які зникли з дошки, але лишилися в журналі.
+   *
+   * Повертаємо лише те, чого зараз немає, і лише додаванням: кнопка, яка
+   * рятує втрачене, не має права сама щось затерти.
+   */
+  function mountLostSlides(wrap, boardKey) {
+    var btn = wrap.querySelector('[data-act-find]');
+    var box = wrap.querySelector('[data-lost]');
+    if (!btn || !box) return;
+
+    btn.addEventListener('click', function () {
+      if (!window.BoardOps || !BoardOps.rebuild) {
+        box.innerHTML = '<div class="muted">Ця сторінка працює на старому коді й журналу ще не знає. ' +
+          'Оновіть сторінку.</div>';
+        return;
+      }
+      btn.disabled = true;
+      box.innerHTML = '<div class="muted">Читаю журнал…</div>';
+
+      BoardOps.rebuild(boardKey).then(function (old) {
+        btn.disabled = false;
+        if (!old) {
+          box.innerHTML = '<div class="muted">Журнал не прочитався. Він живе на сервері, ' +
+            'тож для пошуку потрібні інтернет і вхід у синхронізацію.</div>';
+          return;
+        }
+
+        var have = {};
+        (cur.board.slides || []).forEach(function (s) { if (s && s.id) have[s.id] = 1; });
+        var lost = (old.slides || []).filter(function (s) {
+          return s && s.id && !have[s.id] && (s.items || []).length;
+        });
+
+        if (!lost.length) {
+          box.innerHTML = '<div class="muted">Нічого не бракує: у журналі ' +
+            U.pl(old.ops || 0, 'дія', 'дії', 'дій') + ', і всі слайди з нього на місці.</div>';
+          return;
+        }
+
+        box.innerHTML = '<div class="list">' + lost.map(function (s, i) {
+          var imgs = (s.items || []).filter(function (it) { return it && it.t === 'i'; }).length;
+          return '<div class="list__item">' +
+            '<div style="flex:1;min-width:0">' +
+            '<div class="truncate"><b>' + U.esc(s.title || 'Слайд без назви') + '</b> ' +
+            C.badge(S.slideKind(s) === 'hw' ? 'ДЗ' : 'урок',
+                    S.slideKind(s) === 'hw' ? 'badge--amber' : '') + '</div>' +
+            '<div class="muted" style="font-size:12px">' +
+            U.pl((s.items || []).length, 'об’єкт', 'об’єкти', 'об’єктів') +
+            (imgs ? ' · ' + U.pl(imgs, 'картинка', 'картинки', 'картинок') : '') +
+            '</div></div>' +
+            '<button class="btn btn--primary btn--sm" data-back="' + i + '">Повернути</button>' +
+            '</div>';
+        }).join('') + '</div>';
+
+        U.$$('[data-back]', box).forEach(function (b) {
+          b.addEventListener('click', function () {
+            var s = lost[Number(b.getAttribute('data-back'))];
+            if (!s) return;
+            b.disabled = true;
+            b.textContent = 'Повернуто';
+
+            /* У журналі лишилася й дія, якою слайд зник. Без цієї позначки
+               вона програлася б знову при першому ж читанні — і слайд зник
+               би вдруге, тільки-но його врятували. */
+            if (BoardOps.keep) BoardOps.keep(s.id);
+
+            snapshot(true);
+            var kind = S.slideKind(s);
+            var pos = -1;
+            for (var i = cur.board.slides.length - 1; i >= 0; i--) {
+              if (S.slideKind(cur.board.slides[i]) === kind) { pos = i + 1; break; }
+            }
+            if (pos < 0) pos = kind === 'hw' ? cur.board.slides.length : 0;
+            cur.board.slides.splice(pos, 0, s);
+
+            cur.thumbs = {};
+            markDirty();
+            flushSave();
+            selectSlide(pos);
+            U.toast('Слайд повернувся з журналу', 'ok');
+          });
+        });
+      });
     });
   }
 
@@ -933,6 +1038,10 @@
    */
   function restoreVersion(snap) {
     snapshot(true);                             // щоб і сам відкат можна було відкотити
+    /* Відкат — теж воля людини, і він цілком може зробити дошку меншою.
+       Без цього дозволу сервер побачив би зменшення, вирішив, що це втрата,
+       і повернув би все назад: кнопка «Повернути» не працювала б. */
+    allowShrink();
     cur.board.slides = snap.slides;
     cur.index = 0;
     cur.thumbs = {};
@@ -1054,8 +1163,12 @@
     C.confirm('Видалити слайд ' + n + '?',
       'Усі записи на цьому слайді зникнуть без можливості відновлення.',
       function () {
+        var gone = cur.board.slides[cur.index];
         cur.board.slides.splice(cur.index, 1);
         cur.thumbs = {};
+        // видаляє сама людина — захист «повернутого» більше не потрібен
+        if (window.BoardOps && BoardOps.unkeep && gone) BoardOps.unkeep(gone.id);
+        allowShrink();
         markDirty();
         flushSave();
         selectSlide(Math.max(0, cur.index - 1));

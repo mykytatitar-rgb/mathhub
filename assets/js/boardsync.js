@@ -23,10 +23,12 @@
 
   var REVS = 'mathhub.boards.rev';       // {boardId: rev} — від якої версії ми відштовхуємось
   var PENDING = 'mathhub.boards.pending'; // що не встигло поїхати
+  var ALLOW = 'mathhub.boards.allow';     // де зменшення дозволене самим користувачем
   var PUSH_DELAY = 900;
 
   var revs = {};
   var pending = {};
+  var allow = {};
   var timers = {};
   var busy = {};
   var started = false;
@@ -38,12 +40,14 @@
   function loadState() {
     try { revs = JSON.parse(localStorage.getItem(REVS) || '{}') || {}; } catch (e) { revs = {}; }
     try { pending = JSON.parse(localStorage.getItem(PENDING) || '{}') || {}; } catch (e) { pending = {}; }
+    try { allow = JSON.parse(localStorage.getItem(ALLOW) || '{}') || {}; } catch (e) { allow = {}; }
   }
 
   function saveState() {
     try {
       localStorage.setItem(REVS, JSON.stringify(revs));
       localStorage.setItem(PENDING, JSON.stringify(pending));
+      localStorage.setItem(ALLOW, JSON.stringify(allow));
     } catch (e) { /* сховище переповнене — переживемо, дані вже в базі */ }
   }
 
@@ -59,6 +63,55 @@
     return n;
   }
 
+  /** Скільки слайдів має вміст. */
+  function filled(board) {
+    return ((board && board.slides) || []).filter(function (s) {
+      return s && (s.items || []).length;
+    }).length;
+  }
+
+  /**
+   * Слайди, які є в нас із вмістом, але яких немає в чужій версії.
+   *
+   * Рахувати самі об'єкти — замало, і саме через це зникали ДЗ. Слайд із
+   * трьома скріншотами домашнього важить три об'єкти, а десяток штрихів
+   * олівцем на слайді уроку — десять. Дошка з більшою кількістю ліній
+   * виглядала «повнішою» й забирала з собою цілий слайд.
+   *
+   * Порівнюємо слайди поіменно, за їхніми id.
+   */
+  function orphanSlides(mine, theirs) {
+    if (!mine || !mine.slides || !theirs) return [];
+    var have = {};
+    (theirs.slides || []).forEach(function (s) { if (s && s.id) have[s.id] = 1; });
+    return mine.slides.filter(function (s) {
+      return s && s.id && !have[s.id] && (s.items || []).length;
+    });
+  }
+
+  /**
+   * Повернути загублені слайди в серверну версію — кожен у свій рядок.
+   *
+   * Слайд ДЗ має лишитися в ДЗ, а не поїхати в кінець уроку: інакше
+   * домашнє знайдеться, але не там, де його шукають.
+   */
+  function rescueSlides(mine, theirs) {
+    var back = orphanSlides(mine, theirs);
+    if (!back.length) return 0;
+
+    theirs.slides = theirs.slides || [];
+    back.forEach(function (s) {
+      var kind = S.slideKind(s);
+      var pos = -1;
+      for (var i = theirs.slides.length - 1; i >= 0; i--) {
+        if (S.slideKind(theirs.slides[i]) === kind) { pos = i + 1; break; }
+      }
+      if (pos < 0) pos = kind === 'hw' ? theirs.slides.length : 0;
+      theirs.slides.splice(pos, 0, s);
+    });
+    return back.length;
+  }
+
   function device() {
     try { return (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || ''; }
     catch (e) { return ''; }
@@ -67,6 +120,20 @@
   /* ============================================================
      Відправлення
      ============================================================ */
+
+  /**
+   * Користувач сам щось прибрав із дошки — стерши, видаливши слайд чи
+   * очистивши його.
+   *
+   * Без цієї позначки захист від втрати не відрізняє «програма загубила» від
+   * «людина витерла», і будь-яке зменшення відкочується назад: видалив слайд,
+   * а він повернувся. Захист має стояти проти помилок, а не проти власника.
+   */
+  B.allow = function (boardId) {
+    if (!boardId) return;
+    allow[boardId] = 1;
+    saveState();
+  };
 
   /** Дошка змінилася — відправити її, коли вщухне. */
   B.mark = function (boardId) {
@@ -102,7 +169,8 @@
         p_board: boardId,
         p_rev: revs[boardId] || 0,
         p_data: board,
-        p_device: device()
+        p_device: device(),
+        p_force: !!allow[boardId]
       })
     }).then(function (res) {
       if (!res.ok) throw new Error('Сервер відповів ' + res.status);
@@ -123,6 +191,7 @@
 
       revs[boardId] = rev;
       delete pending[boardId];
+      delete allow[boardId];      // дозвіл разовий: він стосувався саме цієї правки
       saveState();
       return true;
     }).catch(function (e) {
@@ -144,6 +213,7 @@
       return B.pull(boardId, true);
     }).then(function () {
       delete pending[boardId];
+      delete allow[boardId];
       saveState();
       U.toast('На сервері була повніша версія дошки. Свою можна повернути через «Історія»', 'ok');
       return false;
@@ -212,11 +282,13 @@
     if (!row || !row.data) return false;
     var id = row.board_id;
     var mine = S.getBoard(id);
+    var incoming = row.data;
 
     // наша ще не поїхала — вона новіша за визначенням
     if (!force && pending[id] && mine) return false;
 
-    if (mine && !force && items(row.data) < items(mine)) {
+    if (mine && !force &&
+        (items(incoming) < items(mine) || filled(incoming) < filled(mine))) {
       /* Серверна бідніша за нашу. Не беремо: саме так виглядала б втрата.
          Натомість ставимо в чергу свою — хай сервер вирішує за своїм правилом. */
       pending[id] = 1;
@@ -224,7 +296,21 @@
       return false;
     }
 
-    var incoming = row.data;
+    /* Навіть коли серверна версія має право перемогти, вона могла не знати
+       про окремий слайд — той, що народився на цьому пристрої й не встиг
+       поїхати. Такий слайд не зникає: він переїжджає в серверну версію.
+
+       І перед будь-якою заміною відкладаємо своє в історію дошки. Читання з
+       сервера — теж запис поверх написаного, і воно має відкочуватися так
+       само, як усе інше. */
+    var saved = 0;
+    if (mine) {
+      if (window.BoardHistory && BoardHistory.available()) {
+        try { BoardHistory.save(id, mine); } catch (e) {}
+      }
+      saved = rescueSlides(mine, incoming);
+    }
+
     incoming.lessonId = id;
     if (!incoming.id) incoming.id = (mine && mine.id) || U.uid('brd');
 
@@ -234,6 +320,15 @@
 
     revs[id] = row.rev;
     delete pending[id];
+
+    /* Врятований слайд робить нашу дошку відмінною від серверної — отже,
+       її треба відправити, інакше наступний пристрій знову його не побачить. */
+    if (saved) {
+      pending[id] = 1;
+      U.toast(U.pl(saved, 'слайд повернувся', 'слайди повернулися', 'слайдів повернулося') +
+        ' з цього пристрою — на сервері його не було', 'ok');
+    }
+
     saveState();
     S.touchBoards();
     S.save();
@@ -247,6 +342,7 @@
   B.remove = function (boardId) {
     delete pending[boardId];
     delete revs[boardId];
+    delete allow[boardId];
     saveState();
     if (!ready() || !boardId) return Promise.resolve(false);
     return Cloud.request('/rest/v1/boards?board_id=eq.' + encodeURIComponent(boardId),

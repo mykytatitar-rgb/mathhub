@@ -1647,6 +1647,18 @@
     this.zoomAt(Math.pow(0.999, e.deltaY * (e.ctrlKey ? 2.4 : 1)), p.x, p.y);
   };
 
+  /**
+   * Користувач сам щось прибрав.
+   *
+   * Синхронізація боїться зменшення дошки — саме так виглядає втрата. Але
+   * гумка й «видалити» — теж зменшення, і без цього сигналу захист відкочував
+   * би назад стерте власною рукою. Тому дошка каже вголос, коли прибирання
+   * навмисне.
+   */
+  Board.prototype._shrank = function () {
+    if (this.opts && this.opts.onShrink) { try { this.opts.onShrink(); } catch (e) {} }
+  };
+
   Board.prototype._erase = function (x, y) {
     var r = Math.max(8, this.width * 3) / this.scale;
     var items = this.items();
@@ -1654,7 +1666,7 @@
     for (var i = items.length - 1; i >= 0; i--) {
       if (hitItem(items[i], x, y, r)) items.splice(i, 1);
     }
-    if (items.length !== before) this.render();
+    if (items.length !== before) { this._shrank(); this.render(); }
   };
 
   /* ---------- Дії ---------- */
@@ -1732,6 +1744,7 @@
     var sel = this.selection;
     this.slide.items = this.items().filter(function (it) { return sel.indexOf(it) < 0; });
     this.clearSelection();
+    this._shrank();
     this.changed();
     return true;
   };
@@ -1892,6 +1905,7 @@
     this.snapshot();
     this.slide.items = [];
     this.clearSelection();
+    this._shrank();
     this.changed();
     return true;
   };

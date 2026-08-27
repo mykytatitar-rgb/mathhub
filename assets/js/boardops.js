@@ -26,9 +26,11 @@
 
   var BASE = 'mathhub.ops.base';   // {boardId: JSON стану, відомого серверу}
   var SEEN = 'mathhub.ops.seen';   // {boardId: номер останньої прочитаної дії}
+  var KEPT = 'mathhub.ops.kept';   // {slideId: 1} — слайди, повернуті вручну
 
   var base = {};
   var seen = {};
+  var kept = {};
   var loaded = false;
 
   function load() {
@@ -36,14 +38,39 @@
     loaded = true;
     try { base = JSON.parse(localStorage.getItem(BASE) || '{}') || {}; } catch (e) { base = {}; }
     try { seen = JSON.parse(localStorage.getItem(SEEN) || '{}') || {}; } catch (e) { seen = {}; }
+    try { kept = JSON.parse(localStorage.getItem(KEPT) || '{}') || {}; } catch (e) { kept = {}; }
   }
 
   function persist() {
     try {
       localStorage.setItem(BASE, JSON.stringify(base));
       localStorage.setItem(SEEN, JSON.stringify(seen));
+      localStorage.setItem(KEPT, JSON.stringify(kept));
     } catch (e) { /* сховище повне — журнал переживе, дошка збережена окремо */ }
   }
+
+  /**
+   * Слайд, який людина свідомо повернула з журналу.
+   *
+   * У журналі лишається й та дія, якою слайд зник. Без цієї позначки вона
+   * програвалася б знову при першому ж читанні — і слайд зникав би вдруге,
+   * тільки-но його врятували. Тепер видалення такого слайда журнал
+   * пропускає: воля людини сильніша за старий запис.
+   */
+  O.keep = function (slideId) {
+    if (!slideId) return;
+    load();
+    kept[slideId] = 1;
+    persist();
+  };
+
+  /** Людина видалила слайд сама — захист більше не потрібен. */
+  O.unkeep = function (slideId) {
+    if (!slideId) return;
+    load();
+    delete kept[slideId];
+    persist();
+  };
 
   function ready() {
     return !!(window.Cloud && Cloud.available() && Cloud.signedIn() &&
@@ -141,6 +168,8 @@
     }
 
     if (op.t === 's-') {
+      load();
+      if (kept[op.s]) return false;          // цей слайд повернули вручну
       var i = board.slides.findIndex(function (x) { return x.id === op.s; });
       if (i < 0) return false;
       board.slides.splice(i, 1);
@@ -283,6 +312,56 @@
       .catch(function (e) {
         console.warn('Журнал дошки не прочитався:', e && e.message);
         return 0;
+      });
+  };
+
+  /**
+   * Зібрати дошку з усього журналу — від найпершої дії.
+   *
+   * Це рятувальний інструмент, а не звичайне читання. Журнал на сервері
+   * лише дописується, тож у ньому лежить кожен слайд, який колись існував,
+   * разом із вмістом. Тому видалення тут навмисно пропускаються: питання не
+   * «як дошка виглядає зараз», а «що на ній колись було».
+   *
+   * Саме це рятує випадок, коли слайд зник не від руки людини: у журналі
+   * лишився і його «народився», і все, що на ньому малювали.
+   */
+  O.rebuild = function (boardId) {
+    if (!ready() || !boardId) return Promise.resolve(null);
+
+    var out = { slides: [] };
+    var seenOps = 0;
+
+    function page(after) {
+      return Cloud.request('/rest/v1/board_ops?select=id,op&board=eq.' +
+          encodeURIComponent(boardId) + '&id=gt.' + after + '&order=id.asc&limit=2000',
+          { method: 'GET' })
+        .then(function (res) {
+          if (!res.ok) throw new Error('Сервер відповів ' + res.status);
+          return res.json();
+        })
+        .then(function (rows) {
+          if (!rows || !rows.length) return out;
+          var last = after;
+          rows.forEach(function (row) {
+            var op = row.op;
+            last = row.id;
+            seenOps++;
+            if (!op || op.t === 's-' || op.t === 'i-') return;   // втрачене не ховаємо
+            O.apply(out, op);
+          });
+          return rows.length < 2000 ? out : page(last);
+        });
+    }
+
+    return page(0)
+      .then(function (b) {
+        b.ops = seenOps;
+        return b;
+      })
+      .catch(function (e) {
+        console.warn('Журнал не зібрався:', e && e.message);
+        return null;
       });
   };
 

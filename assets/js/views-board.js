@@ -898,7 +898,16 @@
         'навіть коли слайд зник. Тут показані ті, на які зараз не посилається ' +
         'жоден слайд, домашнє чи матеріал.</p>' +
         '<button class="btn btn--ghost btn--sm" data-act-orphans>Пошукати загублені картинки</button>' +
-        '<div data-orphans style="margin-top:12px"></div>',
+        '<div data-orphans style="margin-top:12px"></div>' +
+        (cur.board.share && cur.board.share.token
+          ? '<div style="height:1px;background:var(--line);margin:18px 0 14px"></div>' +
+            '<p style="line-height:1.65;color:var(--ink-2);margin:0 0 10px">' +
+            '<b>Урок надіслано учневі.</b><br>' +
+            'Його сторінка — окрема повна копія слайдів на сервері. Якщо слайд зник, ' +
+            'а публікація після того не встигла оновитись, він там ще лежить.</p>' +
+            '<button class="btn btn--ghost btn--sm" data-act-share>Подивитись у сторінці учня</button>' +
+            '<div data-fromshare style="margin-top:12px"></div>'
+          : ''),
       buttons: [{ label: 'Закрити', kind: 'btn--ghost', act: 'cancel' }],
       onMount: function (wrap, close) {
         var box = wrap.querySelector('[data-hist]');
@@ -947,7 +956,142 @@
 
         mountLostSlides(wrap, boardKey);
         mountLostImages(wrap);
+        mountFromShare(wrap);
       }
+    });
+  }
+
+  /**
+   * Дістати слайд зі сторінки, надісланої учневі.
+   *
+   * Ще одна копія, незалежна і від історії в браузері, і від журналу: те, що
+   * поїхало до учня, лежить на сервері окремим документом.
+   *
+   * Картинки там уже мають власні адреси, тож повертаємо не лише слайд, а й
+   * самі файли — інакше повернувся б слайд із порожніми рамками.
+   */
+  function mountFromShare(wrap) {
+    var btn = wrap.querySelector('[data-act-share]');
+    var box = wrap.querySelector('[data-fromshare]');
+    if (!btn || !box) return;
+
+    btn.addEventListener('click', function () {
+      var token = cur && cur.board.share && cur.board.share.token;
+      if (!token || !window.Cloud || !Cloud.shareData) {
+        box.innerHTML = '<div class="muted">Посилання для учня не знайдено.</div>';
+        return;
+      }
+      btn.disabled = true;
+      box.innerHTML = '<div class="muted">Читаю сторінку учня…</div>';
+
+      Cloud.shareData(token).then(function (row) {
+        btn.disabled = false;
+        var data = row && parseViewerData(row.data);
+        if (!data || !data.slides) {
+          box.innerHTML = '<div class="muted">Сторінку не прочитано. ' +
+            'Потрібні інтернет і вхід у синхронізацію.</div>';
+          return;
+        }
+
+        var have = {};
+        (cur.board.slides || []).forEach(function (s) { if (s && s.id) have[s.id] = 1; });
+        var lost = data.slides.filter(function (s) {
+          return s && s.id && !have[s.id] && (s.items || []).length;
+        });
+
+        var коли = row.updated_at ? U.fmtDateTime(row.updated_at) : '';
+        if (!lost.length) {
+          box.innerHTML = '<div class="muted">У сторінці учня' +
+            (коли ? ' (оновлена ' + U.esc(коли) + ')' : '') +
+            ' немає нічого, чого не було б на дошці.</div>';
+          return;
+        }
+
+        box.innerHTML = '<div class="muted" style="margin-bottom:8px">Сторінка оновлена ' +
+            U.esc(коли) + '</div>' +
+          '<div class="list">' + lost.map(function (s, i) {
+            var imgs = (s.items || []).filter(function (it) { return it && it.t === 'i'; }).length;
+            return '<div class="list__item">' +
+              '<div style="flex:1;min-width:0">' +
+              '<div class="truncate"><b>' + U.esc(s.title || 'Слайд без назви') + '</b> ' +
+              C.badge(s.kind === 'hw' ? 'ДЗ' : 'урок', s.kind === 'hw' ? 'badge--amber' : '') +
+              '</div><div class="muted" style="font-size:12px">' +
+              U.pl((s.items || []).length, 'об’єкт', 'об’єкти', 'об’єктів') +
+              (imgs ? ' · ' + U.pl(imgs, 'картинка', 'картинки', 'картинок') : '') +
+              '</div></div>' +
+              '<button class="btn btn--primary btn--sm" data-share-back="' + i + '">Повернути</button>' +
+              '</div>';
+          }).join('') + '</div>';
+
+        U.$$('[data-share-back]', box).forEach(function (b) {
+          b.addEventListener('click', function () {
+            var s = lost[Number(b.getAttribute('data-share-back'))];
+            if (!s) return;
+            b.disabled = true;
+            b.textContent = 'Повертаю…';
+            restoreFromShare(s, data.images || {}).then(function () {
+              b.textContent = 'Повернуто';
+            });
+          });
+        });
+      });
+    });
+  }
+
+  /* Знімок сторінки учня — це готовий HTML із даними всередині. Дістаємо
+     саме їх: рядок починається з відомої мітки й займає рівно один рядок. */
+  function parseViewerData(html) {
+    if (!html) return null;
+    var at = html.indexOf('var DATA = ');
+    if (at < 0) return null;
+    var from = at + 'var DATA = '.length;
+    var end = html.indexOf('\n', from);
+    var line = (end < 0 ? html.slice(from) : html.slice(from, end)).replace(/;\s*$/, '');
+    try { return JSON.parse(line); } catch (e) { return null; }
+  }
+
+  /** Повернути слайд зі сторінки учня разом із його картинками. */
+  function restoreFromShare(slide, images) {
+    var keys = (slide.items || [])
+      .filter(function (it) { return it && it.t === 'i' && it.k; })
+      .map(function (it) { return it.k; });
+
+    /* Тягнемо лише те, чого справді немає: якщо картинка вже у сховищі,
+       чіпати її нема потреби. */
+    var jobs = keys.map(function (k) {
+      return ImgStore.getLocal ? ImgStore.getLocal(k) : ImgStore.get(k);
+    });
+
+    return Promise.all(jobs).then(function (blobs) {
+      var need = [];
+      blobs.forEach(function (b, i) { if (!b && images[keys[i]]) need.push(keys[i]); });
+
+      return Promise.all(need.map(function (k) {
+        return fetch(images[k]).then(function (r) { return r.ok ? r.blob() : null; })
+          .then(function (b) { return b ? ImgStore.put(k, b) : null; })
+          .catch(function () { return null; });
+      }));
+    }).then(function () {
+      snapshot(true);
+      var kind = slide.kind === 'hw' ? 'hw' : 'lesson';
+      var pos = -1;
+      for (var i = cur.board.slides.length - 1; i >= 0; i--) {
+        if (S.slideKind(cur.board.slides[i]) === kind) { pos = i + 1; break; }
+      }
+      if (pos < 0) pos = kind === 'hw' ? cur.board.slides.length : 0;
+
+      cur.board.slides.splice(pos, 0, {
+        id: slide.id, title: slide.title || '', bg: slide.bg || 'grid',
+        kind: kind, hidden: 0,
+        items: JSON.parse(JSON.stringify(slide.items || []))
+      });
+
+      if (window.BoardOps && BoardOps.keep) BoardOps.keep(slide.id);
+      cur.thumbs = {};
+      markDirty();
+      flushSave();
+      selectSlide(pos);
+      U.toast('Слайд повернувся зі сторінки учня', 'ok');
     });
   }
 

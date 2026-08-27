@@ -540,6 +540,29 @@
   };
 
   /** Оновити сам урок. Це маленький запит, тому його можна робити часто. */
+  /**
+   * Прочитати те, що вже опубліковано учневі.
+   *
+   * Сторінка учня — окрема повна копія слайдів на сервері, і вона не
+   * залежить ні від історії в браузері, ні від журналу дій. Коли слайд
+   * зник із дошки, а публікація після того не встигла оновитись, він там
+   * ще лежить.
+   */
+  Cloud.shareData = function (token) {
+    if (!Cloud.available() || !Cloud.signedIn() || !token) return Promise.resolve(null);
+    return api('/rest/v1/shares?select=data,updated_at&token=eq.' + encodeURIComponent(token),
+               { method: 'GET' })
+      .then(function (res) {
+        if (!res.ok) throw new Error('Сервер відповів ' + res.status);
+        return res.json();
+      })
+      .then(function (rows) { return (rows && rows[0]) || null; })
+      .catch(function (e) {
+        console.warn('Сторінку учня не вдалося прочитати:', e && e.message);
+        return null;
+      });
+  };
+
   Cloud.publishShareData = function (token, lessonId, title, dataJson, canWrite) {
     if (!Cloud.available() || !Cloud.signedIn()) {
       return Promise.reject(new Error('Спершу увімкніть синхронізацію в Налаштуваннях'));

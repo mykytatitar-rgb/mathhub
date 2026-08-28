@@ -570,13 +570,133 @@
     return st > 0 ? st : 1;
   }
 
+  /** Як підписувати вісь: десятковим, звичайним дробом чи обома. */
+  function numFmt(it) {
+    var f = it && it.fmt;
+    return (f === 'frac' || f === 'both') ? f : 'dec';
+  }
+
+  /**
+   * Число як звичайний дріб.
+   *
+   * Через ланцюговий дріб, а не через «поділити на степінь десятки»: крок
+   * ⅓ приходить сюди як 0.3333333333333333, і саме з нього має вийти 1/3,
+   * а не 3333333333333333/10000000000000000.
+   *
+   * Знаменник обмежений: на осі потрібні дроби, які читаються вголос, а не
+   * найточніше наближення. Що не наблизилось — не дріб, і підписується
+   * десятковим.
+   */
+  function toFraction(v, maxDen) {
+    maxDen = maxDen || 200;
+    if (!isFinite(v)) return null;
+
+    var sign = v < 0 ? -1 : 1, x = Math.abs(v);
+    if (Math.abs(x - Math.round(x)) < 1e-10) return { n: sign * Math.round(x), d: 1 };
+
+    var h0 = 0, h1 = 1, k0 = 1, k1 = 0, b = x;
+    for (var i = 0; i < 30; i++) {
+      var a = Math.floor(b);
+      var h2 = a * h1 + h0, k2 = a * k1 + k0;
+      if (k2 > maxDen) break;
+      h0 = h1; h1 = h2; k0 = k1; k1 = k2;
+      if (Math.abs(x - h1 / k1) < 1e-12) break;
+      var rem = b - a;
+      if (rem < 1e-12) break;
+      b = 1 / rem;
+    }
+
+    /* Допуск вузький навмисно. Ширший перетворював би π на 355/113 —
+       славетне наближення, але не той дріб, який мали на увазі. Число або
+       справді дорівнює дробу (з точністю до похибки самих обчислень), або
+       лишається десятковим. */
+    if (!k1 || Math.abs(x - h1 / k1) > 1e-10) return null;
+    return { n: sign * h1, d: k1 };
+  }
+
+  /**
+   * Намалювати підпис ділення й повернути його ширину.
+   *
+   * measure === true означає «нічого не малюй, лише зміряй»: та сама
+   * функція рахує ширину для розстановки підписів і малює їх, тож вони не
+   * можуть розійтися.
+   */
+  function drawNumLabel(ctx, v, step, x, y, fs, mode, measure) {
+    var wantFrac = (mode === 'frac' || mode === 'both');
+    var fr = wantFrac ? toFraction(v) : null;
+
+    var dec = numLabel(v, step);
+    var ffs = fs * 0.86;                       // дріб трохи менший: він удвічі вищий
+
+    /* Ціле число на осі дробів лишається цілим — і без десяткового хвоста.
+       «2/1» виглядає як помилка, а «2.00» серед ⅓ і ⅔ — як недогляд: там,
+       де підписи дробові, круглі точки мають бути найпростішими. */
+    if (fr && fr.d === 1) {
+      ctx.font = '600 ' + fs + 'px "Source Serif 4", Georgia, serif';
+      var whole = String(fr.n);
+      if (!measure) ctx.fillText(whole, x, y);
+      return ctx.measureText(whole).width;
+    }
+
+    var w = 0, top = y;
+
+    if (fr) {
+      var num = String(fr.n), den = String(fr.d);
+      ctx.font = '600 ' + ffs + 'px "Source Serif 4", Georgia, serif';
+      var barW = Math.max(ctx.measureText(num).width, ctx.measureText(den).width) + ffs * 0.24;
+      w = Math.max(w, barW);
+
+      if (!measure) {
+        ctx.fillText(num, x, top);
+        /* Риска дробу тонша за саму вісь: товщина пера тут завелика, і
+           дріб перетворювався б на дві цифри з колодою між ними. */
+        var barY = Math.round(top + ffs * 1.06) + 0.5;
+        var wasW = ctx.lineWidth;
+        ctx.lineWidth = Math.max(1, ffs * 0.075);
+        ctx.beginPath();
+        ctx.moveTo(x - barW / 2, barY);
+        ctx.lineTo(x + barW / 2, barY);
+        ctx.stroke();
+        ctx.lineWidth = wasW;
+        ctx.fillText(den, x, top + ffs * 1.2);
+      }
+      top += ffs * 2.35;
+    }
+
+    /* Десятковий показуємо, коли попросили саме його, і коли попросили
+       обидва. У режимі дробу він потрібен ще й тоді, коли дробу не вийшло:
+       підпис не має зникати через те, що число не поділилося. */
+    if (mode !== 'frac' || !fr) {
+      ctx.font = '600 ' + (fr ? fs * 0.82 : fs) + 'px "Source Serif 4", Georgia, serif';
+      w = Math.max(w, ctx.measureText(dec).width);
+      if (!measure) ctx.fillText(dec, x, top);
+    }
+
+    return w;
+  }
+
   /* Підпис ділення. Дробовий крок вимагає десяткових, цілий — ні: «0.0»
      замість «0» на осі виглядає як помилка. */
+  /**
+   * Скільки знаків після коми потрібно, щоб крок записався точно.
+   *
+   * Крок 2.5 — один знак, 0.25 — два, 1 — жодного. Крок ⅓ не записується
+   * точно жодною кількістю, і для нього беремо два: «0.33» читається, а
+   * «0.3333333333333333» — ні. Саме це й малювалося на осі.
+   */
+  function decimalsFor(step) {
+    for (var d = 0; d <= 6; d++) {
+      var m = step * Math.pow(10, d);
+      if (Math.abs(m - Math.round(m)) < 1e-9) return d;
+    }
+    return 2;
+  }
+
   function numLabel(v, step) {
-    var dec = 0;
-    if (step < 1) dec = String(step).split('.')[1] ? String(step).split('.')[1].length : 1;
+    var dec = decimalsFor(step);
     var out = dec ? v.toFixed(dec) : String(Math.round(v));
-    return out === '-0' ? '0' : out;
+    // «-0.00» — це нуль; мінус перед ним на осі виглядає як помилка
+    return /^-0(\.0*)?$/.test(out) ? out.slice(1) : out;
   }
 
   function moveItem(it, dx, dy) {
@@ -835,8 +955,8 @@
 
       var fs = Math.max(11, (it.w || 3) * 4.2);
       var tick = Math.max(5, (it.w || 3) * 2.2);
+      var mode = numFmt(it);
 
-      ctx.font = '600 ' + fs + 'px "Source Serif 4", Georgia, serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
 
@@ -844,10 +964,12 @@
          сусідні числа не торкаються.
 
          Міряємо найширший підпис, а не розмір шрифту: «1000» удвічі ширше
-         за «5», і осі на кшталт 0…1000 інакше злипаються в суцільну смугу. */
+         за «5», і осі на кшталт 0…1000 інакше злипаються в суцільну смугу.
+         Міряє та сама функція, що й малює, — інакше вони розійшлися б,
+         щойно підпис стане дробом. */
       var widest = 0;
       for (var w0 = 0; w0 <= count; w0++) {
-        var lw = ctx.measureText(numLabel(from + w0 * step, step)).width;
+        var lw = drawNumLabel(ctx, from + w0 * step, step, 0, 0, fs, mode, true);
         if (lw > widest) widest = lw;
       }
       var need = widest + fs * 0.7;                 // сам підпис плюс просвіт
@@ -865,7 +987,7 @@
         ctx.lineTo(tx, y + (big ? tick : tick * 0.55));
         ctx.stroke();
 
-        if (big) ctx.fillText(numLabel(v, step), tx, y + tick + fs * 0.35);
+        if (big) drawNumLabel(ctx, v, step, tx, y + tick + fs * 0.35, fs, mode, false);
       }
       return;
     }
@@ -1472,7 +1594,7 @@
     if (this.tool === 'numline') {
       this.snapshot();
       this.draft = { t: 'n', id: uid('nl'), c: this.color, w: this.width,
-                     from: -5, to: 5, step: 1,
+                     from: -5, to: 5, step: 1, fmt: 'dec',
                      a: [round(w.x), round(w.y), round(w.x), round(w.y)] };
       return;
     }
@@ -1903,6 +2025,10 @@
   Board.classifyTriangle = classifyTriangle;
   Board.constructionPrims = function (it) { return prims.get(it) || null; };
   Board.smoothStroke = smoothStroke;
+  /* Потрібна діалогу осі: підказка має показувати той самий дріб, що
+     й малюнок, а не власне наближення. */
+  Board.toFraction = toFraction;
+  Board.numLabel = numLabel;
   Board.MIN_SCALE = MIN_SCALE;
   Board.MAX_SCALE = MAX_SCALE;
 

@@ -2268,19 +2268,92 @@
     return String(Math.round(n * 1e6) / 1e6);
   }
 
+  /**
+   * Прочитати число з поля, де дозволено писати дробом.
+   *
+   * Приймає «0.5», «1/3», «-2/3» і мішане «1 1/2». Кома як десятковий
+   * роздільник — теж: на українській розкладці її натискають частіше за
+   * крапку, і мовчазне NaN через це виглядало б як зламане поле.
+   */
+  function numValue(text) {
+    var s = String(text == null ? '' : text).trim().replace(/,/g, '.').replace(/\s+/g, ' ');
+    if (!s) return NaN;
+
+    var mixed = s.match(/^(-?\d+)\s+(\d+)\s*\/\s*(\d+)$/);
+    if (mixed) {
+      var whole = Number(mixed[1]), den0 = Number(mixed[3]);
+      if (!den0) return NaN;
+      var part = Number(mixed[2]) / den0;
+      return whole < 0 ? whole - part : whole + part;
+    }
+
+    var frac = s.match(/^(-?\d*\.?\d+)\s*\/\s*(-?\d*\.?\d+)$/);
+    if (frac) {
+      var den = Number(frac[2]);
+      return den ? Number(frac[1]) / den : NaN;
+    }
+
+    return /^-?\d*\.?\d+$/.test(s) ? Number(s) : NaN;
+  }
+
+  /**
+   * Як показати збережене число в полі.
+   *
+   * Десятковим — коли він записує число точно. Інакше дробом: ⅓ у полі як
+   * «0.333333» при наступному «Застосувати» збереглося б саме таким, і
+   * підписи дробами мовчки перетворилися б на десяткові.
+   */
+  function numText(v) {
+    if (v == null || !isFinite(v)) return '';
+    var t = trimNum(v);
+    if (Number(t) === v) return t;
+    var f = window.Board && Board.toFraction ? Board.toFraction(v) : null;
+    return (f && f.d !== 1) ? f.n + '/' + f.d : String(v);
+  }
+
+  function numFmtOf(it) {
+    return (it && (it.fmt === 'frac' || it.fmt === 'both')) ? it.fmt : 'dec';
+  }
+
+  /**
+   * Той самий дріб, що й на осі, — щоб підказка не обіцяла одного, а
+   * малюнок давав інше. Логіка навмисно повторює рушій дошки, бо це
+   * єдина річ, яку вона має показувати правдиво.
+   */
+  function fracText(v) {
+    var f = window.Board && Board.toFraction ? Board.toFraction(v) : null;
+    if (!f || f.d === 1) return null;
+    return f.n + '/' + f.d;
+  }
+
   /** Що вийде з цих чисел — видно ще до натискання «Застосувати». */
-  function numlinePreview(from, to, step) {
+  function numlinePreview(from, to, step, fmt) {
     var bad = numlineProblem(from, to, step);
     if (bad) return '<span style="color:var(--red)">' + U.esc(bad) + '</span>';
+
+    function label(v) {
+      /* Десятковий беремо в самої дошки: підказка не має обіцяти
+         «0.333333», коли на осі буде «0.33». */
+      var dec = (window.Board && Board.numLabel) ? Board.numLabel(v, step) : trimNum(v);
+      if (fmt === 'dec') return dec;
+
+      // те саме правило, що й на осі: ціле лишається цілим, без хвоста
+      var whole = window.Board && Board.toFraction ? Board.toFraction(v) : null;
+      if (whole && whole.d === 1) return String(whole.n);
+
+      var f = fracText(v);
+      if (!f) return dec;                       // не поділилося — лишається десятковий
+      return fmt === 'both' ? f + ' (' + dec + ')' : f;
+    }
 
     var count = Math.round((to - from) / step);
     var sample = [];
     for (var k = 0; k <= count && sample.length < 4; k++) {
-      sample.push(trimNum(from + k * step));
+      sample.push(label(from + k * step));
     }
     // якщо показали не всі — кінець осі має бути видно, інакше число поділок
     // і перелік суперечать одне одному
-    var tail = sample.length <= count ? ' … ' + trimNum(to) : '';
+    var tail = sample.length <= count ? ' … ' + label(to) : '';
 
     return '<b>' + U.pl(count + 1, 'поділка', 'поділки', 'поділок') + '</b>: ' +
       U.esc(sample.join(', ')) + U.esc(tail);
@@ -2291,16 +2364,21 @@
       title: 'Числова вісь',
       sub: 'діапазон і крок',
       body:
+        /* Поля текстові, а не числові. Числове не пускає скісну риску, а
+           без неї крок ⅓ ввести неможливо — тобто підписи звичайними
+           дробами не мали б звідки взятися. */
         '<div class="field-row field-row--3">' +
-          C.field('Від', C.input('from', it.from, 'type="number" step="any"')) +
-          C.field('До', C.input('to', it.to, 'type="number" step="any"')) +
-          C.field('Крок', C.input('step', it.step, 'type="number" step="any" min="0"')) +
+          C.field('Від', C.input('from', numText(it.from), 'inputmode="text"')) +
+          C.field('До', C.input('to', numText(it.to), 'inputmode="text"')) +
+          C.field('Крок', C.input('step', numText(it.step), 'inputmode="text"')) +
         '</div>' +
-        /* «Крок» легко прочитати як «скільки ділень» — і тоді 100 на
-           діапазоні від −5 до 5 дає вісь, на якій немає жодної поділки.
-           Тому поруч завжди видно, що саме вийде. */
         '<div class="field__hint">Крок — це відстань між сусідніми поділками, ' +
-        'а не їх кількість.</div>' +
+        'а не їх кількість. Можна писати дробом: <b>1/3</b>, <b>3/4</b>, <b>1 1/2</b>.</div>' +
+        C.field('Підписи', C.select('fmt', numFmtOf(it), [
+          { value: 'dec',  label: 'Десятковим дробом — 0.5' },
+          { value: 'frac', label: 'Звичайним дробом — ½' },
+          { value: 'both', label: 'Обидва разом — ½ і 0.5' }
+        ])) +
         '<div data-nl-preview style="margin-top:10px;padding:10px 12px;' +
           'background:var(--bg);border-radius:var(--r-sm);line-height:1.55"></div>' +
         '<div class="field__hint" style="margin-top:10px">Підписи ставляться через стільки ' +
@@ -2309,9 +2387,9 @@
         var box = root.querySelector('[data-nl-preview]');
         function refresh() {
           var v = C.readForm(root);
-          box.innerHTML = numlinePreview(Number(v.from), Number(v.to), Number(v.step));
+          box.innerHTML = numlinePreview(numValue(v.from), numValue(v.to), numValue(v.step), v.fmt);
         }
-        U.$$('input', root).forEach(function (i) {
+        U.$$('input, select', root).forEach(function (i) {
           i.addEventListener('input', refresh);
           i.addEventListener('change', refresh);
         });
@@ -2322,12 +2400,13 @@
         { label: 'Застосувати', kind: 'btn--primary', act: 'save', icon: 'check',
           onClick: function (root) {
             var v = C.readForm(root);
-            var from = Number(v.from), to = Number(v.to), step = Number(v.step);
+            var from = numValue(v.from), to = numValue(v.to), step = numValue(v.step);
             var bad = numlineProblem(from, to, step);
             if (bad) { U.toast(bad, 'err'); return false; }
 
             cur.engine.snapshot();
             it.from = from; it.to = to; it.step = step;
+            it.fmt = (v.fmt === 'frac' || v.fmt === 'both') ? v.fmt : 'dec';
             cur.engine.changed();
           } }
       ]

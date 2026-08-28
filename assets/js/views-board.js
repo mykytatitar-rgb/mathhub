@@ -2237,6 +2237,55 @@
    * ділення, стрілка — рахується сама, і питати про це означало б
    * перекладати на людину роботу програми.
    */
+  /**
+   * Що не так із числами осі. Порожній рядок означає «все гаразд».
+   *
+   * Найважливіший тут третій випадок. «Крок» природно прочитати як
+   * «кількість ділень», і тоді на діапазоні від −5 до 5 з'являється крок
+   * 100 — а вісь виходить порожня, бо в десятку сто не вміщається жодного
+   * разу. Тому повідомлення не просто відмовляє, а називає те число, яке
+   * людина насправді мала на увазі.
+   */
+  function numlineProblem(from, to, step) {
+    if (!isFinite(from) || !isFinite(to)) return 'Введіть числа для «Від» і «До»';
+    if (!(to > from)) return '«До» має бути більше за «Від»';
+    if (!(step > 0)) return 'Крок має бути додатним';
+
+    var span = to - from;
+    if (step > span) {
+      var want = trimNum(span / 100);
+      return 'Крок ' + trimNum(step) + ' більший за весь діапазон (' + trimNum(span) +
+        ') — жодного ділення не вийде. Крок — це відстань між поділками. ' +
+        'Для ста ділень тут потрібен крок ' + want;
+    }
+    if (span / step > 400) return 'Забагато ділень — збільште крок';
+    return '';
+  }
+
+  /** Коротке число без хвоста нулів: 0.1, а не 0.10000000000000001. */
+  function trimNum(n) {
+    if (!isFinite(n)) return '?';
+    return String(Math.round(n * 1e6) / 1e6);
+  }
+
+  /** Що вийде з цих чисел — видно ще до натискання «Застосувати». */
+  function numlinePreview(from, to, step) {
+    var bad = numlineProblem(from, to, step);
+    if (bad) return '<span style="color:var(--red)">' + U.esc(bad) + '</span>';
+
+    var count = Math.round((to - from) / step);
+    var sample = [];
+    for (var k = 0; k <= count && sample.length < 4; k++) {
+      sample.push(trimNum(from + k * step));
+    }
+    // якщо показали не всі — кінець осі має бути видно, інакше число поділок
+    // і перелік суперечать одне одному
+    var tail = sample.length <= count ? ' … ' + trimNum(to) : '';
+
+    return '<b>' + U.pl(count + 1, 'поділка', 'поділки', 'поділок') + '</b>: ' +
+      U.esc(sample.join(', ')) + U.esc(tail);
+  }
+
   function numlineDialog(it) {
     C.modal({
       title: 'Числова вісь',
@@ -2247,20 +2296,35 @@
           C.field('До', C.input('to', it.to, 'type="number" step="any"')) +
           C.field('Крок', C.input('step', it.step, 'type="number" step="any" min="0"')) +
         '</div>' +
-        '<div class="field__hint">Підписи ставляться через стільки ділень, скільки ' +
-        'вміщається, — щоб числа не наповзали. Стрілка завжди праворуч.</div>',
+        /* «Крок» легко прочитати як «скільки ділень» — і тоді 100 на
+           діапазоні від −5 до 5 дає вісь, на якій немає жодної поділки.
+           Тому поруч завжди видно, що саме вийде. */
+        '<div class="field__hint">Крок — це відстань між сусідніми поділками, ' +
+        'а не їх кількість.</div>' +
+        '<div data-nl-preview style="margin-top:10px;padding:10px 12px;' +
+          'background:var(--bg);border-radius:var(--r-sm);line-height:1.55"></div>' +
+        '<div class="field__hint" style="margin-top:10px">Підписи ставляться через стільки ' +
+        'ділень, скільки вміщається, — щоб числа не наповзали. Стрілка завжди праворуч.</div>',
+      onMount: function (root) {
+        var box = root.querySelector('[data-nl-preview]');
+        function refresh() {
+          var v = C.readForm(root);
+          box.innerHTML = numlinePreview(Number(v.from), Number(v.to), Number(v.step));
+        }
+        U.$$('input', root).forEach(function (i) {
+          i.addEventListener('input', refresh);
+          i.addEventListener('change', refresh);
+        });
+        refresh();
+      },
       buttons: [
         { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
         { label: 'Застосувати', kind: 'btn--primary', act: 'save', icon: 'check',
           onClick: function (root) {
             var v = C.readForm(root);
             var from = Number(v.from), to = Number(v.to), step = Number(v.step);
-
-            if (!(to > from)) { U.toast('«До» має бути більше за «Від»', 'err'); return false; }
-            if (!(step > 0)) { U.toast('Крок має бути додатним', 'err'); return false; }
-            if ((to - from) / step > 400) {
-              U.toast('Забагато ділень — збільште крок', 'err'); return false;
-            }
+            var bad = numlineProblem(from, to, step);
+            if (bad) { U.toast(bad, 'err'); return false; }
 
             cur.engine.snapshot();
             it.from = from; it.to = to; it.step = step;

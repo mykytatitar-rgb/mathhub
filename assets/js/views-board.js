@@ -2312,7 +2312,8 @@
   }
 
   function numFmtOf(it) {
-    return (it && (it.fmt === 'frac' || it.fmt === 'both')) ? it.fmt : 'dec';
+    var f = it && it.fmt;
+    return (f === 'frac' || f === 'both' || f === 'both-dec') ? f : 'dec';
   }
 
   /**
@@ -2343,7 +2344,9 @@
 
       var f = fracText(v);
       if (!f) return dec;                       // не поділилося — лишається десятковий
-      return fmt === 'both' ? f + ' (' + dec + ')' : f;
+      if (fmt === 'both') return f + ' (' + dec + ')';
+      if (fmt === 'both-dec') return dec + ' (' + f + ')';
+      return f;
     }
 
     var count = Math.round((to - from) / step);
@@ -2375,9 +2378,10 @@
         '<div class="field__hint">Крок — це відстань між сусідніми поділками, ' +
         'а не їх кількість. Можна писати дробом: <b>1/3</b>, <b>3/4</b>, <b>1 1/2</b>.</div>' +
         C.field('Підписи', C.select('fmt', numFmtOf(it), [
-          { value: 'dec',  label: 'Десятковим дробом — 0.5' },
-          { value: 'frac', label: 'Звичайним дробом — ½' },
-          { value: 'both', label: 'Обидва разом — ½ і 0.5' }
+          { value: 'dec',      label: 'Десятковим дробом — 0.5' },
+          { value: 'frac',     label: 'Звичайним дробом — ½' },
+          { value: 'both',     label: 'Обидва: зверху звичайний — ½, під ним 0.5' },
+          { value: 'both-dec', label: 'Обидва: зверху десятковий — 0.5, під ним ½' }
         ])) +
         '<div data-nl-preview style="margin-top:10px;padding:10px 12px;' +
           'background:var(--bg);border-radius:var(--r-sm);line-height:1.55"></div>' +
@@ -2406,7 +2410,8 @@
 
             cur.engine.snapshot();
             it.from = from; it.to = to; it.step = step;
-            it.fmt = (v.fmt === 'frac' || v.fmt === 'both') ? v.fmt : 'dec';
+            it.fmt = (v.fmt === 'frac' || v.fmt === 'both' || v.fmt === 'both-dec')
+              ? v.fmt : 'dec';
             cur.engine.changed();
           } }
       ]

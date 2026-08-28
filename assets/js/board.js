@@ -573,7 +573,7 @@
   /** Як підписувати вісь: десятковим, звичайним дробом чи обома. */
   function numFmt(it) {
     var f = it && it.fmt;
-    return (f === 'frac' || f === 'both') ? f : 'dec';
+    return (f === 'frac' || f === 'both' || f === 'both-dec') ? f : 'dec';
   }
 
   /**
@@ -622,7 +622,9 @@
    * можуть розійтися.
    */
   function drawNumLabel(ctx, v, step, x, y, fs, mode, measure) {
-    var wantFrac = (mode === 'frac' || mode === 'both');
+    var bothFracTop = (mode === 'both');
+    var bothDecTop = (mode === 'both-dec');
+    var wantFrac = (mode === 'frac' || bothFracTop || bothDecTop);
     var fr = wantFrac ? toFraction(v) : null;
 
     var dec = numLabel(v, step);
@@ -638,9 +640,13 @@
       return ctx.measureText(whole).width;
     }
 
+    /* Десятковий потрібен не лише тоді, коли його попросили: у режимі дробу
+       він рятує число, яке дробом не записується. Підпис не має зникати
+       через те, що воно не поділилося. */
+    var showDec = (mode === 'dec') || bothFracTop || bothDecTop || !fr;
     var w = 0, top = y;
 
-    if (fr) {
+    function putFrac() {
       var num = String(fr.n), den = String(fr.d);
       ctx.font = '600 ' + ffs + 'px "Source Serif 4", Georgia, serif';
       var barW = Math.max(ctx.measureText(num).width, ctx.measureText(den).width) + ffs * 0.24;
@@ -663,13 +669,21 @@
       top += ffs * 2.35;
     }
 
-    /* Десятковий показуємо, коли попросили саме його, і коли попросили
-       обидва. У режимі дробу він потрібен ще й тоді, коли дробу не вийшло:
-       підпис не має зникати через те, що число не поділилося. */
-    if (mode !== 'frac' || !fr) {
+    function putDec() {
       ctx.font = '600 ' + (fr ? fs * 0.82 : fs) + 'px "Source Serif 4", Georgia, serif';
       w = Math.max(w, ctx.measureText(dec).width);
       if (!measure) ctx.fillText(dec, x, top);
+      top += fs * 1.15;
+    }
+
+    /* Порядок вибирає людина. Під поділкою стоїть той запис, який на цьому
+       уроці головний, — і це не завжди дріб. */
+    if (bothDecTop) {
+      if (showDec) putDec();
+      if (fr) putFrac();
+    } else {
+      if (fr) putFrac();
+      if (showDec) putDec();
     }
 
     return w;

@@ -2845,6 +2845,23 @@
             '<input class="input" type="number" value="160" min="0" max="360" step="5" data-a2="' + o.k + '">' +
             '<span class="muted small">°</span>' +
             '<button class="btn btn--soft btn--sm" data-add="' + o.k + '">Додати</button></div>';
+        } else if (o.per === 'sides') {
+          /* Кількість сторін — кнопками, а не полем: у школі потрібні три,
+             чотири й шість, і тицьнути в них має бути швидше, ніж набрати. */
+          var quick = '';
+          [3, 4, 5, 6, 8, 12].forEach(function (nn) {
+            quick += '<button class="constr-num" data-add="' + o.k + '" data-n="' + nn +
+              '" title="' + nn + ' сторони">' + nn + '</button>';
+          });
+          ctrl = '<div class="constr-angle">' + quick +
+            '<span class="muted small">поворот</span>' +
+            '<input class="input" type="number" value="90" min="0" max="360" step="5" data-a1="' + o.k + '">' +
+            '<span class="muted small">°</span></div>';
+        } else if (o.per === 'ratio') {
+          ctrl = '<div class="constr-angle">' +
+            '<input class="input" type="number" value="60" min="5" max="300" step="5" data-r2="' + o.k + '">' +
+            '<span class="muted small">% радіуса</span>' +
+            '<button class="btn btn--soft btn--sm" data-add="' + o.k + '">Додати</button></div>';
         } else {
           ctrl = '<button class="btn btn--soft btn--sm" data-add="' + o.k + '">Побудувати</button>';
         }
@@ -2869,6 +2886,12 @@
           if (x.k === 'midline') extra = ' ∥ ' + Cn.sideName(x.i, vcount);
           else if (kind.per === 'side') extra = ' до ' + Cn.sideName(x.i, vcount);
           else extra = ' з ' + Cn.vertexName(x.i);
+        } else if (x.n != null) {
+          extra = ' · ' + U.pl(x.n, 'сторона', 'сторони', 'сторін');
+        } else if (x.r2 != null) {
+          extra = ' · ' + Math.round(x.r2 * 100) + '%';
+        } else if (x.a2 != null) {
+          extra = ' ' + x.a1 + '°…' + x.a2 + '°';
         } else if (x.a1 != null) {
           extra = ' ' + x.a1 + '°';
         }
@@ -2893,25 +2916,26 @@
           root.querySelector('[data-constr-existing]').innerHTML = existingHtml();
         }
 
-        function addOne(kind, idx) {
+        function addOne(kind, idx, sides) {
           var spec = { k: kind };
           if (idx != null) spec.i = idx;
+          if (sides != null) spec.n = sides;
           var a1 = root.querySelector('[data-a1="' + kind + '"]');
           var a2 = root.querySelector('[data-a2="' + kind + '"]');
+          var r2 = root.querySelector('[data-r2="' + kind + '"]');
           if (a1) spec.a1 = +a1.value;
           if (a2) spec.a2 = +a2.value;
+          if (r2) spec.r2 = (+r2.value) / 100;
           var made = cur.engine.addConstruction(shape, spec);
           if (!made) { U.toast('Така побудова тут неможлива', 'err'); return false; }
           return true;
         }
 
         U.onClick(root, '[data-add]', function (el) {
-          if (el.hasAttribute('data-i')) {
-            if (addOne(el.dataset.add, +el.dataset.i)) {
-              U.toast('Додано', 'ok'); refresh(); updateSelBar();
-            }
-          } else {
-            if (addOne(el.dataset.add, null)) { U.toast('Додано', 'ok'); refresh(); updateSelBar(); }
+          var idx = el.hasAttribute('data-i') ? +el.dataset.i : null;
+          var sides = el.hasAttribute('data-n') ? +el.dataset.n : null;
+          if (addOne(el.dataset.add, idx, sides)) {
+            U.toast('Додано', 'ok'); refresh(); updateSelBar();
           }
         });
 
@@ -3445,6 +3469,13 @@
         if (!g) return;
         var thin = Math.max(1, (it.w || 2) * 0.7);
         g.segs.forEach(function (s) {
+          out.push({ t: 'l', c: it.c, w: it.w, a: [s[0], s[1], s[2], s[3]] });
+        });
+        /* Допоміжні лінії побудови досі не доїжджали до учня взагалі: у
+           списку видів їх не було, тож хорда під вписаним кутом чи основа
+           висоти в нього просто зникали. Пунктиру сторінка учня не вміє,
+           тож лінія суцільна — але вона є, а це важливіше. */
+        (g.dashed || []).forEach(function (s) {
           out.push({ t: 'l', c: it.c, w: it.w, a: [s[0], s[1], s[2], s[3]] });
         });
         g.circles.forEach(function (c) {

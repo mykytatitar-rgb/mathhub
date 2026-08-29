@@ -196,6 +196,30 @@
     return [cx + rx * Math.cos(t), cy - ry * Math.sin(t)];
   }
 
+  /**
+   * Дуга як ламана.
+   *
+   * У побудов немає окремого примітива «дуга» — є відрізки й повні кола.
+   * Замість того, щоб заводити новий примітив і проводити його через
+   * малювання, публікацію уроку й експорт, розбиваємо дугу на короткі
+   * відрізки. На екрані вони не відрізняються від кривої, а працюють
+   * усюди без винятків.
+   */
+  function arcSegs(cx, cy, rx, ry, a1, a2, into) {
+    var span = a2 - a1;
+    while (span <= 0) span += 360;
+    while (span > 360) span -= 360;
+
+    var steps = Math.max(8, Math.ceil(span / 4));
+    var prev = onEllipse(cx, cy, rx, ry, a1);
+    for (var s = 1; s <= steps; s++) {
+      var p = onEllipse(cx, cy, rx, ry, a1 + span * s / steps);
+      into.push([prev[0], prev[1], p[0], p[1]]);
+      prev = p;
+    }
+    return span;
+  }
+
   function ellipseTangentDir(rx, ry, deg) {
     var t = deg * Math.PI / 180;
     return norm([-rx * Math.sin(t), -ry * Math.cos(t)]);
@@ -218,7 +242,15 @@
     diameter: { label: 'Діаметр',                per: 'angle' },
     chord:    { label: 'Хорда',                  per: 'angle2' },
     tangent:  { label: 'Дотична',                per: 'angle' },
-    secant:   { label: 'Січна',                  per: 'angle2' }
+    secant:   { label: 'Січна',                  per: 'angle2' },
+    arc:      { label: 'Дуга',                   per: 'angle2' },
+    sector:   { label: 'Сектор',                 per: 'angle2' },
+    segpart:  { label: 'Сегмент',                per: 'angle2' },
+    central:  { label: 'Центральний кут',        per: 'angle2' },
+    inscang:  { label: 'Вписаний кут',           per: 'angle2' },
+    inpoly:   { label: 'Вписаний правильний многокутник',  per: 'sides' },
+    outpoly:  { label: 'Описаний правильний многокутник',  per: 'sides' },
+    concentr: { label: 'Концентричне коло',      per: 'ratio' }
   };
 
   /**
@@ -237,6 +269,19 @@
       out.push({ k: 'chord', label: C.KINDS.chord.label, per: 'angle2' });
       out.push({ k: 'tangent', label: C.KINDS.tangent.label, per: 'angle' });
       out.push({ k: 'secant', label: C.KINDS.secant.label, per: 'angle2' });
+      out.push({ k: 'arc', label: C.KINDS.arc.label, per: 'angle2' });
+      out.push({ k: 'sector', label: C.KINDS.sector.label, per: 'angle2' });
+      out.push({ k: 'segpart', label: C.KINDS.segpart.label, per: 'angle2' });
+      out.push({ k: 'central', label: C.KINDS.central.label, per: 'angle2' });
+      out.push({ k: 'inscang', label: C.KINDS.inscang.label, per: 'angle2',
+                 hint: 'спирається на ту саму хорду' });
+      out.push({ k: 'concentr', label: C.KINDS.concentr.label, per: 'ratio' });
+      if (isCircle) {
+        /* Многокутники — лише для кола. У еліпса «правильний вписаний»
+           не існує: сторони вийшли б різні, і фігура була б неправдою. */
+        out.push({ k: 'inpoly', label: C.KINDS.inpoly.label, per: 'sides' });
+        out.push({ k: 'outpoly', label: C.KINDS.outpoly.label, per: 'sides' });
+      }
       if (!isCircle) {
         out.forEach(function (o) { o.hint = 'для еліпса'; });
       }
@@ -319,6 +364,64 @@
         // прямий кут між дотичною й радіусом
         out.right.push({ at: P, d1: td, d2: norm(sub([cx, cy], P)) });
         out.segs.push([cx, cy, P[0], P[1]]);
+      } else if (item.k === 'arc') {
+        arcSegs(cx, cy, rx, ry, a1, a2, out.segs);
+        out.dots.push(P);
+        out.dots.push(onEllipse(cx, cy, rx, ry, a2));
+      } else if (item.k === 'sector') {
+        var Rs = onEllipse(cx, cy, rx, ry, a2);
+        arcSegs(cx, cy, rx, ry, a1, a2, out.segs);
+        out.segs.push([cx, cy, P[0], P[1]]);
+        out.segs.push([cx, cy, Rs[0], Rs[1]]);
+        out.dots.push([cx, cy]);
+      } else if (item.k === 'segpart') {
+        var Rg = onEllipse(cx, cy, rx, ry, a2);
+        arcSegs(cx, cy, rx, ry, a1, a2, out.segs);
+        out.segs.push([P[0], P[1], Rg[0], Rg[1]]);
+      } else if (item.k === 'central') {
+        var Rc = onEllipse(cx, cy, rx, ry, a2);
+        out.segs.push([cx, cy, P[0], P[1]]);
+        out.segs.push([cx, cy, Rc[0], Rc[1]]);
+        // дужка кута біля центра — інакше не видно, який саме кут мають на увазі
+        var rr = Math.min(rx, ry) * 0.22;
+        arcSegs(cx, cy, rr, rr, a1, a2, out.segs);
+        out.dots.push([cx, cy]);
+      } else if (item.k === 'inscang') {
+        /* Вершина — посередині другої дуги: звідти кут видно найкраще, і
+           одразу впадає в око, що він удвічі менший за центральний. */
+        var spanI = a2 - a1;
+        while (spanI <= 0) spanI += 360;
+        var Vi = onEllipse(cx, cy, rx, ry, a1 + spanI / 2 + 180);
+        var Ri = onEllipse(cx, cy, rx, ry, a2);
+        out.segs.push([Vi[0], Vi[1], P[0], P[1]]);
+        out.segs.push([Vi[0], Vi[1], Ri[0], Ri[1]]);
+        out.dashed.push([P[0], P[1], Ri[0], Ri[1]]);   // хорда, на яку спирається
+        var rv = Math.min(rx, ry) * 0.18;
+        var d1 = norm(sub(P, Vi)), d2 = norm(sub(Ri, Vi));
+        var b1 = Math.atan2(-d1[1], d1[0]) * 180 / Math.PI;
+        var b2 = Math.atan2(-d2[1], d2[0]) * 180 / Math.PI;
+        arcSegs(Vi[0], Vi[1], rv, rv, Math.min(b1, b2), Math.max(b1, b2), out.segs);
+        out.dots.push(Vi);
+      } else if (item.k === 'concentr') {
+        /* Ламаною, а не примітивом «коло»: у еліпса концентричне коло було
+           б колом, тобто не концентричним. */
+        var kr = item.r2 > 0 ? item.r2 : 0.6;
+        arcSegs(cx, cy, rx * kr, ry * kr, 0, 359.99, out.segs);
+        out.dots.push([cx, cy]);
+      } else if (item.k === 'inpoly' || item.k === 'outpoly') {
+        var np = Math.max(3, Math.min(12, item.n || 6));
+        /* Описаний: вершини далі від центра рівно настільки, щоб сторони
+           торкалися кола. Тоді середини сторін лягають на саме коло. */
+        var kk = item.k === 'outpoly' ? 1 / Math.cos(Math.PI / np) : 1;
+        var first = null, prev = null;
+        for (var q = 0; q < np; q++) {
+          var Pq = onEllipse(cx, cy, rx * kk, ry * kk, a1 + q * 360 / np);
+          if (prev) out.segs.push([prev[0], prev[1], Pq[0], Pq[1]]);
+          else first = Pq;
+          out.dots.push(Pq);
+          prev = Pq;
+        }
+        out.segs.push([prev[0], prev[1], first[0], first[1]]);
       } else return null;
       return out;
     }
@@ -467,6 +570,8 @@
     if ((a.i || 0) !== (b.i || 0)) return false;
     if ((a.a1 == null ? null : +a.a1) !== (b.a1 == null ? null : +b.a1)) return false;
     if ((a.a2 == null ? null : +a.a2) !== (b.a2 == null ? null : +b.a2)) return false;
+    if ((a.n == null ? null : +a.n) !== (b.n == null ? null : +b.n)) return false;
+    if ((a.r2 == null ? null : +a.r2) !== (b.r2 == null ? null : +b.r2)) return false;
     return true;
   };
 
@@ -474,7 +579,10 @@
   C.shortLabel = function (item) {
     var m = { height: 'h', median: 'm', bisector: 'l', midline: 'сер.л.',
               perpbis: '⊥', diagonal: 'd', incircle: 'впис.', circum: 'опис.',
-              radius: 'R', diameter: 'd', chord: 'хорда', tangent: 'дот.', secant: 'січна' };
+              radius: 'R', diameter: 'd', chord: 'хорда', tangent: 'дот.', secant: 'січна',
+              arc: 'дуга', sector: 'сектор', segpart: 'сегм.', central: '∠центр.',
+              inscang: '∠впис.', inpoly: 'впис. n-кут.', outpoly: 'опис. n-кут.',
+              concentr: 'концентр.' };
     return m[item.k] || '';
   };
 

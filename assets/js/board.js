@@ -1268,6 +1268,9 @@
     if (spec.i != null) it.i = spec.i;
     if (spec.a1 != null) it.a1 = spec.a1;
     if (spec.a2 != null) it.a2 = spec.a2;
+    // n — сторін у многокутнику, r2 — частка радіуса для концентричного кола
+    if (spec.n != null) it.n = spec.n;
+    if (spec.r2 != null) it.r2 = spec.r2;
 
     var g = window.Constructions.resolve(it, parent);
     if (!g || (!g.segs.length && !g.circles.length)) return null;

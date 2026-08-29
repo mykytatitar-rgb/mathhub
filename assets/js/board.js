@@ -525,6 +525,12 @@
     if (it.t === 'l' || it.t === 'a') {
       return distToSegment(x, y, it.a[0], it.a[1], it.a[2], it.a[3]) <= tol + it.w / 2;
     }
+    // площина — прямокутник: тицяти можна будь-де всередині
+    if (it.t === 'f') {
+      var fx1 = Math.min(it.a[0], it.a[2]), fx2 = Math.max(it.a[0], it.a[2]);
+      var fy1 = Math.min(it.a[1], it.a[3]), fy2 = Math.max(it.a[1], it.a[3]);
+      return x >= fx1 - tol && x <= fx2 + tol && y >= fy1 - tol && y <= fy2 + tol;
+    }
     /* Вісь ловимо ширшою смугою, ніж лінію: у неї є ділення й підписи під
        нею, і тицяти треба туди, де вона виглядає, а не в саму риску. */
     if (it.t === 'n') {
@@ -568,6 +574,186 @@
   function numStep(it) {
     var st = Number(it.step);
     return st > 0 ? st : 1;
+  }
+
+  /* ============================================================
+     Координатна площина
+     ============================================================
+
+     Один обʼєкт, а не набір ліній: осі, сітка, графік і точки на ньому
+     тримаються разом і перераховуються з тих самих чисел. Тому точку можна
+     тягнути й усе решта — проєкції, січна, дотична, підпис h — їде за нею.
+
+     Формула зберігається текстом і обчислюється власним розбором (plot.js),
+     а не мовою: вона повертається з сервера, а виконувати те, що приїхало
+     ззовні, програма не має права. */
+
+  var planeCache = {};       // формула → готова функція; розбирати щоразу дорого
+
+  function planeFn(it) {
+    var src = it.ex || 'x^2';
+    if (planeCache[src] !== undefined) return planeCache[src];
+    var r = (window.Plot && Plot.compile) ? Plot.compile(src) : { f: null };
+    planeCache[src] = r.f;
+    return r.f;
+  }
+
+  /** Межі математичного вікна з розумними запасними. */
+  function planeWin(it) {
+    var xa = typeof it.xa === 'number' ? it.xa : -5;
+    var xb = typeof it.xb === 'number' ? it.xb : 5;
+    var ya = typeof it.ya === 'number' ? it.ya : -3;
+    var yb = typeof it.yb === 'number' ? it.yb : 7;
+    if (!(xb > xa)) { xa = -5; xb = 5; }
+    if (!(yb > ya)) { ya = -3; yb = 7; }
+    return { xa: xa, xb: xb, ya: ya, yb: yb };
+  }
+
+  /** Перетворення «математика → екран» і назад. */
+  function planeMap(it) {
+    var x1 = Math.min(it.a[0], it.a[2]), x2 = Math.max(it.a[0], it.a[2]);
+    var y1 = Math.min(it.a[1], it.a[3]), y2 = Math.max(it.a[1], it.a[3]);
+    var w = planeWin(it);
+    var kx = (x2 - x1) / (w.xb - w.xa);
+    var ky = (y2 - y1) / (w.yb - w.ya);
+    return {
+      x1: x1, y1: y1, x2: x2, y2: y2, win: w, kx: kx, ky: ky,
+      sx: function (mx) { return x1 + (mx - w.xa) * kx; },
+      sy: function (my) { return y2 - (my - w.ya) * ky; },
+      mx: function (px) { return w.xa + (px - x1) / kx; },
+      my: function (py) { return w.ya + (y2 - py) / ky; }
+    };
+  }
+
+  /** Крок сітки: круглий і такий, щоб поділок було приблизно 5–10. */
+  function niceStep(span) {
+    var raw = span / 10;
+    var pow = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10));
+
+    /* Округлення обовʼязкове: 0.35/0.1 у числах із комою дорівнює
+       3.4999999999999996, і порівняння з 3.5 падає не в ту гілку. Через це
+       на діапазоні 3.5 виходило вісімнадцять поділок замість семи. */
+    var n = Math.round((raw / pow) * 1e6) / 1e6;
+    var mult = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10;
+    return mult * pow;
+  }
+
+  function planeP1(it) { return typeof it.p1 === 'number' ? it.p1 : 0.5; }
+  function planeP2(it) { return typeof it.p2 === 'number' ? it.p2 : 2; }
+
+  /**
+   * Точки на графіку й усе, що з них випливає.
+   *
+   * Саме заради цього площина існує одним обʼєктом: січна, дотична,
+   * проєкції та підпис h не зберігаються ніде — вони щоразу рахуються з
+   * двох чисел. Тому вони не можуть відстати від точок.
+   */
+  function drawPlanePoints(ctx, it, m, fn, fsz) {
+    if (it.pts === 0) return;
+
+    var W = m.win;
+    var G = '#17B26A', R = '#E5484D';          // як у підручнику: перша зелена, друга червона
+    var x1 = planeP1(it), x2 = planeP2(it);
+    var y1 = fn(x1), y2 = fn(x2);
+    var dot = Math.max(3.5, (it.w || 2) * 1.7);
+
+    function point(mx, my, color, name) {
+      if (isNaN(my)) return null;
+      var px = m.sx(mx), py = m.sy(my);
+
+      // пунктирні проєкції на обидві осі — щоб було видно, звідки береться число
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1.2, (it.w || 2) * 0.7);
+      ctx.setLineDash([6, 5]);
+      ctx.beginPath();
+      ctx.moveTo(px, py); ctx.lineTo(px, m.sy(0));
+      ctx.moveTo(px, py); ctx.lineTo(m.sx(0), py);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(px, py, dot, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.font = '600 ' + fsz + 'px "Source Serif 4", Georgia, serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(name, px + dot * 1.6, m.sy(0) + fsz * 0.3);
+      ctx.textBaseline = 'middle';
+      ctx.fillText('f(' + name + ')', m.sx(0) + fsz * 0.4, py - fsz * 0.75);
+      ctx.restore();
+      return [px, py];
+    }
+
+    var P1 = point(x1, y1, G, 'x₁');
+    var P2 = point(x2, y2, R, 'x₂');
+
+    // ---- січна через обидві точки
+    if (it.sec && P1 && P2 && Math.abs(x2 - x1) > 1e-9) {
+      var kSec = (y2 - y1) / (x2 - x1);
+      ctx.save();
+      ctx.strokeStyle = '#7A5AF8';
+      ctx.lineWidth = Math.max(1.6, (it.w || 2) * 0.9);
+      ctx.beginPath();
+      ctx.moveTo(m.sx(W.xa), m.sy(y1 + kSec * (W.xa - x1)));
+      ctx.lineTo(m.sx(W.xb), m.sy(y1 + kSec * (W.xb - x1)));
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // ---- дотична в першій точці
+    if (it.tan && P1 && window.Plot && Plot.slopeAt) {
+      var kTan = Plot.slopeAt(fn, x1);
+      if (!isNaN(kTan)) {
+        ctx.save();
+        ctx.strokeStyle = '#F79009';
+        ctx.lineWidth = Math.max(1.6, (it.w || 2) * 0.9);
+        ctx.beginPath();
+        ctx.moveTo(m.sx(W.xa), m.sy(y1 + kTan * (W.xa - x1)));
+        ctx.lineTo(m.sx(W.xb), m.sy(y1 + kTan * (W.xb - x1)));
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // ---- h під віссю: приріст аргументу, з якого й починається похідна
+    if (it.hlab !== 0 && P1 && P2) {
+      var hv = x2 - x1;
+      ctx.save();
+      ctx.strokeStyle = '#7A5AF8';
+      ctx.fillStyle = '#7A5AF8';
+      ctx.lineWidth = Math.max(1.4, (it.w || 2) * 0.8);
+      var hy = m.sy(0) + fsz * 2.1;
+      ctx.beginPath();
+      ctx.moveTo(m.sx(x1), hy); ctx.lineTo(m.sx(x2), hy);
+      ctx.stroke();
+      ctx.font = '600 ' + fsz + 'px "Source Serif 4", Georgia, serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText('h = ' + numLabel(hv, 0.01), (m.sx(x1) + m.sx(x2)) / 2, hy + fsz * 0.25);
+      ctx.restore();
+    }
+
+    /* Різницеве відношення — те саме, що на дошці пишуть словами. Стоїть
+       у кутку, щоб число мінялося на очах, поки тягнеш точку. */
+    if (it.quot && P1 && P2 && Math.abs(x2 - x1) > 1e-9) {
+      var q = (y2 - y1) / (x2 - x1);
+      ctx.save();
+      ctx.fillStyle = '#7A5AF8';
+      ctx.font = '600 ' + (fsz * 1.05) + 'px "Source Serif 4", Georgia, serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      var tx = m.x1 + fsz * 0.6, ty = m.y1 + fsz * 0.5;
+      ctx.fillText('( f(x₂) − f(x₁) ) / h = ' + numLabel(q, 0.01), tx, ty);
+      if (it.tan && window.Plot && Plot.slopeAt) {
+        var kt = Plot.slopeAt(fn, x1);
+        ctx.fillStyle = '#F79009';
+        if (!isNaN(kt)) ctx.fillText('f ′(x₁) = ' + numLabel(kt, 0.01), tx, ty + fsz * 1.5);
+      }
+      ctx.restore();
+    }
   }
 
   /** Як підписувати вісь: десятковим, звичайним дробом чи обома. */
@@ -923,6 +1109,142 @@
         ctx.lineTo(it.a[2] - head * Math.cos(ang + 0.42), it.a[3] - head * Math.sin(ang + 0.42));
         ctx.stroke();
       }
+      return;
+    }
+
+    /* Координатна площина з графіком.
+
+       Малюється кожного разу з нуля з тих самих чисел — тому досить
+       посунути точку, і проєкції, січна, дотична й підпис h стають на нові
+       місця самі. Нічого не «запамʼятовується» в координатах, бо все, що
+       запамʼятали, рано чи пізно розходиться з тим, що показують. */
+    if (it.t === 'f') {
+      var m = planeMap(it);
+      var W = m.win;
+      var fn = planeFn(it);
+      var thin = Math.max(1, (it.w || 2) * 0.5);
+      var fsz = Math.max(10, (it.w || 2) * 4.5);
+
+      var wasCap = ctx.lineCap, wasJoin = ctx.lineJoin;
+      ctx.lineCap = 'butt'; ctx.lineJoin = 'round';
+      ctx.font = '600 ' + fsz + 'px "Source Serif 4", Georgia, serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+
+      var stepX = niceStep(W.xb - W.xa), stepY = niceStep(W.yb - W.ya);
+      var gx, gy, k;
+
+      // ---- сітка
+      if (it.grid !== 0) {
+        ctx.save();
+        ctx.globalAlpha = 0.34;
+        ctx.lineWidth = thin;
+        ctx.beginPath();
+        for (k = Math.ceil(W.xa / stepX); k * stepX <= W.xb + 1e-9; k++) {
+          gx = m.sx(k * stepX);
+          ctx.moveTo(gx, m.y1); ctx.lineTo(gx, m.y2);
+        }
+        for (k = Math.ceil(W.ya / stepY); k * stepY <= W.yb + 1e-9; k++) {
+          gy = m.sy(k * stepY);
+          ctx.moveTo(m.x1, gy); ctx.lineTo(m.x2, gy);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // ---- осі зі стрілками й підписами
+      var ox = m.sx(0), oy = m.sy(0);
+      var onX = oy >= m.y1 && oy <= m.y2;
+      var onY = ox >= m.x1 && ox <= m.x2;
+      var head = Math.max(7, (it.w || 2) * 3);
+
+      ctx.lineWidth = Math.max(1.4, (it.w || 2) * 0.9);
+      ctx.beginPath();
+      if (onX) { ctx.moveTo(m.x1, oy); ctx.lineTo(m.x2, oy); }
+      if (onY) { ctx.moveTo(ox, m.y2); ctx.lineTo(ox, m.y1); }
+      ctx.stroke();
+
+      if (onX) {
+        ctx.beginPath();
+        ctx.moveTo(m.x2, oy);
+        ctx.lineTo(m.x2 - head, oy - head * 0.45);
+        ctx.moveTo(m.x2, oy);
+        ctx.lineTo(m.x2 - head, oy + head * 0.45);
+        ctx.stroke();
+      }
+      if (onY) {
+        ctx.beginPath();
+        ctx.moveTo(ox, m.y1);
+        ctx.lineTo(ox - head * 0.45, m.y1 + head);
+        ctx.moveTo(ox, m.y1);
+        ctx.lineTo(ox + head * 0.45, m.y1 + head);
+        ctx.stroke();
+      }
+
+      /* Підписи осей ставимо через стільки поділок, скільки треба, щоб
+         числа не наповзали, — тим самим правилом, що й на числовій осі. */
+      if (it.nums !== 0) {
+        var everyX = 1;
+        while (m.kx * stepX * everyX < fsz * 2.4) everyX++;
+        var everyY = 1;
+        while (m.ky * stepY * everyY < fsz * 1.9) everyY++;
+
+        ctx.save();
+        ctx.globalAlpha = 0.85;
+        var labY = onX ? oy : m.y2;
+        for (k = Math.ceil(W.xa / stepX); k * stepX <= W.xb + 1e-9; k++) {
+          if (k % everyX || k === 0) continue;
+          gx = m.sx(k * stepX);
+          if (gx > m.x2 - head * 1.6) continue;
+          ctx.fillText(numLabel(k * stepX, stepX), gx, labY + fsz * 0.34);
+        }
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        var labX = onY ? ox : m.x1;
+        for (k = Math.ceil(W.ya / stepY); k * stepY <= W.yb + 1e-9; k++) {
+          if (k % everyY || k === 0) continue;
+          gy = m.sy(k * stepY);
+          if (gy < m.y1 + head * 1.6) continue;
+          ctx.fillText(numLabel(k * stepY, stepY), labX - fsz * 0.34, gy);
+        }
+        if (onX && onY) {
+          ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+          ctx.fillText('0', ox - fsz * 0.28, oy + fsz * 0.3);
+        }
+        ctx.restore();
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      }
+
+      // ---- графік
+      var col = it.gc || '#1358F5';
+      if (fn) {
+        ctx.save();
+        ctx.strokeStyle = col;
+        ctx.lineWidth = Math.max(2, (it.w || 2) * 1.15);
+        ctx.beginPath();
+        /* Понад дві сотні ланок крива вже не стає гладкішою, зате саме з
+           них складається те, що їде на сторінку учня: там площина
+           розкладається на окремі відрізки, і зайва тисяча — це зайва
+           тисяча рядків у знімку уроку. */
+        var steps = Math.max(120, Math.min(240, Math.round((m.x2 - m.x1) / 2)));
+        var drawing = false;
+        for (var q = 0; q <= steps; q++) {
+          var mxv = W.xa + (W.xb - W.xa) * q / steps;
+          var myv = fn(mxv);
+          if (isNaN(myv) || myv < W.ya - (W.yb - W.ya) || myv > W.yb + (W.yb - W.ya)) {
+            drawing = false; continue;      // розрив або далеко за вікном
+          }
+          var px = m.sx(mxv), py = m.sy(myv);
+          if (drawing) ctx.lineTo(px, py); else { ctx.moveTo(px, py); drawing = true; }
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // ---- точки, проєкції, січна, дотична
+      if (fn) drawPlanePoints(ctx, it, m, fn, fsz);
+
+      ctx.lineCap = wasCap; ctx.lineJoin = wasJoin;
       return;
     }
 
@@ -1415,6 +1737,27 @@
         { id: 'se', x: a[2], y: a[3] }, { id: 'sw', x: a[0], y: a[3] }
       ];
     }
+    /* У площини маркери двох сортів: кути змінюють розмір, а дві точки на
+       графіку — те, заради чого вона й потрібна. Тягнення точок іде тим
+       самим механізмом, що й тягнення кутів, тож нічого нового вчити не
+       треба: взявся й повів. */
+    if (it.t === 'f') {
+      var fa = it.a;
+      var hs = [
+        { id: 'nw', x: fa[0], y: fa[1] }, { id: 'ne', x: fa[2], y: fa[1] },
+        { id: 'se', x: fa[2], y: fa[3] }, { id: 'sw', x: fa[0], y: fa[3] }
+      ];
+      if (it.pts !== 0) {
+        var pm = planeMap(it), pf = planeFn(it);
+        if (pf) {
+          [['fx1', planeP1(it)], ['fx2', planeP2(it)]].forEach(function (p) {
+            var yv = pf(p[1]);
+            if (!isNaN(yv)) hs.push({ id: p[0], x: pm.sx(p[1]), y: pm.sy(yv) });
+          });
+        }
+      }
+      return hs;
+    }
     if (it.t === 'x') {
       // напис тягнеться за кути так само, як фігура — змінюється кегль
       var b = itemBounds(it);
@@ -1470,6 +1813,20 @@
 
   function resizeByHandle(it, id, wx, wy, free) {
     if (it.t === 'x') { resizeText(it, id, wx, wy); return; }
+
+    /* Точка ходить лише вздовж графіка: вертикаль задає сама функція.
+       Тому беремо з миші тільки x — інакше точка зʼїжджала б із кривої,
+       а це вже не та побудова. */
+    if (id === 'fx1' || id === 'fx2') {
+      var pm = planeMap(it);
+      var mv = pm.mx(wx);
+      var lim = (pm.win.xb - pm.win.xa) * 0.002;
+      mv = Math.max(pm.win.xa + lim, Math.min(pm.win.xb - lim, mv));
+      mv = Math.round(mv * 1000) / 1000;
+      if (id === 'fx1') it.p1 = mv; else it.p2 = mv;
+      return;
+    }
+
     if (id === 'p1') { it.a[0] = round(wx); it.a[1] = round(wy); return; }
     if (id === 'p2') { it.a[2] = round(wx); it.a[3] = round(wy); return; }
 
@@ -1605,6 +1962,15 @@
         fx: this.flipX ? 1 : 0,
         a: [round(w.x), round(w.y), round(w.x), round(w.y)]
       };
+      return;
+    }
+
+    if (this.tool === 'plane') {
+      this.snapshot();
+      this.draft = { t: 'f', id: uid('pl'), c: this.color, w: this.width,
+                     ex: 'x^2', xa: -3, xb: 5, ya: -2, yb: 8,
+                     p1: 0.5, p2: 2, sec: 1, tan: 0, hlab: 1, quot: 1,
+                     a: [round(w.x), round(w.y), round(w.x), round(w.y)] };
       return;
     }
 
@@ -1751,6 +2117,13 @@
       /* Вісь завжди горизонтальна: похилої числової осі не буває, а тягнути
          мишею рівно неможливо. Вирівнюємо в мить відпускання. */
       if (d.t === 'n') d.a[3] = d.a[1];
+      /* Площина, менша за долоню, — це не побудова, а пляма. Крихітну
+         розтягуємо до придатного розміру замість того, щоб викидати. */
+      if (d.t === 'f') {
+        if (Math.abs(d.a[2] - d.a[0]) < 120) d.a[2] = d.a[0] + 560;
+        if (Math.abs(d.a[3] - d.a[1]) < 90) d.a[3] = d.a[1] + 420;
+        keep = true;
+      }
       if (keep) {
         if (d.t === 'p' && this.smoothing) d.d = smoothStroke(d.d, d.w, this.smoothing);
         this.slide.items.push(ided(d));
@@ -2041,6 +2414,118 @@
 
   Board.classifyTriangle = classifyTriangle;
   Board.constructionPrims = function (it) { return prims.get(it) || null; };
+  /**
+   * Розкласти обʼєкт на прості лінії, кола й написи.
+   *
+   * Потрібно для сторінки учня: вона вміє лише кілька базових видів, і все
+   * складніше — числова вісь, координатна площина — до неї просто не
+   * доїжджало. Мовчки: обʼєкт їхав як є, а переглядач його не впізнавав.
+   *
+   * Замість того щоб писати друге малювання «для учня» (а потім щоразу
+   * памʼятати про обидва), підставляємо замість полотна записувач. Крізь
+   * нього проходить те саме малювання, тож учень бачить рівно те, що
+   * репетитор, — розійтися вони не можуть у принципі.
+   */
+  Board.bakePrimitives = function (it) {
+    var out = [];
+    var st = { stroke: it.c || '#17163A', fill: it.c || '#17163A',
+               lw: it.w || 2, font: '14px serif', align: 'left', base: 'alphabetic',
+               alpha: 1, dash: false };
+    var stack = [];
+    var path = [];          // масив підшляхів: [[x,y], [x,y], …]
+    var cur = null;
+
+    function fontSize() {
+      var m = /(\d+(?:\.\d+)?)px/.exec(st.font);
+      return m ? Number(m[1]) : 14;
+    }
+
+    var rec = {
+      set strokeStyle(v) { st.stroke = v; }, get strokeStyle() { return st.stroke; },
+      set fillStyle(v) { st.fill = v; },     get fillStyle() { return st.fill; },
+      set lineWidth(v) { st.lw = v; },       get lineWidth() { return st.lw; },
+      set font(v) { st.font = v; },          get font() { return st.font; },
+      set textAlign(v) { st.align = v; },    get textAlign() { return st.align; },
+      set textBaseline(v) { st.base = v; },  get textBaseline() { return st.base; },
+      set globalAlpha(v) { st.alpha = v; },  get globalAlpha() { return st.alpha; },
+      set lineCap(v) {}, get lineCap() { return 'butt'; },
+      set lineJoin(v) {}, get lineJoin() { return 'round'; },
+
+      save: function () { stack.push(JSON.parse(JSON.stringify(st))); },
+      restore: function () { var p = stack.pop(); if (p) st = p; },
+      setLineDash: function (a) { st.dash = !!(a && a.length); },
+      beginPath: function () { path = []; cur = null; },
+      closePath: function () { if (cur && cur.length > 2) cur.push(cur[0].slice()); },
+      moveTo: function (x, y) { cur = [[x, y]]; path.push(cur); },
+      lineTo: function (x, y) { if (!cur) { cur = [[x, y]]; path.push(cur); } else cur.push([x, y]); },
+      rect: function (x, y, w, h) {
+        path.push([[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]]);
+        cur = null;
+      },
+      arc: function (x, y, r) { path.push({ circle: [x, y, r] }); cur = null; },
+      ellipse: function (x, y, rx, ry) { path.push({ ell: [x, y, rx, ry] }); cur = null; },
+
+      stroke: function () {
+        path.forEach(function (sub) {
+          if (sub.circle) {
+            var c = sub.circle;
+            out.push({ t: 'e', c: st.stroke, w: st.lw, f: null,
+                       a: [c[0] - c[2], c[1] - c[2], c[0] + c[2], c[1] + c[2]] });
+            return;
+          }
+          if (sub.ell) {
+            var el = sub.ell;
+            out.push({ t: 'e', c: st.stroke, w: st.lw, f: null,
+                       a: [el[0] - el[2], el[1] - el[3], el[0] + el[2], el[1] + el[3]] });
+            return;
+          }
+          for (var i = 1; i < sub.length; i++) {
+            out.push({ t: 'l', c: st.stroke, w: st.lw,
+                       a: [sub[i - 1][0], sub[i - 1][1], sub[i][0], sub[i][1]] });
+          }
+        });
+      },
+
+      fill: function () {
+        path.forEach(function (sub) {
+          if (sub.circle) {
+            var c = sub.circle;
+            out.push({ t: 'e', c: st.fill, w: 1, f: st.fill,
+                       a: [c[0] - c[2], c[1] - c[2], c[0] + c[2], c[1] + c[2]] });
+          }
+        });
+      },
+
+      /* Ширину міряємо на справжньому полотні: без неї не перерахувати
+         вирівнювання по центру у вирівнювання ліворуч, яке лише й розуміє
+         сторінка учня. */
+      measureText: function (txt) {
+        var c = Board._measureCtx || (Board._measureCtx =
+          document.createElement('canvas').getContext('2d'));
+        c.font = st.font;
+        return c.measureText(txt);
+      },
+
+      fillText: function (txt, x, y) {
+        var fs = fontSize();
+        var w = rec.measureText(txt).width;
+        var px = x;
+        if (st.align === 'center') px = x - w / 2;
+        else if (st.align === 'right') px = x - w;
+        var py = y;
+        if (st.base === 'top') py = y + fs * 0.82;
+        else if (st.base === 'middle') py = y + fs * 0.34;
+        out.push({ t: 'x', c: st.fill, v: String(txt), s: fs, p: [px, py] });
+      },
+
+      fillRect: function () {}, clearRect: function () {},
+      translate: function () {}, scale: function () {}, rotate: function () {}
+    };
+
+    try { drawItemBody(rec, it, 1); } catch (e) { return []; }
+    return out;
+  };
+
   Board.smoothStroke = smoothStroke;
   /* Потрібна діалогу осі: підказка має показувати той самий дріб, що
      й малюнок, а не власне наближення. */

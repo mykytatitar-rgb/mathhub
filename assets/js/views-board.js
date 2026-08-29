@@ -21,6 +21,7 @@
     { id: 'line',    icon: 'shapeLine',  label: 'Лінія (L)',      opts: 'stroke' },
     { id: 'arrow',   icon: 'arrowRight', label: 'Стрілка (A)',    opts: 'stroke' },
     { id: 'numline', icon: 'ruler',      label: 'Числова вісь (N)', opts: 'stroke' },
+    { id: 'plane',   icon: 'axes',       label: 'Координатна площина (K)', opts: 'stroke' },
     { id: 'hand',    icon: 'hand',       label: 'Рука — рух по полотну (H)' }
   ];
 
@@ -1938,6 +1939,11 @@
           '" data-act="board-toggle-measures" title="Показати або сховати розміри">' +
           icon('checklist', 16) + '</button>' +
         '<span class="sel-bar__sep"></span>';
+    } else if (n === 1 && e.selection[0].t === 'f') {
+      extra =
+        '<button class="sel-bar__btn" data-act="board-plane" title="Формула, вікно, що показувати">' +
+          icon('target', 16) + '</button>' +
+        '<span class="sel-bar__sep"></span>';
     } else if (n === 1 && e.selection[0].t === 'n') {
       extra =
         '<button class="sel-bar__btn" data-act="board-numline" title="Діапазон і крок осі">' +
@@ -2195,7 +2201,7 @@
     if (e.altKey) return;
 
     var map = { v: 'select', p: 'pen', e: 'eraser', t: 'text', s: 'shape',
-                l: 'line', a: 'arrow', n: 'numline', h: 'hand' };
+                l: 'line', a: 'arrow', n: 'numline', k: 'plane', h: 'hand' };
     var kk = e.key.toLowerCase();
     if (map[kk]) { e.preventDefault(); setTool(map[kk]); return; }
     if (kk === 'r') { e.preventDefault(); eng.setShape('rect'); renderOpts(); return; }
@@ -2362,6 +2368,99 @@
       U.esc(sample.join(', ')) + U.esc(tail);
   }
 
+  /**
+   * Налаштування координатної площини.
+   *
+   * Формула перевіряється просто під час набирання: порожній графік без
+   * пояснення — найгірше, що може статися, бо не видно, чи справа в формулі,
+   * чи у вікні.
+   */
+  function planeDialog(it) {
+    function chk(name, on, label) {
+      return '<label class="check"><input type="checkbox" name="' + name + '"' +
+        (on ? ' checked' : '') + '><span>' + label + '</span></label>';
+    }
+
+    C.modal({
+      title: 'Координатна площина',
+      sub: 'формула, вікно й що показувати',
+      wide: true,
+      body:
+        C.field('Формула f(x)', C.input('ex', it.ex || 'x^2', 'inputmode="text"'),
+          'Можна писати як звично: x^2-3x+1, 2sin(x), sqrt(x), 1/x') +
+        '<div data-plane-check style="margin:-4px 0 14px;line-height:1.5"></div>' +
+
+        '<div class="board-opts__label" style="margin:6px 0 8px">Вікно</div>' +
+        '<div class="field-row field-row--4">' +
+          C.field('x від', C.input('xa', it.xa, 'inputmode="text"')) +
+          C.field('x до', C.input('xb', it.xb, 'inputmode="text"')) +
+          C.field('y від', C.input('ya', it.ya, 'inputmode="text"')) +
+          C.field('y до', C.input('yb', it.yb, 'inputmode="text"')) +
+        '</div>' +
+
+        '<div class="board-opts__label" style="margin:6px 0 8px">Точки на графіку</div>' +
+        '<div class="field-row field-row--3">' +
+          C.field('x₁', C.input('p1', it.p1, 'inputmode="text"')) +
+          C.field('x₂', C.input('p2', it.p2, 'inputmode="text"')) +
+          C.field('', '<div class="field__hint" style="padding-top:9px">Точки ' +
+            'можна просто тягнути мишею на самій площині.</div>') +
+        '</div>' +
+
+        '<div class="board-opts__label" style="margin:6px 0 8px">Показувати</div>' +
+        '<div class="check-row">' +
+          chk('grid', it.grid !== 0, 'Сітку') +
+          chk('nums', it.nums !== 0, 'Числа на осях') +
+          chk('pts', it.pts !== 0, 'Точки й проєкції') +
+          chk('hlab', it.hlab !== 0, 'Приріст h') +
+          chk('sec', !!it.sec, 'Січну через дві точки') +
+          chk('tan', !!it.tan, 'Дотичну в x₁') +
+          chk('quot', !!it.quot, 'Різницеве відношення') +
+        '</div>',
+      onMount: function (root) {
+        var box = root.querySelector('[data-plane-check]');
+        function refresh() {
+          var v = C.readForm(root);
+          var r = window.Plot ? Plot.compile(v.ex) : { err: 'Модуль формул не завантажився' };
+          box.innerHTML = r.err
+            ? '<span style="color:var(--red)">' + U.esc(r.err) + '</span>'
+            : '<span class="muted">Формула читається: f(1) = ' +
+              U.esc(String(Math.round(r.f(1) * 1000) / 1000)) + ', f(2) = ' +
+              U.esc(String(Math.round(r.f(2) * 1000) / 1000)) + '</span>';
+        }
+        var inp = root.querySelector('[name="ex"]');
+        inp.addEventListener('input', refresh);
+        refresh();
+      },
+      buttons: [
+        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+        { label: 'Застосувати', kind: 'btn--primary', act: 'save', icon: 'check',
+          onClick: function (root) {
+            var v = C.readForm(root);
+            var r = window.Plot ? Plot.compile(v.ex) : { err: 'Модуль формул не завантажився' };
+            if (r.err) { U.toast(r.err, 'err'); return false; }
+
+            var xa = numValue(v.xa), xb = numValue(v.xb);
+            var ya = numValue(v.ya), yb = numValue(v.yb);
+            if (!(xb > xa)) { U.toast('По x: «до» має бути більше за «від»', 'err'); return false; }
+            if (!(yb > ya)) { U.toast('По y: «до» має бути більше за «від»', 'err'); return false; }
+
+            var p1 = numValue(v.p1), p2 = numValue(v.p2);
+            if (isNaN(p1) || isNaN(p2)) { U.toast('x₁ і x₂ мають бути числами', 'err'); return false; }
+
+            cur.engine.snapshot();
+            it.ex = String(v.ex).trim();
+            it.xa = xa; it.xb = xb; it.ya = ya; it.yb = yb;
+            it.p1 = Math.max(xa, Math.min(xb, p1));
+            it.p2 = Math.max(xa, Math.min(xb, p2));
+            ['grid', 'nums', 'pts', 'hlab', 'sec', 'tan', 'quot'].forEach(function (k) {
+              it[k] = v[k] ? 1 : 0;
+            });
+            cur.engine.changed();
+          } }
+      ]
+    });
+  }
+
   function numlineDialog(it) {
     C.modal({
       title: 'Числова вісь',
@@ -2441,6 +2540,10 @@
         flushSave();
         U.toast('Цей вигляд слайда стане початковим', 'ok');
       }
+    },
+    'board-plane': function () {
+      var it = cur && cur.engine.selection[0];
+      if (it && it.t === 'f') planeDialog(it);
     },
     'board-numline': function () {
       var it = cur && cur.engine.selection[0];
@@ -3498,12 +3601,21 @@
         return;
       }
       var baked = bakeItem(it);
-      if (baked) out.push(baked);
+      if (!baked) return;
+      // складний обʼєкт розкладається на кілька простих
+      if (Array.isArray(baked)) out.push.apply(out, baked); else out.push(baked);
     });
     return out;
   }
 
   function bakeItem(it) {
+    /* Числова вісь і координатна площина — складніші за все, що вміє
+       сторінка учня, тож розкладаємо їх на прості лінії й написи. Доти вони
+       їхали до учня як є й не малювалися взагалі. */
+    if (it.t === 'n' || it.t === 'f') {
+      var parts = window.Board.bakePrimitives ? window.Board.bakePrimitives(it) : [];
+      return parts.length ? parts : null;
+    }
     if (it.t !== 'g') return it;
     var sh = window.Board.SHAPES[it.sh];
     if (!sh) return null;

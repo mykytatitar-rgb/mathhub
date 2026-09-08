@@ -1,0 +1,20 @@
+{
+  "name": "Hola — іспанська з нуля",
+  "short_name": "Hola",
+  "description": "Вивчення іспанської мови з нуля: флешкарти, озвучка і тести.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#efe9e2",
+  "theme_color": "#e2481c",
+  "lang": "uk",
+  "icons": [
+    {
+      "src": "assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -149,6 +149,16 @@ const EMOJI = {
 };
 function emojiFor(ua){ const k = String(ua||'').toLowerCase().split(/[,(/…]/)[0].trim(); return EMOJI[k] || ''; }
 
+/* службові слова, які вважаємо «безкоштовними» для допуску речень */
+const GLUE = new Set(['el','la','los','las','un','una','unos','unas','mi','tu','su','mis','tus','sus','de','del','y','o','a','con']);
+function wordsOf(str){ return String(str||'').split(/\s+/).map(w=>w.replace(/[¿¡?!.,;:()"«»]/g,'').toLowerCase()).filter(Boolean); }
+function lessonVocab(l){
+  const s=new Set();
+  (l.cards||[]).forEach(c=> wordsOf(c.en).forEach(w=>s.add(w)));
+  (l.verbs||[]).forEach(v=>{ wordsOf(v.inf).forEach(w=>s.add(w)); (v.tenses?v.tenses.reduce((a,t)=>a.concat(t.rows),[]):(v.forms||[])).forEach(f=> wordsOf(f.f).forEach(w=>s.add(w))); });
+  return s;
+}
+
 /* ---------- екран: рівні й уроки ---------- */
 function renderHome(){
   const known = totalKnown(), total = totalCards();
@@ -337,7 +347,7 @@ function renderLesson(id){
       </div>
       <div class="tabs">
         <button data-m="study" class="${mode==='study'?'active':''}">📖 Слова</button>
-        <button data-m="build" class="${mode==='build'?'active':''}">🧩 Речення</button>
+        <button data-m="build" class="${mode==='build'?'active':''}">🃏 Речення</button>
         <button data-m="quiz"  class="${mode==='quiz'?'active':''}">🎯 Тест</button>
       </div>
       <div id="content">${inner}</div>`;
@@ -451,120 +461,45 @@ function renderLesson(id){
     draw();
   }
 
-  /* --- режим «Речення»: збери речення з плиток --- */
+  /* --- режим «Речення»: флешкартка з фонду вивчених слів --- */
   function build(){
-    const items = lesson.sentences || [];
-    if(!items.length){ root.querySelector('#content').innerHTML = `<div class="done-card"><p>Тут поки немає речень.</p></div>`; return; }
-    let sentMode = 'assemble'; // assemble | card
-    const body = ()=>root.querySelector('#sentbody');
-
-    function decoyPool(){
-      const pool = {};
-      items.forEach(x=> x.en.split(' ').forEach(w=> { if(/^[^\s]{1,}$/.test(w)) pool[w]=1; }));
-      lesson.cards.forEach(c=> c.en.split(' ').forEach(w=> { if(/^[A-Za-zÀ-ÿñÑ¿¡]{2,}[.,!?]?$/.test(w)) pool[w]=1; }));
-      return Object.keys(pool);
+    const c = ()=>root.querySelector('#content');
+    const idx = LESSONS.indexOf(lesson);
+    const vocab = new Set();
+    for(let k=0;k<=idx;k++) lessonVocab(LESSONS[k]).forEach(w=>vocab.add(w));
+    const known = w => !w || vocab.has(w) || GLUE.has(w) || /^[0-9]+$/.test(w);
+    const seen = new Set(); const items = [];
+    for(let k=0;k<=idx;k++) (LESSONS[k].sentences||[]).forEach(sn=>{
+      if(!seen.has(sn.en) && wordsOf(sn.en).every(known)){ seen.add(sn.en); items.push(sn); }
+    });
+    if(!items.length){
+      c().innerHTML = `<div class="done-card"><div class="score">📚</div>
+        <p>Речень із вивчених слів ще нема.<br>Пройди більше слів у застосунку — і тут зʼявиться практика речень лише зі знайомих слів.</p></div>`;
+      return;
     }
-
-    function frameSent(){
-      root.querySelector('#content').innerHTML = `
-        <div class="subtabs">
-          <button data-s="assemble" class="${sentMode==='assemble'?'active':''}">🧩 Збери</button>
-          <button data-s="card" class="${sentMode==='card'?'active':''}">🃏 Картка</button>
-        </div>
-        <div id="sentbody"></div>`;
-      root.querySelectorAll('.subtabs button').forEach(b=>{ b.onclick=()=>{ sentMode=b.dataset.s; frameSent(); }; });
-      (sentMode==='assemble' ? assemble : cards)();
+    let i = 0;
+    function draw(reveal){
+      const sn = items[i];
+      c().innerHTML = `
+        <div class="counter">${i+1} / ${items.length} · речення зі знайомих слів</div>
+        <div class="stage">
+          <button class="card sentence flipcard" id="flip">
+            <div class="tag">РЕЧЕННЯ</div>
+            <div class="ua">${esc(sn.ua)}</div>
+            ${reveal ? `<div class="en">${esc(sn.en)}</div><div class="tr">${trHTML(sn.tr)}</div><span class="speak" id="say">🔊 Послухати</span>`
+                     : `<div class="flip-hint">тапни, щоб побачити переклад 👆</div>`}
+          </button>
+          <div class="controls">
+            <button class="btn-nav" id="prev">← Назад</button>
+            <button class="btn-nav" id="next">Далі →</button>
+          </div>
+        </div>`;
+      c().querySelector('#flip').onclick = (e)=>{ if(e.target && e.target.id==='say'){ speak(sn.en); return; } if(!reveal){ draw(true); speak(sn.en); bumpDaily(); } };
+      const go = d => { i=(i+d+items.length)%items.length; draw(false); };
+      c().querySelector('#prev').onclick = ()=>go(-1);
+      c().querySelector('#next').onclick = ()=>go(1);
     }
-
-    /* --- підрежим «Збери»: плитки + зайві слова-обманки --- */
-    function assemble(){
-      let i = 0;
-      function draw(){
-        if(i>=items.length){ finish(); return; }
-        const s = items[i];
-        const tokens = s.en.split(' ').map((w,idx)=>({w, idx}));
-        const wordSet = new Set(tokens.map(t=>t.w.toLowerCase()));
-        const cand = shuffle(decoyPool().filter(w=> !wordSet.has(w.toLowerCase())));
-        const nDecoy = tokens.length>=6 ? 3 : 2;
-        const decoys = cand.slice(0,nDecoy).map(w=>({w, decoy:true}));
-        const bank = shuffle(tokens.concat(decoys));
-        let answer = [];
-        function render(){
-          const done = answer.length === tokens.length;
-          body().innerHTML = `
-            <div class="counter">Речення ${i+1} / ${items.length}</div>
-            <div class="build-q">
-              <div class="prompt">Збери іспанське речення (є зайві слова!):</div>
-              <div class="build-ua">${esc(s.ua)}</div>
-              <div class="answer" id="answer">
-                ${answer.length ? answer.map((t,k)=>`<button class="tile placed" data-k="${k}">${esc(t.w)}</button>`).join('')
-                                : '<span class="ans-empty">тапай слова нижче…</span>'}
-              </div>
-              <div class="bank" id="bank">
-                ${bank.map((t,k)=>`<button class="tile" data-b="${k}" ${answer.indexOf(t)>-1?'disabled':''}>${esc(t.w)}</button>`).join('')}
-              </div>
-              <div class="controls">
-                <button class="btn-nav" id="clear">Очистити</button>
-                <button class="btn-know" id="check" ${done?'':'disabled'}>Перевірити</button>
-              </div>
-              <div id="fb" class="build-fb"></div>
-            </div>`;
-          body().querySelectorAll('#bank .tile').forEach(b=>{ if(!b.disabled) b.onclick=()=>{ answer.push(bank[b.dataset.b]); render(); }; });
-          body().querySelectorAll('#answer .tile.placed').forEach(b=>{ b.onclick=()=>{ answer.splice(+b.dataset.k,1); render(); }; });
-          body().querySelector('#clear').onclick=()=>{ answer=[]; render(); };
-          const chk = body().querySelector('#check'); if(!chk.disabled) chk.onclick=check;
-        }
-        function check(){
-          const got = answer.map(t=>t.w).join(' ');
-          const fb = body().querySelector('#fb');
-          if(got === s.en){
-            fb.innerHTML = `<div class="fb-ok">✓ Правильно! <span class="fb-tr">${trHTML(s.tr)}</span></div>`;
-            body().querySelectorAll('.tile').forEach(x=>x.disabled=true);
-            markKnown(lesson.id, '§'+s.en, true); bumpDaily(); speak(s.en);
-            setTimeout(()=>{ i++; draw(); }, 1400);
-          } else {
-            fb.innerHTML = `<div class="fb-no">Ще ні — прибери зайве і перевір порядок 🔁</div>`;
-          }
-        }
-        render();
-      }
-      function finish(){
-        body().innerHTML = `<div class="done-card"><div class="score">🧩</div>
-          <p>Усі речення зібрано! Це найкраща практика граматики.</p>
-          <button class="primary" id="again">Ще раз</button></div>`;
-        body().querySelector('#again').onclick=()=>assemble();
-      }
-      draw();
-    }
-
-    /* --- підрежим «Картка»: укр → тап → переклад --- */
-    function cards(){
-      let i = 0;
-      function draw(reveal){
-        const s = items[i];
-        body().innerHTML = `
-          <div class="counter">${i+1} / ${items.length}</div>
-          <div class="stage">
-            <button class="card sentence flipcard" id="flip">
-              <div class="tag">РЕЧЕННЯ</div>
-              <div class="ua">${esc(s.ua)}</div>
-              ${reveal ? `<div class="en">${esc(s.en)}</div><div class="tr">${trHTML(s.tr)}</div><span class="speak" id="say">🔊 Послухати</span>`
-                       : `<div class="flip-hint">тапни, щоб побачити переклад 👆</div>`}
-            </button>
-            <div class="controls">
-              <button class="btn-nav" id="prev">← Назад</button>
-              <button class="btn-nav" id="next">Далі →</button>
-            </div>
-          </div>`;
-        body().querySelector('#flip').onclick = (e)=>{ if(e.target && e.target.id==='say'){ speak(s.en); return; } if(!reveal){ draw(true); speak(s.en); } };
-        const go = d => { i=(i+d+items.length)%items.length; draw(false); };
-        body().querySelector('#prev').onclick = ()=>go(-1);
-        body().querySelector('#next').onclick = ()=>go(1);
-      }
-      draw(false);
-    }
-
-    frameSent();
+    draw(false);
   }
 
   /* --- режим «Тест»: вибір із варіантів --- */

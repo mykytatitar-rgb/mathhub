@@ -218,4 +218,21 @@ button.stat.goal:active{transform:scale(.97)}
 .review-banner .rb-badge{flex:none;min-width:30px;height:30px;padding:0 9px;border-radius:99px;
   background:var(--pink);color:#fff;font-weight:800;font-size:14px;display:grid;place-items:center}
 
+/* ---- vocabulary ---- */
+.vfilters{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.vrow{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+.vchip{flex:none;border:1px solid var(--line);background:#fff;border-radius:99px;padding:7px 12px;
+  font-weight:700;font-size:13px;color:var(--muted);cursor:pointer;white-space:nowrap}
+.vchip.active{background:var(--pink);color:#fff;border-color:transparent}
+.vrowitem{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:#fff;
+  border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:8px;cursor:pointer;font-family:inherit}
+.vrowitem:active{transform:scale(.99)}
+.vnum{flex:none;min-width:24px;color:var(--muted);font-weight:800;font-size:12px;font-variant-numeric:tabular-nums;text-align:right}
+.vemoji{flex:none;font-size:22px;width:26px;text-align:center}
+.vmain{flex:1;min-width:0;display:flex;flex-direction:column}
+.vmain .ven{font-weight:800;color:var(--pink);font-size:16px}
+.vmain .vua{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vlvl{flex:none;font-size:11px;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--pink),#7b3ff2);border-radius:8px;padding:3px 7px}
+.vpos{flex:none;font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:3px 7px}
+
 .hint{font-size:12px;color:var(--muted);text-align:center;margin-top:8px}

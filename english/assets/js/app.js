@@ -154,6 +154,18 @@ const EMOJI = {
 };
 function emojiFor(ua){ const k = String(ua||'').toLowerCase().split(/[,(/…]/)[0].trim(); return EMOJI[k] || ''; }
 
+/* частина мови за уроком (домінантна) */
+const POS_BY_ID = {
+  1:'займенник',2:'займенник',3:'числівник',4:'числівник',5:'вираз',6:'займенник',
+  7:'дієслово',8:'дієслово',9:'іменник',10:'прикметник',11:'іменник',12:'іменник',13:'іменник',14:'іменник',15:'іменник',
+  16:'іменник',17:'іменник',18:'іменник',19:'іменник',20:'іменник',21:'іменник',22:'іменник',23:'прикметник',24:'прийменник',
+  25:'іменник',26:'іменник',27:'іменник',28:'дієслово',29:'прикметник',30:'дієслово',31:'іменник',
+  32:'вираз',33:'іменник',34:'іменник',35:'вираз',36:'іменник',
+  37:'іменник',38:'іменник',39:'іменник',40:'іменник',41:'іменник',42:'іменник',43:'дієслово',44:'прислівник',45:'іменник',46:'іменник',
+  47:'дієслово',48:'дієслово',
+};
+function posOf(lesson){ return POS_BY_ID[lesson.id] || 'слово'; }
+
 /* службові слова, які вважаємо «безкоштовними» для допуску речень */
 const GLUE = new Set(['a','an','the','my','your','his','her','our','their','and','or','to']);
 function wordsOf(str){ return String(str||'').split(/\s+/).map(w=>w.replace(/[¿¡?!.,;:()"«»]/g,'').toLowerCase()).filter(Boolean); }
@@ -201,6 +213,10 @@ function renderHome(){
         <small>${due ? due+' слів чекають' : 'на повторенні '+tot+' слів'}</small></div>
       <div class="rb-badge">${due || '✓'}</div></div>`;
   })();
+  const vocabBanner = `<div class="review-banner" id="vocabBanner">
+      <div class="rb-ico">📖</div>
+      <div class="rb-meta"><div class="rb-title">Словник</div><small>усі вивчені слова, з фільтрами</small></div>
+      <div class="rb-badge">${totalKnown()}</div></div>`;
 
   const offsets = [0,44,66,44,0,-44,-66,-44]; let gi = 0;
   const mapHtml = `<div class="road">` + LEVELS.map(lv=>{
@@ -267,6 +283,7 @@ function renderHome(){
       </div>
     </div>
     ${reviewBanner}
+    ${vocabBanner}
     <div class="viewtoggle">
       <button data-v="map" class="${view==='map'?'active':''}">🗺️ Мапа</button>
       <button data-v="list" class="${view==='list'?'active':''}">☰ Список</button>
@@ -276,6 +293,7 @@ function renderHome(){
   `;
   root.querySelectorAll('.road-node, .lesson-card').forEach(el=>{ el.onclick = ()=>{ location.hash = '#/lesson/'+el.dataset.id; }; });
   const rb = root.querySelector('#reviewBanner'); if(rb) rb.onclick = ()=>{ location.hash = '#/review'; };
+  const vb = root.querySelector('#vocabBanner'); if(vb) vb.onclick = ()=>{ location.hash = '#/vocab'; };
   root.querySelectorAll('.viewtoggle button').forEach(b=>{ b.onclick=()=>{ try{ localStorage.setItem('anglo.homeview', b.dataset.v); }catch(e){} renderHome(); }; });
   const gtile = root.querySelector('#goalTile'); if(gtile) gtile.onclick = ()=>{ cycleGoal(); renderHome(); };
   root.querySelector('#reset').onclick = ()=>{ if(confirm('Скинути весь прогрес?')){ progress={}; saveProgress(progress); review={}; saveReview(review); renderHome(); } };
@@ -350,6 +368,53 @@ function renderReview(){
     root.querySelector('#go').onclick=()=>location.hash='#/';
   }
   draw();
+}
+
+/* ---------- екран: словник ---------- */
+function renderVocab(){
+  const words = []; const seen = new Set();
+  LESSONS.forEach(l=>{ const set = progress[l.id]||{}; l.cards.forEach(c=>{
+    if(set[c.en] && !seen.has(c.en)){ seen.add(c.en); words.push({ en:c.en, ua:c.ua, tr:c.tr, level:l.level, pos:posOf(l), emoji:emojiFor(c.ua) }); }
+  }); });
+  const levels = ['','A0','A1','A2','B1','B2'];
+  const posOrder = ['іменник','дієслово','прикметник','займенник','числівник','прислівник','прийменник','вираз'];
+  const present = new Set(words.map(w=>w.pos));
+  const posList = [''].concat(posOrder.filter(p=>present.has(p)));
+  let fLevel = '', fPos = '';
+  root.innerHTML = `
+    <div class="topbar">
+      <button class="backbtn" id="back">← Головна</button>
+      <div class="spacer"></div>
+      <div class="brand" style="font-size:14px">📖 Словник</div>
+      <div class="spacer"></div>
+      <button class="iconbtn" id="speed">${RATES[rateIdx()].e}</button>
+    </div>
+    <div class="hero" style="padding:12px 16px"><div class="lbl" id="vcount"></div></div>
+    <div class="vfilters">
+      <div class="vrow" id="flevels">${levels.map(lv=>`<button data-l="${lv}" class="vchip ${lv===''?'active':''}">${lv||'Усі рівні'}</button>`).join('')}</div>
+      <div class="vrow" id="fpos">${posList.map(p=>`<button data-p="${p}" class="vchip ${p===''?'active':''}">${p||'Усі частини'}</button>`).join('')}</div>
+    </div>
+    <div id="vocablist"></div>`;
+  root.querySelector('#back').onclick=()=>location.hash='#/';
+  root.querySelector('#speed').onclick=()=>{ setRateIdx((rateIdx()+1)%RATES.length); root.querySelector('#speed').textContent=RATES[rateIdx()].e; };
+  function render(){
+    const list = words.filter(w=> (!fLevel||w.level===fLevel) && (!fPos||w.pos===fPos));
+    root.querySelector('#vcount').textContent = `Вивчено слів: ${words.length}` + ((fLevel||fPos)?` · показано: ${list.length}`:'');
+    const el = root.querySelector('#vocablist');
+    if(!words.length){ el.innerHTML=`<div class="done-card"><div class="score">📖</div><p>Ще нема вивчених слів. Познач слова «✓ Знаю» у розділі Слова — і вони зʼявляться тут.</p></div>`; return; }
+    if(!list.length){ el.innerHTML=`<div class="done-card"><p>За цим фільтром слів нема.</p></div>`; return; }
+    el.innerHTML = list.map((w,i)=>`<button class="vrowitem" data-en="${esc(w.en)}">
+      <span class="vnum">${i+1}</span>
+      <span class="vemoji">${w.emoji||'•'}</span>
+      <span class="vmain"><span class="ven">${esc(w.en)}</span><span class="vua">${esc(w.ua)} · ${trHTML(w.tr)}</span></span>
+      <span class="vlvl">${w.level}</span>
+      <span class="vpos">${esc(w.pos)}</span>
+    </button>`).join('');
+    el.querySelectorAll('.vrowitem').forEach(b=> b.onclick=()=>speak(b.dataset.en));
+  }
+  root.querySelectorAll('#flevels .vchip').forEach(b=> b.onclick=()=>{ fLevel=b.dataset.l; root.querySelectorAll('#flevels .vchip').forEach(x=>x.classList.toggle('active',x===b)); render(); });
+  root.querySelectorAll('#fpos .vchip').forEach(b=> b.onclick=()=>{ fPos=b.dataset.p; root.querySelectorAll('#fpos .vchip').forEach(x=>x.classList.toggle('active',x===b)); render(); });
+  render();
 }
 
 /* ---------- екран: урок ---------- */
@@ -586,6 +651,7 @@ function route(){
   const m = h.match(/^#\/lesson\/(\d+)/);
   if(m) renderLesson(parseInt(m[1],10));
   else if(h.indexOf('#/review')===0) renderReview();
+  else if(h.indexOf('#/vocab')===0) renderVocab();
   else renderHome();
   window.scrollTo(0,0);
 }

@@ -901,4 +901,60 @@ const LESSONS = [
       { en: '¿Cuál es la respuesta?', ua: 'Яка відповідь?',      tr: 'ку[а]ль ес ла респу[е]ста' },
     ],
   },
+  {
+    id: 47, level: 'A1', icon: '🔀', title: 'Спряження: теперішній час', subtitle: 'Усі форми дієслова', type: 'verbs',
+    grammar: 'Теперішній час за закінченням: <b>-ar</b> (-o, -as, -a, -amos, -áis, -an); <b>-er</b> (-o, -es, -e, -emos, -éis, -en); <b>-ir</b> (-o, -es, -e, -imos, -ís, -en). Неправильні (ser, tener, ir) вчимо окремо.',
+    verbs: [
+      { inf:'hablar', ua:'говорити (-ar)', tr:'абл[а]р', forms:[
+        {p:'yo', f:'hablo', tr:'[а]бло'},{p:'tú', f:'hablas', tr:'[а]блас'},{p:'él / ella', f:'habla', tr:'[а]бла'},{p:'nosotros', f:'hablamos', tr:'абл[а]мос'},{p:'vosotros', f:'habláis', tr:'абл[а]йс'},{p:'ellos', f:'hablan', tr:'[а]блан'} ]},
+      { inf:'comer', ua:'їсти (-er)', tr:'ком[е]р', forms:[
+        {p:'yo', f:'como', tr:'к[о]мо'},{p:'tú', f:'comes', tr:'к[о]мес'},{p:'él / ella', f:'come', tr:'к[о]ме'},{p:'nosotros', f:'comemos', tr:'ком[е]мос'},{p:'vosotros', f:'coméis', tr:'ком[е]йс'},{p:'ellos', f:'comen', tr:'к[о]мен'} ]},
+      { inf:'vivir', ua:'жити (-ir)', tr:'біб[і]р', forms:[
+        {p:'yo', f:'vivo', tr:'б[і]бо'},{p:'tú', f:'vives', tr:'б[і]бес'},{p:'él / ella', f:'vive', tr:'б[і]бе'},{p:'nosotros', f:'vivimos', tr:'біб[і]мос'},{p:'vosotros', f:'vivís', tr:'біб[і]с'},{p:'ellos', f:'viven', tr:'б[і]бен'} ]},
+      { inf:'ser', ua:'бути (неправ.)', tr:'сер', forms:[
+        {p:'yo', f:'soy', tr:'с[о]й'},{p:'tú', f:'eres', tr:'[е]рес'},{p:'él / ella', f:'es', tr:'ес'},{p:'nosotros', f:'somos', tr:'с[о]мос'},{p:'vosotros', f:'sois', tr:'с[о]йс'},{p:'ellos', f:'son', tr:'сон'} ]},
+      { inf:'tener', ua:'мати (неправ.)', tr:'тен[е]р', forms:[
+        {p:'yo', f:'tengo', tr:'т[е]нго'},{p:'tú', f:'tienes', tr:'ть[е]нес'},{p:'él / ella', f:'tiene', tr:'ть[е]не'},{p:'nosotros', f:'tenemos', tr:'тен[е]мос'},{p:'vosotros', f:'tenéis', tr:'тен[е]йс'},{p:'ellos', f:'tienen', tr:'ть[е]нен'} ]},
+      { inf:'ir', ua:'йти (неправ.)', tr:'ір', forms:[
+        {p:'yo', f:'voy', tr:'бой'},{p:'tú', f:'vas', tr:'бас'},{p:'él / ella', f:'va', tr:'ба'},{p:'nosotros', f:'vamos', tr:'б[а]мос'},{p:'vosotros', f:'vais', tr:'байс'},{p:'ellos', f:'van', tr:'бан'} ]},
+    ],
+    cards: [
+      { en:'hablar', ua:'говорити', tr:'абл[а]р' },
+      { en:'comer',  ua:'їсти',     tr:'ком[е]р' },
+      { en:'vivir',  ua:'жити',     tr:'біб[і]р' },
+      { en:'ser',    ua:'бути',     tr:'сер' },
+      { en:'tener',  ua:'мати',     tr:'тен[е]р' },
+      { en:'ir',     ua:'йти',      tr:'ір' },
+    ],
+    sentences: [
+      { en:'Yo hablo español.',     ua:'Я говорю іспанською.', tr:'йо [а]бло еспань[о]ль' },
+      { en:'Ella tiene un gato.',   ua:'У неї є кіт.',         tr:'[е]йя ть[е]не ун г[а]то' },
+      { en:'Nosotros vamos a casa.', ua:'Ми йдемо додому.',    tr:'нос[о]трос б[а]мос а к[а]са' },
+    ],
+  },
+  {
+    id: 48, level: 'B1', icon: '⏳', title: 'Спряження: минулий час', subtitle: 'Pretérito indefinido', type: 'verbs',
+    grammar: 'Минулий (pretérito): <b>-ar</b> → (-é, -aste, -ó, -amos, -asteis, -aron); <b>-er/-ir</b> → (-í, -iste, -ió, -imos, -isteis, -ieron). Неправильні: ser/ir → <b>fui…</b>, tener → <b>tuve…</b>',
+    verbs: [
+      { inf:'hablar', ua:'говорити (-ar)', tr:'абл[а]р', forms:[
+        {p:'yo', f:'hablé', tr:'абл[е]'},{p:'tú', f:'hablaste', tr:'абл[а]сте'},{p:'él / ella', f:'habló', tr:'абл[о]'},{p:'nosotros', f:'hablamos', tr:'абл[а]мос'},{p:'vosotros', f:'hablasteis', tr:'абласт[е]йс'},{p:'ellos', f:'hablaron', tr:'абл[а]рон'} ]},
+      { inf:'comer', ua:'їсти (-er)', tr:'ком[е]р', forms:[
+        {p:'yo', f:'comí', tr:'ком[і]'},{p:'tú', f:'comiste', tr:'ком[і]сте'},{p:'él / ella', f:'comió', tr:'комь[о]'},{p:'nosotros', f:'comimos', tr:'ком[і]мос'},{p:'vosotros', f:'comisteis', tr:'коміст[е]йс'},{p:'ellos', f:'comieron', tr:'комь[е]рон'} ]},
+      { inf:'ir / ser', ua:'йти / бути (неправ.)', tr:'ір, сер', forms:[
+        {p:'yo', f:'fui', tr:'фу[і]'},{p:'tú', f:'fuiste', tr:'фу[і]сте'},{p:'él / ella', f:'fue', tr:'фу[е]'},{p:'nosotros', f:'fuimos', tr:'фу[і]мос'},{p:'vosotros', f:'fuisteis', tr:'фу[і]стейс'},{p:'ellos', f:'fueron', tr:'фу[е]рон'} ]},
+      { inf:'tener', ua:'мати (неправ.)', tr:'тен[е]р', forms:[
+        {p:'yo', f:'tuve', tr:'т[у]бе'},{p:'tú', f:'tuviste', tr:'туб[і]сте'},{p:'él / ella', f:'tuvo', tr:'т[у]бо'},{p:'nosotros', f:'tuvimos', tr:'туб[і]мос'},{p:'vosotros', f:'tuvisteis', tr:'тубіст[е]йс'},{p:'ellos', f:'tuvieron', tr:'тубь[е]рон'} ]},
+    ],
+    cards: [
+      { en:'hablar', ua:'говорити (hablé)', tr:'абл[а]р' },
+      { en:'comer',  ua:'їсти (comí)',      tr:'ком[е]р' },
+      { en:'ir / ser', ua:'йти / бути (fui)', tr:'ір, сер' },
+      { en:'tener',  ua:'мати (tuve)',      tr:'тен[е]р' },
+    ],
+    sentences: [
+      { en:'Ayer hablé con Ana.',  ua:'Вчора я говорив з Аною.', tr:'ай[е]р абл[е] кон [а]на' },
+      { en:'Fuimos a casa.',       ua:'Ми пішли додому.',        tr:'фу[і]мос а к[а]са' },
+      { en:'Ella tuvo una idea.',  ua:'У неї була ідея.',        tr:'[е]йя т[у]бо [у]на ід[е]а' },
+    ],
+  },
 ];

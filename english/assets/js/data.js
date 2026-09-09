@@ -905,4 +905,60 @@ const LESSONS = [
       { en: 'What is the answer?',    ua: 'Яка відповідь?',       tr: 'уот із зе [а]нсер' },
     ],
   },
+  {
+    id: 47, level: 'A1', icon: '🔀', title: 'Спряження: теперішній час', subtitle: 'Усі форми дієслова', type: 'verbs',
+    grammar: 'Теперішній час: базова форма для I/you/we/they; для he/she/it додаємо <b>-s</b> (he work<b>s</b>). Винятки: be → am/is/are, have → <b>has</b>, do → <b>does</b>, go → <b>goes</b>.',
+    verbs: [
+      { inf:'to work', ua:'працювати', tr:'ту у[ё]рк', forms:[
+        {p:'I', f:'work', tr:'ай у[ё]рк'},{p:'you', f:'work', tr:'ю у[ё]рк'},{p:'he / she', f:'works', tr:'гі у[ё]ркс'},{p:'we', f:'work', tr:'уі у[ё]рк'},{p:'they', f:'work', tr:'зей у[ё]рк'} ]},
+      { inf:'to go', ua:'йти, їхати', tr:'ту г[о]у', forms:[
+        {p:'I', f:'go', tr:'ай г[о]у'},{p:'you', f:'go', tr:'ю г[о]у'},{p:'he / she', f:'goes', tr:'гі г[о]уз'},{p:'we', f:'go', tr:'уі г[о]у'},{p:'they', f:'go', tr:'зей г[о]у'} ]},
+      { inf:'to have', ua:'мати', tr:'ту г[е]в', forms:[
+        {p:'I', f:'have', tr:'ай г[е]в'},{p:'you', f:'have', tr:'ю г[е]в'},{p:'he / she', f:'has', tr:'гі г[е]з'},{p:'we', f:'have', tr:'уі г[е]в'},{p:'they', f:'have', tr:'зей г[е]в'} ]},
+      { inf:'to be', ua:'бути', tr:'ту б[і]', forms:[
+        {p:'I', f:'am', tr:'ай [ем]'},{p:'you', f:'are', tr:'ю [а]'},{p:'he / she', f:'is', tr:'гі [із]'},{p:'we', f:'are', tr:'уі [а]'},{p:'they', f:'are', tr:'зей [а]'} ]},
+      { inf:'to do', ua:'робити', tr:'ту д[у]', forms:[
+        {p:'I', f:'do', tr:'ай д[у]'},{p:'you', f:'do', tr:'ю д[у]'},{p:'he / she', f:'does', tr:'гі д[а]з'},{p:'we', f:'do', tr:'уі д[у]'},{p:'they', f:'do', tr:'зей д[у]'} ]},
+    ],
+    cards: [
+      { en:'to work', ua:'працювати', tr:'ту у[ё]рк' },
+      { en:'to go',   ua:'йти, їхати', tr:'ту г[о]у' },
+      { en:'to have', ua:'мати',      tr:'ту г[е]в' },
+      { en:'to be',   ua:'бути',      tr:'ту б[і]' },
+      { en:'to do',   ua:'робити',    tr:'ту д[у]' },
+    ],
+    sentences: [
+      { en:'He works here.',  ua:'Він тут працює.',     tr:'гі у[ё]ркс г[і]а' },
+      { en:'She has a cat.',  ua:'У неї є кіт.',         tr:'ші гез е к[е]т' },
+      { en:'They go home.',   ua:'Вони йдуть додому.',   tr:'зей гоу г[о]ум' },
+    ],
+  },
+  {
+    id: 48, level: 'B1', icon: '⏳', title: 'Спряження: минулий час', subtitle: 'Дієслова у Past', type: 'verbs',
+    grammar: 'Минулий час: правильні дієслова +<b>-ed</b> (work→work<b>ed</b>) — однаково для всіх осіб. Неправильні вчимо напамʼять: go→<b>went</b>, have→<b>had</b>, do→<b>did</b>, be→<b>was/were</b>.',
+    verbs: [
+      { inf:'to work', ua:'працювати', tr:'ту у[ё]рк', forms:[
+        {p:'I', f:'worked', tr:'ай у[ё]ркт'},{p:'you', f:'worked', tr:'ю у[ё]ркт'},{p:'he / she', f:'worked', tr:'гі у[ё]ркт'},{p:'we', f:'worked', tr:'уі у[ё]ркт'},{p:'they', f:'worked', tr:'зей у[ё]ркт'} ]},
+      { inf:'to be', ua:'бути', tr:'ту б[і]', forms:[
+        {p:'I', f:'was', tr:'ай у[о]з'},{p:'you', f:'were', tr:'ю у[ё]р'},{p:'he / she', f:'was', tr:'гі у[о]з'},{p:'we', f:'were', tr:'уі у[ё]р'},{p:'they', f:'were', tr:'зей у[ё]р'} ]},
+      { inf:'to go', ua:'йти, їхати', tr:'ту г[о]у', forms:[
+        {p:'I', f:'went', tr:'ай у[е]нт'},{p:'you', f:'went', tr:'ю у[е]нт'},{p:'he / she', f:'went', tr:'гі у[е]нт'},{p:'we', f:'went', tr:'уі у[е]нт'},{p:'they', f:'went', tr:'зей у[е]нт'} ]},
+      { inf:'to have', ua:'мати', tr:'ту г[е]в', forms:[
+        {p:'I', f:'had', tr:'ай г[е]д'},{p:'you', f:'had', tr:'ю г[е]д'},{p:'he / she', f:'had', tr:'гі г[е]д'},{p:'we', f:'had', tr:'уі г[е]д'},{p:'they', f:'had', tr:'зей г[е]д'} ]},
+      { inf:'to do', ua:'робити', tr:'ту д[у]', forms:[
+        {p:'I', f:'did', tr:'ай д[і]д'},{p:'you', f:'did', tr:'ю д[і]д'},{p:'he / she', f:'did', tr:'гі д[і]д'},{p:'we', f:'did', tr:'уі д[і]д'},{p:'they', f:'did', tr:'зей д[і]д'} ]},
+    ],
+    cards: [
+      { en:'to work', ua:'працювати (worked)', tr:'ту у[ё]рк' },
+      { en:'to be',   ua:'бути (was/were)',    tr:'ту б[і]' },
+      { en:'to go',   ua:'йти (went)',         tr:'ту г[о]у' },
+      { en:'to have', ua:'мати (had)',         tr:'ту г[е]в' },
+      { en:'to do',   ua:'робити (did)',       tr:'ту д[у]' },
+    ],
+    sentences: [
+      { en:'I worked yesterday.', ua:'Я вчора працював.',   tr:'ай у[ё]ркт є[с]тердей' },
+      { en:'We were happy.',      ua:'Ми були щасливі.',     tr:'уі уёр г[е]пі' },
+      { en:'She went home.',      ua:'Вона пішла додому.',   tr:'ші уент г[о]ум' },
+    ],
+  },
 ];

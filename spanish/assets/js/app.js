@@ -299,8 +299,59 @@ function renderLesson(id){
     root.querySelector('#back').onclick=()=>{ location.hash='#/'; };
     root.querySelector('#speed').onclick=()=>{ setRateIdx((rateIdx()+1)%RATES.length); root.querySelector('#speed').textContent = RATES[rateIdx()].e; };
     root.querySelectorAll('.tabs button').forEach(b=>{
-      b.onclick=()=>{ mode=b.dataset.m; if(mode==='study') study(); else if(mode==='build') build(); else quiz(); };
+      b.onclick=()=>{ mode=b.dataset.m; if(mode==='study') studyDispatch(); else if(mode==='build') build(); else quiz(); };
     });
+  }
+
+  function studyDispatch(){ (lesson.type==='verbs' ? verbsStudy : study)(); }
+
+  /* --- режим «Слова» для дієслів: таблиця спряження --- */
+  function verbsStudy(){
+    const items = lesson.verbs || [];
+    let i = 0;
+    function draw(autospeak){
+      const v = items[i];
+      const g = lesson.grammar ? `
+        <div class="grammar">
+          <button class="grammar-head" id="gtoggle">📘 Правило <span class="chev">${grammarOpen?'▾':'▸'}</span></button>
+          ${grammarOpen?`<div class="grammar-body">${lesson.grammar}</div>`:''}
+        </div>` : '';
+      root.querySelector('#content').innerHTML = `
+        ${g}
+        <div class="counter">${i+1} / ${items.length}</div>
+        <div class="stage">
+          <div class="card word">
+            <div class="tag">СПРЯЖЕННЯ</div>
+            <div class="ua">${esc(v.ua)}</div>
+            <div class="en">${esc(v.inf)}</div>
+            <div class="tr">${trHTML(v.tr)}</div>
+            <button class="speak" id="say">🔊 Інфінітив</button>
+            <table class="conj">
+              ${v.forms.map((f,k)=>`<tr class="conj-row" data-k="${k}"><td class="cp">${esc(f.p)}</td><td class="cf">${esc(f.f)}</td><td class="ct">${trHTML(f.tr)}</td></tr>`).join('')}
+            </table>
+            <div class="conj-hint">тапни рядок, щоб почути форму 🔊</div>
+          </div>
+          <div class="controls">
+            <button class="btn-again" id="again">↻ Повторити</button>
+            <button class="btn-know" id="know">✓ Знаю</button>
+          </div>
+          <div class="controls">
+            <button class="btn-nav" id="prev">← Назад</button>
+            <button class="btn-nav" id="next">Далі →</button>
+          </div>
+        </div>`;
+      const gt = root.querySelector('#gtoggle'); if(gt) gt.onclick=()=>{ grammarOpen=!grammarOpen; draw(false); };
+      const say = v.inf.replace(/^to /,'');
+      root.querySelector('#say').onclick = ()=>speak(say);
+      root.querySelectorAll('.conj-row').forEach(r=>{ r.onclick=()=>speak(v.forms[r.dataset.k].f); });
+      if(autospeak!==false) speak(say);
+      const go = d => { i=(i+d+items.length)%items.length; draw(); };
+      root.querySelector('#prev').onclick = ()=>go(-1);
+      root.querySelector('#next').onclick = ()=>go(1);
+      root.querySelector('#know').onclick = ()=>{ markKnown(lesson.id,v.inf,true); bumpDaily(); go(1); };
+      root.querySelector('#again').onclick = ()=>{ markKnown(lesson.id,v.inf,false); addReview(lesson.id,{en:v.inf,ua:v.ua,tr:v.tr}); go(1); };
+    }
+    draw();
   }
 
   /* --- режим «Слова»: флешкарти --- */
@@ -515,7 +566,7 @@ function renderLesson(id){
   }
 
   shell('');
-  study();
+  studyDispatch();
 }
 
 /* ---------- маршрутизація ---------- */

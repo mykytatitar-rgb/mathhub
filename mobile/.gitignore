@@ -1,0 +1,6 @@
+# Capacitor build artifacts — генеруються локально, у git не потрібні
+*/node_modules/
+*/www/
+*/android/
+*/.gradle/
+package-lock.json

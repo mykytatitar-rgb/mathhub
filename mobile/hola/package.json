@@ -1,0 +1,21 @@
+{
+  "name": "hola-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Android-обгортка Hola (Capacitor + AdMob + Play Billing)",
+  "scripts": {
+    "copyweb": "node -e \"const fs=require('fs');fs.rmSync('www',{recursive:true,force:true});fs.cpSync('../../spanish','www',{recursive:true});\"",
+    "sync": "npm run copyweb && npx cap sync android",
+    "add:android": "npx cap add android",
+    "open": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.1.0",
+    "@capacitor/core": "^6.1.0",
+    "@capacitor-community/admob": "^6.0.0",
+    "cordova-plugin-purchase": "^13.11.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.0"
+  }
+}

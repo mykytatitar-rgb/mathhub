@@ -266,7 +266,7 @@ function renderHome(){
       <div class="rb-ico">📖</div>
       <div class="rb-meta"><div class="rb-title">Словник</div><small>усі вивчені слова, з фільтрами</small></div>
       <div class="rb-badge">${totalKnown()}</div></div>`;
-  const adBanner = isPremium() ? '' : `<div class="adslot" id="adslot">
+  const adBanner = (isPremium() || (window.Native && Native.isNative)) ? '' : `<div class="adslot" id="adslot">
       <span class="ad-tag">Реклама</span>
       <span class="ad-body">📢 Місце для реклами</span>
       <span class="ad-remove">Прибрати ✕</span></div>`;
@@ -430,6 +430,8 @@ function renderReview(){
 /* ---------- екран: підписка (без реклами) ---------- */
 function renderPremium(){
   const prem = isPremium();
+  const nativeMode = !!(window.Native && Native.isNative);
+  const subPrice = (nativeMode && Native.price()) || '₴59 / міс';
   root.innerHTML = `
     <div class="topbar">
       <button class="backbtn" id="back">← Головна</button>
@@ -446,15 +448,29 @@ function renderPremium(){
       <div class="pw-benefit">🔁 Повторення без обмежень</div>
       <div class="pw-benefit">🎧 Пріоритет якісного голосу</div>
       <div class="pw-benefit">❤️ Підтримка розвитку курсу</div>
-      ${prem ? `<button class="primary" id="cancel" style="background:#fff;color:var(--pink)">Вимкнути преміум (демо)</button>`
-             : `<div class="pw-plans">
-                  <button class="pw-plan" data-p="month"><b>Місяць</b><span>₴59 / міс</span></button>
-                  <button class="pw-plan best" data-p="year"><b>Рік ⭐</b><span>₴399 / рік · вигідно</span></button>
-                </div>`}
-      <p class="hint">Демо: підписка вмикається локально на цьому пристрої. У застосунку Google Play тут працюватиме справжня підписка (Google Play Billing).</p>
+      ${prem
+          ? (nativeMode
+              ? `<p class="hint">Підписку активовано. Керувати чи скасувати — у Google Play → Підписки.</p>`
+              : `<button class="primary" id="cancel" style="background:#fff;color:var(--pink)">Вимкнути преміум (демо)</button>`)
+          : (nativeMode
+              ? `<button class="pw-plan best" id="subBtn"><b>Без реклами ⭐</b><span>${esc(subPrice)}</span></button>
+                 <button class="pw-restore" id="restore">Відновити покупку</button>`
+              : `<div class="pw-plans">
+                   <button class="pw-plan" data-p="month"><b>Місяць</b><span>₴59 / міс</span></button>
+                   <button class="pw-plan best" data-p="year"><b>Рік ⭐</b><span>₴399 / рік · вигідно</span></button>
+                 </div>`)}
+      <p class="hint">${nativeMode
+          ? 'Оплата — через Google Play. Скасувати підписку можна будь-коли.'
+          : 'Демо: підписка вмикається локально на цьому пристрої. У версії Google Play тут працюватиме справжня оплата (Google Play Billing).'}</p>
     </div>`;
   root.querySelector('#back').onclick=()=>location.hash='#/';
-  root.querySelectorAll('.pw-plan').forEach(b=> b.onclick=()=>{ setPremium(true); alert('Готово! Рекламу прибрано ⭐\n(демо — у версії Google Play тут буде оплата підписки).'); location.hash='#/'; });
+  if(nativeMode){
+    const sb=root.querySelector('#subBtn');
+    if(sb) sb.onclick=async()=>{ sb.disabled=true; const ok=await Native.buy(); if(!ok) sb.disabled=false; /* успіх обробить entitlement-колбек */ };
+    const rs=root.querySelector('#restore'); if(rs) rs.onclick=()=>Native.restore();
+  } else {
+    root.querySelectorAll('.pw-plan').forEach(b=> b.onclick=()=>{ setPremium(true); alert('Готово! Рекламу прибрано ⭐\n(демо — у версії Google Play тут буде справжня оплата підписки).'); location.hash='#/'; });
+  }
   const c = root.querySelector('#cancel'); if(c) c.onclick=()=>{ setPremium(false); renderPremium(); };
 }
 
@@ -746,6 +762,15 @@ function route(){
 }
 window.addEventListener('hashchange', route);
 route();
+
+/* ---------- нативний місток: реклама + підписка (тільки в Android-обгортці) ---------- */
+if(window.Native && Native.isNative){
+  Native.init(function(active){
+    setPremium(active);      // синхронізуємо статус підписки з магазину
+    route();                 // перемалювати поточний екран з урахуванням статусу
+    Native.syncAds(active);  // показати банер (без підписки) або сховати (з підпискою)
+  });
+}
 
 /* ---------- service worker (офлайн) ---------- */
 if('serviceWorker' in navigator){

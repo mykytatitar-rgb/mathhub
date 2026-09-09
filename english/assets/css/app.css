@@ -68,6 +68,36 @@ body{
 .lesson-card .ring{flex:none;font-size:12px;font-weight:800;color:var(--pink)}
 .badge-done{color:var(--ok)}
 
+/* ---- view toggle ---- */
+.viewtoggle{display:flex;gap:8px;background:rgba(255,255,255,.6);padding:5px;border-radius:16px;margin-bottom:16px}
+.viewtoggle button{flex:1;border:none;background:transparent;padding:9px;border-radius:12px;font-weight:700;
+  color:var(--muted);cursor:pointer;font-size:14px}
+.viewtoggle button.active{background:#fff;color:var(--pink);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+
+/* ---- roadmap ---- */
+.road{position:relative;padding:4px 0 8px}
+.road::before{content:'';position:absolute;left:50%;top:6px;bottom:6px;width:3px;transform:translateX(-50%);
+  background:repeating-linear-gradient(var(--line) 0 9px, transparent 9px 17px);z-index:0}
+.road-milestone{position:relative;z-index:1;display:flex;align-items:center;gap:12px;
+  background:rgba(255,255,255,.85);border-radius:14px;padding:9px 12px;margin:20px 0 10px;box-shadow:var(--shadow)}
+.road-node-wrap{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:5px;margin:12px 0}
+.road-node{width:66px;height:66px;border-radius:50%;border:3px solid #fff;cursor:pointer;
+  display:grid;place-items:center;background:#fff;box-shadow:var(--shadow);position:relative;transition:transform .12s}
+.road-node:active{transform:scale(.92)}
+.road-node .rn-emoji{font-size:28px;line-height:1}
+.road-node.todo{opacity:.7}
+.road-node.started{background:var(--blue-card)}
+.road-node.done{background:var(--pink-soft)}
+.road-node.current{box-shadow:0 0 0 4px var(--pink),var(--shadow);animation:nodePulse 1.7s ease-in-out infinite}
+@keyframes nodePulse{0%,100%{box-shadow:0 0 0 4px var(--pink),var(--shadow)}
+  50%{box-shadow:0 0 0 8px rgba(230,21,127,.22),var(--shadow)}}
+@media (prefers-reduced-motion:reduce){.road-node.current{animation:none}}
+.rn-badge{position:absolute;right:-3px;top:-3px;width:22px;height:22px;border-radius:50%;
+  background:var(--ok);color:#fff;font-size:12px;font-weight:800;display:grid;place-items:center;
+  box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.rn-badge.star{background:var(--pink)}
+.road-label{font-size:11.5px;font-weight:700;color:var(--muted);max-width:120px;text-align:center;line-height:1.2}
+
 /* ---- flashcard ---- */
 .stage{display:flex;flex-direction:column;gap:14px}
 .counter{text-align:center;color:var(--muted);font-size:13px;font-weight:700}

@@ -86,6 +86,66 @@ function esc(s){ return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','
 function renderHome(){
   const known = totalKnown(), total = totalCards();
   const pct = total ? Math.round(known/total*100) : 0;
+  let currentId = null;
+  for(const l of LESSONS){ if(knownCount(l) < l.cards.length){ currentId = l.id; break; } }
+  let view = 'map'; try{ if(localStorage.getItem('anglo.homeview')==='list') view='list'; }catch(e){}
+
+  const reviewBanner = (function(){
+    const due = reviewDue().length, tot = reviewCount();
+    if(!tot) return '';
+    return `<div class="review-banner" id="reviewBanner">
+      <div class="rb-ico">🔁</div>
+      <div class="rb-meta"><div class="rb-title">Повторення</div>
+        <small>${due ? due+' слів чекають' : 'на повторенні '+tot+' слів'}</small></div>
+      <div class="rb-badge">${due || '✓'}</div></div>`;
+  })();
+
+  const offsets = [0,44,66,44,0,-44,-66,-44]; let gi = 0;
+  const mapHtml = `<div class="road">` + LEVELS.map(lv=>{
+    const ls = LESSONS.filter(l=>l.level===lv.id);
+    if(!ls.length) return '';
+    const lk = ls.reduce((s,l)=>s+knownCount(l),0), lt = ls.reduce((s,l)=>s+l.cards.length,0);
+    return `<div class="road-milestone">
+        <span class="level-badge">${lv.id}</span>
+        <div class="level-meta"><div class="level-name">${esc(lv.name)}</div><small>${esc(lv.hint)}</small></div>
+        <span class="level-count">${lk}/${lt}</span>
+      </div>` + ls.map(l=>{
+        const k = knownCount(l), done = k===l.cards.length && k>0;
+        const state = done ? 'done' : (l.id===currentId ? 'current' : (k>0 ? 'started' : 'todo'));
+        const off = offsets[gi++ % offsets.length];
+        const badge = done ? '<span class="rn-badge">✓</span>' : (l.id===currentId ? '<span class="rn-badge star">★</span>' : '');
+        return `<div class="road-node-wrap" style="transform:translateX(${off}px)">
+          <button class="road-node ${state}" data-id="${l.id}"><span class="rn-emoji">${l.icon}</span>${badge}</button>
+          <div class="road-label">${esc(l.title)}</div>
+        </div>`;
+      }).join('');
+  }).join('') + `</div>`;
+
+  const listHtml = LEVELS.map(lv=>{
+    const ls = LESSONS.filter(l=>l.level===lv.id);
+    if(!ls.length) return '';
+    const lk = ls.reduce((s,l)=>s+knownCount(l),0), lt = ls.reduce((s,l)=>s+l.cards.length,0);
+    return `
+      <div class="level">
+        <div class="level-head">
+          <span class="level-badge">${lv.id}</span>
+          <div class="level-meta"><div class="level-name">${esc(lv.name)}</div><small>${esc(lv.hint)}</small></div>
+          <span class="level-count">${lk}/${lt}</span>
+        </div>
+        <div class="lessons">
+          ${ls.map(l=>{
+            const k = knownCount(l), done = k===l.cards.length && k>0;
+            return `<div class="lesson-card" data-id="${l.id}">
+              <div class="emoji">${l.icon}</div>
+              <div class="meta"><h3>${esc(l.title)}</h3>
+                <small>${esc(l.subtitle)} · ${l.cards.length} слів</small></div>
+              <div class="ring ${done?'badge-done':''}">${done?'✓':k+'/'+l.cards.length}</div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+  }).join('');
+
   root.innerHTML = `
     <div class="topbar">
       <div class="brand"><span class="logo">A</span> Anglo <b>·</b> англійська</div>
@@ -94,56 +154,23 @@ function renderHome(){
     </div>
     <div class="hero">
       <h1>Англійська з нуля 👋</h1>
-      <p>Вчи слова, тренуй вимову і збирай речення — крок за кроком.</p>
+      <p>Твій маршрут навчання — крок за кроком.</p>
       <div class="progress">
         <div class="bar"><div class="fill" style="width:${pct}%"></div></div>
-        <div class="lbl">Вивчено ${known} із ${total} слів · ${pct}%</div>
+        <div class="lbl">Пройдено ${known} із ${total} слів · ${pct}% курсу</div>
       </div>
     </div>
-    ${(function(){
-      const due = reviewDue().length, tot = reviewCount();
-      if(!tot) return '';
-      return `<div class="review-banner" id="reviewBanner">
-        <div class="rb-ico">🔁</div>
-        <div class="rb-meta"><div class="rb-title">Повторення</div>
-          <small>${due ? due+' слів чекають' : 'на повторенні '+tot+' слів'}</small></div>
-        <div class="rb-badge">${due || '✓'}</div>
-      </div>`;
-    })()}
-    ${LEVELS.map(lv=>{
-      const ls = LESSONS.filter(l=>l.level===lv.id);
-      if(!ls.length) return '';
-      const lk = ls.reduce((s,l)=>s+knownCount(l),0);
-      const lt = ls.reduce((s,l)=>s+l.cards.length,0);
-      return `
-        <div class="level">
-          <div class="level-head">
-            <span class="level-badge">${lv.id}</span>
-            <div class="level-meta">
-              <div class="level-name">${esc(lv.name)}</div>
-              <small>${esc(lv.hint)}</small>
-            </div>
-            <span class="level-count">${lk}/${lt}</span>
-          </div>
-          <div class="lessons">
-            ${ls.map(l=>{
-              const k = knownCount(l), done = k===l.cards.length && k>0;
-              return `<div class="lesson-card" data-id="${l.id}">
-                <div class="emoji">${l.icon}</div>
-                <div class="meta">
-                  <h3>${esc(l.title)}</h3>
-                  <small>${esc(l.subtitle)} · ${l.cards.length} слів</small>
-                </div>
-                <div class="ring ${done?'badge-done':''}">${done?'✓':k+'/'+l.cards.length}</div>
-              </div>`;
-            }).join('')}
-          </div>
-        </div>`;
-    }).join('')}
+    ${reviewBanner}
+    <div class="viewtoggle">
+      <button data-v="map" class="${view==='map'?'active':''}">🗺️ Мапа</button>
+      <button data-v="list" class="${view==='list'?'active':''}">☰ Список</button>
+    </div>
+    ${view==='map' ? mapHtml : listHtml}
     <p class="hint">Встанови як застосунок: меню браузера → «Додати на головний екран».</p>
   `;
-  root.querySelectorAll('.lesson-card').forEach(el=>{ el.onclick = ()=>{ location.hash = '#/lesson/'+el.dataset.id; }; });
+  root.querySelectorAll('.road-node, .lesson-card').forEach(el=>{ el.onclick = ()=>{ location.hash = '#/lesson/'+el.dataset.id; }; });
   const rb = root.querySelector('#reviewBanner'); if(rb) rb.onclick = ()=>{ location.hash = '#/review'; };
+  root.querySelectorAll('.viewtoggle button').forEach(b=>{ b.onclick=()=>{ try{ localStorage.setItem('anglo.homeview', b.dataset.v); }catch(e){} renderHome(); }; });
   root.querySelector('#reset').onclick = ()=>{ if(confirm('Скинути весь прогрес?')){ progress={}; saveProgress(progress); review={}; saveReview(review); renderHome(); } };
 }
 

@@ -46,6 +46,13 @@ body{
 .progress .bar{height:10px;border-radius:99px;background:#e6e2f0;overflow:hidden}
 .progress .fill{height:100%;background:linear-gradient(90deg,var(--pink),#f5a623);border-radius:99px;transition:width .4s}
 .progress .lbl{font-size:12px;color:var(--muted);margin-top:6px}
+.stats{display:flex;gap:10px;margin-top:12px}
+.stat{flex:1;background:rgba(255,255,255,.75);border:1px solid var(--line);border-radius:14px;
+  padding:10px 12px;text-align:center}
+button.stat{cursor:pointer;font-family:inherit}
+button.stat.goal:active{transform:scale(.97)}
+.stat-num{font-size:18px;font-weight:800;color:var(--pink)}
+.stat-lbl{font-size:11px;color:var(--muted);margin-top:2px}
 
 .level{margin-bottom:20px}
 .level-head{display:flex;align-items:center;gap:12px;padding:2px 4px 10px}

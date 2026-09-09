@@ -112,6 +112,7 @@ const LESSONS = [
   },
   {
     id: 6, level: 'A0', icon: '👉', title: 'Це і той', subtitle: 'Показуємо на речі',
+    grammar: '<b>this/these</b> — близько, <b>that/those</b> — далеко: <b>this</b> book, <b>that</b> house.',
     cards: [
       { en: 'this',  ua: 'це, цей',  tr: 'з[і]с' },
       { en: 'that',  ua: 'те, той',  tr: 'з[е]т' },
@@ -189,6 +190,7 @@ const LESSONS = [
   },
   {
     id: 10, level: 'A1', icon: '🎨', title: 'Кольори', subtitle: 'Основні кольори',
+    grammar: 'Колір ставимо перед іменником, і він не змінюється: two <b>red</b> cars.',
     cards: [
       { en: 'red',    ua: 'червоний',     tr: 'р[е]д' },
       { en: 'blue',   ua: 'синій',        tr: 'бл[у]' },
@@ -344,6 +346,7 @@ const LESSONS = [
   },
   {
     id: 18, level: 'A2', icon: '🌦️', title: 'Погода', subtitle: 'Яка погода надворі',
+    grammar: 'Про погоду кажемо через <b>It is</b>: <b>It is</b> cold, <b>It is</b> raining.',
     cards: [
       { en: 'sun',   ua: 'сонце',    tr: 'с[а]н' },
       { en: 'rain',  ua: 'дощ',      tr: 'р[е]йн' },
@@ -477,6 +480,7 @@ const LESSONS = [
   /* ================= B1 ================= */
   {
     id: 25, level: 'B1', icon: '✈️', title: 'Подорожі', subtitle: 'Аеропорт і готель',
+    grammar: 'Напрямок — прийменник <b>to</b>: I fly <b>to</b> Madrid. Готель: I <b>booked</b> a hotel.',
     cards: [
       { en: 'airport',  ua: 'аеропорт',    tr: '[е]апорт' },
       { en: 'ticket',   ua: 'квиток',      tr: 'т[і]кет' },
@@ -559,6 +563,7 @@ const LESSONS = [
   },
   {
     id: 29, level: 'B1', icon: '😊', title: 'Почуття і характер', subtitle: 'Описуємо людей і настрій',
+    grammar: 'Почуття — через to be: I <b>am</b> happy, she <b>is</b> tired (не «I have happy»).',
     cards: [
       { en: 'happy',  ua: 'щасливий',  tr: 'г[е]пі' },
       { en: 'sad',    ua: 'сумний',    tr: 'с[е]д' },
@@ -635,6 +640,7 @@ const LESSONS = [
   },
   {
     id: 33, level: 'B2', icon: '📈', title: 'Бізнес', subtitle: 'Компанія і гроші',
+    grammar: 'Дія триває зараз — <b>be + -ing</b>: the market <b>is growing</b>.',
     cards: [
       { en: 'company',  ua: 'компанія',     tr: 'к[а]мпані' },
       { en: 'customer', ua: 'клієнт',       tr: 'к[а]стемер' },
@@ -653,6 +659,7 @@ const LESSONS = [
   },
   {
     id: 34, level: 'B2', icon: '🏛️', title: 'Суспільство', subtitle: 'Держава і люди',
+    grammar: 'Загальні поняття — множина без артикля: <b>people</b> want change.',
     cards: [
       { en: 'government', ua: 'уряд',        tr: 'г[а]вермент' },
       { en: 'law',        ua: 'закон',       tr: 'л[о]' },
@@ -706,6 +713,120 @@ const LESSONS = [
       { en: 'I need my password.', ua: 'Мені потрібен пароль.',      tr: 'ай нід май п[а]свёрд' },
       { en: 'The app is online.',  ua: 'Застосунок онлайн.',         tr: 'зе еп із онл[а]йн' },
       { en: 'Send me a message.',  ua: 'Надішли мені повідомлення.', tr: 'сенд мі е м[е]сідж' },
+    ],
+  },
+  {
+    id: 37, level: 'A1', icon: '🐶', title: 'Тварини', subtitle: 'Хатні й дикі',
+    grammar: 'Перед словом із голосного звуку — <b>an</b>: <b>an</b> apple; перед приголосним — <b>a</b>: <b>a</b> dog.',
+    cards: [
+      { en: 'dog',   ua: 'собака',  tr: 'д[о]г' },
+      { en: 'cat',   ua: 'кіт',     tr: 'к[е]т' },
+      { en: 'bird',  ua: 'пташка',  tr: 'б[ё]рд' },
+      { en: 'fish',  ua: 'риба',    tr: 'ф[і]ш' },
+      { en: 'horse', ua: 'кінь',    tr: 'г[о]рс' },
+      { en: 'cow',   ua: 'корова',  tr: 'к[а]у' },
+      { en: 'bear',  ua: 'ведмідь', tr: 'б[е]а' },
+      { en: 'wolf',  ua: 'вовк',    tr: 'в[у]лф' },
+    ],
+    sentences: [
+      { en: 'I have a dog.',    ua: 'У мене є собака.',       tr: 'ай гев е д[о]г' },
+      { en: 'The cat is small.', ua: 'Кіт малий.',            tr: 'зе кет із см[о]л' },
+      { en: 'Birds can fly.',   ua: 'Птахи вміють літати.',   tr: 'бёрдз кен фл[а]й' },
+    ],
+  },
+  {
+    id: 38, level: 'A2', icon: '🎯', title: 'Хобі і дозвілля', subtitle: 'Чим займаємось',
+    grammar: 'Захоплення часто через <b>like + -ing</b>: I like <b>reading</b>, I like <b>dancing</b>.',
+    cards: [
+      { en: 'music',  ua: 'музика',       tr: 'мь[ю]зік' },
+      { en: 'sport',  ua: 'спорт',        tr: 'сп[о]рт' },
+      { en: 'game',   ua: 'гра',          tr: 'г[е]йм' },
+      { en: 'book',   ua: 'книга',        tr: 'б[у]к' },
+      { en: 'film',   ua: 'фільм',        tr: 'ф[і]лм' },
+      { en: 'to dance', ua: 'танцювати',  tr: 'ту д[а]нс' },
+      { en: 'to sing', ua: 'співати',     tr: 'ту с[і]нг' },
+      { en: 'to travel', ua: 'подорожувати', tr: 'ту тр[е]вл' },
+    ],
+    sentences: [
+      { en: 'I like music.',      ua: 'Мені подобається музика.', tr: 'ай лайк мь[ю]зік' },
+      { en: 'We play a game.',    ua: 'Ми граємо в гру.',         tr: 'уі плей е г[е]йм' },
+      { en: 'She likes to dance.', ua: 'Вона любить танцювати.',  tr: 'ші лайкс ту д[а]нс' },
+    ],
+  },
+  {
+    id: 39, level: 'B1', icon: '🍽️', title: 'Ресторан', subtitle: 'Страви і сервіровка',
+    grammar: 'Замовлення в ресторані: <b>I’ll have…</b> або <b>Could I get…?</b> + страва.',
+    cards: [
+      { en: 'dish',    ua: 'страва',   tr: 'д[і]ш' },
+      { en: 'starter', ua: 'закуска',  tr: 'ст[а]ртер' },
+      { en: 'dessert', ua: 'десерт',   tr: 'діз[ё]рт' },
+      { en: 'fork',    ua: 'виделка',  tr: 'ф[о]рк' },
+      { en: 'knife',   ua: 'ніж',      tr: 'н[а]йф' },
+      { en: 'spoon',   ua: 'ложка',    tr: 'сп[у]н' },
+      { en: 'plate',   ua: 'тарілка',  tr: 'пл[е]йт' },
+      { en: 'glass',   ua: 'склянка',  tr: 'гл[а]с' },
+    ],
+    sentences: [
+      { en: 'I would like a dessert.', ua: 'Я б хотів десерт.',  tr: 'ай уд лайк е діз[ё]рт' },
+      { en: 'This dish is delicious.', ua: 'Ця страва смачна.',  tr: 'зіс діш із діл[і]шес' },
+      { en: 'Where is my fork?',       ua: 'Де моя виделка?',    tr: 'уеа із май ф[о]рк' },
+    ],
+  },
+  {
+    id: 40, level: 'B1', icon: '🎓', title: 'Школа й навчання', subtitle: 'Освіта',
+    grammar: 'Розрізняй: <b>learn</b> (вчити щось), <b>study</b> (вивчати), <b>teach</b> (навчати інших).',
+    cards: [
+      { en: 'school',   ua: 'школа',   tr: 'ск[у]л' },
+      { en: 'teacher',  ua: 'вчитель', tr: 'т[і]чер' },
+      { en: 'student',  ua: 'учень',   tr: 'ст[ю]дент' },
+      { en: 'notebook', ua: 'зошит',   tr: 'н[о]утбук' },
+      { en: 'lesson',   ua: 'урок',    tr: 'л[е]сн' },
+      { en: 'exam',     ua: 'іспит',   tr: 'ігз[е]м' },
+      { en: 'to learn', ua: 'вчити',   tr: 'ту л[ё]рн' },
+      { en: 'to write', ua: 'писати',  tr: 'ту р[а]йт' },
+    ],
+    sentences: [
+      { en: 'I learn English.',    ua: 'Я вчу англійську.', tr: 'ай лёрн [і]нгліш' },
+      { en: 'The teacher is kind.', ua: 'Вчитель добрий.',  tr: 'зе тічер із к[а]йнд' },
+      { en: 'I have an exam.',     ua: 'У мене іспит.',     tr: 'ай гев ен ігз[е]м' },
+    ],
+  },
+  {
+    id: 41, level: 'B2', icon: '🌍', title: 'Довкілля', subtitle: 'Природа і планета',
+    grammar: '<b>should</b> = порада/обовʼязок: We <b>should</b> recycle (нам слід переробляти).',
+    cards: [
+      { en: 'environment', ua: 'довкілля',    tr: 'інв[а]йєрнмент' },
+      { en: 'nature',      ua: 'природа',     tr: 'н[е]йчер' },
+      { en: 'pollution',   ua: 'забруднення', tr: 'пол[ю]шн' },
+      { en: 'climate',     ua: 'клімат',      tr: 'кл[а]ймет' },
+      { en: 'energy',      ua: 'енергія',     tr: '[е]нерджі' },
+      { en: 'planet',      ua: 'планета',     tr: 'пл[е]нет' },
+      { en: 'to recycle',  ua: 'переробляти', tr: 'ту рісс[а]йкл' },
+      { en: 'to protect',  ua: 'захищати',    tr: 'ту прот[е]кт' },
+    ],
+    sentences: [
+      { en: 'We should protect nature.', ua: 'Ми маємо захищати природу.', tr: 'уі шуд протект н[е]йчер' },
+      { en: 'Pollution is a problem.',   ua: 'Забруднення — проблема.',    tr: 'пол[ю]шн із е пр[о]блем' },
+      { en: 'I love our planet.',        ua: 'Я люблю нашу планету.',      tr: 'ай лав ауер пл[е]нет' },
+    ],
+  },
+  {
+    id: 42, level: 'B2', icon: '📰', title: 'Медіа і новини', subtitle: 'Інформація',
+    grammar: 'Артикль <b>the</b> — коли обидва знають, про що йдеться: <b>the</b> news, <b>the</b> article.',
+    cards: [
+      { en: 'news',       ua: 'новини',    tr: 'нь[ю]з' },
+      { en: 'newspaper',  ua: 'газета',    tr: 'нь[ю]спейпер' },
+      { en: 'article',    ua: 'стаття',    tr: '[а]ртікл' },
+      { en: 'journalist', ua: 'журналіст', tr: 'дж[ё]рналіст' },
+      { en: 'TV',         ua: 'телебачення', tr: 'тів[і]' },
+      { en: 'radio',      ua: 'радіо',     tr: 'р[е]йдіоу' },
+      { en: 'to report',  ua: 'повідомляти', tr: 'ту ріп[о]рт' },
+      { en: 'story',      ua: 'історія',   tr: 'ст[о]рі' },
+    ],
+    sentences: [
+      { en: 'I read the news.',    ua: 'Я читаю новини.',   tr: 'ай рід зе нь[ю]з' },
+      { en: 'This article is good.', ua: 'Ця стаття гарна.', tr: 'зіс артікл із г[у]д' },
+      { en: 'She is a journalist.', ua: 'Вона журналістка.', tr: 'ші із е дж[ё]рналіст' },
     ],
   },
 ];

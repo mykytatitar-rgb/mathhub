@@ -113,6 +113,7 @@ const LESSONS = [
   },
   {
     id: 6, level: 'A0', icon: '👉', title: 'Це і той', subtitle: 'Показуємо на речі',
+    grammar: '<b>este/esta</b> — близько, <b>ese/esa</b> — далі, <b>aquel</b> — далеко.',
     cards: [
       { en: 'esto',    ua: 'це',       tr: '[е]сто' },
       { en: 'eso',     ua: 'те',       tr: '[е]со' },
@@ -190,6 +191,7 @@ const LESSONS = [
   },
   {
     id: 10, level: 'A1', icon: '🎨', title: 'Кольори', subtitle: 'Основні кольори',
+    grammar: 'Колір ставимо після іменника й узгоджуємо: dos coches <b>rojos</b>, dos casas <b>rojas</b>.',
     cards: [
       { en: 'rojo',     ua: 'червоний',     tr: 'р[о]хо' },
       { en: 'azul',     ua: 'синій',        tr: 'ас[у]ль' },
@@ -343,6 +345,7 @@ const LESSONS = [
   },
   {
     id: 18, level: 'A2', icon: '🌦️', title: 'Погода', subtitle: 'Яка погода надворі',
+    grammar: 'Про погоду — через <b>hace</b>: <b>hace</b> frío (холодно), <b>hace</b> calor (спекотно).',
     cards: [
       { en: 'sol',    ua: 'сонце',  tr: 'соль' },
       { en: 'lluvia', ua: 'дощ',    tr: 'й[у]бія' },
@@ -475,6 +478,7 @@ const LESSONS = [
   /* ================= B1 ================= */
   {
     id: 25, level: 'B1', icon: '✈️', title: 'Подорожі', subtitle: 'Аеропорт і готель',
+    grammar: 'Напрямок — прийменник <b>a</b>: viajo <b>a</b> Madrid. Готель: <b>reservé</b> un hotel.',
     cards: [
       { en: 'aeropuerto', ua: 'аеропорт',    tr: 'аеропу[е]рто' },
       { en: 'billete',    ua: 'квиток',      tr: 'бій[е]те' },
@@ -555,6 +559,7 @@ const LESSONS = [
   },
   {
     id: 29, level: 'B1', icon: '😊', title: 'Почуття і характер', subtitle: 'Описуємо людей і настрій',
+    grammar: 'Тимчасовий стан — через <b>estar</b>: <b>estoy</b> feliz, <b>está</b> cansado (не ser).',
     cards: [
       { en: 'feliz',       ua: 'щасливий',  tr: 'фел[і]с' },
       { en: 'triste',      ua: 'сумний',    tr: 'тр[і]сте' },
@@ -631,6 +636,7 @@ const LESSONS = [
   },
   {
     id: 33, level: 'B2', icon: '📈', title: 'Бізнес', subtitle: 'Компанія і гроші',
+    grammar: 'Зараз відбувається — <b>estar</b> + gerundio: el mercado <b>está creciendo</b>.',
     cards: [
       { en: 'compañía',    ua: 'компанія',    tr: 'компань[і]а' },
       { en: 'cliente',     ua: 'клієнт',      tr: 'клі[е]нте' },
@@ -649,6 +655,7 @@ const LESSONS = [
   },
   {
     id: 34, level: 'B2', icon: '🏛️', title: 'Суспільство', subtitle: 'Держава і люди',
+    grammar: '«Люди» = <b>la gente</b> — в іспанській однина: la gente <b>quiere</b> cambio.',
     cards: [
       { en: 'gobierno',  ua: 'уряд',        tr: 'гобь[е]рно' },
       { en: 'ley',       ua: 'закон',       tr: 'лей' },
@@ -702,6 +709,120 @@ const LESSONS = [
       { en: 'Necesito mi contraseña.',      ua: 'Мені потрібен пароль.',      tr: 'несес[і]то мі контрас[е]ньа' },
       { en: 'La aplicación está en línea.', ua: 'Застосунок онлайн.',         tr: 'ла аплікась[о]н ест[а] ен л[і]неа' },
       { en: 'Envíame un mensaje.',          ua: 'Надішли мені повідомлення.', tr: 'енб[і]аме ун менс[а]хе' },
+    ],
+  },
+  {
+    id: 37, level: 'A1', icon: '🐶', title: 'Тварини', subtitle: 'Хатні й дикі',
+    grammar: 'Іменники мають рід: <b>el</b> perro (чол.), <b>la</b> vaca (жін.). Неозначений: <b>un</b> / <b>una</b>.',
+    cards: [
+      { en: 'perro',   ua: 'собака',  tr: 'п[е]рро' },
+      { en: 'gato',    ua: 'кіт',     tr: 'г[а]то' },
+      { en: 'pájaro',  ua: 'пташка',  tr: 'п[а]харо' },
+      { en: 'pez',     ua: 'риба',    tr: 'пес' },
+      { en: 'caballo', ua: 'кінь',    tr: 'каб[а]йо' },
+      { en: 'vaca',    ua: 'корова',  tr: 'б[а]ка' },
+      { en: 'oso',     ua: 'ведмідь', tr: '[о]со' },
+      { en: 'lobo',    ua: 'вовк',    tr: 'л[о]бо' },
+    ],
+    sentences: [
+      { en: 'Tengo un perro.',       ua: 'У мене є собака.',       tr: 'т[е]нго ун п[е]рро' },
+      { en: 'El gato es pequeño.',   ua: 'Кіт малий.',             tr: 'ель г[а]то ес пек[е]ньйо' },
+      { en: 'Me gustan los pájaros.', ua: 'Мені подобаються птахи.', tr: 'ме г[у]стан лос п[а]харос' },
+    ],
+  },
+  {
+    id: 38, level: 'A2', icon: '🎯', title: 'Хобі і дозвілля', subtitle: 'Чим займаємось',
+    grammar: 'Захоплення — через <b>me gusta</b> + іменник/дієслово: me gusta <b>bailar</b> (люблю танцювати).',
+    cards: [
+      { en: 'música',   ua: 'музика',       tr: 'м[у]сіка' },
+      { en: 'deporte',  ua: 'спорт',        tr: 'деп[о]рте' },
+      { en: 'juego',    ua: 'гра',          tr: 'ху[е]го' },
+      { en: 'libro',    ua: 'книга',        tr: 'л[і]бро' },
+      { en: 'película', ua: 'фільм',        tr: 'пел[і]кула' },
+      { en: 'bailar',   ua: 'танцювати',    tr: 'байл[а]р' },
+      { en: 'cantar',   ua: 'співати',      tr: 'кант[а]р' },
+      { en: 'viajar',   ua: 'подорожувати', tr: 'біах[а]р' },
+    ],
+    sentences: [
+      { en: 'Me gusta la música.', ua: 'Мені подобається музика.', tr: 'ме г[у]ста ла м[у]сіка' },
+      { en: 'Jugamos un juego.',   ua: 'Ми граємо в гру.',         tr: 'хуг[а]мос ун ху[е]го' },
+      { en: 'Le gusta bailar.',    ua: 'Вона любить танцювати.',   tr: 'ле г[у]ста байл[а]р' },
+    ],
+  },
+  {
+    id: 39, level: 'B1', icon: '🍽️', title: 'Ресторан', subtitle: 'Страви і сервіровка',
+    grammar: 'Замовлення: <b>Para mí…</b> (мені…) або <b>¿Me pone…?</b> + страва.',
+    cards: [
+      { en: 'plato',      ua: 'страва',   tr: 'пл[а]то' },
+      { en: 'entrante',   ua: 'закуска',  tr: 'ентр[а]нте' },
+      { en: 'postre',     ua: 'десерт',   tr: 'п[о]стре' },
+      { en: 'tenedor',    ua: 'виделка',  tr: 'тенед[о]р' },
+      { en: 'cuchillo',   ua: 'ніж',      tr: 'куч[і]йо' },
+      { en: 'cuchara',    ua: 'ложка',    tr: 'куч[а]ра' },
+      { en: 'copa',       ua: 'келих',    tr: 'к[о]па' },
+      { en: 'servilleta', ua: 'серветка', tr: 'сербій[е]та' },
+    ],
+    sentences: [
+      { en: 'Para mí un postre.',       ua: 'Мені десерт.',       tr: 'п[а]ра мі ун п[о]стре' },
+      { en: 'El plato es delicioso.',   ua: 'Страва смачна.',     tr: 'ель пл[а]то ес делісь[о]со' },
+      { en: '¿Dónde está mi tenedor?',  ua: 'Де моя виделка?',    tr: 'д[о]нде ест[а] мі тенед[о]р' },
+    ],
+  },
+  {
+    id: 40, level: 'B1', icon: '🎓', title: 'Школа й навчання', subtitle: 'Освіта',
+    grammar: 'Розрізняй: <b>aprender</b> (вчити), <b>estudiar</b> (вивчати), <b>enseñar</b> (навчати інших).',
+    cards: [
+      { en: 'escuela',  ua: 'школа',   tr: 'ску[е]ла' },
+      { en: 'profesor', ua: 'вчитель', tr: 'профес[о]р' },
+      { en: 'alumno',   ua: 'учень',   tr: 'ал[у]мно' },
+      { en: 'cuaderno', ua: 'зошит',   tr: 'куад[е]рно' },
+      { en: 'clase',    ua: 'урок',    tr: 'кл[а]се' },
+      { en: 'examen',   ua: 'іспит',   tr: 'екс[а]мен' },
+      { en: 'aprender', ua: 'вчити',   tr: 'апренд[е]р' },
+      { en: 'escribir', ua: 'писати',  tr: 'ескріб[і]р' },
+    ],
+    sentences: [
+      { en: 'Aprendo español.',       ua: 'Я вчу іспанську.', tr: 'апр[е]ндо еспань[о]ль' },
+      { en: 'El profesor es amable.', ua: 'Вчитель добрий.',  tr: 'ель профес[о]р ес ам[а]бле' },
+      { en: 'Tengo un examen.',       ua: 'У мене іспит.',    tr: 'т[е]нго ун екс[а]мен' },
+    ],
+  },
+  {
+    id: 41, level: 'B2', icon: '🌍', title: 'Довкілля', subtitle: 'Природа і планета',
+    grammar: '<b>deber</b> = мати/повинен: <b>debemos</b> reciclar (ми маємо переробляти).',
+    cards: [
+      { en: 'medio ambiente', ua: 'довкілля',    tr: 'м[е]діо амбь[е]нте' },
+      { en: 'naturaleza',     ua: 'природа',     tr: 'натурал[е]са' },
+      { en: 'contaminación',  ua: 'забруднення', tr: 'контамінась[о]н' },
+      { en: 'clima',          ua: 'клімат',      tr: 'кл[і]ма' },
+      { en: 'energía',        ua: 'енергія',     tr: 'енерх[і]а' },
+      { en: 'planeta',        ua: 'планета',     tr: 'план[е]та' },
+      { en: 'reciclar',       ua: 'переробляти', tr: 'ресікл[а]р' },
+      { en: 'proteger',       ua: 'захищати',    tr: 'протех[е]р' },
+    ],
+    sentences: [
+      { en: 'Debemos proteger la naturaleza.', ua: 'Ми маємо захищати природу.', tr: 'деб[е]мос протех[е]р ла натурал[е]са' },
+      { en: 'La contaminación es un problema.', ua: 'Забруднення — проблема.',   tr: 'ла контамінась[о]н ес ун пробл[е]ма' },
+      { en: 'Amo nuestro planeta.',            ua: 'Я люблю нашу планету.',      tr: '[а]мо ну[е]стро план[е]та' },
+    ],
+  },
+  {
+    id: 42, level: 'B2', icon: '📰', title: 'Медіа і новини', subtitle: 'Інформація',
+    grammar: 'Артикль <b>la/las</b> для жіночого роду: <b>las</b> noticias, <b>la</b> historia.',
+    cards: [
+      { en: 'noticias',   ua: 'новини',    tr: 'нот[і]сіас' },
+      { en: 'periódico',  ua: 'газета',    tr: 'перь[о]діко' },
+      { en: 'artículo',   ua: 'стаття',    tr: 'арт[і]куло' },
+      { en: 'periodista', ua: 'журналіст', tr: 'перьйод[і]ста' },
+      { en: 'televisión', ua: 'телебачення', tr: 'телебісь[о]н' },
+      { en: 'radio',      ua: 'радіо',     tr: 'р[а]діо' },
+      { en: 'informar',   ua: 'повідомляти', tr: 'інформ[а]р' },
+      { en: 'historia',   ua: 'історія',   tr: 'іст[о]ріа' },
+    ],
+    sentences: [
+      { en: 'Leo las noticias.',    ua: 'Я читаю новини.',   tr: 'л[е]о лас нот[і]сіас' },
+      { en: 'El artículo es bueno.', ua: 'Стаття гарна.',    tr: 'ель арт[і]куло ес бу[е]но' },
+      { en: 'Ella es periodista.',  ua: 'Вона журналістка.', tr: '[е]йя ес перьйод[і]ста' },
     ],
   },
 ];

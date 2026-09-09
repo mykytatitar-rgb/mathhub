@@ -41,6 +41,28 @@ function gradeReview(k, ok){
   saveReview(review);
 }
 
+/* ---------- щоденна ціль і стрік ---------- */
+const SKEY = 'anglo.streak.v1';
+function ymd(d){ return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+function todayStr(){ return ymd(new Date()); }
+function yesterdayStr(){ const d=new Date(); d.setDate(d.getDate()-1); return ymd(d); }
+function loadStreak(){ try{ return JSON.parse(localStorage.getItem(SKEY)) || {}; }catch(e){ return {}; } }
+let streakData = Object.assign({day:'',count:0,streak:0,goal:10,lastGoalDay:''}, loadStreak());
+function saveStreak(){ try{ localStorage.setItem(SKEY, JSON.stringify(streakData)); }catch(e){} }
+function todayCount(){ return streakData.day===todayStr() ? streakData.count : 0; }
+function displayStreak(){ const t=todayStr(), y=yesterdayStr(); return (streakData.lastGoalDay===t||streakData.lastGoalDay===y) ? streakData.streak : 0; }
+function bumpDaily(){
+  const t=todayStr();
+  if(streakData.day!==t){ streakData.day=t; streakData.count=0; }
+  streakData.count++;
+  if(streakData.count===streakData.goal){
+    streakData.streak = (streakData.lastGoalDay===yesterdayStr()) ? streakData.streak+1 : 1;
+    streakData.lastGoalDay=t;
+  }
+  saveStreak();
+}
+function cycleGoal(){ const opts=[5,10,15,20]; streakData.goal = opts[(opts.indexOf(streakData.goal)+1)%opts.length] || 10; saveStreak(); }
+
 /* ---------- швидкість озвучки ---------- */
 const RKEY = 'anglo.rate';
 const RATES = [ {v:0.7, e:'🐢'}, {v:0.85, e:'🚶'}, {v:1.0, e:'🐇'} ];
@@ -159,6 +181,10 @@ function renderHome(){
         <div class="bar"><div class="fill" style="width:${pct}%"></div></div>
         <div class="lbl">Пройдено ${known} із ${total} слів · ${pct}% курсу</div>
       </div>
+      <div class="stats">
+        <div class="stat"><div class="stat-num">🔥 ${displayStreak()}</div><div class="stat-lbl">днів поспіль</div></div>
+        <button class="stat goal" id="goalTile"><div class="stat-num">🎯 ${todayCount()}/${streakData.goal}${todayCount()>=streakData.goal?' ✓':''}</div><div class="stat-lbl">ціль сьогодні</div></button>
+      </div>
     </div>
     ${reviewBanner}
     <div class="viewtoggle">
@@ -171,6 +197,7 @@ function renderHome(){
   root.querySelectorAll('.road-node, .lesson-card').forEach(el=>{ el.onclick = ()=>{ location.hash = '#/lesson/'+el.dataset.id; }; });
   const rb = root.querySelector('#reviewBanner'); if(rb) rb.onclick = ()=>{ location.hash = '#/review'; };
   root.querySelectorAll('.viewtoggle button').forEach(b=>{ b.onclick=()=>{ try{ localStorage.setItem('anglo.homeview', b.dataset.v); }catch(e){} renderHome(); }; });
+  const gtile = root.querySelector('#goalTile'); if(gtile) gtile.onclick = ()=>{ cycleGoal(); renderHome(); };
   root.querySelector('#reset').onclick = ()=>{ if(confirm('Скинути весь прогрес?')){ progress={}; saveProgress(progress); review={}; saveReview(review); renderHome(); } };
 }
 
@@ -233,7 +260,7 @@ function renderReview(){
           <button class="btn-know" id="yes">Знаю ✓</button>
         </div>`;
       root.querySelector('#no').onclick=()=>{ gradeReview(rvKey(it.l,it.en),false); i++; draw(); };
-      root.querySelector('#yes').onclick=()=>{ gradeReview(rvKey(it.l,it.en),true); i++; draw(); };
+      root.querySelector('#yes').onclick=()=>{ gradeReview(rvKey(it.l,it.en),true); bumpDaily(); i++; draw(); };
     };
   }
   function done(){
@@ -313,7 +340,7 @@ function renderLesson(id){
       const go = d => { i=(i+d+items.length)%items.length; draw(); };
       root.querySelector('#prev').onclick = ()=>go(-1);
       root.querySelector('#next').onclick = ()=>go(1);
-      root.querySelector('#know').onclick = ()=>{ markKnown(lesson.id,c.en,true); go(1); };
+      root.querySelector('#know').onclick = ()=>{ markKnown(lesson.id,c.en,true); bumpDaily(); go(1); };
       root.querySelector('#again').onclick = ()=>{ markKnown(lesson.id,c.en,false); addReview(lesson.id,c); go(1); };
     }
     draw();
@@ -362,7 +389,7 @@ function renderLesson(id){
         if(got === s.en){
           fb.innerHTML = `<div class="fb-ok">✓ Правильно! <span class="fb-tr">${trHTML(s.tr)}</span></div>`;
           root.querySelectorAll('.tile').forEach(x=>x.disabled=true);
-          markKnown(lesson.id, '§'+s.en, true);
+          markKnown(lesson.id, '§'+s.en, true); bumpDaily();
           speak(s.en);
           setTimeout(()=>{ i++; draw(); }, 1400);
         } else {
@@ -416,7 +443,7 @@ function renderLesson(id){
           if(ok) score++;
           btns.forEach(x=>{ x.disabled=true; const o=opts[x.dataset.k];
             if(o.en===card.en) x.classList.add('correct'); else if(x===b) x.classList.add('wrong'); });
-          if(ok) markKnown(lesson.id,card.en,true); else addReview(lesson.id,card);
+          if(ok){ markKnown(lesson.id,card.en,true); bumpDaily(); } else addReview(lesson.id,card);
           setTimeout(()=>{ i++; draw(); }, 850);
         };
       });

@@ -116,6 +116,10 @@ button.stat.goal:active{transform:scale(.97)}
   font-size:10px;letter-spacing:1.5px;color:#9a90b0;border:1px solid #d7cee6;border-radius:99px;
   padding:3px 12px;font-weight:700}
 .card .ua{font-size:19px;font-weight:700;margin:10px 0 6px}
+.card-pic{font-size:52px;line-height:1;margin:8px 0 2px}
+.ua-back{margin-top:14px;font-size:22px;font-weight:800;color:var(--ink);
+  border-top:1px dashed var(--line);padding-top:12px}
+.flipword{display:block;width:100%;border:none;font-family:inherit;cursor:pointer}
 .card .en{font-size:40px;font-weight:800;color:var(--pink);line-height:1.1;margin:6px 0 12px;word-break:break-word}
 .card.sentence .en{font-size:26px}
 .card .ua-small{font-size:15px;color:#4a4a55;margin:6px 0 4px}

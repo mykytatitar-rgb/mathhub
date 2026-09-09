@@ -137,9 +137,9 @@ const LESSONS = [
     "level": "A1",
     "icon": "🔗",
     "title": "Дієслово to be",
-    "subtitle": "am/is/are у двох часах",
+    "subtitle": "am/is/are — 3 часи",
     "type": "verbs",
-    "grammar": "be = «бути». Нижче Теперішній (am/is/are) і Минулий (was/were).<br>Приклад: I am here. Yesterday I was at home.",
+    "grammar": "be = «бути». Часи: Теперішній (am/is/are), Минулий (was/were), Майбутній (will be).<br>Приклад: Tomorrow I will be at home.",
     "verbs": [
       {
         "inf": "to be",
@@ -205,6 +205,36 @@ const LESSONS = [
                 "tr": "зей у[ё]р"
               }
             ]
+          },
+          {
+            "t": "Майбутній",
+            "rows": [
+              {
+                "p": "I",
+                "f": "will be",
+                "tr": "уіл б[і]"
+              },
+              {
+                "p": "you",
+                "f": "will be",
+                "tr": "уіл б[і]"
+              },
+              {
+                "p": "he/she",
+                "f": "will be",
+                "tr": "уіл б[і]"
+              },
+              {
+                "p": "we",
+                "f": "will be",
+                "tr": "уіл б[і]"
+              },
+              {
+                "p": "they",
+                "f": "will be",
+                "tr": "уіл б[і]"
+              }
+            ]
           }
         ]
       }
@@ -239,9 +269,9 @@ const LESSONS = [
     "level": "A1",
     "icon": "🏃",
     "title": "Основні дієслова",
-    "subtitle": "Спряження: тепер. + мин.",
+    "subtitle": "Спряження: 3 часи",
     "type": "verbs",
-    "grammar": "З he/she/it у теперішньому додаємо -s. Минулий: правильні +-ed, багато неправильних (went, saw, had).<br>Приклад: He wants tea. Yesterday he wanted coffee.",
+    "grammar": "Теперішній: з he/she +-s. Минулий: неправильні (went, saw, had). Майбутній: <b>will</b> + дієслово.<br>Приклад: He will go tomorrow.",
     "verbs": [
       {
         "inf": "to want",
@@ -305,6 +335,36 @@ const LESSONS = [
                 "p": "they",
                 "f": "wanted",
                 "tr": "у[о]нтід"
+              }
+            ]
+          },
+          {
+            "t": "Майбутній",
+            "rows": [
+              {
+                "p": "I",
+                "f": "will want",
+                "tr": "уіл у[о]нт"
+              },
+              {
+                "p": "you",
+                "f": "will want",
+                "tr": "уіл у[о]нт"
+              },
+              {
+                "p": "he/she",
+                "f": "will want",
+                "tr": "уіл у[о]нт"
+              },
+              {
+                "p": "we",
+                "f": "will want",
+                "tr": "уіл у[о]нт"
+              },
+              {
+                "p": "they",
+                "f": "will want",
+                "tr": "уіл у[о]нт"
               }
             ]
           }
@@ -374,6 +434,36 @@ const LESSONS = [
                 "tr": "г[е]д"
               }
             ]
+          },
+          {
+            "t": "Майбутній",
+            "rows": [
+              {
+                "p": "I",
+                "f": "will have",
+                "tr": "уіл г[е]в"
+              },
+              {
+                "p": "you",
+                "f": "will have",
+                "tr": "уіл г[е]в"
+              },
+              {
+                "p": "he/she",
+                "f": "will have",
+                "tr": "уіл г[е]в"
+              },
+              {
+                "p": "we",
+                "f": "will have",
+                "tr": "уіл г[е]в"
+              },
+              {
+                "p": "they",
+                "f": "will have",
+                "tr": "уіл г[е]в"
+              }
+            ]
           }
         ]
       },
@@ -439,6 +529,36 @@ const LESSONS = [
                 "p": "they",
                 "f": "went",
                 "tr": "у[е]нт"
+              }
+            ]
+          },
+          {
+            "t": "Майбутній",
+            "rows": [
+              {
+                "p": "I",
+                "f": "will go",
+                "tr": "уіл г[о]у"
+              },
+              {
+                "p": "you",
+                "f": "will go",
+                "tr": "уіл г[о]у"
+              },
+              {
+                "p": "he/she",
+                "f": "will go",
+                "tr": "уіл г[о]у"
+              },
+              {
+                "p": "we",
+                "f": "will go",
+                "tr": "уіл г[о]у"
+              },
+              {
+                "p": "they",
+                "f": "will go",
+                "tr": "уіл г[о]у"
               }
             ]
           }
@@ -508,6 +628,36 @@ const LESSONS = [
                 "tr": "л[а]йкт"
               }
             ]
+          },
+          {
+            "t": "Майбутній",
+            "rows": [
+              {
+                "p": "I",
+                "f": "will like",
+                "tr": "уіл л[а]йк"
+              },
+              {
+                "p": "you",
+                "f": "will like",
+                "tr": "уіл л[а]йк"
+              },
+              {
+                "p": "he/she",
+                "f": "will like",
+                "tr": "уіл л[а]йк"
+              },
+              {
+                "p": "we",
+                "f": "will like",
+                "tr": "уіл л[а]йк"
+              },
+              {
+                "p": "they",
+                "f": "will like",
+                "tr": "уіл л[а]йк"
+              }
+            ]
           }
         ]
       },
@@ -573,6 +723,36 @@ const LESSONS = [
                 "p": "they",
                 "f": "needed",
                 "tr": "н[і]дід"
+              }
+            ]
+          },
+          {
+            "t": "Майбутній",
+            "rows": [
+              {
+                "p": "I",
+                "f": "will need",
+                "tr": "уіл н[і]д"
+              },
+              {
+                "p": "you",
+                "f": "will need",
+                "tr": "уіл н[і]д"
+              },
+              {
+                "p": "he/she",
+                "f": "will need",
+                "tr": "уіл н[і]д"
+              },
+              {
+                "p": "we",
+                "f": "will need",
+                "tr": "уіл н[і]д"
+              },
+              {
+                "p": "they",
+                "f": "will need",
+                "tr": "уіл н[і]д"
               }
             ]
           }
@@ -642,6 +822,36 @@ const LESSONS = [
                 "tr": "к[у]д"
               }
             ]
+          },
+          {
+            "t": "Майбутній",
+            "rows": [
+              {
+                "p": "I",
+                "f": "will be able to",
+                "tr": "уіл бі [ей]бл ту"
+              },
+              {
+                "p": "you",
+                "f": "will be able to",
+                "tr": "уіл бі [ей]бл ту"
+              },
+              {
+                "p": "he/she",
+                "f": "will be able to",
+                "tr": "уіл бі [ей]бл ту"
+              },
+              {
+                "p": "we",
+                "f": "will be able to",
+                "tr": "уіл бі [ей]бл ту"
+              },
+              {
+                "p": "they",
+                "f": "will be able to",
+                "tr": "уіл бі [ей]бл ту"
+              }
+            ]
           }
         ]
       },
@@ -709,6 +919,36 @@ const LESSONS = [
                 "tr": "с[о]"
               }
             ]
+          },
+          {
+            "t": "Майбутній",
+            "rows": [
+              {
+                "p": "I",
+                "f": "will see",
+                "tr": "уіл с[і]"
+              },
+              {
+                "p": "you",
+                "f": "will see",
+                "tr": "уіл с[і]"
+              },
+              {
+                "p": "he/she",
+                "f": "will see",
+                "tr": "уіл с[і]"
+              },
+              {
+                "p": "we",
+                "f": "will see",
+                "tr": "уіл с[і]"
+              },
+              {
+                "p": "they",
+                "f": "will see",
+                "tr": "уіл с[і]"
+              }
+            ]
           }
         ]
       },
@@ -774,6 +1014,36 @@ const LESSONS = [
                 "p": "they",
                 "f": "knew",
                 "tr": "нь[ю]"
+              }
+            ]
+          },
+          {
+            "t": "Майбутній",
+            "rows": [
+              {
+                "p": "I",
+                "f": "will know",
+                "tr": "уіл н[о]у"
+              },
+              {
+                "p": "you",
+                "f": "will know",
+                "tr": "уіл н[о]у"
+              },
+              {
+                "p": "he/she",
+                "f": "will know",
+                "tr": "уіл н[о]у"
+              },
+              {
+                "p": "we",
+                "f": "will know",
+                "tr": "уіл н[о]у"
+              },
+              {
+                "p": "they",
+                "f": "will know",
+                "tr": "уіл н[о]у"
               }
             ]
           }
@@ -1505,9 +1775,9 @@ const LESSONS = [
     "level": "A1",
     "icon": "⚙️",
     "title": "Дієслова побуту",
-    "subtitle": "Спряження: тепер. + мин.",
+    "subtitle": "Спряження: 3 часи",
     "type": "verbs",
-    "grammar": "Теперішній: +-s з he/she. Минулий часто неправильний (ate, slept, spoke).<br>Приклад: I eat now. Yesterday I ate.",
+    "grammar": "Теперішній: з he/she +-s. Минулий: часто неправильний (ate, slept, spoke). Майбутній: <b>will</b> + дієслово.<br>Приклад: I will eat later.",
     "verbs": [
       {
         "inf": "to eat",
@@ -1571,6 +1841,36 @@ const LESSONS = [
                 "p": "they",
                 "f": "ate",
                 "tr": "[ей]т"
+              }
+            ]
+          },
+          {
+            "t": "Майбутній",
+            "rows": [
+              {
+                "p": "I",
+                "f": "will eat",
+                "tr": "уіл [і]т"
+              },
+              {
+                "p": "you",
+                "f": "will eat",
+                "tr": "уіл [і]т"
+              },
+              {
+                "p": "he/she",
+                "f": "will eat",
+                "tr": "уіл [і]т"
+              },
+              {
+                "p": "we",
+                "f": "will eat",
+                "tr": "уіл [і]т"
+              },
+              {
+                "p": "they",
+                "f": "will eat",
+                "tr": "уіл [і]т"
               }
             ]
           }
@@ -1640,6 +1940,36 @@ const LESSONS = [
                 "tr": "др[е]нк"
               }
             ]
+          },
+          {
+            "t": "Майбутній",
+            "rows": [
+              {
+                "p": "I",
+                "f": "will drink",
+                "tr": "уіл др[і]нк"
+              },
+              {
+                "p": "you",
+                "f": "will drink",
+                "tr": "уіл др[і]нк"
+              },
+              {
+                "p": "he/she",
+                "f": "will drink",
+                "tr": "уіл др[і]нк"
+              },
+              {
+                "p": "we",
+                "f": "will drink",
+                "tr": "уіл др[і]нк"
+              },
+              {
+                "p": "they",
+                "f": "will drink",
+                "tr": "уіл др[і]нк"
+              }
+            ]
           }
         ]
       },
@@ -1705,6 +2035,36 @@ const LESSONS = [
                 "p": "they",
                 "f": "slept",
                 "tr": "сл[е]пт"
+              }
+            ]
+          },
+          {
+            "t": "Майбутній",
+            "rows": [
+              {
+                "p": "I",
+                "f": "will sleep",
+                "tr": "уіл сл[і]п"
+              },
+              {
+                "p": "you",
+                "f": "will sleep",
+                "tr": "уіл сл[і]п"
+              },
+              {
+                "p": "he/she",
+                "f": "will sleep",
+                "tr": "уіл сл[і]п"
+              },
+              {
+                "p": "we",
+                "f": "will sleep",
+                "tr": "уіл сл[і]п"
+              },
+              {
+                "p": "they",
+                "f": "will sleep",
+                "tr": "уіл сл[і]п"
               }
             ]
           }
@@ -1774,6 +2134,36 @@ const LESSONS = [
                 "tr": "л[і]вд"
               }
             ]
+          },
+          {
+            "t": "Майбутній",
+            "rows": [
+              {
+                "p": "I",
+                "f": "will live",
+                "tr": "уіл л[і]в"
+              },
+              {
+                "p": "you",
+                "f": "will live",
+                "tr": "уіл л[і]в"
+              },
+              {
+                "p": "he/she",
+                "f": "will live",
+                "tr": "уіл л[і]в"
+              },
+              {
+                "p": "we",
+                "f": "will live",
+                "tr": "уіл л[і]в"
+              },
+              {
+                "p": "they",
+                "f": "will live",
+                "tr": "уіл л[і]в"
+              }
+            ]
           }
         ]
       },
@@ -1839,6 +2229,36 @@ const LESSONS = [
                 "p": "they",
                 "f": "spoke",
                 "tr": "сп[о]ук"
+              }
+            ]
+          },
+          {
+            "t": "Майбутній",
+            "rows": [
+              {
+                "p": "I",
+                "f": "will speak",
+                "tr": "уіл сп[і]к"
+              },
+              {
+                "p": "you",
+                "f": "will speak",
+                "tr": "уіл сп[і]к"
+              },
+              {
+                "p": "he/she",
+                "f": "will speak",
+                "tr": "уіл сп[і]к"
+              },
+              {
+                "p": "we",
+                "f": "will speak",
+                "tr": "уіл сп[і]к"
+              },
+              {
+                "p": "they",
+                "f": "will speak",
+                "tr": "уіл сп[і]к"
               }
             ]
           }
@@ -1908,6 +2328,36 @@ const LESSONS = [
                 "tr": "пл[е]йд"
               }
             ]
+          },
+          {
+            "t": "Майбутній",
+            "rows": [
+              {
+                "p": "I",
+                "f": "will play",
+                "tr": "уіл пл[е]й"
+              },
+              {
+                "p": "you",
+                "f": "will play",
+                "tr": "уіл пл[е]й"
+              },
+              {
+                "p": "he/she",
+                "f": "will play",
+                "tr": "уіл пл[е]й"
+              },
+              {
+                "p": "we",
+                "f": "will play",
+                "tr": "уіл пл[е]й"
+              },
+              {
+                "p": "they",
+                "f": "will play",
+                "tr": "уіл пл[е]й"
+              }
+            ]
           }
         ]
       },
@@ -1975,6 +2425,36 @@ const LESSONS = [
                 "tr": "[о]упенд"
               }
             ]
+          },
+          {
+            "t": "Майбутній",
+            "rows": [
+              {
+                "p": "I",
+                "f": "will open",
+                "tr": "уіл [о]упен"
+              },
+              {
+                "p": "you",
+                "f": "will open",
+                "tr": "уіл [о]упен"
+              },
+              {
+                "p": "he/she",
+                "f": "will open",
+                "tr": "уіл [о]упен"
+              },
+              {
+                "p": "we",
+                "f": "will open",
+                "tr": "уіл [о]упен"
+              },
+              {
+                "p": "they",
+                "f": "will open",
+                "tr": "уіл [о]упен"
+              }
+            ]
           }
         ]
       },
@@ -2040,6 +2520,36 @@ const LESSONS = [
                 "p": "they",
                 "f": "closed",
                 "tr": "кл[о]узд"
+              }
+            ]
+          },
+          {
+            "t": "Майбутній",
+            "rows": [
+              {
+                "p": "I",
+                "f": "will close",
+                "tr": "уіл кл[о]уз"
+              },
+              {
+                "p": "you",
+                "f": "will close",
+                "tr": "уіл кл[о]уз"
+              },
+              {
+                "p": "he/she",
+                "f": "will close",
+                "tr": "уіл кл[о]уз"
+              },
+              {
+                "p": "we",
+                "f": "will close",
+                "tr": "уіл кл[о]уз"
+              },
+              {
+                "p": "they",
+                "f": "will close",
+                "tr": "уіл кл[о]уз"
               }
             ]
           }

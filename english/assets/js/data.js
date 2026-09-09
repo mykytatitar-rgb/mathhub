@@ -15,6 +15,7 @@ const LESSONS = [
   /* ================= A0 ================= */
   {
     id: 1, level: 'A0', icon: '❓', title: 'Питальні слова', subtitle: 'З чого починаються запитання',
+    grammar: 'Питання часто починається з питального слова (Wh-), а далі — дієслово. <b>What is</b> this? — Що це? · <b>Where are</b> you? — Де ти?',
     cards: [
       { en: 'when',  ua: 'коли',   tr: 'у[е]н' },
       { en: 'where', ua: 'де',     tr: 'у[е]а' },
@@ -50,6 +51,7 @@ const LESSONS = [
   },
   {
     id: 3, level: 'A0', icon: '🔢', title: 'Числа 1–12', subtitle: 'Рахуємо англійською',
+    grammar: 'Множина іменників — додай <b>-s</b>: one apple → two apple<b>s</b>. Число ставимо перед іменником: <b>two</b> brothers.',
     cards: [
       { en: 'one',    ua: 'один',       tr: 'у[а]н' },
       { en: 'two',    ua: 'два',        tr: 'т[у]' },
@@ -129,6 +131,7 @@ const LESSONS = [
   /* ================= A1 ================= */
   {
     id: 7, level: 'A1', icon: '🔗', title: 'Дієслово to be', subtitle: 'am / is / are — маленьке слово «є»',
+    grammar: '<b>am</b> — з I · <b>is</b> — з he/she/it · <b>are</b> — з you/we/they. Заперечення: додай <b>not</b> — I am <b>not</b> here.',
     cards: [
       { en: 'to be', ua: 'бути',                  tr: 'ту б[і]' },
       { en: 'am',    ua: 'є (з I)',               tr: '[ем]' },
@@ -145,6 +148,7 @@ const LESSONS = [
   },
   {
     id: 8, level: 'A1', icon: '🏃', title: 'Основні дієслова', subtitle: 'Дії, з яких будуються речення',
+    grammar: 'У теперішньому часі з he/she/it дієслово отримує <b>-s</b>: I like → he like<b>s</b>. З I/you/we/they — без змін.',
     cards: [
       { en: 'want', ua: 'хотіти',      tr: 'у[о]нт' },
       { en: 'have', ua: 'мати',        tr: 'г[е]в' },
@@ -423,6 +427,7 @@ const LESSONS = [
   },
   {
     id: 23, level: 'A2', icon: '📏', title: 'Описи', subtitle: 'Прикметники',
+    grammar: 'В англійській прикметник ставимо <b>перед</b> іменником: a <b>big</b> house (не «house big»).',
     cards: [
       { en: 'tall',      ua: 'високий',            tr: 'т[о]л' },
       { en: 'short',     ua: 'низький / короткий', tr: 'ш[о]рт' },
@@ -441,6 +446,7 @@ const LESSONS = [
   },
   {
     id: 24, level: 'A2', icon: '📍', title: 'Прийменники місця', subtitle: 'Де що знаходиться',
+    grammar: 'Прийменник ставимо <b>перед</b> місцем: <b>on</b> the table, <b>in</b> the car, <b>under</b> the bed.',
     cards: [
       { en: 'in',      ua: 'в',       tr: '[ін]' },
       { en: 'on',      ua: 'на',      tr: '[он]' },
@@ -521,6 +527,7 @@ const LESSONS = [
   },
   {
     id: 28, level: 'B1', icon: '⏪', title: 'Минулий час', subtitle: 'Розповідаємо про вчора',
+    grammar: 'Правильні дієслова у минулому = <b>-ed</b>: work → work<b>ed</b>. Неправильні треба вчити: go → <b>went</b>, see → <b>saw</b>, come → <b>came</b>.',
     cards: [
       { en: 'was',       ua: 'був / була',   tr: 'у[о]з' },
       { en: 'were',      ua: 'були',         tr: 'у[ё]р' },
@@ -559,6 +566,7 @@ const LESSONS = [
   },
   {
     id: 30, level: 'B1', icon: '⏩', title: 'Майбутній час', subtitle: 'Плани й наміри',
+    grammar: 'Майбутнє: <b>will</b> + дієслово (I <b>will</b> help). Для планів — <b>be going to</b>: I am <b>going to</b> travel.',
     cards: [
       { en: 'will',      ua: 'буде (майб.)',  tr: 'у[і]л' },
       { en: 'going to',  ua: 'збиратися',     tr: 'г[о]уінг ту' },

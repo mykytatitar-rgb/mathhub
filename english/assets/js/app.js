@@ -19,6 +19,28 @@ function markKnown(lessonId, en, val){
   saveProgress(progress);
 }
 
+/* ---------- повторення (інтервальне) ---------- */
+const RVKEY = 'anglo.review.v1';
+const INTERVALS = [12*3600e3, 24*3600e3, 3*24*3600e3, 7*24*3600e3]; // мс за рівнем streak
+function loadReview(){ try{ return JSON.parse(localStorage.getItem(RVKEY)) || {}; }catch(e){ return {}; } }
+function saveReview(r){ try{ localStorage.setItem(RVKEY, JSON.stringify(r)); }catch(e){} }
+let review = loadReview();
+function rvKey(l,en){ return l+'::'+en; }
+function addReview(lessonId, c){
+  const k = rvKey(lessonId, c.en);
+  if(!review[k]) review[k] = { l:lessonId, en:c.en, ua:c.ua, tr:c.tr, streak:0, due:Date.now() };
+  else review[k].due = Math.min(review[k].due, Date.now());
+  saveReview(review);
+}
+function reviewDue(){ const now=Date.now(); return Object.values(review).filter(x=>x.due<=now); }
+function reviewCount(){ return Object.keys(review).length; }
+function gradeReview(k, ok){
+  const it = review[k]; if(!it) return;
+  if(ok){ it.streak++; if(it.streak>=INTERVALS.length) delete review[k]; else it.due = Date.now()+INTERVALS[it.streak-1]; }
+  else { it.streak=0; it.due=Date.now(); }
+  saveReview(review);
+}
+
 /* ---------- швидкість озвучки ---------- */
 const RKEY = 'anglo.rate';
 const RATES = [ {v:0.7, e:'🐢'}, {v:0.85, e:'🚶'}, {v:1.0, e:'🐇'} ];
@@ -78,6 +100,16 @@ function renderHome(){
         <div class="lbl">Вивчено ${known} із ${total} слів · ${pct}%</div>
       </div>
     </div>
+    ${(function(){
+      const due = reviewDue().length, tot = reviewCount();
+      if(!tot) return '';
+      return `<div class="review-banner" id="reviewBanner">
+        <div class="rb-ico">🔁</div>
+        <div class="rb-meta"><div class="rb-title">Повторення</div>
+          <small>${due ? due+' слів чекають' : 'на повторенні '+tot+' слів'}</small></div>
+        <div class="rb-badge">${due || '✓'}</div>
+      </div>`;
+    })()}
     ${LEVELS.map(lv=>{
       const ls = LESSONS.filter(l=>l.level===lv.id);
       if(!ls.length) return '';
@@ -111,7 +143,79 @@ function renderHome(){
     <p class="hint">Встанови як застосунок: меню браузера → «Додати на головний екран».</p>
   `;
   root.querySelectorAll('.lesson-card').forEach(el=>{ el.onclick = ()=>{ location.hash = '#/lesson/'+el.dataset.id; }; });
-  root.querySelector('#reset').onclick = ()=>{ if(confirm('Скинути весь прогрес?')){ progress={}; saveProgress(progress); renderHome(); } };
+  const rb = root.querySelector('#reviewBanner'); if(rb) rb.onclick = ()=>{ location.hash = '#/review'; };
+  root.querySelector('#reset').onclick = ()=>{ if(confirm('Скинути весь прогрес?')){ progress={}; saveProgress(progress); review={}; saveReview(review); renderHome(); } };
+}
+
+/* ---------- екран: повторення ---------- */
+function renderReview(){
+  const due = shuffle(reviewDue());
+  const total = reviewCount();
+  function frame(inner){
+    root.innerHTML = `
+      <div class="topbar">
+        <button class="backbtn" id="back">← Головна</button>
+        <div class="spacer"></div>
+        <div class="brand" style="font-size:14px">🔁 Повторення</div>
+        <div class="spacer"></div>
+        <button class="iconbtn" id="speed">${RATES[rateIdx()].e}</button>
+      </div>
+      <div id="content">${inner}</div>`;
+    root.querySelector('#back').onclick=()=>{ location.hash='#/'; };
+    root.querySelector('#speed').onclick=()=>{ setRateIdx((rateIdx()+1)%RATES.length); root.querySelector('#speed').textContent=RATES[rateIdx()].e; };
+  }
+  if(!total){
+    frame(`<div class="done-card"><div class="score">🗂️</div>
+      <p>Складних слів ще немає. Помились у тесті або познач «↻ Повторити» у картках — і слова зʼявляться тут для інтервального повторення.</p>
+      <button class="primary" id="go">До уроків</button></div>`);
+    root.querySelector('#go').onclick=()=>location.hash='#/'; return;
+  }
+  if(!due.length){
+    frame(`<div class="done-card"><div class="score">✅</div>
+      <p>Все повторено! Наступна порція зʼявиться пізніше.<br>Усього слів на повторенні: ${total}.</p>
+      <button class="primary" id="go">До уроків</button></div>`);
+    root.querySelector('#go').onclick=()=>location.hash='#/'; return;
+  }
+  let i=0;
+  function draw(){
+    if(i>=due.length){ done(); return; }
+    const it=due[i];
+    frame(`
+      <div class="counter">${i+1} / ${due.length}</div>
+      <div class="stage">
+        <div class="card word">
+          <div class="tag">ПОВТОРЕННЯ</div>
+          <div class="ua">${esc(it.ua)}</div>
+          <div id="reveal" hidden>
+            <div class="en">${esc(it.en)}</div>
+            <div class="tr">${trHTML(it.tr)}</div>
+            <button class="speak" id="say">🔊 Послухати</button>
+          </div>
+        </div>
+        <div id="ctrls">
+          <button class="btn-know" id="show" style="width:100%;border-radius:16px;padding:15px;border:none;font-size:15px;font-weight:700;box-shadow:var(--shadow);color:#fff">Показати відповідь</button>
+        </div>
+      </div>`);
+    root.querySelector('#show').onclick=()=>{
+      root.querySelector('#reveal').hidden=false;
+      speak(it.en);
+      root.querySelector('#say').onclick=()=>speak(it.en);
+      root.querySelector('#ctrls').innerHTML=`
+        <div class="controls">
+          <button class="btn-again" id="no">Ще ні</button>
+          <button class="btn-know" id="yes">Знаю ✓</button>
+        </div>`;
+      root.querySelector('#no').onclick=()=>{ gradeReview(rvKey(it.l,it.en),false); i++; draw(); };
+      root.querySelector('#yes').onclick=()=>{ gradeReview(rvKey(it.l,it.en),true); i++; draw(); };
+    };
+  }
+  function done(){
+    frame(`<div class="done-card"><div class="score">🎉</div>
+      <p>Повторення завершено!<br>Залишилось на потім: ${reviewCount()} слів.</p>
+      <button class="primary" id="go">До уроків</button></div>`);
+    root.querySelector('#go').onclick=()=>location.hash='#/';
+  }
+  draw();
 }
 
 /* ---------- екран: урок ---------- */
@@ -119,6 +223,7 @@ function renderLesson(id){
   const lesson = LESSONS.find(l=>l.id===id);
   if(!lesson){ location.hash='#/'; return; }
   let mode = 'study'; // study | build | quiz
+  let grammarOpen = true;
 
   function speedBtn(){ return `<button class="iconbtn" id="speed" title="Швидкість озвучки">${RATES[rateIdx()].e}</button>`; }
 
@@ -148,9 +253,15 @@ function renderLesson(id){
   function study(){
     const items = lesson.cards;
     let i = 0;
-    function draw(){
+    function draw(autospeak){
       const c = items[i];
+      const g = lesson.grammar ? `
+        <div class="grammar">
+          <button class="grammar-head" id="gtoggle">📘 Правило <span class="chev">${grammarOpen?'▾':'▸'}</span></button>
+          ${grammarOpen?`<div class="grammar-body">${lesson.grammar}</div>`:''}
+        </div>` : '';
       root.querySelector('#content').innerHTML = `
+        ${g}
         <div class="counter">${i+1} / ${items.length}</div>
         <div class="stage">
           <div class="card word">
@@ -169,13 +280,14 @@ function renderLesson(id){
             <button class="btn-nav" id="next">Далі →</button>
           </div>
         </div>`;
+      const gt = root.querySelector('#gtoggle'); if(gt) gt.onclick=()=>{ grammarOpen=!grammarOpen; draw(false); };
       root.querySelector('#say').onclick = ()=>speak(c.en);
-      speak(c.en);
+      if(autospeak!==false) speak(c.en);
       const go = d => { i=(i+d+items.length)%items.length; draw(); };
       root.querySelector('#prev').onclick = ()=>go(-1);
       root.querySelector('#next').onclick = ()=>go(1);
       root.querySelector('#know').onclick = ()=>{ markKnown(lesson.id,c.en,true); go(1); };
-      root.querySelector('#again').onclick = ()=>{ markKnown(lesson.id,c.en,false); go(1); };
+      root.querySelector('#again').onclick = ()=>{ markKnown(lesson.id,c.en,false); addReview(lesson.id,c); go(1); };
     }
     draw();
   }
@@ -277,7 +389,7 @@ function renderLesson(id){
           if(ok) score++;
           btns.forEach(x=>{ x.disabled=true; const o=opts[x.dataset.k];
             if(o.en===card.en) x.classList.add('correct'); else if(x===b) x.classList.add('wrong'); });
-          if(ok) markKnown(lesson.id,card.en,true);
+          if(ok) markKnown(lesson.id,card.en,true); else addReview(lesson.id,card);
           setTimeout(()=>{ i++; draw(); }, 850);
         };
       });
@@ -306,7 +418,9 @@ function renderLesson(id){
 function route(){
   const h = location.hash || '#/';
   const m = h.match(/^#\/lesson\/(\d+)/);
-  if(m) renderLesson(parseInt(m[1],10)); else renderHome();
+  if(m) renderLesson(parseInt(m[1],10));
+  else if(h.indexOf('#/review')===0) renderReview();
+  else renderHome();
   window.scrollTo(0,0);
 }
 window.addEventListener('hashchange', route);

@@ -16,6 +16,7 @@ const LESSONS = [
   /* ================= A0 ================= */
   {
     id: 1, level: 'A0', icon: '❓', title: 'Питальні слова', subtitle: 'З чого починаються запитання',
+    grammar: 'Іспанські питання беруться в перевернутий <b>¿</b> і звичайний <b>?</b>: ¿Qué es esto? Над питальними словами — знак наголосу: qué, dónde, cómo.',
     cards: [
       { en: 'cuándo',  ua: 'коли',   tr: 'ку[а]ндо' },
       { en: 'dónde',   ua: 'де',     tr: 'д[о]нде' },
@@ -51,6 +52,7 @@ const LESSONS = [
   },
   {
     id: 3, level: 'A0', icon: '🔢', title: 'Числа 1–12', subtitle: 'Рахуємо іспанською',
+    grammar: 'Множина: після голосної додай <b>-s</b> (libro→libro<b>s</b>), після приголосної — <b>-es</b> (papel→papel<b>es</b>).',
     cards: [
       { en: 'uno',    ua: 'один',       tr: '[у]но' },
       { en: 'dos',    ua: 'два',        tr: 'дос' },
@@ -130,6 +132,7 @@ const LESSONS = [
   /* ================= A1 ================= */
   {
     id: 7, level: 'A1', icon: '🔗', title: 'Дієслово ser', subtitle: 'soy / eres / es — «бути»',
+    grammar: '<b>ser</b> — для постійних речей (хто ти, який ти): yo <b>soy</b>, tú <b>eres</b>, él/ella <b>es</b>, nosotros <b>somos</b>, ellos <b>son</b>.',
     cards: [
       { en: 'ser',   ua: 'бути',       tr: 'сер' },
       { en: 'soy',   ua: 'я є',        tr: 'с[о]й' },
@@ -146,6 +149,7 @@ const LESSONS = [
   },
   {
     id: 8, level: 'A1', icon: '🏃', title: 'Основні дієслова', subtitle: 'Дії, з яких будуються речення',
+    grammar: 'Дієслова закінчуються на <b>-ar / -er / -ir</b>. У формі «я» часто -o: hablar → habl<b>o</b> (я говорю), comer → com<b>o</b> (я їм).',
     cards: [
       { en: 'querer',    ua: 'хотіти',      tr: 'кер[е]р' },
       { en: 'tener',     ua: 'мати',        tr: 'тен[е]р' },
@@ -421,6 +425,7 @@ const LESSONS = [
   },
   {
     id: 23, level: 'A2', icon: '📏', title: 'Описи', subtitle: 'Прикметники',
+    grammar: 'В іспанській прикметник ставимо <b>після</b> іменника й узгоджуємо в роді: coche roj<b>o</b> (авто червоне), casa roj<b>a</b> (хата червона).',
     cards: [
       { en: 'alto',    ua: 'високий',   tr: '[а]льто' },
       { en: 'bajo',    ua: 'низький',   tr: 'б[а]хо' },
@@ -439,6 +444,7 @@ const LESSONS = [
   },
   {
     id: 24, level: 'A2', icon: '📍', title: 'Прийменники місця', subtitle: 'Де що знаходиться',
+    grammar: 'Прийменник + місце: <b>en</b> el coche (в авто), <b>debajo de</b> la mesa (під столом). «de + el» зливається в <b>del</b>.',
     cards: [
       { en: 'en',         ua: 'в, на',  tr: 'ен' },
       { en: 'sobre',      ua: 'на (поверх)', tr: 'с[о]бре' },
@@ -519,6 +525,7 @@ const LESSONS = [
   },
   {
     id: 28, level: 'B1', icon: '⏪', title: 'Минулий час', subtitle: 'Розповідаємо про вчора',
+    grammar: 'Минуле (форма «я»): -ar → <b>-é</b> (hablé — я сказав), -er/-ir → <b>-í</b> (comí — я з’їв). Неправильні: ir → <b>fui</b>, hacer → <b>hice</b>.',
     cards: [
       { en: 'ayer',   ua: 'вчора',        tr: 'ай[е]р' },
       { en: 'fui',    ua: 'я був / пішов', tr: 'фу[і]' },
@@ -555,6 +562,7 @@ const LESSONS = [
   },
   {
     id: 30, level: 'B1', icon: '⏩', title: 'Майбутній час', subtitle: 'Плани й наміри',
+    grammar: 'Наміри/майбутнє: <b>ir a</b> + дієслово: <b>voy a</b> viajar (я збираюсь подорожувати), <b>vamos a</b> comer (ми зараз їстимемо).',
     cards: [
       { en: 'futuro',   ua: 'майбутнє',   tr: 'фут[у]ро' },
       { en: 'ir a',     ua: 'збиратися',  tr: 'ір а' },

@@ -47,6 +47,14 @@ body{
 .progress .fill{height:100%;background:linear-gradient(90deg,var(--pink),#f5a623);border-radius:99px;transition:width .4s}
 .progress .lbl{font-size:12px;color:var(--muted);margin-top:6px}
 
+.level{margin-bottom:20px}
+.level-head{display:flex;align-items:center;gap:12px;padding:2px 4px 10px}
+.level-badge{flex:none;font-weight:800;font-size:13px;color:#fff;background:linear-gradient(135deg,var(--pink),#f5a623);
+  border-radius:10px;padding:6px 10px;letter-spacing:.5px}
+.level-meta{flex:1;min-width:0}
+.level-name{font-weight:800;font-size:15px}
+.level-head small{color:var(--muted);font-size:12px;display:block;line-height:1.3}
+.level-count{flex:none;font-size:12px;font-weight:800;color:var(--muted);font-variant-numeric:tabular-nums}
 .lessons{display:flex;flex-direction:column;gap:12px}
 .lesson-card{display:flex;align-items:center;gap:14px;background:#fff;border-radius:var(--radius);
   padding:14px 16px;box-shadow:var(--shadow);cursor:pointer;border:1px solid var(--line);

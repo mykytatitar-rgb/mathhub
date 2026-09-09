@@ -74,19 +74,36 @@ function renderHome(){
         <div class="lbl">Вивчено ${known} із ${total} слів · ${pct}%</div>
       </div>
     </div>
-    <div class="lessons">
-      ${LESSONS.map(l=>{
-        const k = knownCount(l), done = k===l.cards.length && k>0;
-        return `<div class="lesson-card" data-id="${l.id}">
-          <div class="emoji">${l.icon}</div>
-          <div class="meta">
-            <h3>${esc(l.title)}</h3>
-            <small>${esc(l.subtitle)}</small>
+    ${LEVELS.map(lv=>{
+      const ls = LESSONS.filter(l=>l.level===lv.id);
+      if(!ls.length) return '';
+      const lk = ls.reduce((s,l)=>s+knownCount(l),0);
+      const lt = ls.reduce((s,l)=>s+l.cards.length,0);
+      return `
+        <div class="level">
+          <div class="level-head">
+            <span class="level-badge">${lv.id}</span>
+            <div class="level-meta">
+              <div class="level-name">${esc(lv.name)}</div>
+              <small>${esc(lv.hint)}</small>
+            </div>
+            <span class="level-count">${lk}/${lt}</span>
           </div>
-          <div class="ring ${done?'badge-done':''}">${done?'✓':k+'/'+l.cards.length}</div>
+          <div class="lessons">
+            ${ls.map(l=>{
+              const k = knownCount(l), done = k===l.cards.length && k>0;
+              return `<div class="lesson-card" data-id="${l.id}">
+                <div class="emoji">${l.icon}</div>
+                <div class="meta">
+                  <h3>${esc(l.title)}</h3>
+                  <small>${esc(l.subtitle)}</small>
+                </div>
+                <div class="ring ${done?'badge-done':''}">${done?'✓':k+'/'+l.cards.length}</div>
+              </div>`;
+            }).join('')}
+          </div>
         </div>`;
-      }).join('')}
-    </div>
+    }).join('')}
     <p class="hint">Встанови як застосунок: меню браузера → «Додати на головний екран».</p>
   `;
   root.querySelectorAll('.lesson-card').forEach(el=>{

@@ -322,7 +322,7 @@ function renderLesson(id){
   const lesson = LESSONS.find(l=>l.id===id);
   if(!lesson){ location.hash='#/'; return; }
   let mode = 'study'; // study | build | quiz
-  let grammarOpen = true;
+  let grammarOpen = false;
 
   function speedBtn(){ return `<button class="iconbtn" id="speed" title="Швидкість озвучки">${RATES[rateIdx()].e}</button>`; }
 
@@ -361,6 +361,14 @@ function renderLesson(id){
           <button class="grammar-head" id="gtoggle">📘 Правило <span class="chev">${grammarOpen?'▾':'▸'}</span></button>
           ${grammarOpen?`<div class="grammar-body">${lesson.grammar}</div>`:''}
         </div>` : '';
+      const tenses = v.tenses ? v.tenses : [{ t:'', rows:v.forms }];
+      const allForms = tenses.reduce((a,t)=>a.concat(t.rows), []);
+      let ri = 0;
+      const tblHTML = tenses.map(tn=>`
+        ${tn.t?`<div class="conj-t">${esc(tn.t)}</div>`:''}
+        <table class="conj">
+          ${tn.rows.map(f=>`<tr class="conj-row" data-k="${ri++}"><td class="cp">${esc(f.p)}</td><td class="cf">${esc(f.f)}</td><td class="ct">${trHTML(f.tr)}</td></tr>`).join('')}
+        </table>`).join('');
       root.querySelector('#content').innerHTML = `
         ${g}
         <div class="counter">${i+1} / ${items.length}</div>
@@ -372,9 +380,7 @@ function renderLesson(id){
             <div class="en">${esc(v.inf)}</div>
             <div class="tr">${trHTML(v.tr)}</div>
             <button class="speak" id="say">🔊 Інфінітив</button>
-            <table class="conj">
-              ${v.forms.map((f,k)=>`<tr class="conj-row" data-k="${k}"><td class="cp">${esc(f.p)}</td><td class="cf">${esc(f.f)}</td><td class="ct">${trHTML(f.tr)}</td></tr>`).join('')}
-            </table>
+            ${tblHTML}
             <div class="conj-hint">тапни рядок, щоб почути форму 🔊</div>
           </div>
           <div class="controls">
@@ -389,7 +395,7 @@ function renderLesson(id){
       const gt = root.querySelector('#gtoggle'); if(gt) gt.onclick=()=>{ grammarOpen=!grammarOpen; draw(false); };
       const say = v.inf.replace(/^to /,'');
       root.querySelector('#say').onclick = ()=>speak(say);
-      root.querySelectorAll('.conj-row').forEach(r=>{ r.onclick=()=>speak(v.forms[r.dataset.k].f); });
+      root.querySelectorAll('.conj-row').forEach(r=>{ r.onclick=()=>speak(allForms[r.dataset.k].f); });
       if(autospeak!==false) speak(say);
       const go = d => { i=(i+d+items.length)%items.length; draw(); };
       root.querySelector('#prev').onclick = ()=>go(-1);

@@ -1,8 +1,9 @@
 /* Anglo — service worker для офлайн-режиму. */
-const CACHE = 'anglo-v4';
+const CACHE = 'anglo-v5';
 const ASSETS = [
   './',
   './index.html',
+  './privacy.html',
   './manifest.webmanifest',
   './assets/css/app.css',
   './assets/js/data.js',

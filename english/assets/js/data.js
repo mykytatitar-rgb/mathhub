@@ -1,21 +1,22 @@
 /* Anglo — курс англійської з нуля за рівнями CEFR (A0 → B2).
-   Кожна картка: en (англійською), ua (переклад),
-   tr (транскрипція українськими літерами; наголошений склад у [дужках]).
-   Транскрипції приблизні — щоб було легко повторити вголос. */
+   Кожна картка-слово: en, ua (переклад), tr (транскрипція укр. літерами,
+   наголос у [дужках]).
+   sentences[] — речення для практики «збери речення»: en, ua, tr.
+   Складність і кількість слів зростають від рівня до рівня. */
 
 const LEVELS = [
   { id: 'A0', name: 'Перші кроки',       hint: 'Слова-цеглинки: привітання, числа, займенники' },
-  { id: 'A1', name: 'Початковий',        hint: 'Проста розмова про себе і побут' },
-  { id: 'A2', name: 'Базовий',           hint: 'Кафе, час, погода, дім' },
-  { id: 'B1', name: 'Середній',          hint: 'Подорожі, робота, минулий час' },
-  { id: 'B2', name: 'Вище середнього',   hint: 'Думки, бізнес, ідіоми' },
+  { id: 'A1', name: 'Початковий',        hint: 'Про себе, родина, дієслова, побут' },
+  { id: 'A2', name: 'Базовий',           hint: 'Кафе, час, погода, дім, місто' },
+  { id: 'B1', name: 'Середній',          hint: 'Подорожі, робота, здоров’я, минуле' },
+  { id: 'B2', name: 'Вище середнього',   hint: 'Думки, бізнес, суспільство, технології' },
 ];
 
 const LESSONS = [
-  /* ============ A0 ============ */
+  /* ================= A0 ================= */
   {
     id: 1, level: 'A0', icon: '❓', title: 'Питальні слова',
-    subtitle: 'When, Where, Who — з чого починаються запитання',
+    subtitle: 'З чого починаються запитання',
     cards: [
       { en: 'when',  ua: 'коли',   tr: 'у[е]н' },
       { en: 'where', ua: 'де',     tr: 'у[е]а' },
@@ -25,14 +26,16 @@ const LESSONS = [
       { en: 'how',   ua: 'як',     tr: 'г[а]у' },
       { en: 'which', ua: 'котрий', tr: 'у[і]ч' },
     ],
-    examples: [
+    sentences: [
       { en: 'When will we meet?', ua: 'Коли ми зустрінемось?', tr: 'у[е]н уіл уі міт' },
       { en: 'Where are you?',     ua: 'Де ти?',                tr: 'у[е]а а ю' },
+      { en: 'Who is it?',         ua: 'Хто це?',               tr: 'гу із іт' },
+      { en: 'What is this?',      ua: 'Що це?',                tr: 'уот із зіс' },
     ],
   },
   {
     id: 2, level: 'A0', icon: '🙋', title: 'Займенники',
-    subtitle: 'Я, ти, він, вона — хто виконує дію',
+    subtitle: 'Хто виконує дію',
     cards: [
       { en: 'I',    ua: 'я',        tr: '[а]й' },
       { en: 'you',  ua: 'ти, ви',   tr: '[ю]' },
@@ -42,29 +45,34 @@ const LESSONS = [
       { en: 'we',   ua: 'ми',       tr: 'у[і]' },
       { en: 'they', ua: 'вони',     tr: 'з[ей]' },
     ],
-    examples: [
-      { en: 'I love you.',       ua: 'Я тебе люблю.',    tr: 'ай лав ю' },
-      { en: 'She is my sister.', ua: 'Вона моя сестра.', tr: 'ші із май с[і]стер' },
+    sentences: [
+      { en: 'I love you.',       ua: 'Я тебе люблю.',     tr: 'ай лав ю' },
+      { en: 'She is my sister.', ua: 'Вона моя сестра.',  tr: 'ші із май с[і]стер' },
+      { en: 'We are here.',      ua: 'Ми тут.',           tr: 'уі а г[і]а' },
+      { en: 'What is it?',       ua: 'Що це?',            tr: 'уот із іт' },
     ],
   },
   {
-    id: 3, level: 'A0', icon: '🔢', title: 'Числа 1–10',
+    id: 3, level: 'A0', icon: '🔢', title: 'Числа 1–12',
     subtitle: 'Рахуємо англійською',
     cards: [
-      { en: 'one',   ua: 'один',    tr: 'у[а]н' },
-      { en: 'two',   ua: 'два',     tr: 'т[у]' },
-      { en: 'three', ua: 'три',     tr: 'тр[і]' },
-      { en: 'four',  ua: 'чотири',  tr: 'ф[о]' },
-      { en: 'five',  ua: "п'ять",   tr: 'ф[а]йв' },
-      { en: 'six',   ua: 'шість',   tr: 'с[і]кс' },
-      { en: 'seven', ua: 'сім',     tr: 'с[е]вен' },
-      { en: 'eight', ua: 'вісім',   tr: '[ей]т' },
-      { en: 'nine',  ua: "дев'ять", tr: 'н[а]йн' },
-      { en: 'ten',   ua: 'десять',  tr: 'т[е]н' },
+      { en: 'one',    ua: 'один',       tr: 'у[а]н' },
+      { en: 'two',    ua: 'два',        tr: 'т[у]' },
+      { en: 'three',  ua: 'три',        tr: 'тр[і]' },
+      { en: 'four',   ua: 'чотири',     tr: 'ф[о]' },
+      { en: 'five',   ua: "п'ять",      tr: 'ф[а]йв' },
+      { en: 'six',    ua: 'шість',      tr: 'с[і]кс' },
+      { en: 'seven',  ua: 'сім',        tr: 'с[е]вен' },
+      { en: 'eight',  ua: 'вісім',      tr: '[ей]т' },
+      { en: 'nine',   ua: "дев'ять",    tr: 'н[а]йн' },
+      { en: 'ten',    ua: 'десять',     tr: 'т[е]н' },
+      { en: 'eleven', ua: 'одинадцять', tr: 'іл[е]вен' },
+      { en: 'twelve', ua: 'дванадцять', tr: 'ту[е]лв' },
     ],
-    examples: [
+    sentences: [
       { en: 'I have two brothers.', ua: 'У мене два брати.', tr: 'ай гев ту бр[а]зерс' },
-      { en: 'She is five.',         ua: "Їй п'ять років.",   tr: 'ші із файв' },
+      { en: 'She is five.',         ua: "Їй п'ять років.",   tr: 'ші із ф[а]йв' },
+      { en: 'We are three.',        ua: 'Нас троє.',         tr: 'уі а тр[і]' },
     ],
   },
   {
@@ -80,29 +88,73 @@ const LESSONS = [
       { en: 'no',        ua: 'ні',               tr: 'н[о]у' },
       { en: 'sorry',     ua: 'вибач',            tr: 'с[о]рі' },
     ],
-    examples: [
+    sentences: [
       { en: 'Hello, how are you?', ua: 'Привіт, як справи?', tr: 'гел[о]у гау а ю' },
       { en: 'My name is Anna.',    ua: 'Мене звати Анна.',   tr: 'май н[ей]м із [е]на' },
+      { en: 'Yes, please.',        ua: 'Так, будь ласка.',   tr: 'єс пл[і]з' },
+    ],
+  },
+  {
+    id: 5, level: 'A0', icon: '👉', title: 'Це і той',
+    subtitle: 'Показуємо на речі',
+    cards: [
+      { en: 'this',  ua: 'це, цей',  tr: 'з[і]с' },
+      { en: 'that',  ua: 'те, той',  tr: 'з[е]т' },
+      { en: 'here',  ua: 'тут',      tr: 'г[і]а' },
+      { en: 'there', ua: 'там',      tr: 'з[е]а' },
+      { en: 'good',  ua: 'добре',    tr: 'г[у]д' },
+      { en: 'bad',   ua: 'погано',   tr: 'б[е]д' },
+      { en: 'big',   ua: 'великий',  tr: 'б[і]г' },
+      { en: 'small', ua: 'малий',    tr: 'см[о]л' },
+    ],
+    sentences: [
+      { en: 'This is good.',  ua: 'Це добре.',   tr: 'зіс із г[у]д' },
+      { en: 'That is big.',   ua: 'Те велике.',  tr: 'зет із б[і]г' },
+      { en: 'I am here.',     ua: 'Я тут.',      tr: 'ай ем г[і]а' },
+      { en: 'It is small.',   ua: 'Воно мале.',  tr: 'іт із см[о]л' },
     ],
   },
 
-  /* ============ A1 ============ */
+  /* ================= A1 ================= */
   {
-    id: 5, level: 'A1', icon: '🔗', title: 'Дієслово to be',
+    id: 6, level: 'A1', icon: '🔗', title: 'Дієслово to be',
     subtitle: 'am / is / are — маленьке слово «є»',
     cards: [
       { en: 'to be', ua: 'бути',                  tr: 'ту б[і]' },
       { en: 'am',    ua: 'є (з I)',               tr: '[ем]' },
       { en: 'is',    ua: 'є (з he / she / it)',   tr: '[із]' },
       { en: 'are',   ua: 'є (з you / we / they)', tr: '[а]' },
+      { en: 'not',   ua: 'не (заперечення)',      tr: 'н[о]т' },
     ],
-    examples: [
-      { en: 'I am a student.', ua: 'Я студент.',    tr: 'ай ем е ст[ю]дент' },
-      { en: 'They are here.',  ua: 'Вони тут.',     tr: 'зей а г[і]а' },
+    sentences: [
+      { en: 'I am a student.',   ua: 'Я студент.',      tr: 'ай ем е ст[ю]дент' },
+      { en: 'They are here.',    ua: 'Вони тут.',       tr: 'зей а г[і]а' },
+      { en: 'She is not sad.',   ua: 'Вона не сумна.',  tr: 'ші із нот с[е]д' },
+      { en: 'It is a big city.', ua: 'Це велике місто.', tr: 'іт із е біг с[і]ті' },
     ],
   },
   {
-    id: 6, level: 'A1', icon: '👨‍👩‍👧', title: 'Родина',
+    id: 7, level: 'A1', icon: '🏃', title: 'Основні дієслова',
+    subtitle: 'Дії, з яких будуються речення',
+    cards: [
+      { en: 'want', ua: 'хотіти',      tr: 'у[о]нт' },
+      { en: 'have', ua: 'мати',        tr: 'г[е]в' },
+      { en: 'go',   ua: 'йти, їхати',  tr: 'г[о]у' },
+      { en: 'like', ua: 'подобатись',  tr: 'л[а]йк' },
+      { en: 'need', ua: 'потребувати', tr: 'н[і]д' },
+      { en: 'can',  ua: 'могти',       tr: 'к[е]н' },
+      { en: 'see',  ua: 'бачити',      tr: 'с[і]' },
+      { en: 'know', ua: 'знати',       tr: 'н[о]у' },
+    ],
+    sentences: [
+      { en: 'I want coffee.',   ua: 'Я хочу кави.',           tr: 'ай уонт к[о]фі' },
+      { en: 'I have a sister.', ua: 'У мене є сестра.',       tr: 'ай гев е с[і]стер' },
+      { en: 'We like tea.',     ua: 'Нам подобається чай.',   tr: 'уі лайк т[і]' },
+      { en: 'I can see you.',   ua: 'Я тебе бачу.',           tr: 'ай кен сі ю' },
+    ],
+  },
+  {
+    id: 8, level: 'A1', icon: '👨‍👩‍👧', title: 'Родина',
     subtitle: 'Найближчі люди',
     cards: [
       { en: 'mother',   ua: 'мама',   tr: 'м[а]зер' },
@@ -114,13 +166,15 @@ const LESSONS = [
       { en: 'family',   ua: 'родина', tr: 'ф[е]мілі' },
       { en: 'parents',  ua: 'батьки', tr: 'п[е]рентс' },
     ],
-    examples: [
-      { en: 'This is my mother.', ua: 'Це моя мама.',   tr: 'зіс із май м[а]зер' },
-      { en: 'I have a brother.',  ua: 'У мене є брат.', tr: 'ай гев е бр[а]зер' },
+    sentences: [
+      { en: 'This is my mother.', ua: 'Це моя мама.',    tr: 'зіс із май м[а]зер' },
+      { en: 'I have a brother.',  ua: 'У мене є брат.',  tr: 'ай гев е бр[а]зер' },
+      { en: 'My father is here.', ua: 'Мій тато тут.',   tr: 'май ф[а]зер із г[і]а' },
+      { en: 'We are a family.',   ua: 'Ми родина.',      tr: 'уі а ф[е]мілі' },
     ],
   },
   {
-    id: 7, level: 'A1', icon: '🎨', title: 'Кольори',
+    id: 9, level: 'A1', icon: '🎨', title: 'Кольори',
     subtitle: 'Основні кольори',
     cards: [
       { en: 'red',    ua: 'червоний',     tr: 'р[е]д' },
@@ -132,13 +186,14 @@ const LESSONS = [
       { en: 'orange', ua: 'помаранчевий', tr: '[о]ріндж' },
       { en: 'pink',   ua: 'рожевий',      tr: 'п[і]нк' },
     ],
-    examples: [
-      { en: 'The sky is blue.', ua: 'Небо синє.',                tr: 'зе скай із бл[у]' },
-      { en: 'I like red.',      ua: 'Мені подобається червоний.', tr: 'ай лайк р[е]д' },
+    sentences: [
+      { en: 'The sky is blue.',    ua: 'Небо синє.',                 tr: 'зе скай із бл[у]' },
+      { en: 'I like red.',         ua: 'Мені подобається червоний.', tr: 'ай лайк р[е]д' },
+      { en: 'This apple is green.', ua: 'Це яблуко зелене.',         tr: 'зіс епл із гр[і]н' },
     ],
   },
   {
-    id: 8, level: 'A1', icon: '📅', title: 'Дні тижня',
+    id: 10, level: 'A1', icon: '📅', title: 'Дні тижня',
     subtitle: 'Від понеділка до неділі',
     cards: [
       { en: 'Monday',    ua: 'понеділок', tr: 'м[а]ндей' },
@@ -151,13 +206,14 @@ const LESSONS = [
       { en: 'today',     ua: 'сьогодні',  tr: 'туд[е]й' },
       { en: 'tomorrow',  ua: 'завтра',    tr: 'тум[о]роу' },
     ],
-    examples: [
+    sentences: [
       { en: 'See you on Monday.', ua: 'Побачимось у понеділок.', tr: 'сі ю он м[а]ндей' },
       { en: 'Today is Friday.',   ua: "Сьогодні п'ятниця.",      tr: 'туд[е]й із фр[а]йдей' },
+      { en: 'Tomorrow is Sunday.', ua: 'Завтра неділя.',         tr: 'тум[о]роу із с[а]ндей' },
     ],
   },
   {
-    id: 9, level: 'A1', icon: '🍎', title: 'Їжа і напої',
+    id: 11, level: 'A1', icon: '🍎', title: 'Їжа і напої',
     subtitle: 'Що їмо і п’ємо',
     cards: [
       { en: 'water',  ua: 'вода',    tr: 'у[о]тер' },
@@ -169,33 +225,36 @@ const LESSONS = [
       { en: 'meat',   ua: "м'ясо",   tr: 'м[і]т' },
       { en: 'egg',    ua: 'яйце',    tr: '[е]г' },
     ],
-    examples: [
-      { en: 'I want water, please.', ua: 'Я хочу води, будь ласка.', tr: 'ай уонт у[о]тер пліз' },
-      { en: 'Coffee or tea?',        ua: 'Кава чи чай?',             tr: 'к[о]фі о ті' },
+    sentences: [
+      { en: 'I want water, please.',  ua: 'Я хочу води, будь ласка.',        tr: 'ай уонт у[о]тер пл[і]з' },
+      { en: 'Coffee or tea?',         ua: 'Кава чи чай?',                    tr: 'к[о]фі о т[і]' },
+      { en: 'I like bread and milk.', ua: 'Мені подобається хліб і молоко.', tr: 'ай лайк бред енд м[і]лк' },
     ],
   },
 
-  /* ============ A2 ============ */
+  /* ================= A2 ================= */
   {
-    id: 10, level: 'A2', icon: '☕', title: 'У кафе',
+    id: 12, level: 'A2', icon: '☕', title: 'У кафе',
     subtitle: 'Замовити і розрахуватись',
     cards: [
-      { en: 'menu',       ua: 'меню',       tr: 'м[е]нью' },
-      { en: 'bill',       ua: 'рахунок',    tr: 'б[і]л' },
-      { en: 'order',      ua: 'замовлення', tr: '[о]рдер' },
-      { en: 'table',      ua: 'столик',     tr: 'т[е]йбл' },
-      { en: 'waiter',     ua: 'офіціант',   tr: 'у[е]йтер' },
-      { en: 'delicious',  ua: 'смачно',     tr: 'діл[і]шес' },
-      { en: 'how much',   ua: 'скільки',    tr: 'гау м[а]ч' },
-      { en: 'I would like', ua: 'я б хотів', tr: 'ай уд л[а]йк' },
+      { en: 'menu',        ua: 'меню',       tr: 'м[е]нью' },
+      { en: 'bill',        ua: 'рахунок',    tr: 'б[і]л' },
+      { en: 'order',       ua: 'замовлення', tr: '[о]рдер' },
+      { en: 'table',       ua: 'столик',     tr: 'т[е]йбл' },
+      { en: 'waiter',      ua: 'офіціант',   tr: 'у[е]йтер' },
+      { en: 'delicious',   ua: 'смачно',     tr: 'діл[і]шес' },
+      { en: 'how much',    ua: 'скільки',    tr: 'гау м[а]ч' },
+      { en: 'I would like', ua: 'я б хотів',  tr: 'ай уд л[а]йк' },
     ],
-    examples: [
-      { en: 'Can I have the menu?', ua: 'Можна меню?',        tr: 'кен ай гев зе м[е]нью' },
-      { en: 'The bill, please.',    ua: 'Рахунок, будь ласка.', tr: 'зе біл пл[і]з' },
+    sentences: [
+      { en: 'Can I have the menu?', ua: 'Можна меню?',           tr: 'кен ай гев зе м[е]нью' },
+      { en: 'The bill, please.',    ua: 'Рахунок, будь ласка.',  tr: 'зе біл пл[і]з' },
+      { en: 'How much is this?',    ua: 'Скільки це коштує?',    tr: 'гау мач із з[і]с' },
+      { en: 'The food is delicious.', ua: 'Їжа смачна.',         tr: 'зе фуд із діл[і]шес' },
     ],
   },
   {
-    id: 11, level: 'A2', icon: '🕒', title: 'Час',
+    id: 13, level: 'A2', icon: '🕒', title: 'Час',
     subtitle: 'Котра година',
     cards: [
       { en: 'hour',    ua: 'година',  tr: '[а]уер' },
@@ -205,15 +264,17 @@ const LESSONS = [
       { en: 'late',    ua: 'пізно',   tr: 'л[е]йт' },
       { en: 'morning', ua: 'ранок',   tr: 'м[о]рнінг' },
       { en: 'evening', ua: 'вечір',   tr: '[і]внінг' },
-      { en: 'What time is it?', ua: 'котра година?', tr: 'уот тайм із іт' },
+      { en: "o'clock", ua: 'година (рівно)', tr: 'окл[о]к' },
     ],
-    examples: [
-      { en: "It is three o'clock.", ua: 'Зараз третя.',  tr: 'іт із тр[і] окл[о]к' },
-      { en: 'I am late.',           ua: 'Я запізнююсь.', tr: 'ай ем л[е]йт' },
+    sentences: [
+      { en: 'What time is it?',     ua: 'Котра година?',       tr: 'уот тайм із іт' },
+      { en: "It is three o'clock.", ua: 'Зараз третя.',        tr: 'іт із тр[і] окл[о]к' },
+      { en: 'I am late.',           ua: 'Я запізнююсь.',       tr: 'ай ем л[е]йт' },
+      { en: 'See you in the morning.', ua: 'Побачимось зранку.', tr: 'сі ю ін зе м[о]рнінг' },
     ],
   },
   {
-    id: 12, level: 'A2', icon: '🌦️', title: 'Погода',
+    id: 14, level: 'A2', icon: '🌦️', title: 'Погода',
     subtitle: 'Яка погода надворі',
     cards: [
       { en: 'sun',   ua: 'сонце',    tr: 'с[а]н' },
@@ -225,13 +286,15 @@ const LESSONS = [
       { en: 'cloud', ua: 'хмара',    tr: 'кл[а]уд' },
       { en: 'warm',  ua: 'тепло',    tr: 'у[о]рм' },
     ],
-    examples: [
-      { en: 'It is raining.',     ua: 'Іде дощ.',        tr: 'іт із р[е]йнінг' },
-      { en: 'It is cold today.',  ua: 'Сьогодні холодно.', tr: 'іт із к[о]улд туд[е]й' },
+    sentences: [
+      { en: 'It is raining.',    ua: 'Іде дощ.',          tr: 'іт із р[е]йнінг' },
+      { en: 'It is cold today.', ua: 'Сьогодні холодно.', tr: 'іт із к[о]улд туд[е]й' },
+      { en: 'The sun is hot.',   ua: 'Сонце пекуче.',     tr: 'зе сан із г[о]т' },
+      { en: 'I like the snow.',  ua: 'Мені подобається сніг.', tr: 'ай лайк зе сн[о]у' },
     ],
   },
   {
-    id: 13, level: 'A2', icon: '🏠', title: 'Дім',
+    id: 15, level: 'A2', icon: '🏠', title: 'Дім',
     subtitle: 'Будинок і кімнати',
     cards: [
       { en: 'house',  ua: 'будинок', tr: 'г[а]ус' },
@@ -243,15 +306,38 @@ const LESSONS = [
       { en: 'chair',  ua: 'стілець', tr: 'ч[е]а' },
       { en: 'floor',  ua: 'підлога', tr: 'фл[о]р' },
     ],
-    examples: [
-      { en: 'My room is small.', ua: 'Моя кімната маленька.', tr: 'май рум із см[о]л' },
-      { en: 'Open the door.',    ua: 'Відчини двері.',        tr: '[о]упен зе д[о]р' },
+    sentences: [
+      { en: 'My room is small.',  ua: 'Моя кімната маленька.', tr: 'май рум із см[о]л' },
+      { en: 'Open the door.',     ua: 'Відчини двері.',        tr: '[о]упен зе д[о]р' },
+      { en: 'The kitchen is big.', ua: 'Кухня велика.',        tr: 'зе кічен із б[і]г' },
+      { en: 'I am in the house.', ua: 'Я в будинку.',          tr: 'ай ем ін зе г[а]ус' },
+    ],
+  },
+  {
+    id: 16, level: 'A2', icon: '🏙️', title: 'Місто',
+    subtitle: 'Орієнтуємось у місті',
+    cards: [
+      { en: 'city',    ua: 'місто',     tr: 'с[і]ті' },
+      { en: 'street',  ua: 'вулиця',    tr: 'стр[і]т' },
+      { en: 'shop',    ua: 'магазин',   tr: 'ш[о]п' },
+      { en: 'money',   ua: 'гроші',     tr: 'м[а]ні' },
+      { en: 'bus',     ua: 'автобус',   tr: 'б[а]с' },
+      { en: 'station', ua: 'станція',   tr: 'ст[е]йшн' },
+      { en: 'left',    ua: 'ліворуч',   tr: 'л[е]фт' },
+      { en: 'right',   ua: 'праворуч',  tr: 'р[а]йт' },
+      { en: 'near',    ua: 'близько',   tr: 'н[і]а' },
+    ],
+    sentences: [
+      { en: 'Where is the bus station?', ua: 'Де автобусна станція?', tr: 'уеа із зе бас ст[е]йшн' },
+      { en: 'The shop is on the left.',  ua: 'Магазин ліворуч.',      tr: 'зе шоп із он зе л[е]фт' },
+      { en: 'I need money.',             ua: 'Мені потрібні гроші.',  tr: 'ай нід м[а]ні' },
+      { en: 'The city is big.',          ua: 'Місто велике.',         tr: 'зе сіті із б[і]г' },
     ],
   },
 
-  /* ============ B1 ============ */
+  /* ================= B1 ================= */
   {
-    id: 14, level: 'B1', icon: '✈️', title: 'Подорожі',
+    id: 17, level: 'B1', icon: '✈️', title: 'Подорожі',
     subtitle: 'Аеропорт і готель',
     cards: [
       { en: 'airport',  ua: 'аеропорт',    tr: '[е]апорт' },
@@ -262,14 +348,18 @@ const LESSONS = [
       { en: 'flight',   ua: 'рейс',        tr: 'фл[а]йт' },
       { en: 'to book',  ua: 'забронювати', tr: 'ту б[у]к' },
       { en: 'arrival',  ua: 'прибуття',    tr: 'ер[а]йвл' },
+      { en: 'gate',     ua: 'вихід (посадка)', tr: 'г[е]йт' },
+      { en: 'delay',    ua: 'затримка',    tr: 'діл[е]й' },
     ],
-    examples: [
-      { en: 'Where is my gate?', ua: 'Де мій вихід?',       tr: 'у[е]а із май г[е]йт' },
-      { en: 'I booked a hotel.', ua: 'Я забронював готель.', tr: 'ай букт е гоут[е]л' },
+    sentences: [
+      { en: 'Where is my gate?',       ua: 'Де мій вихід?',         tr: 'уеа із май г[е]йт' },
+      { en: 'I booked a hotel.',       ua: 'Я забронював готель.',  tr: 'ай букт е гоут[е]л' },
+      { en: 'My flight has a delay.',  ua: 'Мій рейс затримується.', tr: 'май флайт гез е діл[е]й' },
+      { en: 'I need my passport.',     ua: 'Мені потрібен паспорт.', tr: 'ай нід май п[а]спорт' },
     ],
   },
   {
-    id: 15, level: 'B1', icon: '💼', title: 'Робота',
+    id: 18, level: 'B1', icon: '💼', title: 'Робота',
     subtitle: 'Офіс і професії',
     cards: [
       { en: 'job',      ua: 'робота',    tr: 'дж[о]б' },
@@ -280,32 +370,40 @@ const LESSONS = [
       { en: 'colleague',ua: 'колега',    tr: 'к[о]лі[г]' },
       { en: 'deadline', ua: 'дедлайн',   tr: 'д[е]длайн' },
       { en: 'to work',  ua: 'працювати', tr: 'ту у[ё]рк' },
+      { en: 'email',    ua: 'імейл',     tr: '[і]мейл' },
+      { en: 'project',  ua: 'проєкт',    tr: 'пр[о]джект' },
     ],
-    examples: [
-      { en: 'I have a meeting.',       ua: 'У мене зустріч.',       tr: 'ай гев е м[і]тінг' },
-      { en: 'She works in an office.', ua: 'Вона працює в офісі.', tr: 'ші у[ё]ркс ін ен [о]фіс' },
+    sentences: [
+      { en: 'I have a meeting.',       ua: 'У мене зустріч.',        tr: 'ай гев е м[і]тінг' },
+      { en: 'She works in an office.', ua: 'Вона працює в офісі.',   tr: 'ші уёркс ін ен [о]фіс' },
+      { en: 'I need to send an email.', ua: 'Мені треба надіслати імейл.', tr: 'ай нід ту сенд ен [і]мейл' },
+      { en: 'The project has a deadline.', ua: 'У проєкту є дедлайн.', tr: 'зе проджект гез е д[е]длайн' },
     ],
   },
   {
-    id: 16, level: 'B1', icon: '🩺', title: 'Здоров’я',
+    id: 19, level: 'B1', icon: '🩺', title: 'Здоров’я',
     subtitle: 'У лікаря',
     cards: [
-      { en: 'doctor',   ua: 'лікар',   tr: 'д[о]ктер' },
-      { en: 'pain',     ua: 'біль',    tr: 'п[е]йн' },
-      { en: 'medicine', ua: 'ліки',    tr: 'м[е]дсін' },
-      { en: 'sick',     ua: 'хворий',  tr: 'с[і]к' },
-      { en: 'head',     ua: 'голова',  tr: 'г[е]д' },
-      { en: 'to hurt',  ua: 'боліти',  tr: 'ту г[ё]рт' },
+      { en: 'doctor',   ua: 'лікар',    tr: 'д[о]ктер' },
+      { en: 'pain',     ua: 'біль',     tr: 'п[е]йн' },
+      { en: 'medicine', ua: 'ліки',     tr: 'м[е]дсін' },
+      { en: 'sick',     ua: 'хворий',   tr: 'с[і]к' },
+      { en: 'head',     ua: 'голова',   tr: 'г[е]д' },
+      { en: 'to hurt',  ua: 'боліти',   tr: 'ту г[ё]рт' },
       { en: 'healthy',  ua: 'здоровий', tr: 'г[е]лсі' },
-      { en: 'hospital', ua: 'лікарня', tr: 'г[о]спітл' },
+      { en: 'hospital', ua: 'лікарня',  tr: 'г[о]спітл' },
+      { en: 'a cold',   ua: 'застуда',  tr: 'е к[о]улд' },
+      { en: 'tired',    ua: 'втомлений', tr: 'т[а]єрд' },
     ],
-    examples: [
-      { en: 'I feel sick.',   ua: 'Мені погано.',          tr: 'ай філ с[і]к' },
-      { en: 'My head hurts.', ua: 'У мене болить голова.', tr: 'май гед г[ё]ртс' },
+    sentences: [
+      { en: 'I feel sick.',    ua: 'Мені погано.',          tr: 'ай філ с[і]к' },
+      { en: 'My head hurts.',  ua: 'У мене болить голова.', tr: 'май гед г[ё]ртс' },
+      { en: 'I have a cold.',  ua: 'Я застудився.',         tr: 'ай гев е к[о]улд' },
+      { en: 'I am very tired.', ua: 'Я дуже втомлений.',    tr: 'ай ем вері т[а]єрд' },
     ],
   },
   {
-    id: 17, level: 'B1', icon: '⏪', title: 'Минулий час',
+    id: 20, level: 'B1', icon: '⏪', title: 'Минулий час',
     subtitle: 'Розповідаємо про вчора',
     cards: [
       { en: 'was',       ua: 'був / була',   tr: 'у[о]з' },
@@ -316,34 +414,60 @@ const LESSONS = [
       { en: 'saw',       ua: 'бачив',        tr: 'с[о]' },
       { en: 'ago',       ua: 'тому (назад)', tr: 'ег[о]у' },
       { en: 'last',      ua: 'минулий',      tr: 'л[а]ст' },
+      { en: 'came',      ua: 'прийшов',      tr: 'к[е]йм' },
+      { en: 'made',      ua: 'зробив',       tr: 'м[е]йд' },
     ],
-    examples: [
-      { en: 'I was at home.',        ua: 'Я був удома.',    tr: 'ай уоз ет г[о]ум' },
-      { en: 'We went to the park.',  ua: 'Ми ходили в парк.', tr: 'уі уент ту зе п[а]рк' },
+    sentences: [
+      { en: 'I was at home.',       ua: 'Я був удома.',      tr: 'ай уоз ет г[о]ум' },
+      { en: 'We went to the park.', ua: 'Ми ходили в парк.', tr: 'уі уент ту зе п[а]рк' },
+      { en: 'She came yesterday.',  ua: 'Вона прийшла вчора.', tr: 'ші кейм є[с]тердей' },
+      { en: 'It was a good day.',   ua: 'Це був гарний день.', tr: 'іт уоз е гуд д[е]й' },
+    ],
+  },
+  {
+    id: 21, level: 'B1', icon: '😊', title: 'Почуття і характер',
+    subtitle: 'Описуємо людей і настрій',
+    cards: [
+      { en: 'happy',  ua: 'щасливий',  tr: 'г[е]пі' },
+      { en: 'sad',    ua: 'сумний',    tr: 'с[е]д' },
+      { en: 'angry',  ua: 'злий',      tr: '[е]нгрі' },
+      { en: 'afraid', ua: 'наляканий', tr: 'ефр[е]йд' },
+      { en: 'kind',   ua: 'добрий',    tr: 'к[а]йнд' },
+      { en: 'smart',  ua: 'розумний',  tr: 'см[а]рт' },
+      { en: 'funny',  ua: 'смішний',   tr: 'ф[а]ні' },
+      { en: 'bored',  ua: 'знуджений', tr: 'б[о]рд' },
+    ],
+    sentences: [
+      { en: 'I am very happy.',  ua: 'Я дуже щасливий.', tr: 'ай ем вері г[е]пі' },
+      { en: 'She is not angry.', ua: 'Вона не зла.',     tr: 'ші із нот [е]нгрі' },
+      { en: 'He is very kind.',  ua: 'Він дуже добрий.', tr: 'гі із вері к[а]йнд' },
+      { en: 'Are you afraid?',   ua: 'Ти боїшся?',       tr: 'а ю ефр[е]йд' },
     ],
   },
 
-  /* ============ B2 ============ */
+  /* ================= B2 ================= */
   {
-    id: 18, level: 'B2', icon: '💭', title: 'Думки і аргументи',
+    id: 22, level: 'B2', icon: '💭', title: 'Думки і аргументи',
     subtitle: 'Висловити позицію',
     cards: [
-      { en: 'opinion',   ua: 'думка',        tr: 'оп[і]ньйон' },
+      { en: 'opinion',   ua: 'думка',         tr: 'оп[і]ньйон' },
       { en: 'to agree',  ua: 'погоджуватись', tr: 'ту егр[і]' },
-      { en: 'however',   ua: 'однак',        tr: 'гау[е]вер' },
-      { en: 'because',   ua: 'тому що',      tr: 'бік[о]з' },
-      { en: 'although',  ua: 'хоча',         tr: 'олз[о]у' },
-      { en: 'probably',  ua: 'мабуть',       tr: 'пр[о]баблі' },
-      { en: 'reason',    ua: 'причина',      tr: 'р[і]зн' },
-      { en: 'in my view', ua: 'на мою думку', tr: 'ін май в[ю]' },
+      { en: 'however',   ua: 'однак',         tr: 'гау[е]вер' },
+      { en: 'because',   ua: 'тому що',       tr: 'бік[о]з' },
+      { en: 'although',  ua: 'хоча',          tr: 'олз[о]у' },
+      { en: 'probably',  ua: 'мабуть',        tr: 'пр[о]баблі' },
+      { en: 'reason',    ua: 'причина',       tr: 'р[і]зн' },
+      { en: 'I think',   ua: 'я думаю',       tr: 'ай с[і]нк' },
     ],
-    examples: [
-      { en: 'I agree with you.',    ua: 'Я з тобою згоден.', tr: 'ай егр[і] уіз ю' },
-      { en: 'However, it is hard.', ua: 'Однак це важко.',   tr: 'гау[е]вер іт із г[а]рд' },
+    sentences: [
+      { en: 'I agree with you.',      ua: 'Я з тобою згоден.',    tr: 'ай егр[і] уіз ю' },
+      { en: 'However, it is hard.',   ua: 'Однак це важко.',      tr: 'гау[е]вер іт із г[а]рд' },
+      { en: 'I think we need a plan.', ua: 'Думаю, нам потрібен план.', tr: 'ай сінк уі нід е пл[а]н' },
+      { en: 'I like it because it is good.', ua: 'Мені подобається, бо це добре.', tr: 'ай лайк іт бікоз іт із г[у]д' },
     ],
   },
   {
-    id: 19, level: 'B2', icon: '📈', title: 'Бізнес',
+    id: 23, level: 'B2', icon: '📈', title: 'Бізнес',
     subtitle: 'Компанія і гроші',
     cards: [
       { en: 'company',  ua: 'компанія',     tr: 'к[а]мпані' },
@@ -355,13 +479,15 @@ const LESSONS = [
       { en: 'growth',   ua: 'зростання',    tr: 'гр[о]ус' },
       { en: 'strategy', ua: 'стратегія',    tr: 'стр[е]теджі' },
     ],
-    examples: [
-      { en: 'Our profit is growing.', ua: 'Наш прибуток зростає.', tr: '[а]уер профіт із гр[о]уінг' },
-      { en: 'We signed a contract.',  ua: 'Ми підписали контракт.', tr: 'уі сайнд е к[о]нтракт' },
+    sentences: [
+      { en: 'Our profit is growing.',  ua: 'Наш прибуток зростає.',  tr: '[а]уер профіт із гр[о]уінг' },
+      { en: 'We signed a contract.',   ua: 'Ми підписали контракт.', tr: 'уі сайнд е к[о]нтракт' },
+      { en: 'The market is changing.', ua: 'Ринок змінюється.',      tr: 'зе маркет із ч[е]йнджінг' },
+      { en: 'They want to invest.',    ua: 'Вони хочуть інвестувати.', tr: 'зей уонт ту інв[е]ст' },
     ],
   },
   {
-    id: 20, level: 'B2', icon: '🏛️', title: 'Суспільство',
+    id: 24, level: 'B2', icon: '🏛️', title: 'Суспільство',
     subtitle: 'Держава і люди',
     cards: [
       { en: 'government', ua: 'уряд',        tr: 'г[а]вермент' },
@@ -373,13 +499,15 @@ const LESSONS = [
       { en: 'change',     ua: 'зміна',       tr: 'ч[е]йндж' },
       { en: 'future',     ua: 'майбутнє',    tr: 'фь[ю]чер' },
     ],
-    examples: [
-      { en: 'People want change.',   ua: 'Люди хочуть змін.',  tr: 'п[і]пл уонт ч[е]йндж' },
-      { en: 'Freedom is important.', ua: 'Свобода важлива.',   tr: 'фр[і]дом із імп[о]ртент' },
+    sentences: [
+      { en: 'People want change.',     ua: 'Люди хочуть змін.',  tr: 'п[і]пл уонт ч[е]йндж' },
+      { en: 'Freedom is important.',   ua: 'Свобода важлива.',   tr: 'фр[і]дом із імп[о]ртент' },
+      { en: 'We have rights.',         ua: 'У нас є права.',     tr: 'уі гев р[а]йтс' },
+      { en: 'The government made a law.', ua: 'Уряд ухвалив закон.', tr: 'зе гавермент мейд е л[о]' },
     ],
   },
   {
-    id: 21, level: 'B2', icon: '🗣️', title: 'Ідіоми і фразові дієслова',
+    id: 25, level: 'B2', icon: '🗣️', title: 'Ідіоми і фразові дієслова',
     subtitle: 'Як говорять носії',
     cards: [
       { en: 'give up',    ua: 'здаватись',   tr: 'гів [а]п' },
@@ -391,9 +519,33 @@ const LESSONS = [
       { en: 'never mind', ua: 'неважливо',   tr: 'н[е]вер майнд' },
       { en: 'make sense', ua: 'мати сенс',   tr: 'мейк с[е]нс' },
     ],
-    examples: [
-      { en: "Don't give up!",   ua: 'Не здавайся!', tr: 'доунт гів [а]п' },
-      { en: 'It makes sense.',  ua: 'Це має сенс.', tr: 'іт мейкс с[е]нс' },
+    sentences: [
+      { en: "Don't give up!",     ua: 'Не здавайся!',       tr: 'доунт гів [а]п' },
+      { en: 'It makes sense.',    ua: 'Це має сенс.',       tr: 'іт мейкс с[е]нс' },
+      { en: 'By the way, I agree.', ua: 'До речі, я згоден.', tr: 'бай зе уей ай егр[і]' },
+      { en: 'Of course, take care.', ua: 'Звісно, бережи себе.', tr: 'ов корс тейк к[е]а' },
+    ],
+  },
+  {
+    id: 26, level: 'B2', icon: '💻', title: 'Технології',
+    subtitle: 'Гаджети та інтернет',
+    cards: [
+      { en: 'computer', ua: "комп'ютер",     tr: 'компь[ю]тер' },
+      { en: 'phone',    ua: 'телефон',       tr: 'ф[о]ун' },
+      { en: 'internet', ua: 'інтернет',      tr: '[і]нтернет' },
+      { en: 'screen',   ua: 'екран',         tr: 'скр[і]н' },
+      { en: 'password', ua: 'пароль',        tr: 'п[а]свёрд' },
+      { en: 'app',      ua: 'застосунок',    tr: '[е]п' },
+      { en: 'online',   ua: 'онлайн',        tr: 'онл[а]йн' },
+      { en: 'file',     ua: 'файл',          tr: 'ф[а]йл' },
+      { en: 'data',     ua: 'дані',          tr: 'д[е]йта' },
+      { en: 'message',  ua: 'повідомлення',  tr: 'м[е]сідж' },
+    ],
+    sentences: [
+      { en: 'I need my password.', ua: 'Мені потрібен пароль.',       tr: 'ай нід май п[а]свёрд' },
+      { en: 'The app is online.',  ua: 'Застосунок онлайн.',          tr: 'зе еп із онл[а]йн' },
+      { en: 'Send me a message.',  ua: 'Надішли мені повідомлення.',  tr: 'сенд мі е м[е]сідж' },
+      { en: 'My computer is new.', ua: "Мій комп'ютер новий.",        tr: 'май компь[ю]тер із нью' },
     ],
   },
 ];

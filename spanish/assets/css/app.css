@@ -211,6 +211,8 @@ button.stat.goal:active{transform:scale(.97)}
   border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;
   box-shadow:var(--shadow);cursor:pointer}
 .review-banner:active{transform:scale(.99)}
+.review-banner.install{background:linear-gradient(135deg,#fff,#e6f7ee)}
+.review-banner.install .rb-badge{background:var(--ok)}
 .review-banner .rb-ico{font-size:24px}
 .review-banner .rb-meta{flex:1;min-width:0}
 .review-banner .rb-title{font-weight:800;font-size:16px}

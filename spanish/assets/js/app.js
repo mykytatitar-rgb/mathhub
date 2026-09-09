@@ -4,6 +4,16 @@
 
 const root = document.getElementById('main');
 
+/* ---------- встановлення застосунку (PWA) ---------- */
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e=>{ e.preventDefault(); deferredPrompt = e; });
+window.addEventListener('appinstalled', ()=>{ deferredPrompt = null; if(location.hash==='#/'||location.hash==='') renderHome(); });
+function isStandalone(){ try{ return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone===true; }catch(e){ return false; } }
+async function doInstall(){
+  if(deferredPrompt){ deferredPrompt.prompt(); try{ await deferredPrompt.userChoice; }catch(e){} deferredPrompt=null; renderHome(); return; }
+  alert('Щоб встановити як окремий застосунок:\n\n• Android (Chrome): меню ⋮ угорі → «Додати на головний екран» / «Встановити застосунок».\n• iPhone (Safari): кнопка «Поділитися» → «На початковий екран».\n\nПотім відкривай його з іконки — він працюватиме як звичайний застосунок, навіть офлайн.');
+}
+
 /* ---------- прогрес ---------- */
 const PKEY = 'hola.progress.v1';
 function loadProgress(){ try { return JSON.parse(localStorage.getItem(PKEY)) || {}; } catch(e){ return {}; } }
@@ -234,6 +244,10 @@ function renderHome(){
   for(const l of LESSONS){ if(!lessonDone(l)){ currentId = l.id; break; } }
   let view = 'map'; try{ if(localStorage.getItem('hola.homeview')==='list') view='list'; }catch(e){}
 
+  const installBanner = isStandalone() ? '' : `<div class="review-banner install" id="installBanner">
+      <div class="rb-ico">⬇️</div>
+      <div class="rb-meta"><div class="rb-title">Встановити застосунок</div><small>відкривати як окремий застосунок, не вкладку</small></div>
+      <div class="rb-badge">＋</div></div>`;
   const reviewBanner = (function(){
     const due = reviewDue().length, tot = reviewCount();
     if(!tot) return '';
@@ -312,6 +326,7 @@ function renderHome(){
         <button class="stat goal" id="goalTile"><div class="stat-num">🎯 ${todayCount()}/${streakData.goal}${todayCount()>=streakData.goal?' ✓':''}</div><div class="stat-lbl">ціль сьогодні</div></button>
       </div>
     </div>
+    ${installBanner}
     ${reviewBanner}
     ${vocabBanner}
     <div class="viewtoggle">
@@ -324,6 +339,7 @@ function renderHome(){
   root.querySelectorAll('.road-node, .lesson-card').forEach(el=>{ el.onclick = ()=>{ location.hash = '#/lesson/'+el.dataset.id; }; });
   const rb = root.querySelector('#reviewBanner'); if(rb) rb.onclick = ()=>{ location.hash = '#/review'; };
   const vb = root.querySelector('#vocabBanner'); if(vb) vb.onclick = ()=>{ location.hash = '#/vocab'; };
+  const ib = root.querySelector('#installBanner'); if(ib) ib.onclick = doInstall;
   root.querySelectorAll('.viewtoggle button').forEach(b=>{ b.onclick=()=>{ try{ localStorage.setItem('hola.homeview', b.dataset.v); }catch(e){} renderHome(); }; });
   const gtile = root.querySelector('#goalTile'); if(gtile) gtile.onclick = ()=>{ cycleGoal(); renderHome(); };
   root.querySelector('#reset').onclick = ()=>{ if(confirm('Скинути весь прогрес?')){ progress={}; saveProgress(progress); review={}; saveReview(review); renderHome(); } };

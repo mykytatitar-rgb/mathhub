@@ -14,6 +14,11 @@ async function doInstall(){
   alert('Щоб встановити як окремий застосунок:\n\n• Android (Chrome): меню ⋮ угорі → «Додати на головний екран» / «Встановити застосунок».\n• iPhone (Safari): кнопка «Поділитися» → «На початковий екран».\n\nПотім відкривай його з іконки — він працюватиме як звичайний застосунок, навіть офлайн.');
 }
 
+/* ---------- преміум / без реклами ---------- */
+const PMKEY = 'anglo.premium.v1';
+function isPremium(){ try{ return localStorage.getItem(PMKEY)==='1'; }catch(e){ return false; } }
+function setPremium(v){ try{ v ? localStorage.setItem(PMKEY,'1') : localStorage.removeItem(PMKEY); }catch(e){} }
+
 /* ---------- прогрес ---------- */
 const PKEY = 'anglo.progress.v1';
 function loadProgress(){ try { return JSON.parse(localStorage.getItem(PKEY)) || {}; } catch(e){ return {}; } }
@@ -261,6 +266,10 @@ function renderHome(){
       <div class="rb-ico">📖</div>
       <div class="rb-meta"><div class="rb-title">Словник</div><small>усі вивчені слова, з фільтрами</small></div>
       <div class="rb-badge">${totalKnown()}</div></div>`;
+  const adBanner = isPremium() ? '' : `<div class="adslot" id="adslot">
+      <span class="ad-tag">Реклама</span>
+      <span class="ad-body">📢 Місце для реклами</span>
+      <span class="ad-remove">Прибрати ✕</span></div>`;
 
   const offsets = [0,44,66,44,0,-44,-66,-44]; let gi = 0;
   const mapHtml = `<div class="road">` + LEVELS.map(lv=>{
@@ -334,12 +343,14 @@ function renderHome(){
       <button data-v="list" class="${view==='list'?'active':''}">☰ Список</button>
     </div>
     ${view==='map' ? mapHtml : listHtml}
+    ${adBanner}
     <p class="hint">Встанови як застосунок: меню браузера → «Додати на головний екран».</p>
   `;
   root.querySelectorAll('.road-node, .lesson-card').forEach(el=>{ el.onclick = ()=>{ location.hash = '#/lesson/'+el.dataset.id; }; });
   const rb = root.querySelector('#reviewBanner'); if(rb) rb.onclick = ()=>{ location.hash = '#/review'; };
   const vb = root.querySelector('#vocabBanner'); if(vb) vb.onclick = ()=>{ location.hash = '#/vocab'; };
   const ib = root.querySelector('#installBanner'); if(ib) ib.onclick = doInstall;
+  const ad = root.querySelector('#adslot'); if(ad) ad.onclick = ()=>{ location.hash = '#/premium'; };
   root.querySelectorAll('.viewtoggle button').forEach(b=>{ b.onclick=()=>{ try{ localStorage.setItem('anglo.homeview', b.dataset.v); }catch(e){} renderHome(); }; });
   const gtile = root.querySelector('#goalTile'); if(gtile) gtile.onclick = ()=>{ cycleGoal(); renderHome(); };
   root.querySelector('#reset').onclick = ()=>{ if(confirm('Скинути весь прогрес?')){ progress={}; saveProgress(progress); review={}; saveReview(review); renderHome(); } };
@@ -414,6 +425,37 @@ function renderReview(){
     root.querySelector('#go').onclick=()=>location.hash='#/';
   }
   draw();
+}
+
+/* ---------- екран: підписка (без реклами) ---------- */
+function renderPremium(){
+  const prem = isPremium();
+  root.innerHTML = `
+    <div class="topbar">
+      <button class="backbtn" id="back">← Головна</button>
+      <div class="spacer"></div>
+      <div class="brand" style="font-size:14px">⭐ Без реклами</div>
+      <div class="spacer"></div>
+    </div>
+    <div class="hero">
+      <h1>Прибрати рекламу ⭐</h1>
+      <p>${prem?'Підписку активовано — реклами немає. Дякуємо! 💛':'Підтримай застосунок і навчайся без реклами.'}</p>
+    </div>
+    <div class="paywall">
+      <div class="pw-benefit">🚫 Жодної реклами</div>
+      <div class="pw-benefit">🔁 Повторення без обмежень</div>
+      <div class="pw-benefit">🎧 Пріоритет якісного голосу</div>
+      <div class="pw-benefit">❤️ Підтримка розвитку курсу</div>
+      ${prem ? `<button class="primary" id="cancel" style="background:#fff;color:var(--pink)">Вимкнути преміум (демо)</button>`
+             : `<div class="pw-plans">
+                  <button class="pw-plan" data-p="month"><b>Місяць</b><span>₴59 / міс</span></button>
+                  <button class="pw-plan best" data-p="year"><b>Рік ⭐</b><span>₴399 / рік · вигідно</span></button>
+                </div>`}
+      <p class="hint">Демо: підписка вмикається локально на цьому пристрої. У застосунку Google Play тут працюватиме справжня підписка (Google Play Billing).</p>
+    </div>`;
+  root.querySelector('#back').onclick=()=>location.hash='#/';
+  root.querySelectorAll('.pw-plan').forEach(b=> b.onclick=()=>{ setPremium(true); alert('Готово! Рекламу прибрано ⭐\n(демо — у версії Google Play тут буде оплата підписки).'); location.hash='#/'; });
+  const c = root.querySelector('#cancel'); if(c) c.onclick=()=>{ setPremium(false); renderPremium(); };
 }
 
 /* ---------- екран: словник ---------- */
@@ -698,6 +740,7 @@ function route(){
   if(m) renderLesson(parseInt(m[1],10));
   else if(h.indexOf('#/review')===0) renderReview();
   else if(h.indexOf('#/vocab')===0) renderVocab();
+  else if(h.indexOf('#/premium')===0) renderPremium();
   else renderHome();
   window.scrollTo(0,0);
 }

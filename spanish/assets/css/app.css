@@ -237,4 +237,20 @@ button.stat.goal:active{transform:scale(.97)}
 .vlvl{flex:none;font-size:11px;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--pink),#f5a623);border-radius:8px;padding:3px 7px}
 .vpos{flex:none;font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:3px 7px}
 
+/* ---- ad slot + paywall ---- */
+.adslot{display:flex;align-items:center;gap:10px;margin:16px 0 4px;padding:14px 14px;border-radius:14px;
+  border:1px dashed #cdbfae;background:rgba(255,255,255,.5);cursor:pointer}
+.ad-tag{flex:none;font-size:10px;font-weight:800;letter-spacing:1px;color:#a99a86;border:1px solid var(--line);border-radius:6px;padding:2px 6px}
+.ad-body{flex:1;color:var(--muted);font-size:14px;font-weight:600}
+.ad-remove{flex:none;font-size:12px;font-weight:800;color:var(--pink)}
+.paywall{display:flex;flex-direction:column;gap:10px}
+.pw-benefit{background:#fff;border:1px solid var(--line);border-radius:14px;padding:13px 16px;font-weight:700;font-size:15px}
+.pw-plans{display:flex;gap:10px;margin-top:4px}
+.pw-plan{flex:1;border:1px solid var(--line);background:#fff;border-radius:16px;padding:14px;cursor:pointer;
+  display:flex;flex-direction:column;gap:3px;font-family:inherit}
+.pw-plan b{font-size:16px;color:var(--ink)}
+.pw-plan span{font-size:12.5px;color:var(--muted)}
+.pw-plan.best{border-color:var(--pink);box-shadow:0 0 0 2px var(--pink) inset}
+.pw-plan:active{transform:scale(.98)}
+
 .hint{font-size:12px;color:var(--muted);text-align:center;margin-top:8px}

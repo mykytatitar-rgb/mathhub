@@ -266,7 +266,7 @@ function renderHome(){
       <div class="rb-ico">📖</div>
       <div class="rb-meta"><div class="rb-title">Словник</div><small>усі вивчені слова, з фільтрами</small></div>
       <div class="rb-badge">${totalKnown()}</div></div>`;
-  const adBanner = (isPremium() || (window.Native && Native.isNative)) ? '' : `<div class="adslot" id="adslot">
+  const adBanner = isPremium() ? '' : `<div class="adslot" id="adslot">
       <span class="ad-tag">Реклама</span>
       <span class="ad-body">📢 Місце для реклами</span>
       <span class="ad-remove">Прибрати ✕</span></div>`;

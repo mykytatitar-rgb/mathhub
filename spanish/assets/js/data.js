@@ -35,6 +35,7 @@ const LESSONS = [
   },
   {
     id: 2, level: 'A0', icon: '🙋', title: 'Займенники', subtitle: 'Хто виконує дію',
+    grammar: 'В іспанській займенник-підмет часто <b>пропускають</b> — його видно з дієслова: <b>soy</b> = я є (yo не обовʼязково).',
     cards: [
       { en: 'yo',       ua: 'я',    tr: 'йо' },
       { en: 'tú',       ua: 'ти',   tr: 'т[у]' },
@@ -75,6 +76,7 @@ const LESSONS = [
   },
   {
     id: 4, level: 'A0', icon: '🔟', title: 'Числа 13–100', subtitle: 'Десятки і велике',
+    grammar: 'Складені: veinti<b>uno</b> (21), а від 31 — через <b>y</b>: treinta <b>y</b> uno.',
     cards: [
       { en: 'trece',     ua: 'тринадцять',  tr: 'тр[е]се' },
       { en: 'quince',    ua: "п'ятнадцять", tr: 'к[і]нсе' },
@@ -169,6 +171,7 @@ const LESSONS = [
   },
   {
     id: 9, level: 'A1', icon: '👨‍👩‍👧', title: 'Родина', subtitle: 'Найближчі люди',
+    grammar: 'Присвійні: <b>mi</b> (мій), <b>tu</b> (твій), <b>su</b> (його/її): <b>mi</b> madre, <b>su</b> hermano.',
     cards: [
       { en: 'madre',   ua: 'мама',   tr: 'м[а]дре' },
       { en: 'padre',   ua: 'тато',   tr: 'п[а]дре' },
@@ -205,6 +208,7 @@ const LESSONS = [
   },
   {
     id: 11, level: 'A1', icon: '📅', title: 'Дні тижня', subtitle: 'Від понеділка до неділі',
+    grammar: 'Дні — з малої літери й з артиклем <b>el</b>: <b>el</b> lunes (у понеділок).',
     cards: [
       { en: 'lunes',     ua: 'понеділок', tr: 'л[у]нес' },
       { en: 'martes',    ua: 'вівторок',  tr: 'м[а]ртес' },
@@ -224,6 +228,7 @@ const LESSONS = [
   },
   {
     id: 12, level: 'A1', icon: '🍂', title: 'Місяці і пори року', subtitle: 'Календар',
+    grammar: 'Місяці — з малої літери й з прийменником <b>en</b>: <b>en</b> julio, <b>en</b> verano.',
     cards: [
       { en: 'primavera', ua: 'весна',     tr: 'прімаб[е]ра' },
       { en: 'verano',    ua: 'літо',      tr: 'бер[а]но' },
@@ -243,6 +248,7 @@ const LESSONS = [
   },
   {
     id: 13, level: 'A1', icon: '🍎', title: 'Їжа і напої', subtitle: 'Що їмо і п’ємо',
+    grammar: 'Артикль за родом: <b>el</b> (чол.) — el pan, <b>la</b> (жін.) — la leche.',
     cards: [
       { en: 'agua',    ua: 'вода',   tr: '[а]гуа' },
       { en: 'pan',     ua: 'хліб',   tr: 'пан' },
@@ -299,6 +305,7 @@ const LESSONS = [
   /* ================= A2 ================= */
   {
     id: 16, level: 'A2', icon: '☕', title: 'У кафе', subtitle: 'Замовити і розрахуватись',
+    grammar: 'Ввічливе прохання: <b>¿Me trae…?</b> або <b>Quisiera…</b> + що саме.',
     cards: [
       { en: 'menú',      ua: 'меню',       tr: 'мен[у]' },
       { en: 'cuenta',    ua: 'рахунок',    tr: 'ку[е]нта' },
@@ -317,6 +324,7 @@ const LESSONS = [
   },
   {
     id: 17, level: 'A2', icon: '🕒', title: 'Час', subtitle: 'Котра година',
+    grammar: 'Котра година: <b>Son las</b> + число (Son las tres). Для 1-ї: <b>Es la</b> una.',
     cards: [
       { en: 'hora',    ua: 'година',     tr: '[о]ра' },
       { en: 'minuto',  ua: 'хвилина',    tr: 'мін[у]то' },
@@ -389,6 +397,7 @@ const LESSONS = [
   },
   {
     id: 21, level: 'A2', icon: '🚗', title: 'Транспорт', subtitle: 'Як пересуватися',
+    grammar: 'Спосіб пересування — прийменник <b>en</b>: <b>en</b> coche, <b>en</b> tren, <b>en</b> avión.',
     cards: [
       { en: 'coche',     ua: 'авто',       tr: 'к[о]че' },
       { en: 'tren',      ua: 'потяг',      tr: 'трен' },
@@ -407,6 +416,7 @@ const LESSONS = [
   },
   {
     id: 22, level: 'A2', icon: '🛒', title: 'Покупки', subtitle: 'У магазині',
+    grammar: 'Ціна: <b>¿Cuánto cuesta?</b> Оплата: pagar <b>con</b> tarjeta або <b>en</b> efectivo.',
     cards: [
       { en: 'precio',    ua: 'ціна',     tr: 'пр[е]сіо' },
       { en: 'barato',    ua: 'дешевий',  tr: 'бар[а]то' },
@@ -505,6 +515,7 @@ const LESSONS = [
   },
   {
     id: 27, level: 'B1', icon: '🩺', title: 'Здоров’я', subtitle: 'У лікаря',
+    grammar: 'Біль: <b>Me duele</b> + частина тіла: Me duele la cabeza (болить голова).',
     cards: [
       { en: 'médico',    ua: 'лікар',    tr: 'м[е]діко' },
       { en: 'dolor',     ua: 'біль',     tr: 'дол[о]р' },
@@ -601,6 +612,7 @@ const LESSONS = [
   /* ================= B2 ================= */
   {
     id: 32, level: 'B2', icon: '💭', title: 'Думки і аргументи', subtitle: 'Висловити позицію',
+    grammar: 'Зʼєднуємо думки: <b>porque</b> (бо), <b>sin embargo</b> (однак), <b>aunque</b> (хоча).',
     cards: [
       { en: 'opinión',          ua: 'думка',         tr: 'опінь[о]н' },
       { en: 'estar de acuerdo', ua: 'погоджуватись', tr: 'ест[а]р де аку[е]рдо' },
@@ -655,6 +667,7 @@ const LESSONS = [
   },
   {
     id: 35, level: 'B2', icon: '🗣️', title: 'Ідіоми і вирази', subtitle: 'Як говорять носії',
+    grammar: 'Багато сталих виразів: <b>tener razón</b> = мати рацію, <b>darse cuenta</b> = усвідомити.',
     cards: [
       { en: 'por supuesto', ua: 'звісно',     tr: 'пор супу[е]сто' },
       { en: 'de nada',      ua: 'нема за що',  tr: 'де н[а]да' },

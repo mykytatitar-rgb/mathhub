@@ -18,6 +18,11 @@ function markKnown(lessonId, en, val){
   if(val) progress[lessonId][en] = true; else delete progress[lessonId][en];
   saveProgress(progress);
 }
+function markMeta(lessonId, key, val){
+  progress[lessonId] = progress[lessonId] || {};
+  if(val) progress[lessonId][key] = true; else delete progress[lessonId][key];
+  saveProgress(progress);
+}
 
 /* ---------- повторення (інтервальне) ---------- */
 const RVKEY = 'anglo.review.v1';
@@ -158,13 +163,33 @@ function lessonVocab(l){
   (l.verbs||[]).forEach(v=>{ wordsOf(v.inf).forEach(w=>s.add(w)); (v.tenses?v.tenses.reduce((a,t)=>a.concat(t.rows),[]):(v.forms||[])).forEach(f=> wordsOf(f.f).forEach(w=>s.add(w))); });
   return s;
 }
+/* фонд речень, доступних станом на цей урок (лише знайомі слова) */
+function sentencePool(lesson){
+  const idx = LESSONS.indexOf(lesson);
+  const vocab = new Set();
+  for(let k=0;k<=idx;k++) lessonVocab(LESSONS[k]).forEach(w=>vocab.add(w));
+  const known = w => !w || vocab.has(w) || GLUE.has(w) || /^[0-9]+$/.test(w);
+  const seen = new Set(), items = [];
+  for(let k=0;k<=idx;k++) (LESSONS[k].sentences||[]).forEach(sn=>{
+    if(!seen.has(sn.en) && wordsOf(sn.en).every(known)){ seen.add(sn.en); items.push(sn); }
+  });
+  return items;
+}
+/* урок «готовий» лише коли всі розділи пройдені: слова 100% + тест 100% + речення */
+function lessonDone(l){
+  const set = progress[l.id] || {};
+  const wordsDone = l.cards.length>0 && knownCount(l)===l.cards.length;
+  const quizDone = !!set['@quiz'];
+  const sentDone = !!set['@sent'] || sentencePool(l).length===0;
+  return wordsDone && quizDone && sentDone;
+}
 
 /* ---------- екран: рівні й уроки ---------- */
 function renderHome(){
   const known = totalKnown(), total = totalCards();
   const pct = total ? Math.round(known/total*100) : 0;
   let currentId = null;
-  for(const l of LESSONS){ if(knownCount(l) < l.cards.length){ currentId = l.id; break; } }
+  for(const l of LESSONS){ if(!lessonDone(l)){ currentId = l.id; break; } }
   let view = 'map'; try{ if(localStorage.getItem('anglo.homeview')==='list') view='list'; }catch(e){}
 
   const reviewBanner = (function(){
@@ -187,7 +212,7 @@ function renderHome(){
         <div class="level-meta"><div class="level-name">${esc(lv.name)}</div><small>${esc(lv.hint)}</small></div>
         <span class="level-count">${lk}/${lt}</span>
       </div>` + ls.map(l=>{
-        const k = knownCount(l), done = k===l.cards.length && k>0;
+        const k = knownCount(l), done = lessonDone(l);
         const state = done ? 'done' : (l.id===currentId ? 'current' : (k>0 ? 'started' : 'todo'));
         const off = offsets[gi++ % offsets.length];
         const badge = done ? '<span class="rn-badge">✓</span>' : (l.id===currentId ? '<span class="rn-badge star">★</span>' : '');
@@ -211,7 +236,7 @@ function renderHome(){
         </div>
         <div class="lessons">
           ${ls.map(l=>{
-            const k = knownCount(l), done = k===l.cards.length && k>0;
+            const k = knownCount(l), done = lessonDone(l);
             return `<div class="lesson-card" data-id="${l.id}">
               <div class="emoji">${l.icon}</div>
               <div class="meta"><h3>${esc(l.title)}</h3>
@@ -450,7 +475,7 @@ function renderLesson(id){
           </div>
         </div>`;
       const gt = root.querySelector('#gtoggle'); if(gt) gt.onclick=()=>{ grammarOpen=!grammarOpen; draw(false); };
-      root.querySelector('#wcard').onclick = (e)=>{ if(e.target && e.target.id==='say'){ speak(c.en); return; } if(!revealed){ revealed=true; draw(false); } };
+      root.querySelector('#wcard').onclick = (e)=>{ if(e.target && e.target.id==='say'){ speak(c.en); return; } if(!revealed){ revealed=true; draw(false); speak(c.en); } };
       if(autospeak!==false) speak(c.en);
       const go = d => { revealed=false; i=(i+d+items.length)%items.length; draw(); };
       root.querySelector('#prev').onclick = ()=>go(-1);
@@ -464,14 +489,8 @@ function renderLesson(id){
   /* --- режим «Речення»: флешкартка з фонду вивчених слів --- */
   function build(){
     const c = ()=>root.querySelector('#content');
-    const idx = LESSONS.indexOf(lesson);
-    const vocab = new Set();
-    for(let k=0;k<=idx;k++) lessonVocab(LESSONS[k]).forEach(w=>vocab.add(w));
-    const known = w => !w || vocab.has(w) || GLUE.has(w) || /^[0-9]+$/.test(w);
-    const seen = new Set(); const items = [];
-    for(let k=0;k<=idx;k++) (LESSONS[k].sentences||[]).forEach(sn=>{
-      if(!seen.has(sn.en) && wordsOf(sn.en).every(known)){ seen.add(sn.en); items.push(sn); }
-    });
+    const items = sentencePool(lesson);
+    const revealedSet = new Set();
     if(!items.length){
       c().innerHTML = `<div class="done-card"><div class="score">📚</div>
         <p>Речень із вивчених слів ще нема.<br>Пройди більше слів у застосунку — і тут зʼявиться практика речень лише зі знайомих слів.</p></div>`;
@@ -494,7 +513,7 @@ function renderLesson(id){
             <button class="btn-nav" id="next">Далі →</button>
           </div>
         </div>`;
-      c().querySelector('#flip').onclick = (e)=>{ if(e.target && e.target.id==='say'){ speak(sn.en); return; } if(!reveal){ draw(true); speak(sn.en); bumpDaily(); } };
+      c().querySelector('#flip').onclick = (e)=>{ if(e.target && e.target.id==='say'){ speak(sn.en); return; } if(!reveal){ draw(true); speak(sn.en); bumpDaily(); revealedSet.add(i); if(revealedSet.size===items.length) markMeta(lesson.id,'@sent',true); } };
       const go = d => { i=(i+d+items.length)%items.length; draw(false); };
       c().querySelector('#prev').onclick = ()=>go(-1);
       c().querySelector('#next').onclick = ()=>go(1);
@@ -522,24 +541,27 @@ function renderLesson(id){
           ${askEn?`<button class="speak" id="say">🔊</button>`:''}
         </div>
         <div class="options">
-          ${opts.map((o,k)=>`<button data-k="${k}">${esc(askEn?o.ua:o.en)}</button>`).join('')}
+          ${opts.map((o,k)=>`<button data-k="${k}">${esc(askEn?o.ua:o.en)}${askEn?'':`<span class="opt-say" data-say="${k}">🔊</span>`}</button>`).join('')}
         </div>`;
       if(askEn){ const s=root.querySelector('#say'); s.onclick=()=>speak(card.en); speak(card.en); }
       const btns = root.querySelectorAll('.options button');
       btns.forEach(b=>{
-        b.onclick=()=>{
+        b.onclick=(e)=>{
+          if(e.target && e.target.dataset && e.target.dataset.say!=null){ speak(opts[e.target.dataset.say].en); return; }
           const chosen = opts[b.dataset.k];
           const ok = chosen.en===card.en;
           if(ok) score++;
           btns.forEach(x=>{ x.disabled=true; const o=opts[x.dataset.k];
             if(o.en===card.en) x.classList.add('correct'); else if(x===b) x.classList.add('wrong'); });
+          speak(card.en);
           if(ok){ markKnown(lesson.id,card.en,true); bumpDaily(); } else addReview(lesson.id,card);
-          setTimeout(()=>{ i++; draw(); }, 850);
+          setTimeout(()=>{ i++; draw(); }, 950);
         };
       });
     }
     function finish(){
       const pct=Math.round(score/qs.length*100);
+      if(pct===100) markMeta(lesson.id,'@quiz',true);
       const msg = pct===100?'Ідеально! 🎉' : pct>=70?'Добре! Ще трохи 💪' : 'Повтори слова і спробуй ще 🔁';
       root.querySelector('#content').innerHTML = `
         <div class="done-card">

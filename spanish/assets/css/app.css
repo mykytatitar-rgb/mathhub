@@ -155,6 +155,7 @@ button.stat.goal:active{transform:scale(.97)}
 .options button.correct{background:#e4f7ee;border-color:var(--ok);color:var(--ok)}
 .options button.wrong{background:#fde8ef;border-color:var(--pink);color:var(--pink)}
 .options button:disabled{cursor:default}
+.opt-say{margin-left:8px;opacity:.6;font-size:15px}
 .done-card{background:#fff;border-radius:var(--radius);padding:28px 20px;text-align:center;box-shadow:var(--shadow)}
 .done-card .score{font-size:44px;font-weight:800;color:var(--pink)}
 .done-card p{color:var(--muted)}

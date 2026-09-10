@@ -212,6 +212,8 @@
 
     updateHwCount();
 
+    healStudentImages();
+
     // поки дошка відкрита — забираємо те, що пише учень за посиланням
     cur.pullTimer = setInterval(function () {
       pullContributions();
@@ -640,7 +642,11 @@
     var pics = [];   // картинки від учня — їх треба забрати до себе
 
     rows.forEach(function (row) {
-      ids.push(row.id);
+      /* Раніше id додавався тут — до будь-якої обробки. Через це внесок,
+         який не вдалося застосувати, все одно позначався прийнятим і більше
+         ніколи не читався. Тепер id потрапляє в список лише наприкінці, і
+         лише якщо все справді лягло на місце. */
+      var ok = true;
       var msgs;
       try { msgs = JSON.parse(row.payload); } catch (e) { return; }
       if (!Array.isArray(msgs)) msgs = [msgs];
@@ -655,23 +661,29 @@
             s = cur.board.slides.filter(function (x) { return x.id === m.sid; })[0] || null;
           }
           if (!s && m.sid == null) s = cur.board.slides[m.slide];
-          if (!s) return;
+          // слайда немає — можливо, дошка тут ще стара; спробуємо наступного разу
+          if (!s) { ok = false; return; }
           if (!s.items) s.items = [];
           // позначаємо чиє це — щоб на дошці було видно, що писав учень
           var it = m.item;
           it.by = 'student';
-          /* Учень міг вставити фото чи скріншот. У нас його ще немає —
-             у повідомленні лежить лише адреса. Запам'ятовуємо, щоб забрати
-             файл до себе, і саму адресу з об'єкта прибираємо: у сховищі
-             картинки живуть за ключем, а не за посиланням. */
-          if (it.t === 'i' && it.src) {
-            pics.push({ key: it.k, url: it.src });
-            delete it.src;
-          }
-          if (!s.items.some(function (x) { return x.id === it.id; })) {
+
+          /* Якщо запис уже на дошці, далі працюємо саме з ним, а не з
+             копією з повідомлення. Інакше при повторній спробі адресу
+             прибрало б із копії, а на дошці вона висіла б вічно. */
+          var was = s.items.filter(function (x) { return x.id === it.id; })[0];
+          if (was) {
+            it = was;
+          } else {
             s.items.push(it);
             changed = true;
           }
+
+          /* Учень міг вставити фото чи скріншот. Файлу в нас ще немає — у
+             повідомленні лише адреса, і вона єдиний шлях до нього. Поки
+             файл не ляже у сховище, стерти адресу означає втратити фото
+             назавжди. Приберемо її тоді, коли файл справді доїде. */
+          if (it.t === 'i' && it.src) pics.push({ key: it.k, url: it.src, item: it });
         } else if (m.mathhub === 'ink-undo' && m.id) {
           cur.board.slides.forEach(function (s) {
             if (!s.items) return;
@@ -681,32 +693,46 @@
           });
         }
       });
+      if (ok) ids.push(row.id);
     });
 
-    /* Файли забираємо у фоні: доки вони йдуть, картинка вже стоїть на дошці
-       порожньою рамкою, а домалюється, щойно доїде. Чекати на це, тримаючи
-       злиття, не варто — решта записів учня має з'явитися одразу. */
-    if (pics.length && window.ImgStore && window.ImgStore.available()) {
-      Promise.all(pics.map(function (p) {
-        if (!p.key || !p.url) return null;
-        return window.ImgStore.get(p.key).then(function (have) {
-          if (have) return null;                       // уже забрали раніше
-          return fetch(p.url).then(function (res) {
-            if (!res.ok) throw new Error('http ' + res.status);
-            return res.blob();
-          }).then(function (blob) { return window.ImgStore.put(p.key, blob); });
-        }).catch(function (e) {
-          console.warn('Картинка від учня не забралася:', e && e.message);
+    /* Файли чекаємо, а не відпускаємо у фон. Раніше внесок позначався
+       прийнятим одразу, а завантаження йшло слідом: одна невдала спроба —
+       і фото не лишалося ніде, бо адресу вже стерто, а внесок більше не
+       читався. Тепер «прийнято» настає лише після того, як файл ліг у
+       сховище. */
+    if (!pics.length || !window.ImgStore || !window.ImgStore.available()) {
+      return Promise.resolve({ changed: changed, ids: ids });
+    }
+
+    return Promise.all(pics.map(function (p) {
+      if (!p.key || !p.url) return null;
+      return window.ImgStore.get(p.key).then(function (have) {
+        if (have) { delete p.item.src; return null; }        // уже забрали раніше
+        return fetch(p.url).then(function (res) {
+          if (!res.ok) throw new Error('http ' + res.status);
+          return res.blob();
+        }).then(function (blob) {
+          return window.ImgStore.put(p.key, blob);
+        }).then(function () {
+          delete p.item.src;                                 // тепер адреса не потрібна
         });
-      })).then(function () {
-        if (!cur) return;
+      }).catch(function (e) {
+        console.warn('Картинка від учня не забралася:', e && e.message);
+        p.failed = true;
+      });
+    })).then(function () {
+      if (cur) {
         cur.engine.ensureImages();
         cur.engine.render();
         markDirty();
-      });
-    }
-
-    return { changed: changed, ids: ids };
+      }
+      /* Хоч одне фото не доїхало — увесь внесок лишається неприйнятим і
+         буде спробуваний ще раз. Повторна спроба нічого не зіпсує: усе, що
+         вже лягло, пропускається. */
+      if (pics.some(function (p) { return p.failed; })) ids = [];
+      return { changed: changed, ids: ids };
+    });
   }
 
   /**
@@ -717,14 +743,18 @@
   function mergeHomework(rows) {
     var jobs = [];
     var touched = 0;
+    var failed = {};        // внески, які не вдалося прийняти повністю
 
     rows.forEach(function (row) {
       var m;
-      try { m = JSON.parse(row.payload); } catch (e) { return; }
-      if (!m || !m.hw || !m.photos) return;
+      try { m = JSON.parse(row.payload); } catch (e) { failed[row.id] = 1; return; }
+      if (!m || !m.hw || !m.photos) { failed[row.id] = 1; return; }
 
       var hw = S.get('homeworks', m.hw);
-      if (!hw) return;
+      /* Завдання ще немає — найімовірніше, воно просто не доїхало з іншого
+         пристрою. Це не привід викидати фото: лишаємо внесок неприйнятим,
+         і він застосується, щойно завдання з'явиться. */
+      if (!hw) { failed[row.id] = 1; return; }
       /* Розвʼязання учня лежать ОКРЕМО від фото завдання. Раніше вони падали
          в один список, і відрізнити «що я задав» від «що учень надіслав»
          було неможливо — на вигляд просто набір картинок. */
@@ -750,12 +780,19 @@
             touched++;
           }).catch(function (e) {
             console.warn('Фото від учня не забралося:', e && e.message);
+            failed[row.id] = 1;
           })
         );
       });
     });
 
-    return Promise.all(jobs).then(function () { return touched; });
+    return Promise.all(jobs).then(function () {
+      return {
+        n: touched,
+        ids: rows.filter(function (r) { return !failed[r.id]; })
+                 .map(function (r) { return r.id; })
+      };
+    });
   }
 
   /**
@@ -782,6 +819,47 @@
     });
   }
 
+  /**
+   * Доносимо фото учня, які колись не доїхали.
+   *
+   * Тепер адреса лишається на обʼєкті, доки файл не ляже у сховище. Отже,
+   * кожне відкриття дошки — ще одна спроба. Було офлайн, впав інтернет,
+   * закінчилося місце — фото зʼявиться саме, без жодних дій і без питань
+   * до людини.
+   */
+  function healStudentImages() {
+    if (!cur || !window.ImgStore || !ImgStore.available()) return;
+
+    var need = [];
+    (cur.board.slides || []).forEach(function (sl) {
+      (sl.items || []).forEach(function (it) {
+        if (it && it.t === 'i' && it.src && it.k) need.push(it);
+      });
+    });
+    if (!need.length) return;
+
+    Promise.all(need.map(function (it) {
+      return ImgStore.get(it.k).then(function (have) {
+        if (have) { delete it.src; return true; }
+        return fetch(it.src).then(function (r) {
+          if (!r.ok) throw new Error('http ' + r.status);
+          return r.blob();
+        }).then(function (b) {
+          return ImgStore.put(it.k, b);
+        }).then(function () { delete it.src; return true; });
+      }).catch(function () { return false; });
+    })).then(function (res) {
+      var got = res.filter(Boolean).length;
+      if (!got || !cur) return;
+      cur.engine.ensureImages();
+      cur.engine.render();
+      markDirty();
+      flushSave();
+      if (got) U.toast(U.pl(got, 'фото учня повернулося', 'фото учня повернулися',
+                            'фото учня повернулося'), 'ok');
+    });
+  }
+
   function pullContributions() {
     if (!cur || !cur.board.share) return;
     if (!(window.Cloud && Cloud.available() && Cloud.signedIn())) return;
@@ -793,24 +871,33 @@
       var ink = rows.filter(function (r) { return r.kind === 'ink'; });
       var hw  = rows.filter(function (r) { return r.kind === 'homework'; });
 
-      var res = mergeContributions(ink);
-      if (res.changed) {
-        markDirty();
-        flushSave();
-        cur.engine.setSlide(cur.board.slides[cur.index], true);
-        renderRail();
-        refreshEmpty();
-        U.toast('Учень щось написав на дошці', 'ok');
-      }
-
-      return mergeHomework(hw).then(function (n) {
-        if (n) {
-          S.save();
-          updateHwCount();
-          U.toast('Учень надіслав ' + U.pl(n, 'фото', 'фото', 'фото') + ' розв\'язання', 'ok');
+      return mergeContributions(ink).then(function (res) {
+        if (res.changed) {
+          markDirty();
+          flushSave();
+          cur.engine.setSlide(cur.board.slides[cur.index], true);
+          renderRail();
+          refreshEmpty();
+          U.toast('Учень щось написав на дошці', 'ok');
         }
-        var ids = res.ids.concat(hw.map(function (r) { return r.id; }));
-        if (ids.length) window.Cloud.markContributionsMerged(ids);
+
+        return mergeHomework(hw).then(function (h) {
+          if (h.n) {
+            S.save();
+            updateHwCount();
+            U.toast('Учень надіслав ' + U.pl(h.n, 'фото', 'фото', 'фото') + ' розв\'язання', 'ok');
+          }
+
+          /* Позначаємо прийнятими лише те, що справді прийнято. Решта
+             лишається на сервері й буде спробувана знову — краще зайва
+             спроба, ніж зникле фото. */
+          var ids = res.ids.concat(h.ids);
+          var stuck = (ink.length + hw.length) - ids.length;
+          if (stuck > 0) {
+            console.warn('Внесків учня не прийнято:', stuck, '— спробуємо ще раз');
+          }
+          if (ids.length) window.Cloud.markContributionsMerged(ids);
+        });
       });
     }).catch(function (e) {
       // без цього будь-яка помилка тут гинула тихо — саме так і сховалася
@@ -3783,12 +3870,27 @@
           { label: 'Закрити', kind: 'btn--ghost', act: 'cancel' },
           { label: 'Відкликати', kind: 'btn--danger', act: 'revoke',
             onClick: function () {
-              window.Cloud.revokeShare(share.token).then(function () {
-                delete cur.board.share;
-                markDirty(); flushSave();
-                U.toast('Посилання більше не працює', 'ok');
-              }).catch(function (e) {
-                U.toast('Не вдалося відкликати: ' + (e && e.message ? e.message : e), 'err');
+              /* Відкликання стирає й те, що надіслав учень. Якщо щось із
+                 надісланого ще не забрано до себе, воно зникне назавжди —
+                 і людина про це не дізнається. Тому спершу дивимось, чи
+                 порожньо, і лише потім питаємо. */
+              window.Cloud.shareContributions(share.token).then(function (rows) {
+                var n = (rows || []).length;
+                function doRevoke() {
+                  window.Cloud.revokeShare(share.token).then(function () {
+                    delete cur.board.share;
+                    markDirty(); flushSave();
+                    U.toast('Посилання більше не працює', 'ok');
+                  }).catch(function (e) {
+                    U.toast('Не вдалося відкликати: ' + (e && e.message ? e.message : e), 'err');
+                  });
+                }
+                if (!n) { doRevoke(); return; }
+                C.confirm('Учень надіслав ' + U.pl(n, 'запис', 'записи', 'записів') +
+                  ', які ще не забрані',
+                  'Відкликання прибере їх разом із посиланням, і повернути їх буде ' +
+                  'нізвідки. Спершу відкрийте дошку й дочекайтеся, поки вони зʼявляться.',
+                  doRevoke, 'Все одно відкликати');
               });
             } },
           { label: 'Оновити', kind: 'btn--primary', act: 'go', icon: 'refresh',

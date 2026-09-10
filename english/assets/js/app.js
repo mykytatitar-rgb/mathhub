@@ -270,10 +270,10 @@ function renderHome(){
       <div class="rb-ico">🎧</div>
       <div class="rb-meta"><div class="rb-title">Аудіо-диктант</div><small>почуй слово — обери переклад</small></div>
       <div class="rb-badge">▶</div></div>`;
-  const adBanner = isPremium() ? '' : `<div class="adslot" id="adslot">
-      <span class="ad-tag">Реклама</span>
-      <span class="ad-body">📢 Місце для реклами</span>
-      <span class="ad-remove">Прибрати ✕</span></div>`;
+  const adBanner = isPremium() ? '' : `<div class="review-banner" id="premiumBanner">
+      <div class="rb-ico">⭐</div>
+      <div class="rb-meta"><div class="rb-title">Преміум</div><small>підтримати проєкт і навчатись без обмежень</small></div>
+      <div class="rb-badge">→</div></div>`;
 
   const offsets = [0,36,52,36,0,-36,-52,-36]; let gi = 0;
   const mapHtml = `<div class="road">` + LEVELS.map(lv=>{
@@ -358,7 +358,7 @@ function renderHome(){
   const dbn = root.querySelector('#dictBanner'); if(dbn) dbn.onclick = ()=>{ location.hash = '#/dictation'; };
   const ib = root.querySelector('#installBanner'); if(ib) ib.onclick = doInstall;
   const cbtn = root.querySelector('#continueBtn'); if(cbtn) cbtn.onclick = ()=>{ location.hash = '#/lesson/'+currentId; };
-  const ad = root.querySelector('#adslot'); if(ad) ad.onclick = ()=>{ location.hash = '#/premium'; };
+  const ad = root.querySelector('#premiumBanner'); if(ad) ad.onclick = ()=>{ location.hash = '#/premium'; };
   root.querySelectorAll('.viewtoggle button').forEach(b=>{ b.onclick=()=>{ try{ localStorage.setItem('anglo.homeview', b.dataset.v); }catch(e){} renderHome(); }; });
   const gtile = root.querySelector('#goalTile'); if(gtile) gtile.onclick = ()=>{ cycleGoal(); renderHome(); };
   root.querySelector('#reset').onclick = ()=>{ if(confirm('Скинути весь прогрес?')){ progress={}; saveProgress(progress); review={}; saveReview(review); renderHome(); } };
@@ -444,15 +444,15 @@ function renderPremium(){
     <div class="topbar">
       <button class="backbtn" id="back">← Головна</button>
       <div class="spacer"></div>
-      <div class="brand" style="font-size:14px">⭐ Без реклами</div>
+      <div class="brand" style="font-size:14px">⭐ Преміум</div>
       <div class="spacer"></div>
     </div>
     <div class="hero">
-      <h1>Прибрати рекламу ⭐</h1>
-      <p>${prem?'Підписку активовано — реклами немає. Дякуємо! 💛':'Підтримай застосунок і навчайся без реклами.'}</p>
+      <h1>Преміум ⭐</h1>
+      <p>${prem?'Преміум активовано. Дякуємо за підтримку! 💛':'Підтримай проєкт і відкрий повний доступ.'}</p>
     </div>
     <div class="paywall">
-      <div class="pw-benefit">🚫 Жодної реклами</div>
+      <div class="pw-benefit">♾️ Повний доступ до всіх функцій</div>
       <div class="pw-benefit">🔁 Повторення без обмежень</div>
       <div class="pw-benefit">🎧 Пріоритет якісного голосу</div>
       <div class="pw-benefit">❤️ Підтримка розвитку курсу</div>
@@ -461,7 +461,7 @@ function renderPremium(){
               ? `<p class="hint">Підписку активовано. Керувати чи скасувати — у Google Play → Підписки.</p>`
               : `<button class="primary" id="cancel" style="background:#fff;color:var(--pink)">Вимкнути преміум (демо)</button>`)
           : (nativeMode
-              ? `<button class="pw-plan best" id="subBtn"><b>Без реклами ⭐</b><span>${esc(subPrice)}</span></button>
+              ? `<button class="pw-plan best" id="subBtn"><b>Преміум ⭐</b><span>${esc(subPrice)}</span></button>
                  <button class="pw-restore" id="restore">Відновити покупку</button>`
               : `<div class="pw-plans">
                    <button class="pw-plan" data-p="month"><b>Місяць</b><span>₴59 / міс</span></button>
@@ -477,7 +477,7 @@ function renderPremium(){
     if(sb) sb.onclick=async()=>{ sb.disabled=true; const ok=await Native.buy(); if(!ok) sb.disabled=false; /* успіх обробить entitlement-колбек */ };
     const rs=root.querySelector('#restore'); if(rs) rs.onclick=()=>Native.restore();
   } else {
-    root.querySelectorAll('.pw-plan').forEach(b=> b.onclick=()=>{ setPremium(true); alert('Готово! Рекламу прибрано ⭐\n(демо — у версії Google Play тут буде справжня оплата підписки).'); location.hash='#/'; });
+    root.querySelectorAll('.pw-plan').forEach(b=> b.onclick=()=>{ setPremium(true); alert('Готово! Преміум активовано ⭐\n(демо — у версії Google Play тут буде справжня оплата підписки).'); location.hash='#/'; });
   }
   const c = root.querySelector('#cancel'); if(c) c.onclick=()=>{ setPremium(false); renderPremium(); };
 }

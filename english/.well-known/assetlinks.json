@@ -1,12 +1,8 @@
-[
-  {
-    "relation": ["delegate_permission/common.handle_all_urls"],
-    "target": {
-      "namespace": "android_app",
-      "package_name": "REPLACE_WITH_YOUR_PACKAGE_NAME",
-      "sha256_cert_fingerprints": [
-        "REPLACE_WITH_SHA256_FINGERPRINT_FROM_PLAY_CONSOLE"
-      ]
-    }
-  }
-]
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "app.netlify.charming_concha_789581.twa",
+        "sha256_cert_fingerprints": ["67:EE:1B:93:C5:00:39:C5:CD:32:3E:89:3B:95:04:44:E9:E8:5F:6D:77:6A:7A:54:23:00:0C:AA:66:A5:9D:17"]
+      }
+    }]

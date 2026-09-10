@@ -843,6 +843,21 @@ if(window.Native && Native.isNative){
   });
 }
 
+/* ---------- прибираємо сторонній бейдж хостингу (напр. «Powered by Netlify») ---------- */
+(function(){
+  function kill(){
+    try{
+      document.querySelectorAll('a[href*="netlify"]').forEach(a=>{ if(/netlify/i.test(a.textContent||'')) a.remove(); });
+      document.querySelectorAll('[id*="netlify" i],[class*="netlify" i]').forEach(el=>{
+        const p=getComputedStyle(el).position; if(p==='fixed'||p==='absolute') el.remove();
+      });
+    }catch(e){}
+  }
+  kill();
+  window.addEventListener('load', kill);
+  let n=0, t=setInterval(function(){ kill(); if(++n>=12) clearInterval(t); }, 500);
+})();
+
 /* ---------- service worker (офлайн) ---------- */
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{ navigator.serviceWorker.register('./sw.js').catch(()=>{}); });

@@ -1394,6 +1394,8 @@ const LESSONS = [
       { en: 'blanco',   ua: 'білий',        tr: 'бл[а]нко' },
       { en: 'naranja',  ua: 'помаранчевий', tr: 'нар[а]нха' },
       { en: 'rosa',     ua: 'рожевий',      tr: 'р[о]са' },
+      { en: 'marrón',   ua: 'коричневий',   tr: 'марр[о]н' },
+      { en: 'gris',     ua: 'сірий',        tr: 'гр[і]с' },
     ],
     sentences: [
       { en: 'El cielo es azul.',    ua: 'Небо синє.',                 tr: 'ель сь[е]ло ес ас[у]ль' },
@@ -1453,6 +1455,8 @@ const LESSONS = [
       { en: 'leche',   ua: 'молоко', tr: 'л[е]че' },
       { en: 'carne',   ua: "м'ясо",  tr: 'к[а]рне' },
       { en: 'huevo',   ua: 'яйце',   tr: 'у[е]бо' },
+      { en: 'queso',   ua: 'сир',    tr: 'к[е]со' },
+      { en: 'arroz',   ua: 'рис',    tr: 'арр[о]с' },
     ],
     sentences: [
       { en: 'Quiero agua, por favor.', ua: 'Я хочу води, будь ласка.', tr: 'кь[е]ро [а]гуа пор фаб[о]р' },
@@ -1916,6 +1920,8 @@ const LESSONS = [
       { en: 'vaca',    ua: 'корова',  tr: 'б[а]ка' },
       { en: 'oso',     ua: 'ведмідь', tr: '[о]со' },
       { en: 'lobo',    ua: 'вовк',    tr: 'л[о]бо' },
+      { en: 'conejo',  ua: 'кролик',  tr: 'кон[е]хо' },
+      { en: 'ratón',   ua: 'миша',    tr: 'рат[о]н' },
     ],
     sentences: [
       { en: 'Tengo un perro.',       ua: 'У мене є собака.',       tr: 'т[е]нго ун п[е]рро' },

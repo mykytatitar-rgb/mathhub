@@ -1141,6 +1141,8 @@ const LESSONS = [
       { en: 'white',  ua: 'білий',        tr: 'у[а]йт' },
       { en: 'orange', ua: 'помаранчевий', tr: '[о]ріндж' },
       { en: 'pink',   ua: 'рожевий',      tr: 'п[і]нк' },
+      { en: 'brown',  ua: 'коричневий',   tr: 'бр[а]ун' },
+      { en: 'grey',   ua: 'сірий',        tr: 'гр[е]й' },
     ],
     sentences: [
       { en: 'The sky is blue.',     ua: 'Небо синє.',                 tr: 'зе скай із бл[у]' },
@@ -1201,6 +1203,8 @@ const LESSONS = [
       { en: 'milk',   ua: 'молоко', tr: 'м[і]лк' },
       { en: 'meat',   ua: "м'ясо",  tr: 'м[і]т' },
       { en: 'egg',    ua: 'яйце',   tr: '[е]г' },
+      { en: 'cheese', ua: 'сир',    tr: 'ч[і]з' },
+      { en: 'rice',   ua: 'рис',    tr: 'р[а]йс' },
     ],
     sentences: [
       { en: 'I want water, please.',  ua: 'Я хочу води, будь ласка.',        tr: 'ай уонт у[о]тер пл[і]з' },
@@ -1666,8 +1670,10 @@ const LESSONS = [
       { en: 'fish',  ua: 'риба',    tr: 'ф[і]ш' },
       { en: 'horse', ua: 'кінь',    tr: 'г[о]рс' },
       { en: 'cow',   ua: 'корова',  tr: 'к[а]у' },
-      { en: 'bear',  ua: 'ведмідь', tr: 'б[е]а' },
-      { en: 'wolf',  ua: 'вовк',    tr: 'в[у]лф' },
+      { en: 'bear',   ua: 'ведмідь', tr: 'б[е]а' },
+      { en: 'wolf',   ua: 'вовк',    tr: 'в[у]лф' },
+      { en: 'rabbit', ua: 'кролик',  tr: 'р[е]біт' },
+      { en: 'mouse',  ua: 'миша',    tr: 'м[а]ус' },
     ],
     sentences: [
       { en: 'I have a dog.',    ua: 'У мене є собака.',       tr: 'ай гев е д[о]г' },

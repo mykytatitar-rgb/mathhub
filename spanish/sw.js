@@ -1,5 +1,5 @@
 /* Hola — service worker для офлайн-режиму. */
-const CACHE = 'hola-v27';
+const CACHE = 'hola-v28';
 const ASSETS = [
   './',
   './index.html',

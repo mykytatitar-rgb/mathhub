@@ -1124,6 +1124,8 @@ const LESSONS = [
       { en: 'daughter', ua: 'дочка',  tr: 'д[о]тер' },
       { en: 'family',   ua: 'родина', tr: 'ф[е]мілі' },
       { en: 'parents',  ua: 'батьки', tr: 'п[е]рентс' },
+      { en: 'grandmother', ua: 'бабуся', tr: 'гр[е]ндмазер' },
+      { en: 'grandfather', ua: 'дідусь', tr: 'гр[е]ндфазер' },
     ],
     sentences: [
       { en: 'This is my mother.', ua: 'Це моя мама.',   tr: 'зіс із май м[а]зер' },
@@ -1165,6 +1167,8 @@ const LESSONS = [
       { en: 'Sunday',    ua: 'неділя',    tr: 'с[а]ндей' },
       { en: 'today',     ua: 'сьогодні',  tr: 'туд[е]й' },
       { en: 'tomorrow',  ua: 'завтра',    tr: 'тум[о]роу' },
+      { en: 'weekend',   ua: 'вихідні',   tr: 'у[і]кенд' },
+      { en: 'day',       ua: 'день',      tr: 'д[е]й' },
     ],
     sentences: [
       { en: 'See you on Monday.',  ua: 'Побачимось у понеділок.', tr: 'сі ю он м[а]ндей' },
@@ -1186,6 +1190,8 @@ const LESSONS = [
       { en: 'year',    ua: 'рік',       tr: 'й[і]а' },
       { en: 'week',    ua: 'тиждень',   tr: 'у[і]к' },
       { en: 'season',  ua: 'пора року', tr: 'с[і]зн' },
+      { en: 'March',    ua: 'березень', tr: 'м[а]рч' },
+      { en: 'December', ua: 'грудень',  tr: 'діс[е]мбер' },
     ],
     sentences: [
       { en: 'Summer is hot.',     ua: 'Літо спекотне.',            tr: 'самер із г[о]т' },
@@ -1392,6 +1398,8 @@ const LESSONS = [
       { en: 'to pay',    ua: 'платити',  tr: 'ту п[е]й' },
       { en: 'size',      ua: 'розмір',   tr: 'с[а]йз' },
       { en: 'card',      ua: 'картка',   tr: 'к[а]рд' },
+      { en: 'to cost',   ua: 'коштувати', tr: 'ту к[о]ст' },
+      { en: 'discount',  ua: 'знижка',    tr: 'д[і]скаунт' },
     ],
     sentences: [
       { en: 'How much is it?',        ua: 'Скільки це коштує?',      tr: 'гау мач із іт' },
@@ -1494,6 +1502,8 @@ const LESSONS = [
       { en: 'hospital', ua: 'лікарня',   tr: 'г[о]спітл' },
       { en: 'a cold',   ua: 'застуда',   tr: 'е к[о]улд' },
       { en: 'tired',    ua: 'втомлений', tr: 'т[а]єрд' },
+      { en: 'fever',    ua: 'температура', tr: 'ф[і]вер' },
+      { en: 'nurse',    ua: 'медсестра',   tr: 'н[ё]рс' },
     ],
     sentences: [
       { en: 'I feel sick.',     ua: 'Мені погано.',          tr: 'ай філ с[і]к' },

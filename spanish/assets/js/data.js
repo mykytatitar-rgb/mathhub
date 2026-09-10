@@ -1377,6 +1377,8 @@ const LESSONS = [
       { en: 'hija',    ua: 'дочка',  tr: '[і]ха' },
       { en: 'familia', ua: 'родина', tr: 'фам[і]ліа' },
       { en: 'padres',  ua: 'батьки', tr: 'п[а]дрес' },
+      { en: 'abuela',  ua: 'бабуся', tr: 'абу[е]ла' },
+      { en: 'abuelo',  ua: 'дідусь', tr: 'абу[е]ло' },
     ],
     sentences: [
       { en: 'Esta es mi madre.',    ua: 'Це моя мама.',   tr: '[е]ста ес мі м[а]дре' },
@@ -1418,6 +1420,8 @@ const LESSONS = [
       { en: 'domingo',   ua: 'неділя',    tr: 'дом[і]нго' },
       { en: 'hoy',       ua: 'сьогодні',  tr: '[о]й' },
       { en: 'mañana',    ua: 'завтра',    tr: 'мань[а]на' },
+      { en: 'fin de semana', ua: 'вихідні', tr: 'фін де сем[а]на' },
+      { en: 'día',       ua: 'день',      tr: 'д[і]а' },
     ],
     sentences: [
       { en: 'Nos vemos el lunes.', ua: 'Побачимось у понеділок.', tr: 'нос б[е]мос ель л[у]нес' },
@@ -1438,6 +1442,8 @@ const LESSONS = [
       { en: 'mes',       ua: 'місяць',    tr: 'мес' },
       { en: 'año',       ua: 'рік',       tr: '[а]ньйо' },
       { en: 'semana',    ua: 'тиждень',   tr: 'сем[а]на' },
+      { en: 'marzo',     ua: 'березень',  tr: 'м[а]рсо' },
+      { en: 'diciembre', ua: 'грудень',   tr: 'дісь[е]мбре' },
     ],
     sentences: [
       { en: 'El verano es caluroso.', ua: 'Літо спекотне.',          tr: 'ель бер[а]но ес калур[о]со' },
@@ -1642,6 +1648,8 @@ const LESSONS = [
       { en: 'talla',     ua: 'розмір',   tr: 'т[а]йя' },
       { en: 'tarjeta',   ua: 'картка',   tr: 'тарх[е]та' },
       { en: 'efectivo',  ua: 'готівка',  tr: 'ефект[і]бо' },
+      { en: 'costar',    ua: 'коштувати', tr: 'кост[а]р' },
+      { en: 'descuento', ua: 'знижка',    tr: 'деску[е]нто' },
     ],
     sentences: [
       { en: '¿Cuánto cuesta?',           ua: 'Скільки коштує?',        tr: 'ку[а]нто ку[е]ста' },
@@ -1744,6 +1752,8 @@ const LESSONS = [
       { en: 'hospital',  ua: 'лікарня',  tr: 'оспіт[а]ль' },
       { en: 'resfriado', ua: 'застуда',  tr: 'ресфрі[а]до' },
       { en: 'cansado',   ua: 'втомлений', tr: 'канс[а]до' },
+      { en: 'fiebre',    ua: 'температура', tr: 'фь[е]бре' },
+      { en: 'enfermera', ua: 'медсестра',   tr: 'енферм[е]ра' },
     ],
     sentences: [
       { en: 'Estoy enfermo.',       ua: 'Я хворий.',             tr: 'ест[о]й енф[е]рмо' },

@@ -145,6 +145,29 @@
     return [x1, -z2, y2];              // x, екранний y (вгору — вгору), глибина
   }
 
+  /**
+   * З екрана назад у простір.
+   *
+   * Двовимірна миша не може задати три координати, і вдавати протилежне —
+   * означає щоразу зміщувати вершину туди, куди її не вели. Тому глибину
+   * лишаємо ту, що була: миша рухає вершину в площині екрана, а вгору-вниз
+   * по самому тілу — окремо, з Shift.
+   */
+  S.unproject = function (sx, sy, depth, yaw, pitch) {
+    var cp = Math.cos(pitch), sp = Math.sin(pitch);
+    var z2 = -sy, y2 = depth;
+    var y1 = y2 * cp + z2 * sp;
+    var pz = -y2 * sp + z2 * cp;
+
+    var cy = Math.cos(yaw), sy2 = Math.sin(yaw);
+    var px = sx * cy + y1 * sy2;
+    var py = -sx * sy2 + y1 * cy;
+    return [px, py, pz];
+  };
+
+  /** Куди потрапить точка простору на екрані. Потрібно для маркерів. */
+  S.project = function (p, yaw, pitch) { return project(p, yaw, pitch); };
+
   /** Площа проєкції грані зі знаком — за нею й видно, куди грань обернена. */
   function signedArea(face, pts) {
     var s = 0;
@@ -161,11 +184,20 @@
    * Усе в умовних координатах приблизно від −1.5 до 1.5; переносити на
    * дошку — справа того, хто малює.
    */
-  S.build = function (kind, yaw, pitch) {
+  S.build = function (kind, yaw, pitch, moved) {
     var def = S.KINDS[kind];
     if (!def || def.round) return null;
 
     var m = def.make();
+    /* Зрушені вершини. Тіло лишається тим самим набором граней — міняються
+       лише координати. Тому воно перестає бути правильним, але не
+       перестає бути тілом: грані, ребра й видимість рахуються так само. */
+    if (moved) {
+      Object.keys(moved).forEach(function (i) {
+        var q = Number(i);
+        if (m.v[q]) m.v[q] = moved[i].slice();
+      });
+    }
     var pts = m.v.map(function (p) { return project(p, yaw, pitch); });
 
     /* Грань обернена до нас, якщо її проєкція обходиться за годинниковою
@@ -207,10 +239,10 @@
    * замість граней рахуємо еліпси основ і твірні. Задня половина основи
    * пунктиром — саме так її і малюють на дошці.
    */
-  S.buildRound = function (kind, pitch) {
+  S.buildRound = function (kind, pitch, rsec) {
     var k = Math.abs(Math.sin(pitch));          // сплюснутість основи від нахилу
     var ry = Math.max(0.06, k);
-    var out = { visible: [], hidden: [], labels: [], ellipses: [] };
+    var out = { visible: [], hidden: [], labels: [], ellipses: [], fill: null };
 
     function ellipse(cy, rx, ryy, dashedBack) {
       var N = 64, i, a, prev = null;
@@ -249,8 +281,64 @@
       out.labels.push({ name: 'O', x: 0.08, y: 0 });
     } else return null;
 
+    /* ---- перерізи круглих тіл
+
+       У них немає граней, тож алгоритм для многогранників тут не працює.
+       Зате в школі потрібні рівно два: осьовий і паралельний основі. Обидва
+       рахуються прямо, з тих самих розмірів.
+
+       Осьовий збігається з обрисом тіла — так і має бути, і саме тому його
+       не досить обвести: він читається лише залитим. */
+    if (rsec && rsec.k) {
+      var t = typeof rsec.t === 'number' ? Math.max(0.02, Math.min(0.98, rsec.t)) : 0.5;
+
+      if (rsec.k === 'parallel') {
+        var cy2, rr;
+        if (kind === 'cyl') { cy2 = -1 + 2 * t; rr = 1; }
+        else if (kind === 'cone') { cy2 = -1 + 2.15 * t; rr = 1 - t; }
+        else { cy2 = -1 + 2 * t; rr = Math.sqrt(Math.max(0, 1 - cy2 * cy2)); }
+
+        if (rr > 0.01) {
+          var poly = [], N2 = 64;
+          for (var q = 0; q <= N2; q++) {
+            var aa = Math.PI * 2 * q / N2;
+            poly.push([Math.cos(aa) * rr, cy2 + Math.sin(aa) * ry * rr]);
+          }
+          out.fill = poly;
+          // передню половину малюємо суцільною, задню пунктиром — як основу
+          for (var q2 = 1; q2 <= N2; q2++) {
+            var a0 = Math.PI * 2 * (q2 - 1) / N2, a1 = Math.PI * 2 * q2 / N2;
+            var back = Math.sin(a0) < 0 && Math.sin(a1) < 0;
+            (back ? out.hidden : out.visible).push(
+              [poly[q2 - 1][0], poly[q2 - 1][1], poly[q2][0], poly[q2][1]]);
+          }
+        }
+      } else if (rsec.k === 'axial') {
+        if (kind === 'cyl') {
+          out.fill = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+        } else if (kind === 'cone') {
+          out.fill = [[-1, -1], [1, -1], [0, 1.15]];
+        } else {
+          var poly2 = [], N3 = 64;
+          for (var q3 = 0; q3 <= N3; q3++) {
+            var a3 = Math.PI * 2 * q3 / N3;
+            poly2.push([Math.cos(a3), Math.sin(a3)]);
+          }
+          out.fill = poly2;                     // великий круг у кулі — сам обрис
+        }
+        if (out.fill) {
+          for (var q4 = 0; q4 < out.fill.length; q4++) {
+            var p1 = out.fill[q4], p2 = out.fill[(q4 + 1) % out.fill.length];
+            out.visible.push([p1[0], p1[1], p2[0], p2[1]]);
+          }
+        }
+      }
+    }
+
     return out;
   };
+
+  S.RSEC = { axial: 'Осьовий переріз', parallel: 'Переріз, паралельний основі' };
 
   /* ============================================================
      Побудови на тілі
@@ -291,11 +379,14 @@
    * теоретично можлива, але задати її мишею на плоскому екрані неможливо
    * без здогадок, а здогадки в геометрії гірші за відсутність можливості.
    */
-  S.pointsOf = function (kind) {
+  S.pointsOf = function (kind, moved) {
     var def = S.KINDS[kind];
     if (!def || def.round) return [];
 
     var m = def.make();
+    if (moved) Object.keys(moved).forEach(function (i) {
+      if (m.v[Number(i)]) m.v[Number(i)] = moved[i].slice();
+    });
     var out = m.v.map(function (p, i) {
       return { id: 'v' + i, name: m.names[i] || ('P' + i), p: p };
     });
@@ -310,8 +401,8 @@
     return out;
   };
 
-  function pointById(kind, id) {
-    var all = S.pointsOf(kind);
+  function pointById(kind, id, moved) {
+    var all = S.pointsOf(kind, moved);
     for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i].p;
     return null;
   }
@@ -324,11 +415,12 @@
    * дає рівно один відрізок, а разом вони складаються в многокутник —
    * точний, а не намальований на око.
    */
-  S.section = function (kind, ids) {
+  S.section = function (kind, ids, moved) {
     var def = S.KINDS[kind];
     if (!def || def.round || !ids || ids.length < 3) return null;
 
-    var A = pointById(kind, ids[0]), B = pointById(kind, ids[1]), C = pointById(kind, ids[2]);
+    var A = pointById(kind, ids[0], moved), B = pointById(kind, ids[1], moved),
+        C = pointById(kind, ids[2], moved);
     if (!A || !B || !C) return null;
 
     var u = [B[0] - A[0], B[1] - A[1], B[2] - A[2]];
@@ -343,6 +435,9 @@
     }
 
     var m = def.make();
+    if (moved) Object.keys(moved).forEach(function (i) {
+      if (m.v[Number(i)]) m.v[Number(i)] = moved[i].slice();
+    });
     var d = m.v.map(dist);
     var EPS = 1e-9;
     var segs = [];
@@ -422,11 +517,14 @@
    * Повертає відрізки в тривимірних координатах; куди вони ляжуть на
    * екрані, вирішує та сама проєкція, що й для ребер.
    */
-  S.cons = function (kind, spec) {
+  S.cons = function (kind, spec, moved) {
     var def = S.KINDS[kind];
     if (!def || def.round || !spec) return [];
 
     var m = def.make();
+    if (moved) Object.keys(moved).forEach(function (i) {
+      if (m.v[Number(i)]) m.v[Number(i)] = moved[i].slice();
+    });
     var base = m.f[0].slice().reverse();          // нижня грань, у прямому порядку
     var nb = base.length;
     var bc = centroid(base.map(function (i) { return m.v[i]; }));

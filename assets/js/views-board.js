@@ -2527,7 +2527,13 @@
             '><span>Невидимі ребра пунктиром</span></label>' +
         '</div>' +
         '<div class="field__hint" style="margin-top:10px">Тіло можна обертати й мишею — ' +
-        'помаранчевий маркер над ним: убік крутить, вгору-вниз нахиляє.</div>' +
+        'помаранчевий маркер над ним: убік крутить, вгору-вниз нахиляє. ' +
+        'Зелені маркери на вершинах тягнуть саму вершину: мишею — у площині ' +
+        'екрана, із Shift — угору-вниз по висоті.' +
+        (it.mv && Object.keys(it.mv).length
+          ? ' <button type="button" class="btn btn--ghost btn--sm" data-reset-mv ' +
+            'style="margin-top:8px">Повернути правильну форму</button>'
+          : '') + '</div>' +
         '<div data-solid-extra></div>',
       onMount: function (root) {
         var extra = root.querySelector('[data-solid-extra]');
@@ -2537,7 +2543,31 @@
            нема через що. */
         function renderExtra(kind) {
           var d = K[kind];
-          if (!d || d.round || !window.Solids) { extra.innerHTML = ''; return; }
+          if (!d || !window.Solids) { extra.innerHTML = ''; return; }
+
+          /* У кулі, циліндра й конуса граней немає, тож переріз через три
+             вершини до них не застосовний. Зате саме для них у школі
+             потрібні два свої: осьовий і паралельний основі. */
+          if (d.round) {
+            var cur0 = (it.rsec && it.rsec.k) || '';
+            extra.innerHTML =
+              '<div class="dim-sep" style="margin:16px 0 12px"></div>' +
+              '<div class="board-opts__label" style="margin-bottom:8px">Переріз</div>' +
+              '<div class="field-row">' +
+                C.field('', C.select('rk', cur0, [
+                  { value: '', label: 'Без перерізу' },
+                  { value: 'axial', label: Solids.RSEC.axial },
+                  { value: 'parallel', label: Solids.RSEC.parallel }
+                ])) +
+                C.field('Висота, % від низу',
+                  C.input('rt', Math.round(((it.rsec && it.rsec.t) || 0.5) * 100),
+                          'type="number" min="2" max="98" step="5"')) +
+              '</div>' +
+              '<div class="field__hint">Висота стосується лише перерізу, ' +
+              'паралельного основі. Осьовий проходить через вісь і збігається з ' +
+              'обрисом тіла — тому він залитий, інакше його не було б видно.</div>';
+            return;
+          }
 
           var have = {};
           (it.cons || []).forEach(function (c) { have[c.k] = 1; });
@@ -2585,6 +2615,14 @@
           note();
         }
 
+        U.onClick(root, '[data-reset-mv]', function (el) {
+          cur.engine.snapshot();
+          delete it.mv;
+          cur.engine.changed();
+          el.disabled = true;
+          el.textContent = 'Повернуто';
+        });
+
         U.onClick(root, '[data-kind]', function (el) {
           U.$$('[data-kind]', root).forEach(function (b) { b.classList.remove('is-on'); });
           el.classList.add('is-on');
@@ -2619,6 +2657,9 @@
             }
             it.cons = cons;
             it.sec = (vv.secOn && vv.s1 && vv.s2 && vv.s3) ? [vv.s1, vv.s2, vv.s3] : null;
+            it.rsec = vv.rk
+              ? { k: vv.rk, t: Math.max(0.02, Math.min(0.98, (Number(vv.rt) || 50) / 100)) }
+              : null;
 
             cur.engine.changed();
           } }

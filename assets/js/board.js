@@ -641,7 +641,8 @@
     var yaw = (typeof it.yaw === 'number' ? it.yaw : (def.yaw0 || 28)) * Math.PI / 180;
     var pitch = (typeof it.pitch === 'number' ? it.pitch : 22) * Math.PI / 180;
 
-    var raw = def.round ? Solids.buildRound(kind, pitch) : Solids.build(kind, yaw, pitch);
+    var raw = def.round ? Solids.buildRound(kind, pitch, it.rsec)
+                        : Solids.build(kind, yaw, pitch, it.mv);
     if (!raw) return null;
 
     /* Побудови й переріз рахуються в просторі й проєктуються тими самими
@@ -649,21 +650,31 @@
        обернеш його — і висота обернеться разом із ним. */
     var cons = [];
     (it.cons || []).forEach(function (spec) {
-      var segs3 = Solids.cons(kind, spec);
+      var segs3 = Solids.cons(kind, spec, it.mv);
       if (segs3.length) cons.push({ k: spec.k, segs: Solids.projectSegs(segs3, yaw, pitch) });
     });
 
     var sect = null;
     if (it.sec && it.sec.length === 3) {
-      var got = Solids.section(kind, it.sec);
+      var got = Solids.section(kind, it.sec, it.mv);
       if (got) sect = Solids.projectPoly(got.poly, yaw, pitch);
     }
 
+    /* Масштаб рахуємо за НЕЗМІНЕНИМ тілом, а не за поточним.
+
+       Інакше кожен рух вершини перемасштабовував би всю картинку: вершина
+       їде за курсором, а разом із нею — і саме тіло, і вершина знову не
+       там, де курсор. Тепер перетворення стале, а зрушена вершина просто
+       виходить за початкові межі — як їй і належить. */
+    var fitSrc = it.mv && !def.round
+      ? (Solids.build(kind, yaw, pitch) || raw)
+      : raw;
+
     var xs = [], ys = [];
-    raw.visible.concat(raw.hidden).forEach(function (e) {
+    fitSrc.visible.concat(fitSrc.hidden).forEach(function (e) {
       xs.push(e[0], e[2]); ys.push(e[1], e[3]);
     });
-    (raw.labels || []).forEach(function (L) { xs.push(L.x); ys.push(L.y); });
+    (fitSrc.labels || []).forEach(function (L) { xs.push(L.x); ys.push(L.y); });
     if (!xs.length) return null;
 
     var mnx = Math.min.apply(null, xs), mxx = Math.max.apply(null, xs);
@@ -681,14 +692,25 @@
 
     function mapSeg(e) { return [e[0] * k + offX, e[1] * k + offY, e[2] * k + offX, e[3] * k + offY]; }
 
+    /* Те саме перетворення назовні: маркери вершин мають стояти рівно там,
+       де вершини намальовані, а не там, де вони «приблизно». */
+    var fit = {
+      k: k, offX: offX, offY: offY, yaw: yaw, pitch: pitch,
+      toBoard: function (p) { return [p[0] * k + offX, p[1] * k + offY]; },
+      fromBoard: function (bx, by) { return [(bx - offX) / k, (by - offY) / k]; }
+    };
+
     return {
       visible: raw.visible.map(mapSeg),
       hidden: raw.hidden.map(mapSeg),
       labels: (raw.labels || []).map(function (L) {
         return { name: L.name, x: L.x * k + offX, y: L.y * k + offY };
       }),
+      fit: fit,
       cons: cons.map(function (c) { return { k: c.k, segs: c.segs.map(mapSeg) }; }),
-      section: sect ? sect.map(function (p) { return [p[0] * k + offX, p[1] * k + offY]; }) : null
+      section: sect
+        ? sect.map(function (p) { return [p[0] * k + offX, p[1] * k + offY]; })
+        : (raw.fill ? raw.fill.map(function (p) { return [p[0] * k + offX, p[1] * k + offY]; }) : null)
     };
   }
 
@@ -2092,11 +2114,25 @@
       var sa = it.a;
       var scx = (sa[0] + sa[2]) / 2;
       var stop = Math.min(sa[1], sa[3]);
-      return [
+      var hs3 = [
         { id: 'nw', x: sa[0], y: sa[1] }, { id: 'ne', x: sa[2], y: sa[1] },
         { id: 'se', x: sa[2], y: sa[3] }, { id: 'sw', x: sa[0], y: sa[3] },
         { id: 'spin', x: scx, y: stop - 34 }
       ];
+
+      /* Вершини многогранника — теж маркери. У круглих тіл вершин немає,
+         тож і тягати там нічого. */
+      var fr3 = solidFrame(it);
+      if (fr3 && fr3.fit && window.Solids && Solids.pointsOf) {
+        var all3 = Solids.pointsOf(it.k || 'cube', it.mv);
+        all3.forEach(function (p, i) {
+          if (p.id.charAt(0) !== 'v') return;             // середини ребер не тягаємо
+          var pr = Solids.project(p.p, fr3.fit.yaw, fr3.fit.pitch);
+          var b3 = fr3.fit.toBoard(pr);
+          hs3.push({ id: 'sv' + i, x: b3[0], y: b3[1] });
+        });
+      }
+      return hs3;
     }
 
     /* У площини маркери двох сортів: кути змінюють розмір, а дві точки на
@@ -2136,10 +2172,17 @@
     var hs = this._handles();
     if (!hs) return null;
     var tol = HANDLE_PX / this.scale;
+
+    /* Беремо НАЙБЛИЖЧИЙ, а не перший підхожий. На віддаленому масштабі
+       допуск у світових одиницях великий, і в нього потрапляє одразу
+       кілька маркерів — тоді завжди вигравав той, що стоїть першим у
+       списку, тобто кут рамки, а не та вершина, за яку взялися. */
+    var best = null, bestD = Infinity;
     for (var i = 0; i < hs.length; i++) {
-      if (Math.hypot(x - hs[i].x, y - hs[i].y) <= tol) return hs[i];
+      var d = Math.hypot(x - hs[i].x, y - hs[i].y);
+      if (d <= tol && d < bestD) { bestD = d; best = hs[i]; }
     }
-    return null;
+    return best;
   };
 
   /**
@@ -2173,6 +2216,8 @@
     it.p[1] = round(y1 + it.s);   // itemBounds відкладає верх як p[1] − s
   }
 
+  var svFit = null;      // зафіксоване перетворення, поки тягнуть вершину тіла
+
   function resizeByHandle(it, id, wx, wy, free) {
     if (it.t === 'x') { resizeText(it, id, wx, wy); return; }
 
@@ -2186,6 +2231,49 @@
       mv = Math.max(pm.win.xa + lim, Math.min(pm.win.xb - lim, mv));
       mv = Math.round(mv * 1000) / 1000;
       if (id === 'fx1') it.p1 = mv; else it.p2 = mv;
+      return;
+    }
+
+    /**
+     * Вершина тіла в просторі.
+     *
+     * Мишею задаються дві координати з трьох, і третю вигадувати не можна:
+     * вершина щоразу від'їжджала б у глибину сама собою. Тому глибину
+     * лишаємо ту, що була, — миша рухає вершину в площині екрана. Рух
+     * уздовж третьої осі є окремо: із Shift вертикаль миші стає висотою.
+     */
+    if (id.charAt(0) === 's' && id.charAt(1) === 'v' && it.t === 's') {
+      var vi3 = Number(id.slice(2));
+      /* Перетворення фіксуємо на весь час тягнення. Рух вершини змінює
+         межі каркаса, а з ними масштаб і зсув — і вершина щоразу сідала б
+         не туди, куди її ведуть, бо картинка під курсором уже інша. */
+      if (!svFit) {
+        var fr0 = solidFrame(it);
+        if (!fr0 || !fr0.fit) return;
+        svFit = fr0.fit;
+      }
+      var fr = { fit: svFit };
+      if (!window.Solids) return;
+
+      var all = Solids.pointsOf(it.k || 'cube', it.mv);
+      var p0 = all[vi3];
+      if (!p0 || p0.id.charAt(0) !== 'v') return;
+
+      var yaw3 = fr.fit.yaw, pitch3 = fr.fit.pitch;
+      var was3 = Solids.project(p0.p, yaw3, pitch3);
+      var loc = fr.fit.fromBoard(wx, wy);
+
+      var np;
+      if (free) {
+        // Shift: рухаємо лише по висоті, решта лишається
+        np = [p0.p[0], p0.p[1], p0.p[2] + (was3[1] - loc[1])];
+      } else {
+        np = Solids.unproject(loc[0], loc[1], was3[2], yaw3, pitch3);
+      }
+
+      np = np.map(function (q) { return Math.max(-4, Math.min(4, Math.round(q * 1e4) / 1e4)); });
+      it.mv = it.mv || {};
+      it.mv[String(vi3)] = np;
       return;
     }
 
@@ -2525,7 +2613,12 @@
 
     if (this._pan) { this._pan = null; this.canvas.style.cursor = ''; this.applyCursor(); return; }
     if (this._erasing) { this._erasing = false; if (this.opts.onChange) this.opts.onChange(); return; }
-    if (this._resize) { this._resize = null; if (this.opts.onChange) this.opts.onChange(); return; }
+    if (this._resize) {
+      this._resize = null;
+      svFit = null;                       // тягнення скінчилося — фіксація не потрібна
+      if (this.opts.onChange) this.opts.onChange();
+      return;
+    }
     if (this._drag) { this._drag = null; if (this.opts.onChange) this.opts.onChange(); return; }
 
     if (this.band) {

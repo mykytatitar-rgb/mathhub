@@ -2,7 +2,7 @@
       "relation": ["delegate_permission/common.handle_all_urls"],
       "target": {
         "namespace": "android_app",
-        "package_name": "app.netlify.charming_concha_789581.twa",
-        "sha256_cert_fingerprints": ["67:EE:1B:93:C5:00:39:C5:CD:32:3E:89:3B:95:04:44:E9:E8:5F:6D:77:6A:7A:54:23:00:0C:AA:66:A5:9D:17"]
+        "package_name": "dev.pages.anglo_68b.twa",
+        "sha256_cert_fingerprints": ["88:79:F7:39:B4:60:96:79:55:76:06:D7:B3:6E:63:56:37:FA:7B:1C:86:4E:A2:18:6D:9D:3F:79:41:F6:AC:88"]
       }
     }]

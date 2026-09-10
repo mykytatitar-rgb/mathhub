@@ -275,7 +275,7 @@ function renderHome(){
       <span class="ad-body">📢 Місце для реклами</span>
       <span class="ad-remove">Прибрати ✕</span></div>`;
 
-  const offsets = [0,44,66,44,0,-44,-66,-44]; let gi = 0;
+  const offsets = [0,36,52,36,0,-36,-52,-36]; let gi = 0;
   const mapHtml = `<div class="road">` + LEVELS.map(lv=>{
     const ls = LESSONS.filter(l=>l.level===lv.id);
     if(!ls.length) return '';

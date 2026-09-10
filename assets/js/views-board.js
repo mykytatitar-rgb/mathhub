@@ -1948,6 +1948,8 @@
       extra =
         '<button class="sel-bar__btn" data-act="board-numline" title="Діапазон і крок осі">' +
           icon('target', 16) + '</button>' +
+        '<button class="sel-bar__btn" data-act="board-ineq" title="Нерівність: точки та інтервали">' +
+          icon('sigma', 16) + '</button>' +
         '<span class="sel-bar__sep"></span>';
     } else if (e.selection.some(function (i) { return i.t === 'x'; })) {
       extra =
@@ -2461,6 +2463,136 @@
     });
   }
 
+  /**
+   * Нерівність на числовій прямій — метод інтервалів.
+   *
+   * Вводиться так, як стоїть у задачі: вираз і знак. Далі програма робить
+   * те саме, що робить рука на дошці, — знаходить нулі й розриви, ставить
+   * точки, розставляє знаки й підкреслює відповідь. Вручну теж можна: не
+   * кожна нерівність зводиться до одного виразу.
+   */
+  function ineqDialog(it) {
+    C.modal({
+      title: 'Нерівність на прямій',
+      sub: 'метод інтервалів',
+      wide: true,
+      body:
+        '<div class="field-row" style="grid-template-columns:3fr 1fr">' +
+          C.field('Вираз', C.input('ex', it.ex || 'x^2-5x+6', 'inputmode="text"'),
+            'Ліва частина, коли справа нуль: x^2-5x+6, (x-1)/(x-2), (x+3)(x-4)') +
+          C.field('Знак', C.select('op', it.op || '>', [
+            { value: '>', label: '> 0' }, { value: '>=', label: '≥ 0' },
+            { value: '<', label: '< 0' }, { value: '<=', label: '≤ 0' }
+          ])) +
+        '</div>' +
+        '<div data-ineq-out style="margin:2px 0 14px;line-height:1.6"></div>' +
+        '<div class="check-row">' +
+          '<label class="check"><input type="checkbox" name="showSigns"' +
+            (it.showSigns !== 0 ? ' checked' : '') + '><span>Знаки + і − між точками</span></label>' +
+          '<label class="check"><input type="checkbox" name="fit"' +
+            ' checked><span>Підігнати діапазон осі під точки</span></label>' +
+        '</div>' +
+        '<div class="field__hint" style="margin-top:10px">Нулі й розриви шукаються перебором, ' +
+        'тож розкладати на множники не потрібно. Розрив ніколи не входить у відповідь, ' +
+        'навіть при знаку ≥.</div>',
+      onMount: function (root) {
+        var box = root.querySelector('[data-ineq-out]');
+        function refresh() {
+          var v = C.readForm(root);
+          var r = window.Plot ? Plot.compile(v.ex) : { err: 'Модуль формул не завантажився' };
+          if (r.err) {
+            box.innerHTML = '<span style="color:var(--red)">' + U.esc(r.err) + '</span>';
+            return null;
+          }
+          var lo = typeof it.from === 'number' ? it.from : -5;
+          var hi = typeof it.to === 'number' ? it.to : 5;
+          var wide = Math.max(20, (hi - lo) * 3);
+          var sol = Plot.solveIneq(r.f, v.op, -wide, wide);
+
+          var pts = sol.points.map(function (p) {
+            return trimNum(p.x) + (p.kind === 'pole' ? ' (розрив)' : '');
+          });
+          box.innerHTML =
+            '<div class="muted">' + (pts.length
+              ? 'Точки: ' + U.esc(pts.join(', '))
+              : 'Особливих точок немає — вираз не змінює знак') + '</div>' +
+            '<div style="color:var(--blue-600);font-weight:700;margin-top:4px">' +
+              U.esc(answerText(sol, -wide, wide)) + '</div>';
+          return { sol: sol, lo: -wide, hi: wide };
+        }
+        U.$$('input, select', root).forEach(function (i) {
+          i.addEventListener('input', refresh);
+          i.addEventListener('change', refresh);
+        });
+        refresh();
+      },
+      buttons: [
+        { label: 'Прибрати позначки', kind: 'btn--ghost', act: 'clear',
+          onClick: function () {
+            cur.engine.snapshot();
+            it.marks = []; it.spans = []; it.signs = []; it.ans = '';
+            cur.engine.changed();
+          } },
+        { label: 'Побудувати', kind: 'btn--primary', act: 'save', icon: 'check',
+          onClick: function (root) {
+            var v = C.readForm(root);
+            var r = window.Plot ? Plot.compile(v.ex) : { err: 'Модуль формул не завантажився' };
+            if (r.err) { U.toast(r.err, 'err'); return false; }
+
+            var lo = typeof it.from === 'number' ? it.from : -5;
+          var hi = typeof it.to === 'number' ? it.to : 5;
+            var wide = Math.max(20, (hi - lo) * 3);
+            var sol = Plot.solveIneq(r.f, v.op, -wide, wide);
+
+            cur.engine.snapshot();
+
+            /* Вісь підганяємо під знайдені точки: інакше найчастіший
+               випадок — усі корені за краєм видимого шматка прямої. */
+            if (v.fit && sol.points.length) {
+              var xs = sol.points.map(function (p) { return p.x; });
+              var mn = Math.min.apply(null, xs), mx = Math.max.apply(null, xs);
+              var pad = Math.max(1, (mx - mn) * 0.45);
+              it.from = Math.floor(mn - pad);
+              it.to = Math.ceil(mx + pad);
+              if (it.to - it.from < 2) { it.from -= 1; it.to += 1; }
+
+              /* Крок цілий, поки вісь не надто довга: корені зазвичай цілі,
+                 і вони мають стояти саме на поділках. При кроці 1.5 точка
+                 −3 опинялася між рисками, і побудова читалася як неточна. */
+              var wide2 = it.to - it.from;
+              it.step = wide2 <= 24 ? 1 : Math.ceil(wide2 / 12);
+            }
+
+            it.ex = String(v.ex).trim();
+            it.op = v.op;
+            it.showSigns = v.showSigns ? 1 : 0;
+            it.marks = sol.marks;
+            it.signs = sol.signs;
+            it.spans = sol.spans;
+            it.ans = answerText(sol, -wide, wide);
+            cur.engine.changed();
+          } }
+      ]
+    });
+  }
+
+  /** Відповідь у звичному записі: x ∈ (−∞; 2) ∪ [3; +∞). */
+  function answerText(sol, lo, hi) {
+    if (!sol.spans.length) return 'Розвʼязків немає';
+    // мінус усюди один і той самий: поруч із −∞ дефіс виглядає як помилка
+    function num(v) { return trimNum(v).replace('-', '−'); }
+    return 'x ∈ ' + sol.spans.map(function (g) {
+      var aInf = g.a <= lo + 1e-9, bInf = g.b >= hi - 1e-9;
+      var openA = true, openB = true;
+      sol.marks.forEach(function (m) {
+        if (Math.abs(m.x - g.a) < 1e-9) openA = !!m.o;
+        if (Math.abs(m.x - g.b) < 1e-9) openB = !!m.o;
+      });
+      return (aInf || openA ? '(' : '[') + (aInf ? '−∞' : num(g.a)) + '; ' +
+             (bInf ? '+∞' : num(g.b)) + (bInf || openB ? ')' : ']');
+    }).join(' ∪ ');
+  }
+
   function numlineDialog(it) {
     C.modal({
       title: 'Числова вісь',
@@ -2544,6 +2676,10 @@
     'board-plane': function () {
       var it = cur && cur.engine.selection[0];
       if (it && it.t === 'f') planeDialog(it);
+    },
+    'board-ineq': function () {
+      var it = cur && cur.engine.selection[0];
+      if (it && it.t === 'n') ineqDialog(it);
     },
     'board-numline': function () {
       var it = cur && cur.engine.selection[0];

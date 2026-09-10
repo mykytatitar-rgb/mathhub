@@ -215,6 +215,134 @@
     return { f: f, err: '' };
   };
 
+  /**
+   * Нулі й розриви функції на проміжку — основа методу інтервалів.
+   *
+   * Шукаємо не формулою, а перебором зі згущенням: формулу пише людина, і
+   * вона може бути якою завгодно. Зате розвʼязок не залежить від того, чи
+   * зуміли ми розкласти многочлен на множники.
+   *
+   * Розрив від кореня відрізняємо за поведінкою: у корені функція
+   * переходить через нуль і лишається малою, у розриві — злітає. Для
+   * нерівностей це принципово різні точки: корінь може входити у
+   * відповідь, розрив — ніколи.
+   */
+  P.roots = function (f, a, b) {
+    var out = [];
+    var N = 4000;
+    var h = (b - a) / N;
+
+    function push(x, kind) {
+      x = Math.round(x * 1e9) / 1e9;
+      /* Точку на самому краю проміжку не показуємо: це не особливість
+         функції, а край того, що ми взагалі дивилися. Інакше sqrt(x)
+         отримувала б зайву позначку на лівому кінці осі. */
+      if (Math.abs(x - a) < Math.abs(h) || Math.abs(x - b) < Math.abs(h)) return;
+      for (var i = 0; i < out.length; i++) {
+        if (Math.abs(out[i].x - x) < Math.abs(h) * 2) return;   // це той самий
+      }
+      out.push({ x: x, kind: kind });
+    }
+
+    /* Точну межу «є значення / немає значення» знаходимо діленням навпіл.
+       Без цього точка сідала на вузол сітки: у (x−1)/(x−2) розрив опинявся
+       в 1.995 замість 2, а 1/x давав аж два розриви обабіч нуля. */
+    function edge(good, bad) {
+      for (var k = 0; k < 60; k++) {
+        var mid = (good + bad) / 2;
+        if (isNaN(f(mid))) bad = mid; else good = mid;
+      }
+      return bad;
+    }
+
+    var gapL = null;                          // де почалася діра в області визначення
+    var prevX = a, prevY = f(a);
+    if (!isNaN(prevY) && Math.abs(prevY) < 1e-12) push(a, 'root');
+    if (isNaN(prevY)) gapL = a;
+
+    for (var i = 1; i <= N; i++) {
+      var x = a + h * i;
+      var y = f(x);
+
+      if (isNaN(y) || isNaN(prevY)) {
+        if (!isNaN(prevY) && isNaN(y)) gapL = edge(prevX, x);       // входимо в діру
+        else if (isNaN(prevY) && !isNaN(y)) {
+          var gapR = edge(x, prevX);
+          /* Діра шириною в точку — це розрив (1/x у нулі). Широка діра —
+             це край області визначення, і в неї є два краї. */
+          if (gapL == null || gapR - gapL < (b - a) * 1e-6) push(gapR, 'pole');
+          else { push(gapL, 'pole'); push(gapR, 'pole'); }
+          gapL = null;
+        }
+        prevX = x; prevY = y;
+        continue;
+      }
+
+      if (Math.abs(y) < 1e-12) { push(x, 'root'); prevX = x; prevY = y; continue; }
+
+      if ((prevY < 0) !== (y < 0)) {
+        /* Знак змінився. Ділимо навпіл і дивимось, куди йде значення: до
+           нуля — корінь, у нескінченність — розрив. */
+        var lo = prevX, hi = x, lv = prevY, mid = lo, mv = lv;
+        for (var k = 0; k < 60; k++) {
+          mid = (lo + hi) / 2;
+          mv = f(mid);
+          if (isNaN(mv)) break;
+          if ((lv < 0) !== (mv < 0)) { hi = mid; } else { lo = mid; lv = mv; }
+        }
+        var jump = Math.max(Math.abs(prevY), Math.abs(y));
+        push(mid, (isNaN(mv) || Math.abs(mv) > 1e-4 * jump + 1e-6) && jump > 1e3
+          ? 'pole' : (isNaN(mv) ? 'pole' : 'root'));
+      }
+
+      prevX = x; prevY = y;
+    }
+
+    out.sort(function (p, q) { return p.x - q.x; });
+    return out;
+  };
+
+  /**
+   * Розвʼязати нерівність методом інтервалів.
+   *
+   * op — один із '>', '>=', '<', '<='. Повертає точки, проміжки-відповідь і
+   * знак на кожному проміжку: рівно те, що малюють на дошці.
+   */
+  P.solveIneq = function (f, op, a, b) {
+    var pts = P.roots(f, a, b);
+    var strict = op === '>' || op === '<';
+    var want = op === '>' || op === '>=' ? 1 : -1;
+
+    // межі проміжків: краї плюс усі знайдені точки
+    var cuts = [a].concat(pts.map(function (p) { return p.x; })).concat([b]);
+    var spans = [], signs = [];
+
+    for (var i = 0; i < cuts.length - 1; i++) {
+      var lo = cuts[i], hi = cuts[i + 1];
+      if (hi - lo < 1e-9) continue;
+
+      /* Пробуємо кілька точок усередині: рівно посередині функція може
+         випадково не визначитись, і цілий проміжок отримав би не той знак. */
+      var s = 0;
+      for (var t = 1; t <= 5 && !s; t++) {
+        var v = f(lo + (hi - lo) * t / 6);
+        if (!isNaN(v) && v !== 0) s = v > 0 ? 1 : -1;
+      }
+      if (!s) continue;
+
+      signs.push({ a: lo, b: hi, s: s });
+      if (s === want) spans.push({ a: lo, b: hi });
+    }
+
+    /* Точки: корінь входить у відповідь лише при нестрогому знаку, розрив —
+       ніколи. Саме це найчастіше й губиться в зошиті. */
+    var marks = pts.map(function (p) {
+      return { x: p.x, o: p.kind === 'pole' ? 1 : (strict ? 1 : 0), pole: p.kind === 'pole' ? 1 : 0 };
+    });
+
+    return { marks: marks, spans: spans, signs: signs, points: pts };
+  };
+
   /** Похідна за означенням — саме так, як її показують на уроці. */
   P.slopeAt = function (f, x, h) {
     h = h || 1e-6;

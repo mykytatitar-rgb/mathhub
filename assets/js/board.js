@@ -756,6 +756,86 @@
     }
   }
 
+  /**
+   * Метод інтервалів на числовій прямій.
+   *
+   * Три речі, які на дошці малюють крейдою: зафарбовані й виколоті точки,
+   * плюси й мінуси між ними та жирна лінія над відповіддю. Разом вони і є
+   * розвʼязком нерівності — окремо кожна з них нічого не доводить.
+   */
+  function drawIneq(ctx, it, px1, px2, y, from, to, fs, tick) {
+    var marks = it.marks || [], spans = it.spans || [], signs = it.signs || [];
+    if (!marks.length && !spans.length && !signs.length) return;
+
+    var span = to - from;
+    if (!(span > 0)) return;
+    function sx(v) { return px1 + (v - from) / span * (px2 - px1); }
+    function clamp(v) { return Math.max(from, Math.min(to, v)); }
+
+    ctx.save();
+
+    // ---- знаки між точками, над прямою
+    if (it.showSigns !== 0 && signs.length) {
+      ctx.font = '700 ' + (fs * 1.25) + 'px "Source Serif 4", Georgia, serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      signs.forEach(function (g) {
+        var a = clamp(g.a), b = clamp(g.b);
+        if (b - a < span * 0.004) return;
+        ctx.fillStyle = g.s > 0 ? '#17B26A' : '#E5484D';
+        ctx.fillText(g.s > 0 ? '+' : '−', (sx(a) + sx(b)) / 2, y - tick - fs * 0.5);
+      });
+    }
+
+    // ---- відповідь: жирна лінія просто над віссю
+    if (spans.length) {
+      ctx.strokeStyle = '#4B3FDB';
+      ctx.lineWidth = Math.max(4, (it.w || 3) * 1.8);
+      ctx.lineCap = 'butt';
+      var lift = tick * 0.9;
+      spans.forEach(function (g) {
+        var a = clamp(g.a), b = clamp(g.b);
+        if (b - a < span * 0.002) return;
+        ctx.beginPath();
+        ctx.moveTo(sx(a), y - lift);
+        ctx.lineTo(sx(b), y - lift);
+        ctx.stroke();
+      });
+    }
+
+    // ---- точки: зафарбована входить у відповідь, виколота — ні
+    var r = Math.max(4.5, (it.w || 3) * 2.1);
+    marks.forEach(function (m) {
+      if (m.x < from - 1e-9 || m.x > to + 1e-9) return;
+      var mx = sx(m.x);
+      ctx.beginPath();
+      ctx.arc(mx, y, r, 0, Math.PI * 2);
+      if (m.o) {
+        /* Виколоту заливаємо кольором тла, а не лишаємо прозорою: під нею
+           проходить сама пряма, і без заливки коло на ній не читається. */
+        ctx.fillStyle = it.bg || '#FFFFFF';
+        ctx.fill();
+        ctx.strokeStyle = it.c || '#17163A';
+        ctx.lineWidth = Math.max(2, (it.w || 3) * 0.8);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = it.c || '#17163A';
+        ctx.fill();
+      }
+    });
+
+    // ---- сама відповідь словами, під віссю
+    if (it.ans) {
+      ctx.fillStyle = '#4B3FDB';
+      ctx.font = '600 ' + (fs * 1.15) + 'px "Source Serif 4", Georgia, serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(it.ans, px1, y + tick + fs * 2.1);
+    }
+
+    ctx.restore();
+  }
+
   /** Як підписувати вісь: десятковим, звичайним дробом чи обома. */
   function numFmt(it) {
     var f = it && it.fmt;
@@ -1325,6 +1405,8 @@
 
         if (big) drawNumLabel(ctx, v, step, tx, y + tick + fs * 0.35, fs, mode, false);
       }
+
+      drawIneq(ctx, it, x1, x2 - head, y, from, to, fs, tick);
       return;
     }
 

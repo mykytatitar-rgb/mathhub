@@ -1224,6 +1224,8 @@ const LESSONS = [
       { en: 'hair',  ua: 'волосся', tr: 'г[е]а' },
       { en: 'heart', ua: 'серце',   tr: 'г[а]рт' },
       { en: 'face',  ua: 'обличчя', tr: 'ф[е]йс' },
+      { en: 'finger', ua: 'палець', tr: 'ф[і]нгер' },
+      { en: 'tooth',  ua: 'зуб',    tr: 'т[у]с' },
     ],
     sentences: [
       { en: 'My hand hurts.',    ua: 'У мене болить рука.',   tr: 'май генд гёртс' },
@@ -1242,6 +1244,8 @@ const LESSONS = [
       { en: 'hat',      ua: 'капелюх',   tr: 'г[е]т' },
       { en: 'socks',    ua: 'шкарпетки', tr: 'с[о]кс' },
       { en: 'coat',     ua: 'пальто',    tr: 'к[о]ут' },
+      { en: 'belt',     ua: 'пояс',      tr: 'б[е]лт' },
+      { en: 'glasses',  ua: 'окуляри',   tr: 'гл[а]сіз' },
     ],
     sentences: [
       { en: 'I like this dress.', ua: 'Мені подобається ця сукня.', tr: 'ай лайк зіс др[е]с' },
@@ -1301,6 +1305,8 @@ const LESSONS = [
       { en: 'cold',  ua: 'холодно',  tr: 'к[о]улд' },
       { en: 'cloud', ua: 'хмара',    tr: 'кл[а]уд' },
       { en: 'warm',  ua: 'тепло',    tr: 'у[о]рм' },
+      { en: 'storm', ua: 'буря',     tr: 'ст[о]рм' },
+      { en: 'fog',   ua: 'туман',    tr: 'ф[о]г' },
     ],
     sentences: [
       { en: 'It is raining.',    ua: 'Іде дощ.',               tr: 'іт із р[е]йнінг' },

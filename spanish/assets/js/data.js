@@ -1475,6 +1475,8 @@ const LESSONS = [
       { en: 'pierna', ua: 'нога',    tr: 'пь[е]рна' },
       { en: 'pelo',   ua: 'волосся', tr: 'п[е]ло' },
       { en: 'cara',   ua: 'обличчя', tr: 'к[а]ра' },
+      { en: 'dedo',   ua: 'палець',  tr: 'д[е]до' },
+      { en: 'diente', ua: 'зуб',     tr: 'дь[е]нте' },
     ],
     sentences: [
       { en: 'Me duele la mano.',    ua: 'У мене болить рука.',   tr: 'ме ду[е]ле ла м[а]но' },
@@ -1493,6 +1495,8 @@ const LESSONS = [
       { en: 'sombrero',   ua: 'капелюх',   tr: 'сомбр[е]ро' },
       { en: 'calcetines', ua: 'шкарпетки', tr: 'калсет[і]нес' },
       { en: 'abrigo',     ua: 'пальто',    tr: 'абр[і]го' },
+      { en: 'cinturón',   ua: 'пояс',      tr: 'сінтур[о]н' },
+      { en: 'gafas',      ua: 'окуляри',   tr: 'г[а]фас' },
     ],
     sentences: [
       { en: 'Me gusta este vestido.',    ua: 'Мені подобається ця сукня.', tr: 'ме г[у]ста [е]сте бест[і]до' },
@@ -1552,6 +1556,8 @@ const LESSONS = [
       { en: 'frío',   ua: 'холод',  tr: 'фр[і]о' },
       { en: 'nube',   ua: 'хмара',  tr: 'н[у]бе' },
       { en: 'tiempo', ua: 'погода', tr: 'ть[е]мпо' },
+      { en: 'tormenta', ua: 'буря',  tr: 'торм[е]нта' },
+      { en: 'niebla',   ua: 'туман', tr: 'нь[е]бла' },
     ],
     sentences: [
       { en: 'Está lloviendo.',    ua: 'Іде дощ.',               tr: 'ест[а] йобь[е]ндо' },

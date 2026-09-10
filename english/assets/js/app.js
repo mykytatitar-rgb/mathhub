@@ -847,15 +847,22 @@ if(window.Native && Native.isNative){
 (function(){
   function kill(){
     try{
-      document.querySelectorAll('a[href*="netlify"]').forEach(a=>{ if(/netlify/i.test(a.textContent||'')) a.remove(); });
-      document.querySelectorAll('[id*="netlify" i],[class*="netlify" i]').forEach(el=>{
-        const p=getComputedStyle(el).position; if(p==='fixed'||p==='absolute') el.remove();
-      });
+      document.querySelectorAll('a[href*="netlify" i],[id*="netlify" i],[class*="netlify" i]').forEach(function(el){ el.remove(); });
+      document.querySelectorAll('iframe').forEach(function(f){ var p=getComputedStyle(f).position; if(p==='fixed'||p==='absolute') f.remove(); });
+      var b=document.body; if(b){
+        b.querySelectorAll('div,a,span,section,aside').forEach(function(el){
+          if(el.childElementCount<=1 && /powered by netlify/i.test(el.textContent||'')){
+            var n=el;
+            while(n && n!==b){ var p=getComputedStyle(n).position; if(p==='fixed'||p==='absolute'){ n.remove(); return; } n=n.parentElement; }
+          }
+        });
+      }
     }catch(e){}
   }
   kill();
   window.addEventListener('load', kill);
-  let n=0, t=setInterval(function(){ kill(); if(++n>=12) clearInterval(t); }, 500);
+  var c=0, t=setInterval(function(){ kill(); if(++c>=20) clearInterval(t); }, 400);
+  try{ new MutationObserver(kill).observe(document.body||document.documentElement,{childList:true}); }catch(e){}
 })();
 
 /* ---------- service worker (офлайн) ---------- */

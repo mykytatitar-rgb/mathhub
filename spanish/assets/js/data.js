@@ -104,6 +104,8 @@ const LESSONS = [
       { en: 'no',        ua: 'ні',           tr: 'но' },
       { en: 'perdón',    ua: 'вибач',        tr: 'перд[о]н' },
       { en: 'me llamo',  ua: 'мене звати…',  tr: 'ме й[а]мо' },
+      { en: 'disculpe',  ua: 'перепрошую',   tr: 'диск[у]льпе' },
+      { en: 'de nada',   ua: 'нема за що',   tr: 'де н[а]да' },
     ],
     sentences: [
       { en: '¡Hola! ¿Cómo estás?', ua: 'Привіт! Як справи?', tr: '[о]ла к[о]мо ест[а]с' },
@@ -1518,6 +1520,8 @@ const LESSONS = [
       { en: 'delicioso', ua: 'смачно',     tr: 'делісь[о]со' },
       { en: 'cuánto',    ua: 'скільки',    tr: 'ку[а]нто' },
       { en: 'quisiera',  ua: 'я б хотів',  tr: 'кісь[е]ра' },
+      { en: 'café',      ua: 'кава',       tr: 'каф[е]' },
+      { en: 'agua',      ua: 'вода',       tr: '[а]гуа' },
     ],
     sentences: [
       { en: '¿Me trae el menú?',    ua: 'Принесете меню?',      tr: 'ме тр[а]е ель мен[у]' },
@@ -1576,6 +1580,8 @@ const LESSONS = [
       { en: 'cama',    ua: 'ліжко',   tr: 'к[а]ма' },
       { en: 'silla',   ua: 'стілець', tr: 'с[і]йя' },
       { en: 'suelo',   ua: 'підлога', tr: 'су[е]ло' },
+      { en: 'pared',   ua: 'стіна',   tr: 'пар[е]д' },
+      { en: 'baño',    ua: 'ванна',   tr: 'б[а]ньйо' },
     ],
     sentences: [
       { en: 'Mi cuarto es pequeño.', ua: 'Моя кімната маленька.', tr: 'мі ку[а]рто ес пек[е]ньйо' },
@@ -1594,6 +1600,8 @@ const LESSONS = [
       { en: 'estación',  ua: 'станція',  tr: 'естась[о]н' },
       { en: 'izquierda', ua: 'ліворуч',  tr: 'іскь[е]рда' },
       { en: 'derecha',   ua: 'праворуч', tr: 'дер[е]ча' },
+      { en: 'parque',    ua: 'парк',     tr: 'п[а]рке' },
+      { en: 'mercado',   ua: 'ринок',    tr: 'мерк[а]до' },
     ],
     sentences: [
       { en: '¿Dónde está la estación?',      ua: 'Де станція?',        tr: 'д[о]нде ест[а] ла естась[о]н' },
@@ -1613,6 +1621,8 @@ const LESSONS = [
       { en: 'barco',     ua: 'корабель',   tr: 'б[а]рко' },
       { en: 'carretera', ua: 'дорога',     tr: 'карет[е]ра' },
       { en: 'conducir',  ua: 'керувати',   tr: 'кондус[і]р' },
+      { en: 'billete',   ua: 'квиток',     tr: 'бій[е]те' },
+      { en: 'caminar',   ua: 'йти пішки',  tr: 'камін[а]р' },
     ],
     sentences: [
       { en: 'Voy en coche.',       ua: 'Я їду машиною.',    tr: 'бой ен к[о]че' },

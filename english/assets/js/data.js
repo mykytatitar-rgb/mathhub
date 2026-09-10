@@ -103,6 +103,8 @@ const LESSONS = [
       { en: 'yes',       ua: 'так',              tr: '[є]с' },
       { en: 'no',        ua: 'ні',               tr: 'н[о]у' },
       { en: 'sorry',     ua: 'вибач',            tr: 'с[о]рі' },
+      { en: 'excuse me', ua: 'перепрошую',       tr: 'ікскь[ю]з мі' },
+      { en: "you're welcome", ua: 'нема за що',  tr: 'юр у[е]лкам' },
     ],
     sentences: [
       { en: 'Hello, how are you?', ua: 'Привіт, як справи?', tr: 'гел[о]у гау а ю' },
@@ -1267,6 +1269,8 @@ const LESSONS = [
       { en: 'delicious',   ua: 'смачно',     tr: 'діл[і]шес' },
       { en: 'how much',    ua: 'скільки',    tr: 'гау м[а]ч' },
       { en: 'I would like', ua: 'я б хотів',  tr: 'ай уд л[а]йк' },
+      { en: 'coffee',      ua: 'кава',        tr: 'к[о]фі' },
+      { en: 'water',       ua: 'вода',        tr: 'у[о]тер' },
     ],
     sentences: [
       { en: 'Can I have the menu?',   ua: 'Можна меню?',          tr: 'кен ай гев зе м[е]нью' },
@@ -1325,6 +1329,8 @@ const LESSONS = [
       { en: 'bed',    ua: 'ліжко',   tr: 'б[е]д' },
       { en: 'chair',  ua: 'стілець', tr: 'ч[е]а' },
       { en: 'floor',  ua: 'підлога', tr: 'фл[о]р' },
+      { en: 'wall',   ua: 'стіна',   tr: 'у[о]л' },
+      { en: 'bathroom', ua: 'ванна', tr: 'б[а]срум' },
     ],
     sentences: [
       { en: 'My room is small.',   ua: 'Моя кімната маленька.', tr: 'май рум із см[о]л' },
@@ -1344,6 +1350,8 @@ const LESSONS = [
       { en: 'left',    ua: 'ліворуч',  tr: 'л[е]фт' },
       { en: 'right',   ua: 'праворуч', tr: 'р[а]йт' },
       { en: 'near',    ua: 'близько',  tr: 'н[і]а' },
+      { en: 'park',    ua: 'парк',     tr: 'п[а]рк' },
+      { en: 'market',  ua: 'ринок',    tr: 'м[а]ркіт' },
     ],
     sentences: [
       { en: 'Where is the bus station?', ua: 'Де автобусна станція?', tr: 'уеа із зе бас ст[е]йшн' },
@@ -1363,6 +1371,8 @@ const LESSONS = [
       { en: 'ship',     ua: 'корабель',       tr: 'ш[і]п' },
       { en: 'road',     ua: 'дорога',         tr: 'р[о]уд' },
       { en: 'to drive', ua: 'керувати (авто)', tr: 'ту др[а]йв' },
+      { en: 'ticket',   ua: 'квиток',          tr: 'т[і]кіт' },
+      { en: 'to walk',  ua: 'йти пішки',       tr: 'ту у[о]к' },
     ],
     sentences: [
       { en: 'I go by car.',      ua: 'Я їду машиною.',    tr: 'ай гоу бай к[а]р' },

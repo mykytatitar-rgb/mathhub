@@ -311,7 +311,7 @@ function renderHome(){
         const badge = done ? '<span class="rn-badge">✓</span>' : (l.id===currentId ? '<span class="rn-badge star">★</span>' : '');
         return `<div class="road-node-wrap" style="transform:translateX(${off}px)">
           <button class="road-node ${state}" data-id="${l.id}"><span class="rn-emoji">${l.icon}</span>${badge}</button>
-          <div class="road-label">${esc(l.title)}</div>
+          <div class="road-label"><b>${l.id}.</b> ${esc(l.title)}</div>
         </div>`;
       }).join('');
   }).join('') + `</div>`;
@@ -332,7 +332,7 @@ function renderHome(){
             const k = knownCount(l), done = lessonDone(l);
             return `<div class="lesson-card" data-id="${l.id}">
               <div class="emoji">${l.icon}</div>
-              <div class="meta"><h3>${esc(l.title)}</h3>
+              <div class="meta"><h3>${l.id}. ${esc(l.title)}</h3>
                 <small>${esc(l.subtitle)} · ${l.cards.length} слів</small></div>
               <div class="ring ${done?'badge-done':''}">${done?'✓':k+'/'+l.cards.length}</div>
             </div>`;

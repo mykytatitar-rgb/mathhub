@@ -548,7 +548,7 @@
      які уроки треба перевидати.
 
      Підіймати щоразу, коли міняється VIEWER_SCRIPT або розмітка переглядача. */
-  var VIEWER_VERSION = 8;
+  var VIEWER_VERSION = 9;
 
   /**
    * Показати, що зараз із копією учня.
@@ -4061,6 +4061,17 @@
     /* Числова вісь і координатна площина — складніші за все, що вміє
        сторінка учня, тож розкладаємо їх на прості лінії й написи. Доти вони
        їхали до учня як є й не малювалися взагалі. */
+    /* Площину й тіло віддаємо кадрами: учень зможе тягнути точку й
+       обертати тіло, хоч у нього немає ні обчислювача формул, ні
+       стереометрії. Сторінка уроку — один самодостатній файл, і вантажити
+       в неї модулі не можна: сайт за захистом, а учень не входить. */
+    if ((it.t === 'f' || it.t === 's') && window.Board.bakeFrames) {
+      var fr = window.Board.bakeFrames(it);
+      if (fr) {
+        return [{ t: 'q', k: fr.kind, st: fr.stat, fr: fr.frames,
+                  box: fr.box, id: it.id || U.uid('q') }];
+      }
+    }
     if (it.t === 'n' || it.t === 'f' || it.t === 's') {
       var parts = window.Board.bakePrimitives ? window.Board.bakePrimitives(it) : [];
       return parts.length ? parts : null;
@@ -4458,6 +4469,27 @@ VIEWER_SCRIPT +
 '});});',
 'saveMine();}',
 'var tool="pen",PENC="#E11D48",PENW=3;',
+'var QPOS={};',                       // який кадр показуємо для кожного рухомого обʼєкта
+'var qdrag=null;',
+
+/* Підказка під обʼєктом. Без неї учень не здогадається, що тут можна
+   тягнути: на вигляд це звичайний малюнок. */
+'function drawGrab(ctx,it){var x1=Math.min(it.box[0],it.box[2]),x2=Math.max(it.box[0],it.box[2]);',
+'var y2=Math.max(it.box[1],it.box[3]);',
+'ctx.save();ctx.fillStyle="#7E90AE";ctx.font=\'600 13px Manrope,"Segoe UI",system-ui,sans-serif\';',
+'ctx.textAlign="center";ctx.textBaseline="top";',
+'var t=it.k==="plane"?"\\u270B тягніть \\u2014 точка поїде графіком":"\\u270B тягніть \\u2014 тіло обернеться";',
+'if(!QCAN())t+=" (візьміть \\u270B на панелі)";',
+'ctx.fillText(t,(x1+x2)/2,y2+8);ctx.restore();}',
+
+/* Тягнути можна рукою або коли писати нема чим: інакше рухомий обʼєкт
+   крав би кожен штрих, який учень хотів зробити поверх нього. */
+'function QCAN(){return tool==="hand"||!CANW;}',
+'function qAt(wx,wy){var found=null;',
+'((DATA.slides[idx]||{}).items||[]).forEach(function(it){if(it.t!=="q")return;',
+'var x1=Math.min(it.box[0],it.box[2]),x2=Math.max(it.box[0],it.box[2]);',
+'var y1=Math.min(it.box[1],it.box[3]),y2=Math.max(it.box[1],it.box[3]);',
+'if(wx>=x1&&wx<=x2&&wy>=y1&&wy<=y2)found=it;});return found;}',
 'var CANW=!!DATA.canWrite;',
 'function seq(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}',
 'function toWorld(sx,sy){return[sx/scale+cam.x,sy/scale+cam.y];}',
@@ -4478,11 +4510,19 @@ VIEWER_SCRIPT +
 'function bounds(it){var xs=[],ys=[],i;',
 'if(it.t==="p"){for(i=0;i<it.d.length;i+=2){xs.push(it.d[i]);ys.push(it.d[i+1]);}}',
 'else if(it.t==="y"){it.p.forEach(function(q){xs.push(q[0]);ys.push(q[1]);});}',
+'else if(it.t==="q"){xs=[it.box[0],it.box[2]];ys=[it.box[1],it.box[3]];}',
 'else if(it.t==="x"){var ls=String(it.v).split("\\n"),m=0;ls.forEach(function(l){m=Math.max(m,l.length)});',
 'xs=[it.p[0],it.p[0]+m*it.s*0.55];ys=[it.p[1]-it.s,it.p[1]+(ls.length-1)*it.s*1.25+it.s*0.3];}',
 'else{xs=[it.a[0],it.a[2]];ys=[it.a[1],it.a[3]];}',
 'if(!xs.length)return null;return{x1:Math.min.apply(null,xs),y1:Math.min.apply(null,ys),x2:Math.max.apply(null,xs),y2:Math.max.apply(null,ys)};}',
-'function drawItem(ctx,it){ctx.strokeStyle=it.c;ctx.fillStyle=it.c;ctx.lineWidth=it.w||3;ctx.lineCap="round";ctx.lineJoin="round";var i;',
+'function drawItem(ctx,it){',
+/* Рухомий обʼєкт: стала частина плюс поточний кадр. Кадри намальовані
+   заздалегідь у репетитора, тож учень бачить точно те саме, що й він. */
+'if(it.t==="q"){var qi=QPOS[it.id]||0;',
+'(it.st||[]).forEach(function(p){drawItem(ctx,p);});',
+'var f2=it.fr[qi];if(f2)f2.p.forEach(function(p){drawItem(ctx,p);});',
+'drawGrab(ctx,it);return;}',
+'ctx.strokeStyle=it.c;ctx.fillStyle=it.c;ctx.lineWidth=it.w||3;ctx.lineCap="round";ctx.lineJoin="round";var i;',
 'if(it.t==="p"){if(it.d.length<4){ctx.beginPath();ctx.arc(it.d[0],it.d[1],(it.w||3)/2,0,Math.PI*2);ctx.fill();return;}',
 'ctx.beginPath();ctx.moveTo(it.d[0],it.d[1]);',
 'for(i=2;i<it.d.length-2;i+=2){var mx=(it.d[i]+it.d[i+2])/2,my=(it.d[i+1]+it.d[i+3])/2;ctx.quadraticCurveTo(it.d[i],it.d[i+1],mx,my);}',
@@ -4596,6 +4636,10 @@ VIEWER_SCRIPT +
 
 'cv.addEventListener("pointerdown",function(e){try{cv.setPointerCapture(e.pointerId)}catch(x){}var r=cv.getBoundingClientRect();',
 'var sx=e.clientX-r.left,sy=e.clientY-r.top;var w0=toWorld(sx,sy);',
+/* Рухомий обʼєкт перехоплюємо першим — але лише коли він має право
+   ловити: інакше він крав би кожен штрих поверх себе. */
+'if(QCAN()&&e.button!==2){var qh=qAt(w0[0],w0[1]);',
+'if(qh){e.preventDefault();qdrag={it:qh,sx:sx,i0:QPOS[qh.id]||0};return;}}',
 'if(CANW&&tool!=="hand"&&e.button!==2){e.preventDefault();',
 'if(tool==="erase"){erasing=true;eraseAt(w0[0],w0[1]);return;}',
 'if(tool==="text"){placeText(sx,sy,w0);return;}',
@@ -4608,6 +4652,15 @@ VIEWER_SCRIPT +
 'pan={sx:sx,sy:sy,cx:cam.x,cy:cam.y};cv.className="drag";});',
 
 'cv.addEventListener("pointermove",function(e){var r=cv.getBoundingClientRect();var p={x:e.clientX-r.left,y:e.clientY-r.top};',
+/* Площину рухаємо за самою точкою: скільки пікселів пройшла миша по
+   ширині обʼєкта, стільки кадрів і перегортаємо. Тіло — за горизонтальним
+   зсувом: так само, як у репетитора. */
+'if(qdrag){var it=qdrag.it,N=it.fr.length-1;',
+'var x1=Math.min(it.box[0],it.box[2]),x2=Math.max(it.box[0],it.box[2]);',
+'var wq=toWorld(p.x,p.y);var k2;',
+'if(it.k==="plane"){k2=Math.round((wq[0]-x1)/Math.max(1,x2-x1)*N);}',
+'else{k2=qdrag.i0+Math.round((p.x-qdrag.sx)/26);k2=((k2%(N+1))+(N+1))%(N+1);}',
+'QPOS[it.id]=Math.max(0,Math.min(N,k2));draw();return;}',
 'if(erasing){var we=toWorld(p.x,p.y);eraseAt(we[0],we[1]);return;}',
 'if(cur){var wp=toWorld(p.x,p.y);',
 'if(cur.t==="p"){var n=cur.d.length;',
@@ -4624,6 +4677,7 @@ VIEWER_SCRIPT +
 'if(!pan)return;cam.x=pan.cx-(p.x-pan.sx)/scale;cam.y=pan.cy-(p.y-pan.sy)/scale;draw();keep();});',
 
 'function up(e){',
+'if(qdrag){qdrag=null;return;}',
 'if(erasing){erasing=false;return;}',
 'if(cur){var it=cur;cur=null;',
 'var okItem=(it.t==="p")?it.d.length>=4:(Math.hypot(it.a[2]-it.a[0],it.a[3]-it.a[1])>3/scale);',

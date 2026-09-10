@@ -1480,6 +1480,16 @@
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
 
+      /* «Лише точки» потрібне для сторінки учня: там стала частина
+         (осі, сітка, графік) запікається один раз, а рухома — окремими
+         кадрами. Інакше кожне положення точки везло б із собою ще й увесь
+         графік, і знімок уроку розпух би в десятки разів. */
+      if (it.only === 'pts') {
+        if (fn) drawPlanePoints(ctx, it, m, fn, fsz);
+        ctx.lineCap = wasCap; ctx.lineJoin = wasJoin;
+        return;
+      }
+
       var stepX = niceStep(W.xb - W.xa), stepY = niceStep(W.yb - W.ya);
       var gx, gy, k;
 
@@ -3047,6 +3057,67 @@
 
     try { drawItemBody(rec, it, 1); } catch (e) { return []; }
     return out;
+  };
+
+  /**
+   * Кадри для сторінки учня.
+   *
+   * Учень не має ні обчислювача формул, ні стереометрії — сторінка уроку
+   * це один самодостатній файл, і вантажити в неї модулі не можна: сайт
+   * за захистом, а учень не входить. Тому інтерактивність робиться інакше:
+   * ми заздалегідь малюємо всі положення й кладемо їх у сторінку готовими.
+   *
+   * Стала частина окремо від рухомої, бо інакше кожне положення точки
+   * везло б із собою весь графік із сіткою.
+   */
+  /* Округлення до десятої пікселя. На екрані різниці немає, а в знімку
+     уроку кожен зайвий знак — це кілобайти, помножені на кількість кадрів. */
+  function slimPrims(list) {
+    return list.map(function (p) {
+      var q = { t: p.t, c: p.c };
+      if (p.w != null) q.w = Math.round(p.w * 10) / 10;
+      if (p.f) q.f = p.f;
+      if (p.a) q.a = p.a.map(function (n) { return Math.round(n * 10) / 10; });
+      if (p.p) q.p = [Math.round(p.p[0] * 10) / 10, Math.round(p.p[1] * 10) / 10];
+      if (p.v != null) q.v = p.v;
+      if (p.s != null) q.s = Math.round(p.s * 10) / 10;
+      return q;
+    });
+  }
+
+  Board.bakeFrames = function (it) {
+    if (it.t === 'f') {
+      var fn0 = planeFn(it);
+      if (!fn0) return null;
+      var W = planeWin(it);
+
+      var base = JSON.parse(JSON.stringify(it));
+      base.pts = 0;
+      var stat = slimPrims(Board.bakePrimitives(base));
+
+      var N = 40, frames = [];
+      for (var i = 0; i <= N; i++) {
+        var v = W.xa + (W.xb - W.xa) * (i + 0.5) / (N + 1);
+        var f2 = JSON.parse(JSON.stringify(it));
+        f2.only = 'pts';
+        f2.p2 = Math.round(v * 1000) / 1000;
+        frames.push({ v: f2.p2, p: slimPrims(Board.bakePrimitives(f2)) });
+      }
+      return { kind: 'plane', stat: stat, frames: frames,
+               box: it.a.slice(), xa: W.xa, xb: W.xb };
+    }
+
+    if (it.t === 's') {
+      var frames2 = [];
+      for (var y = 0; y < 360; y += 15) {
+        var g2 = JSON.parse(JSON.stringify(it));
+        g2.yaw = y;
+        frames2.push({ v: y, p: slimPrims(Board.bakePrimitives(g2)) });
+      }
+      return { kind: 'solid', stat: [], frames: frames2, box: it.a.slice() };
+    }
+
+    return null;
   };
 
   Board.smoothStroke = smoothStroke;

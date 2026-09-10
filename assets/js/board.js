@@ -644,6 +644,21 @@
     var raw = def.round ? Solids.buildRound(kind, pitch) : Solids.build(kind, yaw, pitch);
     if (!raw) return null;
 
+    /* Побудови й переріз рахуються в просторі й проєктуються тими самими
+       кутами. Тому вони не «домальовані поверх», а справді лежать на тілі:
+       обернеш його — і висота обернеться разом із ним. */
+    var cons = [];
+    (it.cons || []).forEach(function (spec) {
+      var segs3 = Solids.cons(kind, spec);
+      if (segs3.length) cons.push({ k: spec.k, segs: Solids.projectSegs(segs3, yaw, pitch) });
+    });
+
+    var sect = null;
+    if (it.sec && it.sec.length === 3) {
+      var got = Solids.section(kind, it.sec);
+      if (got) sect = Solids.projectPoly(got.poly, yaw, pitch);
+    }
+
     var xs = [], ys = [];
     raw.visible.concat(raw.hidden).forEach(function (e) {
       xs.push(e[0], e[2]); ys.push(e[1], e[3]);
@@ -671,7 +686,9 @@
       hidden: raw.hidden.map(mapSeg),
       labels: (raw.labels || []).map(function (L) {
         return { name: L.name, x: L.x * k + offX, y: L.y * k + offY };
-      })
+      }),
+      cons: cons.map(function (c) { return { k: c.k, segs: c.segs.map(mapSeg) }; }),
+      section: sect ? sect.map(function (p) { return [p[0] * k + offX, p[1] * k + offY]; }) : null
     };
   }
 
@@ -1307,6 +1324,38 @@
         ctx.beginPath();
         frame.hidden.forEach(function (e) { ctx.moveTo(e[0], e[1]); ctx.lineTo(e[2], e[3]); });
         ctx.stroke();
+        ctx.restore();
+      }
+
+      /* Переріз малюємо після ребер, але під підписами: заливка не має
+         затуляти літери, якими його ж і називають. */
+      if (frame.section && frame.section.length > 2) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(frame.section[0][0], frame.section[0][1]);
+        for (var q = 1; q < frame.section.length; q++) {
+          ctx.lineTo(frame.section[q][0], frame.section[q][1]);
+        }
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(75,63,219,.16)';
+        ctx.fill();
+        ctx.strokeStyle = '#4B3FDB';
+        ctx.lineWidth = Math.max(2, sw * 1.15);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      if (frame.cons.length) {
+        ctx.save();
+        ctx.lineWidth = Math.max(1.4, sw * 0.85);
+        frame.cons.forEach(function (c) {
+          // висота — суцільна й помітна, решта тонша: інакше каркас губиться
+          ctx.strokeStyle = c.k === 'height' ? '#F79009' : '#17B26A';
+          ctx.setLineDash(c.k === 'height' ? [] : [6, 4]);
+          ctx.beginPath();
+          c.segs.forEach(function (e) { ctx.moveTo(e[0], e[1]); ctx.lineTo(e[2], e[3]); });
+          ctx.stroke();
+        });
         ctx.restore();
       }
 

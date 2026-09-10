@@ -2418,15 +2418,74 @@
             '><span>Невидимі ребра пунктиром</span></label>' +
         '</div>' +
         '<div class="field__hint" style="margin-top:10px">Тіло можна обертати й мишею — ' +
-        'помаранчевий маркер над ним: убік крутить, вгору-вниз нахиляє.</div>',
+        'помаранчевий маркер над ним: убік крутить, вгору-вниз нахиляє.</div>' +
+        '<div data-solid-extra></div>',
       onMount: function (root) {
+        var extra = root.querySelector('[data-solid-extra]');
+
+        /* Побудови й переріз показуємо лише для многогранників: у кулі
+           немає ні вершин, ні граней, тож і різати її через три вершини
+           нема через що. */
+        function renderExtra(kind) {
+          var d = K[kind];
+          if (!d || d.round || !window.Solids) { extra.innerHTML = ''; return; }
+
+          var have = {};
+          (it.cons || []).forEach(function (c) { have[c.k] = 1; });
+
+          var opts = Solids.pointsOf(kind).map(function (p) {
+            return { value: p.id, label: p.name };
+          });
+          var picked = (it.sec && it.sec.length === 3) ? it.sec
+            : [opts[0] && opts[0].value, opts[1] && opts[1].value, opts[2] && opts[2].value];
+
+          extra.innerHTML =
+            '<div class="dim-sep" style="margin:16px 0 12px"></div>' +
+            '<div class="board-opts__label" style="margin-bottom:8px">Побудови</div>' +
+            '<div class="check-row">' +
+              Object.keys(Solids.CONS).map(function (ck) {
+                return '<label class="check"><input type="checkbox" name="c_' + ck + '"' +
+                  (have[ck] ? ' checked' : '') + '><span>' + U.esc(Solids.CONS[ck]) +
+                  '</span></label>';
+              }).join('') +
+            '</div>' +
+            '<div class="board-opts__label" style="margin:16px 0 8px">Переріз через три точки</div>' +
+            '<div class="field-row field-row--4">' +
+              C.field('', C.select('s1', picked[0], opts)) +
+              C.field('', C.select('s2', picked[1], opts)) +
+              C.field('', C.select('s3', picked[2], opts)) +
+              C.field('', '<label class="check" style="padding-top:9px">' +
+                '<input type="checkbox" name="secOn"' + (it.sec && it.sec.length === 3 ? ' checked' : '') +
+                '><span>Показати</span></label>') +
+            '</div>' +
+            '<div data-sec-note class="field__hint"></div>';
+
+          function note() {
+            var vv = C.readForm(root);
+            var box = extra.querySelector('[data-sec-note]');
+            if (!box) return;
+            var r = Solids.section(kind, [vv.s1, vv.s2, vv.s3]);
+            /* Число тут — частина слова («6-кутник»), а не окрема кількість,
+               тож відмінювати нічого не треба: «6-кутників» — це нісенітниця. */
+            box.innerHTML = r
+              ? 'Вийде ' + r.poly.length + '-кутник.'
+              : '<span style="color:var(--red)">Ці три точки лежать на одній прямій — ' +
+                'площину через них не провести.</span>';
+          }
+          U.$$('select', extra).forEach(function (sel) { sel.addEventListener('change', note); });
+          note();
+        }
+
         U.onClick(root, '[data-kind]', function (el) {
           U.$$('[data-kind]', root).forEach(function (b) { b.classList.remove('is-on'); });
           el.classList.add('is-on');
           root.setAttribute('data-picked', el.dataset.kind);
           var d = K[el.dataset.kind];
           if (d && d.yaw0 != null) root.querySelector('[name="yaw"]').value = d.yaw0;
+          renderExtra(el.dataset.kind);
         });
+
+        renderExtra(it.k || 'cube');
       },
       buttons: [
         { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
@@ -2442,6 +2501,16 @@
             it.pitch = Math.max(-80, Math.min(80, Number(vv.pitch) || 0));
             it.lb = vv.lb ? 1 : 0;
             it.hid = vv.hid ? 1 : 0;
+
+            var cons = [];
+            if (window.Solids) {
+              Object.keys(Solids.CONS).forEach(function (ck) {
+                if (vv['c_' + ck]) cons.push({ k: ck, i: 0 });
+              });
+            }
+            it.cons = cons;
+            it.sec = (vv.secOn && vv.s1 && vv.s2 && vv.s3) ? [vv.s1, vv.s2, vv.s3] : null;
+
             cur.engine.changed();
           } }
       ]

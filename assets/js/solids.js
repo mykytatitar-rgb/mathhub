@@ -252,5 +252,242 @@
     return out;
   };
 
+  /* ============================================================
+     Побудови на тілі
+     ============================================================
+
+     Усе рахується в просторі, а не на картинці. Тому висота лишається
+     висотою під будь-яким кутом, а переріз — справжнім перерізом, а не
+     чотирикутником, домальованим на око. Проєкція застосовується в самому
+     кінці, одна на все. */
+
+  function centroid(list) {
+    var c = [0, 0, 0];
+    list.forEach(function (p) { c[0] += p[0]; c[1] += p[1]; c[2] += p[2]; });
+    return [c[0] / list.length, c[1] / list.length, c[2] / list.length];
+  }
+
+  function mid3(a, b) { return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2]; }
+
+  /** Усі ребра тіла, кожне один раз. */
+  function edgesOf(m) {
+    var seen = {}, out = [];
+    m.f.forEach(function (face) {
+      for (var i = 0; i < face.length; i++) {
+        var a = face[i], b = face[(i + 1) % face.length];
+        var key = Math.min(a, b) + '-' + Math.max(a, b);
+        if (seen[key]) continue;
+        seen[key] = 1;
+        out.push([Math.min(a, b), Math.max(a, b)]);
+      }
+    });
+    return out;
+  }
+
+  /**
+   * Точки, через які має сенс проводити переріз: вершини й середини ребер.
+   *
+   * Саме ці дві множини й трапляються в задачах. Довільна точка в просторі
+   * теоретично можлива, але задати її мишею на плоскому екрані неможливо
+   * без здогадок, а здогадки в геометрії гірші за відсутність можливості.
+   */
+  S.pointsOf = function (kind) {
+    var def = S.KINDS[kind];
+    if (!def || def.round) return [];
+
+    var m = def.make();
+    var out = m.v.map(function (p, i) {
+      return { id: 'v' + i, name: m.names[i] || ('P' + i), p: p };
+    });
+
+    edgesOf(m).forEach(function (e) {
+      out.push({
+        id: 'm' + e[0] + '_' + e[1],
+        name: 'сер. ' + (m.names[e[0]] || '') + (m.names[e[1]] || ''),
+        p: mid3(m.v[e[0]], m.v[e[1]])
+      });
+    });
+    return out;
+  };
+
+  function pointById(kind, id) {
+    var all = S.pointsOf(kind);
+    for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i].p;
+    return null;
+  }
+
+  /**
+   * Переріз тіла площиною через три точки.
+   *
+   * Для кожної грані дивимось, з якого боку від площини лежать її вершини,
+   * і беремо ребра, які площину перетинають. Для опуклого тіла кожна грань
+   * дає рівно один відрізок, а разом вони складаються в многокутник —
+   * точний, а не намальований на око.
+   */
+  S.section = function (kind, ids) {
+    var def = S.KINDS[kind];
+    if (!def || def.round || !ids || ids.length < 3) return null;
+
+    var A = pointById(kind, ids[0]), B = pointById(kind, ids[1]), C = pointById(kind, ids[2]);
+    if (!A || !B || !C) return null;
+
+    var u = [B[0] - A[0], B[1] - A[1], B[2] - A[2]];
+    var w = [C[0] - A[0], C[1] - A[1], C[2] - A[2]];
+    var n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
+    var len = Math.hypot(n[0], n[1], n[2]);
+    if (len < 1e-9) return null;                 // три точки на одній прямій
+    n = [n[0] / len, n[1] / len, n[2] / len];
+
+    function dist(p) {
+      return n[0] * (p[0] - A[0]) + n[1] * (p[1] - A[1]) + n[2] * (p[2] - A[2]);
+    }
+
+    var m = def.make();
+    var d = m.v.map(dist);
+    var EPS = 1e-9;
+    var segs = [];
+
+    m.f.forEach(function (face) {
+      var hit = [];
+      for (var i = 0; i < face.length; i++) {
+        var a = face[i], b = face[(i + 1) % face.length];
+        var da = d[a], db = d[b];
+
+        if (Math.abs(da) < EPS) { hit.push(m.v[a]); continue; }   // вершина на площині
+        if ((da < 0) !== (db < 0) && Math.abs(db) >= EPS) {
+          var t = da / (da - db);
+          hit.push([m.v[a][0] + (m.v[b][0] - m.v[a][0]) * t,
+                    m.v[a][1] + (m.v[b][1] - m.v[a][1]) * t,
+                    m.v[a][2] + (m.v[b][2] - m.v[a][2]) * t]);
+        }
+      }
+      // прибираємо збіги: вершину на площині ловлять обидва суміжні ребра
+      var uniq = [];
+      hit.forEach(function (p) {
+        for (var i = 0; i < uniq.length; i++) {
+          if (Math.hypot(p[0] - uniq[i][0], p[1] - uniq[i][1], p[2] - uniq[i][2]) < 1e-7) return;
+        }
+        uniq.push(p);
+      });
+      if (uniq.length === 2) segs.push([uniq[0], uniq[1]]);
+    });
+
+    if (segs.length < 3) return null;
+
+    /* Зшиваємо відрізки в многокутник: кожен наступний починається там, де
+       скінчився попередній. Без цього заливка виглядала б як зірка. */
+    var poly = [segs[0][0], segs[0][1]];
+    var used = { 0: 1 };
+    for (var step = 1; step < segs.length; step++) {
+      var tail = poly[poly.length - 1], found = -1;
+      for (var i = 0; i < segs.length; i++) {
+        if (used[i]) continue;
+        var s0 = segs[i][0], s1 = segs[i][1];
+        if (Math.hypot(tail[0] - s0[0], tail[1] - s0[1], tail[2] - s0[2]) < 1e-6) { found = i; poly.push(s1); break; }
+        if (Math.hypot(tail[0] - s1[0], tail[1] - s1[1], tail[2] - s1[2]) < 1e-6) { found = i; poly.push(s0); break; }
+      }
+      if (found < 0) break;
+      used[found] = 1;
+    }
+    // кінець зійшовся з початком — замикання не дублюємо
+    if (poly.length > 2) {
+      var f0 = poly[0], fl = poly[poly.length - 1];
+      if (Math.hypot(f0[0] - fl[0], f0[1] - fl[1], f0[2] - fl[2]) < 1e-6) poly.pop();
+    }
+
+    /* Точки посеред прямої сторони прибираємо. Вони зʼявляються там, де
+       площина проходить рівно через ребро: сусідні грані дають два
+       відрізки на одній прямій, і переріз ABC₁ у куба виглядав би
+       шестикутником, хоча це чотирикутник ABC₁D₁. */
+    var clean = [];
+    for (var q = 0; q < poly.length; q++) {
+      var pv = poly[(q - 1 + poly.length) % poly.length];
+      var cv = poly[q];
+      var nv = poly[(q + 1) % poly.length];
+      var e1 = [cv[0] - pv[0], cv[1] - pv[1], cv[2] - pv[2]];
+      var e2 = [nv[0] - cv[0], nv[1] - cv[1], nv[2] - cv[2]];
+      var cr = [e1[1] * e2[2] - e1[2] * e2[1],
+                e1[2] * e2[0] - e1[0] * e2[2],
+                e1[0] * e2[1] - e1[1] * e2[0]];
+      if (Math.hypot(cr[0], cr[1], cr[2]) > 1e-7) clean.push(cv);
+    }
+    if (clean.length >= 3) poly = clean;
+
+    return { poly: poly, normal: n };
+  };
+
+  /**
+   * Висота, діагоналі, апофема — у просторі.
+   *
+   * Повертає відрізки в тривимірних координатах; куди вони ляжуть на
+   * екрані, вирішує та сама проєкція, що й для ребер.
+   */
+  S.cons = function (kind, spec) {
+    var def = S.KINDS[kind];
+    if (!def || def.round || !spec) return [];
+
+    var m = def.make();
+    var base = m.f[0].slice().reverse();          // нижня грань, у прямому порядку
+    var nb = base.length;
+    var bc = centroid(base.map(function (i) { return m.v[i]; }));
+
+    if (spec.k === 'height') {
+      var apex = m.names[m.v.length - 1] === 'S'
+        ? m.v[m.v.length - 1]
+        : centroid(m.f[1].map(function (i) { return m.v[i]; }));
+      return [[apex, bc]];
+    }
+
+    if (spec.k === 'apothem') {
+      if (m.names[m.v.length - 1] !== 'S') return [];
+      var i0 = (spec.i || 0) % nb;
+      var mp = mid3(m.v[base[i0]], m.v[base[(i0 + 1) % nb]]);
+      return [[m.v[m.v.length - 1], mp], [bc, mp]];
+    }
+
+    if (spec.k === 'basediag') {
+      var out = [];
+      for (var i = 0; i < nb; i++) {
+        for (var j = i + 2; j < nb; j++) {
+          if (i === 0 && j === nb - 1) continue;   // це сторона, а не діагональ
+          out.push([m.v[base[i]], m.v[base[j]]]);
+        }
+      }
+      return out;
+    }
+
+    if (spec.k === 'diag') {
+      /* Просторова діагональ є лише там, де верх повторює низ: у призми чи
+         паралелепіпеда. У піраміди її немає, і вигадувати нічого не будемо. */
+      if (m.v.length !== nb * 2) return [];
+      var k = Math.floor(nb / 2);
+      return [[m.v[base[0]], m.v[nb + ((base[0] + k) % nb)]]];
+    }
+
+    return [];
+  };
+
+  S.CONS = {
+    height:   'Висота',
+    apothem:  'Апофема',
+    basediag: 'Діагоналі основи',
+    diag:     'Просторова діагональ'
+  };
+
+  /** Спроєктувати довільні відрізки простору тими самими кутами, що й тіло. */
+  S.projectSegs = function (segs, yaw, pitch) {
+    return segs.map(function (s) {
+      var a = project(s[0], yaw, pitch), b = project(s[1], yaw, pitch);
+      return [a[0], a[1], b[0], b[1]];
+    });
+  };
+
+  S.projectPoly = function (poly, yaw, pitch) {
+    return poly.map(function (p) {
+      var q = project(p, yaw, pitch);
+      return [q[0], q[1]];
+    });
+  };
+
   window.Solids = S;
 })();

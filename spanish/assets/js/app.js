@@ -334,6 +334,7 @@ function renderHome(){
         <div class="stat"><div class="stat-num">🔥 ${displayStreak()}</div><div class="stat-lbl">днів поспіль</div></div>
         <button class="stat goal" id="goalTile"><div class="stat-num">🎯 ${todayCount()}/${streakData.goal}${todayCount()>=streakData.goal?' ✓':''}</div><div class="stat-lbl">ціль сьогодні</div></button>
       </div>
+      ${currentId ? `<button class="continue-btn" id="continueBtn">▶ Продовжити навчання</button>` : `<div class="continue-done">🎉 Курс пройдено! Повторюй слова, щоб не забути.</div>`}
     </div>
     ${installBanner}
     ${reviewBanner}
@@ -350,6 +351,7 @@ function renderHome(){
   const rb = root.querySelector('#reviewBanner'); if(rb) rb.onclick = ()=>{ location.hash = '#/review'; };
   const vb = root.querySelector('#vocabBanner'); if(vb) vb.onclick = ()=>{ location.hash = '#/vocab'; };
   const ib = root.querySelector('#installBanner'); if(ib) ib.onclick = doInstall;
+  const cbtn = root.querySelector('#continueBtn'); if(cbtn) cbtn.onclick = ()=>{ location.hash = '#/lesson/'+currentId; };
   const ad = root.querySelector('#adslot'); if(ad) ad.onclick = ()=>{ location.hash = '#/premium'; };
   root.querySelectorAll('.viewtoggle button').forEach(b=>{ b.onclick=()=>{ try{ localStorage.setItem('hola.homeview', b.dataset.v); }catch(e){} renderHome(); }; });
   const gtile = root.querySelector('#goalTile'); if(gtile) gtile.onclick = ()=>{ cycleGoal(); renderHome(); };
@@ -484,7 +486,7 @@ function renderVocab(){
   const posOrder = ['іменник','дієслово','прикметник','займенник','числівник','прислівник','прийменник','сполучник','частка','вираз'];
   const present = new Set(words.map(w=>w.pos));
   const posList = [''].concat(posOrder.filter(p=>present.has(p)));
-  let fLevel = '', fPos = '';
+  let fLevel = '', fPos = '', fQ = '';
   root.innerHTML = `
     <div class="topbar">
       <button class="backbtn" id="back">← Головна</button>
@@ -494,6 +496,7 @@ function renderVocab(){
       <button class="iconbtn" id="speed">${RATES[rateIdx()].e}</button>
     </div>
     <div class="hero" style="padding:12px 16px"><div class="lbl" id="vcount"></div></div>
+    <div class="vsearch"><input id="vq" type="search" placeholder="🔍 Пошук слова…" autocomplete="off" autocapitalize="none"></div>
     <div class="vfilters">
       <div class="vrow" id="flevels">${levels.map(lv=>`<button data-l="${lv}" class="vchip ${lv===''?'active':''}">${lv||'Усі рівні'}</button>`).join('')}</div>
       <div class="vrow" id="fpos">${posList.map(p=>`<button data-p="${p}" class="vchip ${p===''?'active':''}">${p||'Усі частини'}</button>`).join('')}</div>
@@ -502,7 +505,7 @@ function renderVocab(){
   root.querySelector('#back').onclick=()=>location.hash='#/';
   root.querySelector('#speed').onclick=()=>{ setRateIdx((rateIdx()+1)%RATES.length); root.querySelector('#speed').textContent=RATES[rateIdx()].e; };
   function render(){
-    const list = words.filter(w=> (!fLevel||w.level===fLevel) && (!fPos||w.pos===fPos));
+    const list = words.filter(w=> (!fLevel||w.level===fLevel) && (!fPos||w.pos===fPos) && (!fQ || w.en.toLowerCase().includes(fQ) || w.ua.toLowerCase().includes(fQ)));
     root.querySelector('#vcount').textContent = `Вивчено слів: ${words.length}` + ((fLevel||fPos)?` · показано: ${list.length}`:'');
     const el = root.querySelector('#vocablist');
     if(!words.length){ el.innerHTML=`<div class="done-card"><div class="score">📖</div><p>Ще нема вивчених слів. Познач слова «✓ Знаю» у розділі Слова — і вони зʼявляться тут.</p></div>`; return; }
@@ -518,6 +521,7 @@ function renderVocab(){
   }
   root.querySelectorAll('#flevels .vchip').forEach(b=> b.onclick=()=>{ fLevel=b.dataset.l; root.querySelectorAll('#flevels .vchip').forEach(x=>x.classList.toggle('active',x===b)); render(); });
   root.querySelectorAll('#fpos .vchip').forEach(b=> b.onclick=()=>{ fPos=b.dataset.p; root.querySelectorAll('#fpos .vchip').forEach(x=>x.classList.toggle('active',x===b)); render(); });
+  const vq=root.querySelector('#vq'); if(vq) vq.oninput=()=>{ fQ=vq.value.trim().toLowerCase(); render(); };
   render();
 }
 

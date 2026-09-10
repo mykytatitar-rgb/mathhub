@@ -117,8 +117,8 @@ button.stat.goal:active{transform:scale(.97)}
   padding:3px 12px;font-weight:700}
 .card .ua{font-size:19px;font-weight:700;margin:10px 0 6px}
 .card-pic{font-size:52px;line-height:1;margin:8px 0 2px}
-.ua-back{margin-top:14px;font-size:22px;font-weight:800;color:var(--ink);
-  border-top:1px dashed var(--line);padding-top:12px}
+.ua-back{margin-top:14px;font-size:25px;font-weight:800;color:var(--ink);
+  border-top:1px dashed var(--line);padding-top:14px}
 .flipword{display:block;width:100%;border:none;font-family:inherit;cursor:pointer}
 .card .en{font-size:40px;font-weight:800;color:var(--pink);line-height:1.1;margin:6px 0 12px;word-break:break-word}
 .card.sentence .en{font-size:26px}
@@ -130,6 +130,7 @@ button.stat.goal:active{transform:scale(.97)}
   padding:10px 20px;font-weight:700;font-size:15px;cursor:pointer;display:inline-flex;
   align-items:center;gap:8px;box-shadow:0 2px 10px rgba(0,0,0,.08)}
 .speak:active{transform:scale(.96)}
+.speak-ico{padding:10px 18px;font-size:22px;line-height:1}
 
 .controls{display:flex;gap:10px}
 .controls button{flex:1;border:none;border-radius:16px;padding:15px;font-size:15px;font-weight:700;

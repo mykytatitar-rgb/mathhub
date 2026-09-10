@@ -428,7 +428,7 @@ function renderReview(){
           <div id="reveal" hidden>
             <div class="en">${esc(it.en)}</div>
             <div class="tr">${trHTML(it.tr)}</div>
-            <button class="speak" id="say">🔊 Послухати</button>
+            <button class="speak speak-ico" id="say" title="Послухати">🔊</button>
           </div>
         </div>
         <div id="ctrls">
@@ -738,8 +738,8 @@ function renderLesson(id){
             ${pic?`<div class="card-pic">${pic}</div>`:''}
             <div class="en">${esc(c.en)}</div>
             <div class="tr">${trHTML(c.tr)}</div>
-            <span class="speak" id="say">🔊 Послухати</span>
             ${revealed ? `<div class="ua-back">${esc(c.ua)}</div>` : `<div class="flip-hint">тапни, щоб побачити переклад 👆</div>`}
+            <span class="speak speak-ico" id="say" title="Послухати">🔊</span>
           </button>
           <div class="controls">
             <button class="btn-again" id="again">↻ Повторити</button>
@@ -781,7 +781,7 @@ function renderLesson(id){
           <button class="card sentence flipcard" id="flip">
             <div class="tag">РЕЧЕННЯ</div>
             <div class="ua">${esc(sn.ua)}</div>
-            ${reveal ? `<div class="en">${esc(sn.en)}</div><div class="tr">${trHTML(sn.tr)}</div><span class="speak" id="say">🔊 Послухати</span>`
+            ${reveal ? `<div class="en">${esc(sn.en)}</div><div class="tr">${trHTML(sn.tr)}</div><span class="speak speak-ico" id="say" title="Послухати">🔊</span>`
                      : `<div class="flip-hint">тапни, щоб побачити переклад 👆</div>`}
           </button>
           <div class="controls">

@@ -681,6 +681,13 @@ a { color: inherit; text-decoration: none; }
 /* Прапорці площини — у два стовпці: сім штук у стовпчик виганяють
    кнопки вікна за екран ноутбука. */
 .check-row { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 18px; }
+/* Плитки тіл: назва читається одразу, а не ховається у випадному списку. */
+.solid-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.solid-tile { border: 1.5px solid var(--line); background: #fff; border-radius: var(--r-sm);
+  padding: 11px 12px; font: inherit; font-size: 13px; font-weight: 600; color: var(--ink-2);
+  cursor: pointer; text-align: left; }
+.solid-tile:hover { border-color: var(--blue-600); color: var(--blue-600); }
+.solid-tile.is-on { border-color: var(--blue-600); background: var(--blue-bg, #F1EFFE); color: var(--blue-600); }
 
 .swatches { display: flex; gap: 9px; flex-wrap: wrap; }
 .swatch { width: 30px; height: 30px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; padding: 0; transition: transform .12s; }

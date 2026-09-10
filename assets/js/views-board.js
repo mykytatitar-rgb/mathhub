@@ -22,6 +22,7 @@
     { id: 'arrow',   icon: 'arrowRight', label: 'Стрілка (A)',    opts: 'stroke' },
     { id: 'numline', icon: 'ruler',      label: 'Числова вісь (N)', opts: 'stroke' },
     { id: 'plane',   icon: 'axes',       label: 'Координатна площина (K)', opts: 'stroke' },
+    { id: 'solid',   icon: 'cube3d',     label: 'Стереометрія (J)', opts: 'stroke' },
     { id: 'hand',    icon: 'hand',       label: 'Рука — рух по полотну (H)' }
   ];
 
@@ -1939,6 +1940,11 @@
           '" data-act="board-toggle-measures" title="Показати або сховати розміри">' +
           icon('checklist', 16) + '</button>' +
         '<span class="sel-bar__sep"></span>';
+    } else if (n === 1 && e.selection[0].t === 's') {
+      extra =
+        '<button class="sel-bar__btn" data-act="board-solid" title="Тіло, кути, підписи">' +
+          icon('target', 16) + '</button>' +
+        '<span class="sel-bar__sep"></span>';
     } else if (n === 1 && e.selection[0].t === 'f') {
       extra =
         '<button class="sel-bar__btn" data-act="board-plane" title="Формула, вікно, що показувати">' +
@@ -2203,7 +2209,7 @@
     if (e.altKey) return;
 
     var map = { v: 'select', p: 'pen', e: 'eraser', t: 'text', s: 'shape',
-                l: 'line', a: 'arrow', n: 'numline', k: 'plane', h: 'hand' };
+                l: 'line', a: 'arrow', n: 'numline', k: 'plane', j: 'solid', h: 'hand' };
     var kk = e.key.toLowerCase();
     if (map[kk]) { e.preventDefault(); setTool(map[kk]); return; }
     if (kk === 'r') { e.preventDefault(); eng.setShape('rect'); renderOpts(); return; }
@@ -2377,6 +2383,71 @@
    * пояснення — найгірше, що може статися, бо не видно, чи справа в формулі,
    * чи у вікні.
    */
+  /**
+   * Яке тіло, під яким кутом і з якими підписами.
+   *
+   * Кути числами — на додачу до маркера обертання: «поверни рівно на 45»
+   * мишею не зробиш, а на уроці це трапляється постійно.
+   */
+  function solidDialog(it) {
+    var K = window.Solids ? Solids.KINDS : {};
+    var list = Object.keys(K);
+
+    function tiles() {
+      return '<div class="solid-grid">' + list.map(function (k) {
+        return '<button type="button" class="solid-tile' + (it.k === k ? ' is-on' : '') +
+          '" data-kind="' + k + '">' + U.esc(K[k].label) + '</button>';
+      }).join('') + '</div>';
+    }
+
+    C.modal({
+      title: 'Стереометрія',
+      sub: 'тіло, кути й підписи',
+      wide: true,
+      body:
+        tiles() +
+        '<div class="field-row" style="margin-top:14px">' +
+          C.field('Поворот, °', C.input('yaw', Math.round(it.yaw || 0), 'type="number" step="5"')) +
+          C.field('Нахил, °', C.input('pitch', Math.round(typeof it.pitch === 'number' ? it.pitch : 22),
+            'type="number" step="5" min="-80" max="80"')) +
+        '</div>' +
+        '<div class="check-row">' +
+          '<label class="check"><input type="checkbox" name="lb"' + (it.lb !== 0 ? ' checked' : '') +
+            '><span>Підписи вершин</span></label>' +
+          '<label class="check"><input type="checkbox" name="hid"' + (it.hid !== 0 ? ' checked' : '') +
+            '><span>Невидимі ребра пунктиром</span></label>' +
+        '</div>' +
+        '<div class="field__hint" style="margin-top:10px">Тіло можна обертати й мишею — ' +
+        'помаранчевий маркер над ним: убік крутить, вгору-вниз нахиляє.</div>',
+      onMount: function (root) {
+        U.onClick(root, '[data-kind]', function (el) {
+          U.$$('[data-kind]', root).forEach(function (b) { b.classList.remove('is-on'); });
+          el.classList.add('is-on');
+          root.setAttribute('data-picked', el.dataset.kind);
+          var d = K[el.dataset.kind];
+          if (d && d.yaw0 != null) root.querySelector('[name="yaw"]').value = d.yaw0;
+        });
+      },
+      buttons: [
+        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+        { label: 'Застосувати', kind: 'btn--primary', act: 'save', icon: 'check',
+          onClick: function (root) {
+            var vv = C.readForm(root);
+            var picked = root.getAttribute('data-picked') || it.k || 'cube';
+            if (!K[picked]) { U.toast('Такого тіла немає', 'err'); return false; }
+
+            cur.engine.snapshot();
+            it.k = picked;
+            it.yaw = Number(vv.yaw) || 0;
+            it.pitch = Math.max(-80, Math.min(80, Number(vv.pitch) || 0));
+            it.lb = vv.lb ? 1 : 0;
+            it.hid = vv.hid ? 1 : 0;
+            cur.engine.changed();
+          } }
+      ]
+    });
+  }
+
   function planeDialog(it) {
     function chk(name, on, label) {
       return '<label class="check"><input type="checkbox" name="' + name + '"' +
@@ -2672,6 +2743,10 @@
         flushSave();
         U.toast('Цей вигляд слайда стане початковим', 'ok');
       }
+    },
+    'board-solid': function () {
+      var it = cur && cur.engine.selection[0];
+      if (it && it.t === 's') solidDialog(it);
     },
     'board-plane': function () {
       var it = cur && cur.engine.selection[0];
@@ -3748,7 +3823,7 @@
     /* Числова вісь і координатна площина — складніші за все, що вміє
        сторінка учня, тож розкладаємо їх на прості лінії й написи. Доти вони
        їхали до учня як є й не малювалися взагалі. */
-    if (it.t === 'n' || it.t === 'f') {
+    if (it.t === 'n' || it.t === 'f' || it.t === 's') {
       var parts = window.Board.bakePrimitives ? window.Board.bakePrimitives(it) : [];
       return parts.length ? parts : null;
     }

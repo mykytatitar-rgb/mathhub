@@ -169,10 +169,27 @@
     /* fx — дзеркало по горизонталі, fy — по вертикалі. Потрібне передусім
        прямокутному трикутнику: у задачах прямий кут буває і зліва, і справа.
        Робимо це для всіх фігур, бо коштує рівно нічого. */
-    return base.map(function (p) {
+    var out = base.map(function (p) {
       var px = it.fx ? (1 - p[0]) : p[0];
       var py = it.fy ? (1 - p[1]) : p[1];
       return [x1 + px * w, y1 + py * h];
+    });
+
+    /* Поворот застосовуємо тут, а не під час малювання. Тоді його бачать
+       усі: влучання мишею, межі, підписи вершин і — головне — побудови.
+       Висота поверненого трикутника лишається висотою, бо вона будується
+       з тих самих точок, а не з рамки. */
+    return rotatePts(out, it.rot, x1 + w / 2, y1 + h / 2);
+  }
+
+  /** Повернути набір точок навколо центра. Кут — у градусах, за годинником. */
+  function rotatePts(pts, deg, cx, cy) {
+    var a = (deg || 0) * Math.PI / 180;
+    if (!a) return pts;
+    var co = Math.cos(a), si = Math.sin(a);
+    return pts.map(function (p) {
+      var dx = p[0] - cx, dy = p[1] - cy;
+      return [cx + dx * co - dy * si, cy + dx * si + dy * co];
     });
   }
 
@@ -452,6 +469,20 @@
       lines.forEach(function (ln) { wMax = Math.max(wMax, ln.length); });
       xs = [it.p[0], it.p[0] + wMax * it.s * 0.55];
       ys = [it.p[1] - it.s, it.p[1] + (lines.length - 1) * it.s * 1.25 + it.s * 0.3];
+    } else if (it.t === 'g' && it.rot) {
+      /* У повернутої фігури рамка вже не збігається з тим, що видно. Беремо
+         справжні вершини, інакше виділення й вписування в екран рахувалися б
+         по місцю, де фігури немає. */
+      var rp = shapePoints(it);
+      if (rp) {
+        rp.forEach(function (p) { xs.push(p[0]); ys.push(p[1]); });
+      } else {
+        // коло: описуємо його рамкою, повернутою навколо центра
+        var cx0 = (it.a[0] + it.a[2]) / 2, cy0 = (it.a[1] + it.a[3]) / 2;
+        var corners = rotatePts([[it.a[0], it.a[1]], [it.a[2], it.a[1]],
+                                 [it.a[2], it.a[3]], [it.a[0], it.a[3]]], it.rot, cx0, cy0);
+        corners.forEach(function (p) { xs.push(p[0]); ys.push(p[1]); });
+      }
     } else {
       xs = [it.a[0], it.a[2]]; ys = [it.a[1], it.a[3]];
     }
@@ -525,7 +556,12 @@
     if (it.t === 'l' || it.t === 'a') {
       return distToSegment(x, y, it.a[0], it.a[1], it.a[2], it.a[3]) <= tol + it.w / 2;
     }
-    // площина — прямокутник: тицяти можна будь-де всередині
+    // тіло й площина — прямокутники: тицяти можна будь-де всередині
+    if (it.t === 's') {
+      var sx1 = Math.min(it.a[0], it.a[2]), sx2 = Math.max(it.a[0], it.a[2]);
+      var sy1 = Math.min(it.a[1], it.a[3]), sy2 = Math.max(it.a[1], it.a[3]);
+      return x >= sx1 - tol && x <= sx2 + tol && y >= sy1 - tol && y <= sy2 + tol;
+    }
     if (it.t === 'f') {
       var fx1 = Math.min(it.a[0], it.a[2]), fx2 = Math.max(it.a[0], it.a[2]);
       var fy1 = Math.min(it.a[1], it.a[3]), fy2 = Math.max(it.a[1], it.a[3]);
@@ -587,6 +623,57 @@
      Формула зберігається текстом і обчислюється власним розбором (plot.js),
      а не мовою: вона повертається з сервера, а виконувати те, що приїхало
      ззовні, програма не має права. */
+
+  /**
+   * Каркас тіла, вписаний у рамку обʼєкта.
+   *
+   * Модуль стереометрії рахує в умовних одиницях і нічого не знає про
+   * дошку. Тут ми беремо готовий каркас і вписуємо його в рамку так, щоб
+   * пропорції не попливли: масштаб один на обидві осі, інакше куб
+   * перестав би бути кубом.
+   */
+  function solidFrame(it) {
+    if (!window.Solids) return null;
+    var kind = it.k || 'cube';
+    var def = Solids.KINDS[kind];
+    if (!def) return null;
+
+    var yaw = (typeof it.yaw === 'number' ? it.yaw : (def.yaw0 || 28)) * Math.PI / 180;
+    var pitch = (typeof it.pitch === 'number' ? it.pitch : 22) * Math.PI / 180;
+
+    var raw = def.round ? Solids.buildRound(kind, pitch) : Solids.build(kind, yaw, pitch);
+    if (!raw) return null;
+
+    var xs = [], ys = [];
+    raw.visible.concat(raw.hidden).forEach(function (e) {
+      xs.push(e[0], e[2]); ys.push(e[1], e[3]);
+    });
+    (raw.labels || []).forEach(function (L) { xs.push(L.x); ys.push(L.y); });
+    if (!xs.length) return null;
+
+    var mnx = Math.min.apply(null, xs), mxx = Math.max.apply(null, xs);
+    var mny = Math.min.apply(null, ys), mxy = Math.max.apply(null, ys);
+
+    var bx1 = Math.min(it.a[0], it.a[2]), bx2 = Math.max(it.a[0], it.a[2]);
+    var by1 = Math.min(it.a[1], it.a[3]), by2 = Math.max(it.a[1], it.a[3]);
+    var pad = Math.min(bx2 - bx1, by2 - by1) * 0.08;
+
+    var kx = ((bx2 - bx1) - pad * 2) / Math.max(1e-6, mxx - mnx);
+    var ky = ((by2 - by1) - pad * 2) / Math.max(1e-6, mxy - mny);
+    var k = Math.min(kx, ky);
+    var offX = (bx1 + bx2) / 2 - (mnx + mxx) / 2 * k;
+    var offY = (by1 + by2) / 2 - (mny + mxy) / 2 * k;
+
+    function mapSeg(e) { return [e[0] * k + offX, e[1] * k + offY, e[2] * k + offX, e[3] * k + offY]; }
+
+    return {
+      visible: raw.visible.map(mapSeg),
+      hidden: raw.hidden.map(mapSeg),
+      labels: (raw.labels || []).map(function (L) {
+        return { name: L.name, x: L.x * k + offX, y: L.y * k + offY };
+      })
+    };
+  }
 
   var planeCache = {};       // формула → готова функція; розбирати щоразу дорого
 
@@ -1192,6 +1279,49 @@
       return;
     }
 
+    /* Стереометричне тіло.
+
+       Каркас будується заново на кожному малюванні з двох кутів. Тому
+       обертання не «перемальовує картинку», а справді повертає тіло:
+       невидимі ребра перераховуються й міняються місцями з видимими. */
+    if (it.t === 's') {
+      var frame = solidFrame(it);
+      if (!frame) return;
+
+      var sw = Math.max(1.5, (it.w || 2));
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      ctx.lineWidth = sw;
+      ctx.beginPath();
+      frame.visible.forEach(function (e) { ctx.moveTo(e[0], e[1]); ctx.lineTo(e[2], e[3]); });
+      ctx.stroke();
+
+      if (it.hid !== 0 && frame.hidden.length) {
+        /* Невидиме — тонше й пунктиром. Однакова товщина зробила б із
+           каркаса плутанину: очей не розрізняє, що спереду, а що ззаду. */
+        ctx.save();
+        ctx.lineWidth = Math.max(1, sw * 0.62);
+        ctx.setLineDash([7, 5]);
+        ctx.globalAlpha = 0.75;
+        ctx.beginPath();
+        frame.hidden.forEach(function (e) { ctx.moveTo(e[0], e[1]); ctx.lineTo(e[2], e[3]); });
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      if (it.lb !== 0 && frame.labels.length) {
+        var lfs = Math.max(12, sw * 6);
+        ctx.font = '600 ' + lfs + 'px "Source Serif 4", Georgia, serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        frame.labels.forEach(function (L) {
+          if (L.name) ctx.fillText(L.name, L.x, L.y);
+        });
+      }
+      return;
+    }
+
     /* Координатна площина з графіком.
 
        Малюється кожного разу з нуля з тих самих чисел — тому досить
@@ -1431,8 +1561,10 @@
       if (!sh) return;
       ctx.beginPath();
       if (sh.round) {
+        // еліпс повертати нема сенсу лише тоді, коли він коло; ellipse уміє сам
         ctx.ellipse((it.a[0] + it.a[2]) / 2, (it.a[1] + it.a[3]) / 2,
-          Math.abs(it.a[2] - it.a[0]) / 2, Math.abs(it.a[3] - it.a[1]) / 2, 0, 0, Math.PI * 2);
+          Math.abs(it.a[2] - it.a[0]) / 2, Math.abs(it.a[3] - it.a[1]) / 2,
+          (it.rot || 0) * Math.PI / 180, 0, Math.PI * 2);
       } else {
         var pts = shapePoints(it);
         if (!pts) return;
@@ -1814,11 +1946,42 @@
     }
     if (it.t === 'r' || it.t === 'e' || it.t === 'i' || it.t === 'g') {
       var a = it.a;
-      return [
+      var box = [
         { id: 'nw', x: a[0], y: a[1] }, { id: 'ne', x: a[2], y: a[1] },
         { id: 'se', x: a[2], y: a[3] }, { id: 'sw', x: a[0], y: a[3] }
       ];
+      if (it.t !== 'g') return box;
+
+      /* У фігури маркерів більше: кут повороту й кожна вершина окремо.
+         Кути рамки лишаються — ними міняють розмір. */
+      var cx1 = (a[0] + a[2]) / 2, cy1 = (a[1] + a[3]) / 2;
+      box = rotatePts(box.map(function (p) { return [p.x, p.y]; }), it.rot, cx1, cy1)
+        .map(function (p, i) { return { id: ['nw', 'ne', 'se', 'sw'][i], x: p[0], y: p[1] }; });
+
+      var top = Math.min(a[1], a[3]);
+      var rh = rotatePts([[cx1, top - 34]], it.rot, cx1, cy1)[0];
+      box.push({ id: 'rot', x: rh[0], y: rh[1] });
+
+      var vp = shapePoints(it);
+      if (vp && vp.length <= 12) {
+        vp.forEach(function (p, i) { box.push({ id: 'v' + i, x: p[0], y: p[1] }); });
+      }
+      return box;
     }
+    /* У тіла один додатковий маркер — обертання. Він робить одразу обидва
+       кути: горизонталь крутить навколо вертикалі, вертикаль нахиляє.
+       Двома окремими ручками цим було б неможливо користуватися. */
+    if (it.t === 's') {
+      var sa = it.a;
+      var scx = (sa[0] + sa[2]) / 2;
+      var stop = Math.min(sa[1], sa[3]);
+      return [
+        { id: 'nw', x: sa[0], y: sa[1] }, { id: 'ne', x: sa[2], y: sa[1] },
+        { id: 'se', x: sa[2], y: sa[3] }, { id: 'sw', x: sa[0], y: sa[3] },
+        { id: 'spin', x: scx, y: stop - 34 }
+      ];
+    }
+
     /* У площини маркери двох сортів: кути змінюють розмір, а дві точки на
        графіку — те, заради чого вона й потрібна. Тягнення точок іде тим
        самим механізмом, що й тягнення кутів, тож нічого нового вчити не
@@ -1906,6 +2069,59 @@
       mv = Math.max(pm.win.xa + lim, Math.min(pm.win.xb - lim, mv));
       mv = Math.round(mv * 1000) / 1000;
       if (id === 'fx1') it.p1 = mv; else it.p2 = mv;
+      return;
+    }
+
+    /* Обертання тіла. Горизонтальний зсув — навколо вертикалі, вертикальний
+       — нахил. Нахил обмежуємо: за межами приблизно ±80° тіло стає плоским
+       і читати його неможливо. */
+    if (id === 'spin' && it.t === 's') {
+      var ccx = (it.a[0] + it.a[2]) / 2;
+      var ctop = Math.min(it.a[1], it.a[3]);
+      var base = window.Solids && Solids.KINDS[it.k || 'cube'];
+      var y0 = typeof it.yaw === 'number' ? it.yaw : ((base && base.yaw0) || 28);
+      it.yaw = Math.round((((wx - ccx) * 0.55) % 360 + 360) % 360 * 10) / 10;
+      it.pitch = Math.max(-80, Math.min(80,
+        Math.round((22 + (ctop - 34 - wy) * 0.35) * 10) / 10));
+      return;
+    }
+
+    /* Поворот: кут рахуємо від центра до миші. Із Shift — кроками по 15°,
+       щоб «рівно на 90» не доводилося ловити рукою. */
+    if (id === 'rot') {
+      var rcx = (it.a[0] + it.a[2]) / 2, rcy = (it.a[1] + it.a[3]) / 2;
+      var ang = Math.atan2(wy - rcy, wx - rcx) * 180 / Math.PI + 90;
+      if (!free) ang = Math.round(ang / 15) * 15;
+      it.rot = Math.round(((ang % 360) + 360) % 360 * 10) / 10;
+      return;
+    }
+
+    /* Тягнення однієї вершини. Фігура перестає бути «правильним
+       трикутником із набору» й стає своєю власною: зберігаємо всі вершини
+       як частки рамки, і далі вона живе цими числами. */
+    if (id.charAt(0) === 'v' && it.t === 'g') {
+      var vi = Number(id.slice(1));
+      var raw = shapePoints(it);            // уже повернуті, у координатах дошки
+      if (!raw || !(vi >= 0 && vi < raw.length)) return;
+
+      raw = raw.slice();
+      raw[vi] = [wx, wy];
+
+      /* Поворот вбудовуємо у самі вершини й обнуляємо кут. Інакше після
+         зміни вершин зсувається центр рамки, навколо якого крутиться
+         фігура, — і точка сідає не туди, куди її вели. Фігура від цього
+         нічого не втрачає: вона просто стає своєю власною. */
+      it.rot = 0;
+
+      var vxs = raw.map(function (p) { return p[0]; });
+      var vys = raw.map(function (p) { return p[1]; });
+      var bx1 = Math.min.apply(null, vxs), bx2 = Math.max.apply(null, vxs);
+      var by1 = Math.min.apply(null, vys), by2 = Math.max.apply(null, vys);
+      if (bx2 - bx1 < 8 || by2 - by1 < 8) return;    // вершини злиплися — не приймаємо
+
+      it.pts = normalizePoints(raw).pts;
+      it.a = [bx1, by1, bx2, by2];
+      it.fx = 0; it.fy = 0;      // дзеркала вже враховані у збережених вершинах
       return;
     }
 
@@ -2044,6 +2260,16 @@
         fx: this.flipX ? 1 : 0,
         a: [round(w.x), round(w.y), round(w.x), round(w.y)]
       };
+      return;
+    }
+
+    if (this.tool === 'solid') {
+      this.snapshot();
+      var sk = this.solidKind || 'cube';
+      var sd = window.Solids && Solids.KINDS[sk];
+      this.draft = { t: 's', id: uid('sl'), c: this.color, w: this.width,
+                     k: sk, yaw: (sd && sd.yaw0) || 28, pitch: 22, lb: 1, hid: 1,
+                     a: [round(w.x), round(w.y), round(w.x), round(w.y)] };
       return;
     }
 
@@ -2204,6 +2430,11 @@
       if (d.t === 'f') {
         if (Math.abs(d.a[2] - d.a[0]) < 120) d.a[2] = d.a[0] + 560;
         if (Math.abs(d.a[3] - d.a[1]) < 90) d.a[3] = d.a[1] + 420;
+        keep = true;
+      }
+      if (d.t === 's') {
+        if (Math.abs(d.a[2] - d.a[0]) < 90) d.a[2] = d.a[0] + 340;
+        if (Math.abs(d.a[3] - d.a[1]) < 90) d.a[3] = d.a[1] + 340;
         keep = true;
       }
       if (keep) {
@@ -2709,11 +2940,16 @@
       if (hs) {
         ctx.lineWidth = 2 * k;
         hs.forEach(function (hd) {
+          /* Маркери різні на вигляд, бо роблять різне: кут повороту —
+             помаранчевий і більший, вершини — зелені. Інакше на фігурі
+             стоїть десяток однакових кружечків і незрозуміло, за що братися. */
+          var isRot = hd.id === 'rot';
+          var isV = hd.id.charAt(0) === 'v' && hd.id.length > 1;
           ctx.beginPath();
-          ctx.arc(hd.x, hd.y, 5 * k, 0, Math.PI * 2);
-          ctx.fillStyle = '#fff';
+          ctx.arc(hd.x, hd.y, (isRot ? 6.5 : 5) * k, 0, Math.PI * 2);
+          ctx.fillStyle = isRot ? '#F79009' : (isV ? '#17B26A' : '#fff');
           ctx.fill();
-          ctx.strokeStyle = '#1358F5';
+          ctx.strokeStyle = isRot || isV ? '#fff' : '#1358F5';
           ctx.stroke();
         });
       }

@@ -848,7 +848,11 @@ if(window.Native && Native.isNative){
   function kill(){
     try{
       document.querySelectorAll('a[href*="netlify" i],[id*="netlify" i],[class*="netlify" i]').forEach(function(el){ el.remove(); });
-      document.querySelectorAll('iframe').forEach(function(f){ var p=getComputedStyle(f).position; if(p==='fixed'||p==='absolute') f.remove(); });
+      document.querySelectorAll('iframe').forEach(function(f){
+        var n=f;
+        while(n && n!==document.body){ var p=getComputedStyle(n).position; if(p==='fixed'||p==='absolute'){ n.remove(); return; } n=n.parentElement; }
+        f.remove();
+      });
       var b=document.body; if(b){
         b.querySelectorAll('div,a,span,section,aside').forEach(function(el){
           if(el.childElementCount<=1 && /powered by netlify/i.test(el.textContent||'')){

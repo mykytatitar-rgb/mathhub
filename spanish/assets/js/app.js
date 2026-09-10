@@ -14,6 +14,16 @@ async function doInstall(){
   alert('Щоб встановити як окремий застосунок:\n\n• Android (Chrome): меню ⋮ угорі → «Додати на головний екран» / «Встановити застосунок».\n• iPhone (Safari): кнопка «Поділитися» → «На початковий екран».\n\nПотім відкривай його з іконки — він працюватиме як звичайний застосунок, навіть офлайн.');
 }
 
+/* ---------- тема (світла / темна / авто) ---------- */
+const THEME_KEY = 'hola.theme';
+function storedTheme(){ try{ return localStorage.getItem(THEME_KEY) || 'auto'; }catch(e){ return 'auto'; } }
+function effectiveTheme(){ const t = storedTheme(); if(t==='auto'){ return (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light'; } return t; }
+function applyTheme(){ try{ document.documentElement.dataset.theme = effectiveTheme(); }catch(e){} }
+function cycleTheme(){ const order=['auto','light','dark']; const nx=order[(order.indexOf(storedTheme())+1)%order.length]; try{ localStorage.setItem(THEME_KEY, nx); }catch(e){} applyTheme(); }
+function themeIcon(){ const t=storedTheme(); return t==='auto'?'🌓':(t==='light'?'☀️':'🌙'); }
+applyTheme();
+if(window.matchMedia){ try{ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', ()=>{ if(storedTheme()==='auto') applyTheme(); }); }catch(e){} }
+
 /* ---------- преміум / без реклами ---------- */
 const PMKEY = 'hola.premium.v1';
 function isPremium(){ try{ return localStorage.getItem(PMKEY)==='1'; }catch(e){ return false; } }
@@ -325,6 +335,7 @@ function renderHome(){
     <div class="topbar">
       <div class="brand"><span class="logo">H</span> Hola <b>·</b> іспанська</div>
       <div class="spacer"></div>
+      <button class="iconbtn" id="theme" title="Тема">${themeIcon()}</button>
       <button class="iconbtn" id="reset" title="Скинути прогрес">↺</button>
     </div>
     <div class="hero">
@@ -361,6 +372,7 @@ function renderHome(){
   const ad = root.querySelector('#premiumBanner'); if(ad) ad.onclick = ()=>{ location.hash = '#/premium'; };
   root.querySelectorAll('.viewtoggle button').forEach(b=>{ b.onclick=()=>{ try{ localStorage.setItem('hola.homeview', b.dataset.v); }catch(e){} renderHome(); }; });
   const gtile = root.querySelector('#goalTile'); if(gtile) gtile.onclick = ()=>{ cycleGoal(); renderHome(); };
+  const th = root.querySelector('#theme'); if(th) th.onclick = ()=>{ cycleTheme(); renderHome(); };
   root.querySelector('#reset').onclick = ()=>{ if(confirm('Скинути весь прогрес?')){ progress={}; saveProgress(progress); review={}; saveReview(review); renderHome(); } };
 }
 

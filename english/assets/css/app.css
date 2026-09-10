@@ -268,3 +268,58 @@ button.stat.goal:active{transform:scale(.97)}
 .dict-play:active{transform:scale(.97)}
 
 .hint{font-size:12px;color:var(--muted);text-align:center;margin-top:8px}
+
+/* ================= ТЕМНА ТЕМА ================= */
+:root[data-theme="dark"]{
+  --ink:#ececf2; --muted:#a3a3b2; --line:#33333f;
+  --blue-card:#1b2735; --lilac-card:#241b34; --pink-soft:#33232b;
+  --bg1:#15151b; --bg2:#0e0e13;
+  --shadow:0 10px 30px rgba(0,0,0,.45);
+  --surface:#1c1c24;
+}
+:root[data-theme="dark"] body{
+  background:
+    repeating-linear-gradient(-45deg, rgba(255,255,255,.03) 0 2px, transparent 2px 26px),
+    linear-gradient(135deg,var(--bg1),var(--bg2));
+}
+:root[data-theme="dark"] .hero,
+:root[data-theme="dark"] .stat,
+:root[data-theme="dark"] .iconbtn,
+:root[data-theme="dark"] .backbtn,
+:root[data-theme="dark"] .lesson-card,
+:root[data-theme="dark"] .road-milestone,
+:root[data-theme="dark"] .road-node,
+:root[data-theme="dark"] .btn-again,
+:root[data-theme="dark"] .btn-nav,
+:root[data-theme="dark"] .quiz-q,
+:root[data-theme="dark"] .options button,
+:root[data-theme="dark"] .done-card,
+:root[data-theme="dark"] .build-q,
+:root[data-theme="dark"] .tile,
+:root[data-theme="dark"] .grammar,
+:root[data-theme="dark"] .vchip,
+:root[data-theme="dark"] .vrowitem,
+:root[data-theme="dark"] .vsearch input,
+:root[data-theme="dark"] .pw-benefit,
+:root[data-theme="dark"] .pw-plan,
+:root[data-theme="dark"] .speak,
+:root[data-theme="dark"] .viewtoggle button.active,
+:root[data-theme="dark"] .tabs button.active,
+:root[data-theme="dark"] .subtabs button.active{ background:var(--surface); }
+:root[data-theme="dark"] .viewtoggle,
+:root[data-theme="dark"] .tabs,
+:root[data-theme="dark"] .subtabs{ background:rgba(255,255,255,.06); }
+:root[data-theme="dark"] .road-node{ border-color:var(--surface); }
+:root[data-theme="dark"] .progress .bar{ background:#2a2a35; }
+:root[data-theme="dark"] .review-banner{ background:linear-gradient(135deg,#1c1c24,#2a1420); }
+:root[data-theme="dark"] .review-banner.install{ background:linear-gradient(135deg,#1c1c24,#12261b); }
+:root[data-theme="dark"] .card .tr,
+:root[data-theme="dark"] .conj .ct,
+:root[data-theme="dark"] .fb-ok .fb-tr{ color:#c9c9d4; }
+:root[data-theme="dark"] .card .ua-small{ color:#b7b7c4; }
+:root[data-theme="dark"] .grammar-body{ color:#c2c2cf; }
+:root[data-theme="dark"] .card .tag{ color:#a99fc0; border-color:#3a3450; }
+:root[data-theme="dark"] .ans-empty{ color:#6f6f80; }
+:root[data-theme="dark"] .options button.correct{ background:#12301f; }
+:root[data-theme="dark"] .options button.wrong{ background:#3a1020; }
+:root[data-theme="dark"] .conj td{ border-top-color:rgba(255,255,255,.1); }

@@ -266,6 +266,10 @@ function renderHome(){
       <div class="rb-ico">📖</div>
       <div class="rb-meta"><div class="rb-title">Словник</div><small>усі вивчені слова, з фільтрами</small></div>
       <div class="rb-badge">${totalKnown()}</div></div>`;
+  const dictBanner = `<div class="review-banner" id="dictBanner">
+      <div class="rb-ico">🎧</div>
+      <div class="rb-meta"><div class="rb-title">Аудіо-диктант</div><small>почуй слово — обери переклад</small></div>
+      <div class="rb-badge">▶</div></div>`;
   const adBanner = isPremium() ? '' : `<div class="adslot" id="adslot">
       <span class="ad-tag">Реклама</span>
       <span class="ad-body">📢 Місце для реклами</span>
@@ -339,6 +343,7 @@ function renderHome(){
     ${installBanner}
     ${reviewBanner}
     ${vocabBanner}
+    ${dictBanner}
     <div class="viewtoggle">
       <button data-v="map" class="${view==='map'?'active':''}">🗺️ Мапа</button>
       <button data-v="list" class="${view==='list'?'active':''}">☰ Список</button>
@@ -350,6 +355,7 @@ function renderHome(){
   root.querySelectorAll('.road-node, .lesson-card').forEach(el=>{ el.onclick = ()=>{ location.hash = '#/lesson/'+el.dataset.id; }; });
   const rb = root.querySelector('#reviewBanner'); if(rb) rb.onclick = ()=>{ location.hash = '#/review'; };
   const vb = root.querySelector('#vocabBanner'); if(vb) vb.onclick = ()=>{ location.hash = '#/vocab'; };
+  const dbn = root.querySelector('#dictBanner'); if(dbn) dbn.onclick = ()=>{ location.hash = '#/dictation'; };
   const ib = root.querySelector('#installBanner'); if(ib) ib.onclick = doInstall;
   const cbtn = root.querySelector('#continueBtn'); if(cbtn) cbtn.onclick = ()=>{ location.hash = '#/lesson/'+currentId; };
   const ad = root.querySelector('#adslot'); if(ad) ad.onclick = ()=>{ location.hash = '#/premium'; };
@@ -523,6 +529,66 @@ function renderVocab(){
   root.querySelectorAll('#fpos .vchip').forEach(b=> b.onclick=()=>{ fPos=b.dataset.p; root.querySelectorAll('#fpos .vchip').forEach(x=>x.classList.toggle('active',x===b)); render(); });
   const vq=root.querySelector('#vq'); if(vq) vq.oninput=()=>{ fQ=vq.value.trim().toLowerCase(); render(); };
   render();
+}
+
+/* ---------- екран: аудіо-диктант ---------- */
+function renderDictation(){
+  const all = []; LESSONS.forEach(l=> l.cards.forEach(c=> all.push({en:c.en, ua:c.ua, tr:c.tr, l:l.id})));
+  const learned = all.filter(c=> (progress[c.l]||{})[c.en]);
+  const pool = learned.length>=4 ? learned : all;
+  const qs = shuffle(pool).slice(0, Math.min(10, pool.length)).map(card=>{
+    const others = shuffle(all.filter(c=> c.ua!==card.ua)).slice(0,3);
+    return { card, opts: shuffle([card, ...others]) };
+  });
+  let i=0, score=0;
+  function frame(inner){
+    root.innerHTML = `
+      <div class="topbar">
+        <button class="backbtn" id="back">← Головна</button>
+        <div class="spacer"></div>
+        <div class="brand" style="font-size:14px">🎧 Аудіо-диктант</div>
+        <div class="spacer"></div>
+        <button class="iconbtn" id="speed">${RATES[rateIdx()].e}</button>
+      </div>
+      <div id="content">${inner}</div>`;
+    root.querySelector('#back').onclick=()=>location.hash='#/';
+    root.querySelector('#speed').onclick=()=>{ setRateIdx((rateIdx()+1)%RATES.length); root.querySelector('#speed').textContent=RATES[rateIdx()].e; };
+  }
+  if(!pool.length){
+    frame(`<div class="done-card"><div class="score">🎧</div><p>Ще нема слів для диктанту. Повчи слова в уроках — і повертайся.</p><button class="primary" id="go">До уроків</button></div>`);
+    root.querySelector('#go').onclick=()=>location.hash='#/'; return;
+  }
+  function draw(){
+    if(i>=qs.length){ finish(); return; }
+    const {card, opts}=qs[i];
+    frame(`
+      <div class="counter">Питання ${i+1} / ${qs.length}</div>
+      <div class="quiz-q">
+        <div class="prompt">Послухай і обери переклад:</div>
+        <button class="dict-play" id="play">🔊 Прослухати ще раз</button>
+      </div>
+      <div class="options">
+        ${opts.map((o,k)=>`<button data-k="${k}">${esc(o.ua)}</button>`).join('')}
+      </div>`);
+    root.querySelector('#play').onclick=()=>speak(card.en);
+    speak(card.en);
+    const btns=root.querySelectorAll('.options button');
+    btns.forEach(b=>{ b.onclick=()=>{
+      const chosen=opts[b.dataset.k], ok=chosen.ua===card.ua;
+      if(ok) score++;
+      btns.forEach(x=>{ x.disabled=true; const o=opts[x.dataset.k];
+        if(o.ua===card.ua) x.classList.add('correct'); else if(x===b) x.classList.add('wrong'); });
+      if(ok) bumpDaily(); else addReview(card.l, {en:card.en, ua:card.ua, tr:card.tr});
+      setTimeout(()=>{ i++; draw(); }, 950);
+    }; });
+  }
+  function finish(){
+    const pct=Math.round(score/qs.length*100);
+    const msg = pct===100?'Ідеальний слух! 🎉' : pct>=70?'Гарно чуєш! 💪' : 'Слухай більше — вийде 🔁';
+    frame(`<div class="done-card"><div class="score">${score}/${qs.length}</div><p>${msg}</p><button class="primary" id="retry">Ще раз</button></div>`);
+    root.querySelector('#retry').onclick=()=>renderDictation();
+  }
+  draw();
 }
 
 /* ---------- екран: урок ---------- */
@@ -760,6 +826,7 @@ function route(){
   if(m) renderLesson(parseInt(m[1],10));
   else if(h.indexOf('#/review')===0) renderReview();
   else if(h.indexOf('#/vocab')===0) renderVocab();
+  else if(h.indexOf('#/dictation')===0) renderDictation();
   else if(h.indexOf('#/premium')===0) renderPremium();
   else renderHome();
   window.scrollTo(0,0);

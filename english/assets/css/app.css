@@ -263,5 +263,8 @@ button.stat.goal:active{transform:scale(.97)}
 .vsearch input{width:100%;border:1px solid var(--line);border-radius:14px;padding:12px 14px;
   font-size:15px;font-family:inherit;background:#fff;color:var(--ink);box-shadow:0 2px 8px rgba(0,0,0,.05)}
 .vsearch input:focus{outline:none;border-color:var(--pink)}
+.dict-play{margin-top:6px;border:none;border-radius:99px;padding:16px 26px;font-size:18px;font-weight:800;
+  color:#fff;cursor:pointer;box-shadow:var(--shadow);background:linear-gradient(90deg,var(--pink),#7b3ff2)}
+.dict-play:active{transform:scale(.97)}
 
 .hint{font-size:12px;color:var(--muted);text-align:center;margin-top:8px}

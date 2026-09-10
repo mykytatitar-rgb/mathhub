@@ -2394,7 +2394,19 @@
       return den ? Number(frac[1]) / den : NaN;
     }
 
-    return /^-?\d*\.?\d+$/.test(s) ? Number(s) : NaN;
+    if (/^-?\d*\.?\d+$/.test(s)) return Number(s);
+
+    /* Усе складніше віддаємо обчислювачу формул: sqrt(5), pi/3, log2(8),
+       2^(1/3). Інакше такі числа неможливо було б поставити на пряму —
+       а саме вони й стоять у задачах про корені та логарифми. */
+    if (window.Plot && Plot.compile) {
+      var r = Plot.compile(s);
+      if (r.f) {
+        var v = r.f(0);
+        if (isFinite(v)) return v;
+      }
+    }
+    return NaN;
   }
 
   /**
@@ -2414,7 +2426,8 @@
 
   function numFmtOf(it) {
     var f = it && it.fmt;
-    return (f === 'frac' || f === 'both' || f === 'both-dec') ? f : 'dec';
+    return (f === 'frac' || f === 'both' || f === 'both-dec' ||
+            f === 'pi' || f === 'root' || f === 'auto') ? f : 'dec';
   }
 
   /**
@@ -2438,6 +2451,15 @@
          «0.333333», коли на осі буде «0.33». */
       var dec = (window.Board && Board.numLabel) ? Board.numLabel(v, step) : trimNum(v);
       if (fmt === 'dec') return dec;
+
+      // π і корені — те саме правило, що й на осі, і в тому самому порядку
+      if (fmt === 'pi' || fmt === 'root' || fmt === 'auto') {
+        var sp = Math.abs(v) < 1e-12 ? '0' : null;
+        if ((fmt === 'pi' || fmt === 'auto') && Board.piLabel) sp = Board.piLabel(v);
+        if (!sp && (fmt === 'root' || fmt === 'auto') && Board.rootLabel) sp = Board.rootLabel(v);
+        if (sp) return sp;
+        if (fmt === 'pi' || fmt === 'root') return dec;
+      }
 
       // те саме правило, що й на осі: ціле лишається цілим, без хвоста
       var whole = window.Board && Board.toFraction ? Board.toFraction(v) : null;
@@ -2834,10 +2856,14 @@
           C.field('Крок', C.input('step', numText(it.step), 'inputmode="text"')) +
         '</div>' +
         '<div class="field__hint">Крок — це відстань між сусідніми поділками, ' +
-        'а не їх кількість. Можна писати дробом: <b>1/3</b>, <b>3/4</b>, <b>1 1/2</b>.</div>' +
+        'а не їх кількість. Можна писати дробом: <b>1/3</b>, <b>3/4</b>, <b>1 1/2</b> — ' +
+        'або формулою: <b>pi/2</b>, <b>sqrt(2)</b>, <b>log2(8)</b>.</div>' +
         C.field('Підписи', C.select('fmt', numFmtOf(it), [
+          { value: 'auto',     label: 'Сама — π, корінь, дріб або десятковий' },
           { value: 'dec',      label: 'Десятковим дробом — 0.5' },
           { value: 'frac',     label: 'Звичайним дробом — ½' },
+          { value: 'pi',       label: 'Через π — π/2, 3π/2' },
+          { value: 'root',     label: 'Через корінь — √2, 2√3' },
           { value: 'both',     label: 'Обидва: зверху звичайний — ½, під ним 0.5' },
           { value: 'both-dec', label: 'Обидва: зверху десятковий — 0.5, під ним ½' }
         ])) +
@@ -2868,7 +2894,7 @@
 
             cur.engine.snapshot();
             it.from = from; it.to = to; it.step = step;
-            it.fmt = (v.fmt === 'frac' || v.fmt === 'both' || v.fmt === 'both-dec')
+            it.fmt = ['frac', 'both', 'both-dec', 'pi', 'root', 'auto'].indexOf(v.fmt) >= 0
               ? v.fmt : 'dec';
             cur.engine.changed();
           } }

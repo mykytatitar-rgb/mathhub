@@ -22,6 +22,11 @@
     sqrt: Math.sqrt, abs: Math.abs, exp: Math.exp,
     ln: Math.log, lg: function (v) { return Math.log(v) / Math.LN10; },
     log: function (v) { return Math.log(v) / Math.LN10; },
+    /* Логарифм за основою 2 трапляється в задачах не рідше за десятковий,
+       а писати ln(x)/ln(2) щоразу — зайва робота на уроці. */
+    log2: function (v) { return Math.log(v) / Math.LN2; },
+    log3: function (v) { return Math.log(v) / Math.log(3); },
+    cbrt: function (v) { return Math.cbrt(v); },
     sinh: Math.sinh, cosh: Math.cosh, tanh: Math.tanh,
     sign: function (v) { return v > 0 ? 1 : v < 0 ? -1 : 0; },
     floor: Math.floor, ceil: Math.ceil, round: Math.round

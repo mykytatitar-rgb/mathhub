@@ -940,11 +940,58 @@
     ctx.restore();
   }
 
-  /** Як підписувати вісь: десятковим, звичайним дробом чи обома. */
+  /** Як підписувати вісь. */
   function numFmt(it) {
     var f = it && it.fmt;
-    return (f === 'frac' || f === 'both' || f === 'both-dec') ? f : 'dec';
+    return (f === 'frac' || f === 'both' || f === 'both-dec' ||
+            f === 'pi' || f === 'root' || f === 'auto') ? f : 'dec';
   }
+
+  /**
+   * Число як частка π: «π/2», «3π/2», «−π», «2π».
+   *
+   * Тригонометрія без цього не читається: 1.5707963 на осі не каже нічого,
+   * а π/2 каже все. Повертає null, коли число не кратне π із розумним
+   * знаменником — тоді підпис лишається звичайним.
+   */
+  function piLabel(v) {
+    if (!isFinite(v)) return null;
+    if (Math.abs(v) < 1e-12) return '0';
+    var f = toFraction(v / Math.PI, 24);
+    if (!f) return null;
+
+    var sign = f.n < 0 ? '−' : '';
+    var n = Math.abs(f.n), d = f.d;
+    var top = (n === 1 ? '' : String(n)) + 'π';
+    return d === 1 ? sign + top : sign + top + '/' + d;
+  }
+
+  /**
+   * Число як корінь: «√2», «2√3», «√5/2».
+   *
+   * Шукаємо серед підкорінних 2…30, бо саме вони й стоять у задачах.
+   * Множник і знаменник — прості дроби; що не вкладається, лишається
+   * десятковим.
+   */
+  function rootLabel(v) {
+    if (!isFinite(v) || Math.abs(v) < 1e-12) return null;
+    var sign = v < 0 ? '−' : '';
+    var x = Math.abs(v);
+
+    for (var r = 2; r <= 30; r++) {
+      var sq = Math.sqrt(r);
+      if (Math.abs(sq - Math.round(sq)) < 1e-12) continue;   // повний квадрат — це не корінь
+      var f = toFraction(x / sq, 12);
+      if (!f) continue;
+      var n = f.n, d = f.d;
+      var top = (n === 1 ? '' : String(n)) + '√' + r;
+      return d === 1 ? sign + top : sign + top + '/' + d;
+    }
+    return null;
+  }
+
+  Board.piLabel = piLabel;
+  Board.rootLabel = rootLabel;
 
   /**
    * Число як звичайний дріб.
@@ -992,6 +1039,27 @@
    * можуть розійтися.
    */
   function drawNumLabel(ctx, v, step, x, y, fs, mode, measure) {
+    /* Кратні π і корені — окремим написом в один рядок: над «√2» дробової
+       риски не буває, і зображати його стосом не треба.
+
+       «Сама» пробує обидві форми й лише потім відступає до дробу чи
+       десяткового. Саме цього й хочеться на уроці: числа стоять у тому
+       вигляді, у якому вони справді записані в задачі. */
+    if (mode === 'pi' || mode === 'root' || mode === 'auto') {
+      // нуль лишається нулем: «0.00» серед √2 і √3 виглядає як недогляд
+      var special = Math.abs(v) < 1e-12 ? '0' : null;
+      if (!special && (mode === 'pi' || mode === 'auto')) special = piLabel(v);
+      if (!special && (mode === 'root' || mode === 'auto')) special = rootLabel(v);
+
+      if (special) {
+        ctx.font = '600 ' + fs + 'px "Source Serif 4", Georgia, serif';
+        if (!measure) ctx.fillText(special, x, y);
+        return ctx.measureText(special).width;
+      }
+      // не вийшло — далі як звичайно: «сама» пробує дріб, решта десятковий
+      mode = mode === 'auto' ? 'frac' : 'dec';
+    }
+
     var bothFracTop = (mode === 'both');
     var bothDecTop = (mode === 'both-dec');
     var wantFrac = (mode === 'frac' || bothFracTop || bothDecTop);

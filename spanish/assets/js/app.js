@@ -278,7 +278,7 @@ function renderHome(){
   })();
   const vocabBanner = `<div class="review-banner" id="vocabBanner">
       <div class="rb-ico">📖</div>
-      <div class="rb-meta"><div class="rb-title">Словник</div><small>усі вивчені слова, з фільтрами</small></div>
+      <div class="rb-meta"><div class="rb-title">Словник</div><small>пошук будь-якого слова + вивчені</small></div>
       <div class="rb-badge">${totalKnown()}</div></div>`;
   const dictBanner = `<div class="review-banner" id="dictBanner">
       <div class="rb-ico">🎧</div>
@@ -499,11 +499,20 @@ function renderPremium(){
 }
 
 /* ---------- екран: словник ---------- */
-function renderVocab(){
-  const words = []; const seen = new Set();
-  LESSONS.forEach(l=>{ const set = progress[l.id]||{}; l.cards.forEach(c=>{
-    if(set[c.en] && !seen.has(c.en)){ seen.add(c.en); words.push({ en:c.en, ua:c.ua, tr:c.tr, level:l.level, pos:posOf(c,l), emoji:emojiFor(c.ua) }); }
-  }); });
+function renderVocab(mode){
+  mode = (mode==='learned') ? 'learned' : 'all';
+  function collect(onlyLearned){
+    const out=[]; const seen=new Set();
+    LESSONS.forEach(l=>{ const set = progress[l.id]||{}; l.cards.forEach(c=>{
+      if(onlyLearned && !set[c.en]) return;
+      if(seen.has(c.en)) return; seen.add(c.en);
+      out.push({ en:c.en, ua:c.ua, tr:c.tr, level:l.level, pos:posOf(c,l), emoji:emojiFor(c.ua) });
+    }); });
+    return out;
+  }
+  const learned = collect(true);
+  const all = collect(false).sort((a,b)=> a.en.localeCompare(b.en));
+  const words = mode==='learned' ? learned : all;
   const levels = ['','A0','A1','A2','B1','B2'];
   const posOrder = ['іменник','дієслово','прикметник','займенник','числівник','прислівник','прийменник','сполучник','частка','вираз'];
   const present = new Set(words.map(w=>w.pos));
@@ -517,6 +526,10 @@ function renderVocab(){
       <div class="spacer"></div>
       <button class="iconbtn" id="speed">${RATES[rateIdx()].e}</button>
     </div>
+    <div class="subtabs" id="vmode">
+      <button data-m="all" class="${mode==='all'?'active':''}">📚 Усі слова</button>
+      <button data-m="learned" class="${mode==='learned'?'active':''}">📗 Вивчені</button>
+    </div>
     <div class="hero" style="padding:12px 16px"><div class="lbl" id="vcount"></div></div>
     <div class="vsearch"><input id="vq" type="search" placeholder="🔍 Пошук слова…" autocomplete="off" autocapitalize="none"></div>
     <div class="vfilters">
@@ -526,12 +539,14 @@ function renderVocab(){
     <div id="vocablist"></div>`;
   root.querySelector('#back').onclick=()=>location.hash='#/';
   root.querySelector('#speed').onclick=()=>{ setRateIdx((rateIdx()+1)%RATES.length); root.querySelector('#speed').textContent=RATES[rateIdx()].e; };
+  root.querySelectorAll('#vmode button').forEach(b=> b.onclick=()=>renderVocab(b.dataset.m));
   function render(){
     const list = words.filter(w=> (!fLevel||w.level===fLevel) && (!fPos||w.pos===fPos) && (!fQ || w.en.toLowerCase().includes(fQ) || w.ua.toLowerCase().includes(fQ)));
-    root.querySelector('#vcount').textContent = `Вивчено слів: ${words.length}` + ((fLevel||fPos)?` · показано: ${list.length}`:'');
+    const base = mode==='learned' ? `Вивчено слів: ${words.length}` : `Усього слів: ${words.length}`;
+    root.querySelector('#vcount').textContent = base + ((fLevel||fPos||fQ)?` · показано: ${list.length}`:'');
     const el = root.querySelector('#vocablist');
-    if(!words.length){ el.innerHTML=`<div class="done-card"><div class="score">📖</div><p>Ще нема вивчених слів. Познач слова «✓ Знаю» у розділі Слова — і вони зʼявляться тут.</p></div>`; return; }
-    if(!list.length){ el.innerHTML=`<div class="done-card"><p>За цим фільтром слів нема.</p></div>`; return; }
+    if(!words.length){ el.innerHTML=`<div class="done-card"><div class="score">📖</div><p>Ще нема вивчених слів. Познач слова «✓ Знаю» у розділі Слова — або перемкни на «📚 Усі слова».</p></div>`; return; }
+    if(!list.length){ el.innerHTML=`<div class="done-card"><p>За цим запитом слів нема.</p></div>`; return; }
     el.innerHTML = list.map((w,i)=>`<button class="vrowitem" data-en="${esc(w.en)}">
       <span class="vnum">${i+1}</span>
       <span class="vemoji">${w.emoji||'•'}</span>

@@ -1,5 +1,5 @@
 /* Svenska — service worker для офлайн-режиму. */
-const CACHE = 'svenska-v1';
+const CACHE = 'svenska-v2';
 const ASSETS = [
   './',
   './index.html',

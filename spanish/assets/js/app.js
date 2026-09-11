@@ -664,7 +664,11 @@ function renderLesson(id){
     root.querySelector('#back').onclick=()=>{ location.hash='#/'; };
     root.querySelector('#speed').onclick=()=>{ setRateIdx((rateIdx()+1)%RATES.length); root.querySelector('#speed').textContent = RATES[rateIdx()].e; };
     root.querySelectorAll('.tabs button').forEach(b=>{
-      b.onclick=()=>{ mode=b.dataset.m; if(mode==='study') studyDispatch(); else if(mode==='build') build(); else quiz(); };
+      b.onclick=()=>{
+        mode=b.dataset.m;
+        root.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('active', x===b));
+        if(mode==='study') studyDispatch(); else if(mode==='build') build(); else quiz();
+      };
     });
   }
 

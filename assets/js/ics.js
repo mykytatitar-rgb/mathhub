@@ -105,6 +105,157 @@
     return out.join('\r\n');
   }
 
+  /* ============================================================
+     Постійний розклад — повторюваними подіями
+     ============================================================
+
+     Уроки за постійним розкладом створюються на чотири тижні вперед. Якщо
+     віддавати календарю тільки їх, далі за обрій він порожній — а розклад
+     насправді триває. Тому сам слот їде окремою подією з повторенням, і
+     календар показує його безстроково.
+
+     Час у повторюваній події — місцевий, із зазначенням поясу, а не UTC.
+     Це не дрібниця: урок о 17:30 за Києвом улітку — це 14:30Z, а взимку
+     15:30Z. Щотижневе повторення в UTC зсунулося б на годину в день
+     переходу на зимовий час і лишалося б зсунутим півроку. */
+
+  var TZ = 'Europe/Kyiv';
+
+  /* Правила переходу на літній час для цього поясу. Без цього блоку
+     календарі або відмовляються читати TZID, або вгадують — і вгадують
+     по-різному. */
+  var VTIMEZONE = [
+    'BEGIN:VTIMEZONE',
+    'TZID:' + TZ,
+    'BEGIN:STANDARD',
+    'DTSTART:19701025T040000',
+    'TZOFFSETFROM:+0300',
+    'TZOFFSETTO:+0200',
+    'TZNAME:EET',
+    'RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU',
+    'END:STANDARD',
+    'BEGIN:DAYLIGHT',
+    'DTSTART:19700329T030000',
+    'TZOFFSETFROM:+0200',
+    'TZOFFSETTO:+0300',
+    'TZNAME:EEST',
+    'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU',
+    'END:DAYLIGHT',
+    'END:VTIMEZONE'
+  ].join('\r\n');
+
+  var BYDAY = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
+
+  /** Місцевий час без «Z» — саме такий вимагає TZID. */
+  function localStamp(d) {
+    function two(n) { return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + two(d.getMonth() + 1) + two(d.getDate()) + 'T' +
+           two(d.getHours()) + two(d.getMinutes()) + '00';
+  }
+
+  /**
+   * Чи цей браузер живе в тому поясі, який ми вміємо описати.
+   *
+   * Слоти постійного розкладу задані годинником на стіні («17:30»), тобто
+   * місцевим часом того, хто їх вводив. Приписати їм чужий пояс означало б
+   * зсунути весь розклад. Якщо пояс інший — повторюваних подій просто не
+   * буде, а окремі уроки лишаються точними, бо вони в UTC.
+   */
+  /* Назв у цього поясу кілька. «Europe/Kyiv» — теперішня, «Europe/Kiev» —
+     стара, і саме її досі віддає більшість систем; Ужгород і Запоріжжя —
+     окремі записи з тими самими правилами. Порівняння з однією назвою
+     мовчки вимикало б усе там, де воно найпотрібніше. */
+  var TZ_SAME = ['Europe/Kyiv', 'Europe/Kiev', 'Europe/Uzhgorod', 'Europe/Zaporozhye'];
+
+  function tzMatches() {
+    try {
+      var z = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      return TZ_SAME.indexOf(z) >= 0;
+    } catch (e) { return false; }
+  }
+
+  /** Перше входження слота, починаючи від сьогодні. */
+  function firstOccurrence(slot) {
+    var base = U.startOfWeek(U.today());
+    for (var w = 0; w < 8; w++) {
+      var d = U.toDate(U.ymd(U.addDays(base, (w * 7) + slot.day - 1)) + 'T' + slot.time);
+      if (!isNaN(d.getTime()) && d >= new Date()) return d;
+    }
+    return null;
+  }
+
+  /** Урок стоїть саме в цьому слоті цього учня. */
+  function inSlot(l, slot) {
+    var d = new Date(l.date);
+    if (isNaN(d.getTime())) return false;
+    var wd = ((d.getDay() + 6) % 7) + 1;                 // Пн = 1
+    return wd === slot.day && String(l.date).slice(11, 16) === slot.time;
+  }
+
+  /**
+   * Повторювані події постійного розкладу.
+   *
+   * Повертає самі події й список уроків, які вони вже покривають, — щоб ті
+   * не поїхали ще й окремо й не задвоїлись у календарі.
+   */
+  function weekly(host) {
+    var out = [], covered = {};
+    if (!tzMatches()) return { events: out, covered: covered };
+
+    var now = new Date();
+    var lessons = S.db().lessons || [];
+
+    S.students().forEach(function (st) {
+      (st.schedule || []).forEach(function (slot) {
+        if (!(slot.day >= 1 && slot.day <= 7) || !slot.time) return;
+
+        var first = firstOccurrence(slot);
+        if (!first) return;
+
+        /* Винятки. Урок, який відрізняється від звичайного — скасований,
+           перенесений, із темою чи нотаткою, — має поїхати окремою подією.
+           Тоді з повторення його треба виключити, інакше в календарі
+           стоятимуть обидва. */
+        var ex = [];
+        lessons.forEach(function (l) {
+          if (l.studentId !== st.id) return;
+          var d = new Date(l.date);
+          if (isNaN(d.getTime()) || d < now) return;     // минуле лишається як є
+          if (!inSlot(l, slot)) return;
+
+          var plain = l.fromTemplate && l.status === 'planned' && !l.topic && !l.note;
+          if (plain) covered[l.id] = 1;
+          else ex.push(d);
+        });
+
+        var mins = Number(st.duration) > 0 ? Number(st.duration) : 60;
+        var end = new Date(first.getTime() + mins * 60000);
+        var meet = S.meetUrlFor(st.id);
+
+        var ev = ['BEGIN:VEVENT'];
+        ev.push(line('UID', 'slot-' + st.id + '-' + slot.day + '-' +
+                     slot.time.replace(':', '') + '@' + host));
+        ev.push('DTSTAMP:' + stamp(new Date()));
+        ev.push('DTSTART;TZID=' + TZ + ':' + localStamp(first));
+        ev.push('DTEND;TZID=' + TZ + ':' + localStamp(end));
+        ev.push('RRULE:FREQ=WEEKLY;BYDAY=' + BYDAY[slot.day - 1]);
+        if (ex.length) {
+          // коми тут розділяють дати, тож екранувати їх не можна — лише згортаємо
+          ev.push(fold('EXDATE;TZID=' + TZ + ':' + ex.map(localStamp).join(',')));
+        }
+        ev.push(line('SUMMARY', st.name));
+        ev.push(line('DESCRIPTION', 'Постійний розклад'));
+        if (meet) ev.push(line('LOCATION', meet));
+        ev.push('STATUS:CONFIRMED');
+        ev.push('END:VEVENT');
+
+        out.push(ev.join('\r\n'));
+      });
+    });
+
+    return { events: out, covered: covered };
+  }
+
   /**
    * Увесь календар.
    *
@@ -119,7 +270,10 @@
     var from = new Date(); from.setMonth(from.getMonth() - 6);
     var to = new Date();   to.setFullYear(to.getFullYear() + 1);
 
+    var rep = weekly(host);
+
     var events = (S.db().lessons || []).filter(function (l) {
+      if (rep.covered[l.id]) return false;        // уже покрито повторюваною подією
       var d = new Date(l.date);
       return !isNaN(d.getTime()) && d >= from && d <= to;
     }).map(function (l) { return event(l, host); }).filter(Boolean);
@@ -131,7 +285,9 @@
       'CALSCALE:GREGORIAN',
       'METHOD:PUBLISH',
       line('X-WR-CALNAME', 'Уроки — Вектор'),
-      'X-WR-TIMEZONE:Europe/Kyiv',
+      'X-WR-TIMEZONE:' + TZ,
+      VTIMEZONE,
+      rep.events.join('\r\n'),
       events.join('\r\n'),
       'END:VCALENDAR'
     ].filter(Boolean).join('\r\n') + '\r\n';
@@ -139,7 +295,17 @@
 
   /** Скільки уроків потрапляє у файл — для підпису в Налаштуваннях. */
   I.count = function () {
-    return (I.build().match(/BEGIN:VEVENT/g) || []).length;
+    var t = I.build();
+    var all = (t.match(/BEGIN:VEVENT/g) || []).length;
+    // саме тижневі: у блоці поясу теж є RRULE, але річні
+    var rep = (t.match(/^RRULE:FREQ=WEEKLY/gm) || []).length;
+    // повторювані події віднімаємо: це не уроки, а слоти постійного розкладу
+    return Math.max(0, all - rep);
+  };
+
+  /** Скільки слотів постійного розкладу їде повторюваними подіями. */
+  I.slotCount = function () {
+    return (I.build().match(/^RRULE:FREQ=WEEKLY/gm) || []).length;
   };
 
   /**
@@ -221,10 +387,16 @@
     if (!tok || !window.Cloud || !Cloud.publishCalendar) return Promise.resolve('');
 
     var text = I.build();
-    if (!force && text === lastText) return Promise.resolve(I.url());
+
+    /* Порівнюємо без DTSTAMP. Він містить час складання файлу, тобто
+       змінюється щосекунди — і перевірка «однакове двічі не відправляємо»
+       не спрацьовувала жодного разу: календар перевикладався на кожне
+       збереження, хоч у розкладі нічого не змінилося. */
+    var same = text.replace(/^DTSTAMP:.*$/gm, '');
+    if (!force && same === lastText) return Promise.resolve(I.url());
 
     return Cloud.publishCalendar(tok, text).then(function (url) {
-      lastText = text;
+      lastText = same;
       return url;
     });
   };

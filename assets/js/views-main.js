@@ -1273,6 +1273,7 @@
     var on = window.ICS && ICS.enabled && ICS.enabled();
     var url = on ? ICS.url() : '';
     var n = window.ICS ? ICS.count() : 0;
+    var slots = (window.ICS && ICS.slotCount) ? ICS.slotCount() : 0;
 
     var body;
     if (!window.Cloud || !Cloud.available() || !Cloud.signedIn()) {
@@ -1287,8 +1288,12 @@
     } else {
       body =
         '<div class="guard guard--on"><span class="guard__dot"></span>' +
-        '<span>Працює. У файлі ' + U.pl(n, 'урок', 'уроки', 'уроків') +
-        ' — від пів року тому до року вперед.</span></div>' +
+        '<span>Працює. У файлі ' + U.pl(n, 'окремий урок', 'окремі уроки', 'окремих уроків') +
+        ' — від пів року тому до року вперед' +
+        (slots
+          ? ', і ще ' + U.pl(slots, 'постійний слот', 'постійні слоти', 'постійних слотів') +
+            ', які повторюються щотижня без кінця'
+          : '') + '.</span></div>' +
 
         '<input class="input mt-2" readonly value="' + U.esc(url) + '" ' +
         'onclick="this.select()" style="font-size:12px">' +

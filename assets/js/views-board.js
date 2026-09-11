@@ -20,6 +20,8 @@
     { id: 'shape',   icon: 'shapes',     label: 'Геометричні фігури (S)', opts: 'shape' },
     { id: 'line',    icon: 'shapeLine',  label: 'Лінія (L)',      opts: 'stroke' },
     { id: 'arrow',   icon: 'arrowRight', label: 'Стрілка (A)',    opts: 'stroke' },
+    { id: 'point',   icon: 'dot',        label: 'Точка (O)',        opts: 'stroke' },
+    { id: 'link',    icon: 'link2',      label: 'Зʼєднати точки (C)', opts: 'stroke' },
     { id: 'numline', icon: 'ruler',      label: 'Числова вісь (N)', opts: 'stroke' },
     { id: 'plane',   icon: 'axes',       label: 'Координатна площина (K)', opts: 'stroke' },
     { id: 'solid',   icon: 'cube3d',     label: 'Стереометрія (J)', opts: 'stroke' },
@@ -2296,7 +2298,7 @@
     if (e.altKey) return;
 
     var map = { v: 'select', p: 'pen', e: 'eraser', t: 'text', s: 'shape',
-                l: 'line', a: 'arrow', n: 'numline', k: 'plane', j: 'solid', h: 'hand' };
+                l: 'line', a: 'arrow', n: 'numline', k: 'plane', j: 'solid', o: 'point', c: 'link', h: 'hand' };
     var kk = e.key.toLowerCase();
     if (map[kk]) { e.preventDefault(); setTool(map[kk]); return; }
     if (kk === 'r') { e.preventDefault(); eng.setShape('rect'); renderOpts(); return; }
@@ -4014,6 +4016,10 @@
     var byId = {}, out = [];
     items.forEach(function (it) { if (it.id) byId[it.id] = it; });
 
+    /* Точки й відрізки посилаються на сусідів по слайду, тож малюванню
+       потрібен увесь список. Без цього вони запікалися б у порожнечу. */
+    if (window.Board && Board.setDrawScope) Board.setDrawScope(items);
+
     items.forEach(function (it) {
       if (it.t === 'd') {
         var parent = byId[it.pid];
@@ -4072,7 +4078,7 @@
                   box: fr.box, id: it.id || U.uid('q') }];
       }
     }
-    if (it.t === 'n' || it.t === 'f' || it.t === 's') {
+    if (it.t === 'n' || it.t === 'f' || it.t === 's' || it.t === 'o' || it.t === 'c') {
       var parts = window.Board.bakePrimitives ? window.Board.bakePrimitives(it) : [];
       return parts.length ? parts : null;
     }

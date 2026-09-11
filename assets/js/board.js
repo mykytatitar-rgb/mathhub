@@ -461,6 +461,20 @@
         x2: Math.max.apply(null, xs), y2: Math.max.apply(null, ys)
       };
     }
+    if (it.t === 'o') {
+      var op = window.Points ? Points.at(it, drawMap || {}) : it.p;
+      if (!op) return null;
+      var orr = Math.max(6, (it.w || 3) * 3);
+      return { x1: op[0] - orr, y1: op[1] - orr, x2: op[0] + orr, y2: op[1] + orr };
+    }
+    if (it.t === 'c') {
+      var cm = drawMap || {};
+      var ca = window.Points ? Points.at(cm[it.a1], cm) : null;
+      var cb = window.Points ? Points.at(cm[it.a2], cm) : null;
+      if (!ca || !cb) return null;
+      return { x1: Math.min(ca[0], cb[0]), y1: Math.min(ca[1], cb[1]),
+               x2: Math.max(ca[0], cb[0]), y2: Math.max(ca[1], cb[1]) };
+    }
     if (it.t === 'p') {
       for (i = 0; i < it.d.length; i += 2) { xs.push(it.d[i]); ys.push(it.d[i + 1]); }
     } else if (it.t === 'x') {
@@ -556,6 +570,19 @@
     if (it.t === 'l' || it.t === 'a') {
       return distToSegment(x, y, it.a[0], it.a[1], it.a[2], it.a[3]) <= tol + it.w / 2;
     }
+    if (it.t === 'o') {
+      var hp = window.Points ? Points.at(it, drawMap || {}) : it.p;
+      if (!hp) return false;
+      return Math.hypot(x - hp[0], y - hp[1]) <= Math.max(9, (it.w || 3) * 3.2) + tol;
+    }
+    if (it.t === 'c') {
+      var hm = drawMap || {};
+      var ha = window.Points ? Points.at(hm[it.a1], hm) : null;
+      var hb = window.Points ? Points.at(hm[it.a2], hm) : null;
+      if (!ha || !hb) return false;
+      return distToSegment(x, y, ha[0], ha[1], hb[0], hb[1]) <= tol + (it.w || 3) / 2;
+    }
+
     // тіло й площина — прямокутники: тицяти можна будь-де всередині
     if (it.t === 's') {
       var sx1 = Math.min(it.a[0], it.a[2]), sx2 = Math.max(it.a[0], it.a[2]);
@@ -962,6 +989,56 @@
     ctx.restore();
   }
 
+  /* ============================================================
+     Геометричні точки й відрізки між ними
+     ============================================================ */
+
+  /** Швидкий доступ до обʼєктів слайда за id — потрібен точкам. */
+  function idMap(items) {
+    var m = {};
+    (items || []).forEach(function (it) { if (it.id) m[it.id] = it; });
+    return m;
+  }
+
+  /**
+   * Позначки для відрізків слайда: рисочки рівності й прямі кути.
+   *
+   * Рахуємо один раз на малювання й запамʼятовуємо за підписом із самих
+   * координат. Без цього кожен відрізок перебирав би всі інші, і на
+   * кресленні з двадцяти відрізків це чотириста перевірок на кадр.
+   */
+  var markCache = { sig: null, data: null };
+
+  function linkMarks(items) {
+    if (!window.Points) return { ticks: {}, right: [] };
+
+    var by = idMap(items);
+    var segs = [];
+    (items || []).forEach(function (it) {
+      if (it.t !== 'c' || !it.a1 || !it.a2) return;
+      var A = Points.at(by[it.a1], by), B2 = Points.at(by[it.a2], by);
+      if (!A || !B2) return;
+      segs.push({ id: it.id, a: A, b: B2, len: Math.hypot(B2[0] - A[0], B2[1] - A[1]) });
+    });
+
+    var sig = segs.map(function (s) {
+      return s.id + ':' + Math.round(s.a[0]) + ',' + Math.round(s.a[1]) +
+             '-' + Math.round(s.b[0]) + ',' + Math.round(s.b[1]);
+    }).join('|');
+    if (markCache.sig === sig) return markCache.data;
+
+    var ticks = {};
+    Points.equalGroups(segs).forEach(function (g, gi) {
+      g.items.forEach(function (s) { ticks[s.id] = gi + 1; });
+    });
+
+    var data = { ticks: ticks, right: Points.rightAngles(segs), segs: segs };
+    markCache = { sig: sig, data: data };
+    return data;
+  }
+
+  Board.linkMarks = linkMarks;
+
   /** Як підписувати вісь. */
   function numFmt(it) {
     var f = it && it.fmt;
@@ -1176,6 +1253,17 @@
   function moveItem(it, dx, dy) {
     var i;
     if (it.t === 'd') return;   // побудова їде разом із фігурою, окремо не рухається
+    if (it.t === 'c') return;   // відрізок їде за своїми точками
+
+    /* Точка, прив'язана до фігури, не рухається окремо від неї: вона ж і
+       стоїть «на стороні», а не «поруч». Щоб зняти прив'язку, точку треба
+       перетягнути своїм маркером. */
+    if (it.t === 'o') {
+      if (it.on && it.on.pid) return;
+      it.p[0] = round(it.p[0] + dx);
+      it.p[1] = round(it.p[1] + dy);
+      return;
+    }
     if (it.t === 'p') {
       for (i = 0; i < it.d.length; i += 2) { it.d[i] = round(it.d[i] + dx); it.d[i + 1] = round(it.d[i + 1] + dy); }
     } else if (it.t === 'x') {
@@ -1275,6 +1363,18 @@
   /* Обгортка зі збереженням стану полотна. Потрібна тому, що всередині
      виставляються тінь, пунктир і прозорість, а виходів із функції багато —
      без цього налаштування одного об'єкта протікали б на наступний. */
+  /* Що зараз малюється. Точка й відрізок посилаються на сусідів по слайду,
+     тож їм потрібен весь список — а передавати його через кожен виклик
+     означало б змінити підпис усього малювання заради двох видів. */
+  var drawItems = null, drawMap = null;
+
+  function setDrawScope(items) {
+    drawItems = items || [];
+    drawMap = idMap(drawItems);
+  }
+
+  Board.setDrawScope = setDrawScope;
+
   function drawItem(ctx, it, scale) {
     ctx.save();
     try { drawItemBody(ctx, it, scale); } finally { ctx.restore(); }
@@ -1604,6 +1704,82 @@
       if (fn) drawPlanePoints(ctx, it, m, fn, fsz);
 
       ctx.lineCap = wasCap; ctx.lineJoin = wasJoin;
+      return;
+    }
+
+    /* Геометрична точка. */
+    if (it.t === 'o') {
+      var pp = window.Points ? Points.at(it, drawMap) : (it.p || null);
+      if (!pp) return;
+      var pr = Math.max(3.5, (it.w || 3) * 1.5);
+
+      ctx.beginPath();
+      ctx.arc(pp[0], pp[1], pr, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (it.n && it.lb !== 0) {
+        var pfs = Math.max(12, (it.w || 3) * 5);
+        ctx.font = '600 ' + pfs + 'px "Source Serif 4", Georgia, serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(it.n, pp[0] + pr * 1.5, pp[1] - pr * 0.8);
+      }
+      return;
+    }
+
+    /* Відрізок між двома точками.
+
+       Своїх координат не має: щоразу питає їх у точок. Тому він не може
+       відстати від них — ні коли точку тягнуть, ні коли рухається фігура,
+       якій ця точка належить. */
+    if (it.t === 'c') {
+      var byc = drawMap || {};
+      var A = window.Points ? Points.at(byc[it.a1], byc) : null;
+      var B2 = window.Points ? Points.at(byc[it.a2], byc) : null;
+      if (!A || !B2) return;
+
+      ctx.beginPath();
+      ctx.moveTo(A[0], A[1]);
+      ctx.lineTo(B2[0], B2[1]);
+      ctx.stroke();
+
+      if (it.marks === 0) return;
+      var mk = linkMarks(drawItems || []);
+
+      // рисочки рівності посередині
+      var n2c = mk.ticks[it.id] || 0;
+      if (n2c) {
+        var mx = (A[0] + B2[0]) / 2, my = (A[1] + B2[1]) / 2;
+        var dx2 = B2[0] - A[0], dy2 = B2[1] - A[1];
+        var L2c = Math.hypot(dx2, dy2) || 1;
+        var ux = dx2 / L2c, uy = dy2 / L2c;
+        var nx = -uy, ny = ux;
+        var half = Math.max(5, (it.w || 3) * 2.4);
+        var gap = Math.max(3, (it.w || 3) * 1.6);
+
+        ctx.beginPath();
+        for (var q = 0; q < n2c; q++) {
+          var off = (q - (n2c - 1) / 2) * gap;
+          var bx = mx + ux * off, by2 = my + uy * off;
+          ctx.moveTo(bx - nx * half, by2 - ny * half);
+          ctx.lineTo(bx + nx * half, by2 + ny * half);
+        }
+        ctx.stroke();
+      }
+
+      // прямий кут малює той відрізок, який його «тримає»
+      mk.right.forEach(function (r) {
+        if (r.owner !== it.id) return;
+        var m2 = Math.max(9, (it.w || 3) * 3.4);
+        var p1 = [r.at[0] + r.d1[0] * m2, r.at[1] + r.d1[1] * m2];
+        var p2 = [r.at[0] + r.d2[0] * m2, r.at[1] + r.d2[1] * m2];
+        var p3 = [p1[0] + r.d2[0] * m2, p1[1] + r.d2[1] * m2];
+        ctx.beginPath();
+        ctx.moveTo(p1[0], p1[1]);
+        ctx.lineTo(p3[0], p3[1]);
+        ctx.lineTo(p2[0], p2[1]);
+        ctx.stroke();
+      });
       return;
     }
 
@@ -2090,6 +2266,13 @@
   Board.prototype._handles = function () {
     if (this.selection.length !== 1) return null;   // маркери — лише для одного об'єкта
     var it = this.selection[0];
+    /* У точки один маркер — вона сама. Тягнення ним не просто пересуває
+       точку, а заново шукає, до чого вона липне: так її можна зняти з
+       однієї сторони й посадити на іншу. */
+    if (it.t === 'o') {
+      var hp2 = window.Points ? Points.at(it, drawMap || {}) : it.p;
+      return hp2 ? [{ id: 'pt', x: hp2[0], y: hp2[1] }] : null;
+    }
     if (it.t === 'l' || it.t === 'a' || it.t === 'n') {
       return [{ id: 'p1', x: it.a[0], y: it.a[1] }, { id: 'p2', x: it.a[2], y: it.a[3] }];
     }
@@ -2340,6 +2523,15 @@
       return;
     }
 
+    if (id === 'pt' && it.t === 'o') {
+      var snap = window.Points
+        ? Points.snap(wx, wy, (drawItems || []).filter(function (x) { return x !== it; }))
+        : { p: [wx, wy] };
+      it.p = [round(snap.p[0]), round(snap.p[1])];
+      if (snap.on) it.on = snap.on; else delete it.on;
+      return;
+    }
+
     if (id === 'p1') { it.a[0] = round(wx); it.a[1] = round(wy); return; }
     if (id === 'p2') { it.a[2] = round(wx); it.a[3] = round(wy); return; }
 
@@ -2475,6 +2667,57 @@
         fx: this.flipX ? 1 : 0,
         a: [round(w.x), round(w.y), round(w.x), round(w.y)]
       };
+      return;
+    }
+
+    /* Точка ставиться одним клацанням. Тягнути нічого не треба — і саме
+       тому вона зручна: креслення будується швидше за розмову про нього. */
+    if (this.tool === 'point') {
+      this.snapshot();
+      var snapP = window.Points
+        ? Points.snap(w.x, w.y, this.items())
+        : { p: [w.x, w.y] };
+      var np = { t: 'o', id: uid('pt'), c: this.color, w: this.width,
+                 n: window.Points ? Points.nextName(this.items()) : '',
+                 p: [round(snapP.p[0]), round(snapP.p[1])] };
+      if (snapP.on) np.on = snapP.on;
+      this.slide.items.push(np);
+      this.changed();
+      return;
+    }
+
+    /* Зʼєднання: клацнули першу точку, клацнули другу — між ними відрізок.
+       Проміжний стан живе в самому рушії, бо він скороминущий: перемкнули
+       інструмент — і він зник, нічого по собі не лишивши. */
+    if (this.tool === 'link') {
+      var hitP = null;
+      var self = this;
+      this.items().forEach(function (x) {
+        if (x.t !== 'o') return;
+        var q = window.Points ? Points.at(x, idMap(self.items())) : x.p;
+        if (!q) return;
+        if (Math.hypot(w.x - q[0], w.y - q[1]) <= Math.max(12, self.width * 4)) hitP = x;
+      });
+
+      if (!hitP) { this.linkFrom = null; this.render(); return; }
+
+      if (!this.linkFrom) { this.linkFrom = hitP.id; this.render(); return; }
+      if (this.linkFrom === hitP.id) { this.linkFrom = null; this.render(); return; }
+
+      var pair = [this.linkFrom, hitP.id].sort().join('|');
+      var dup = this.items().some(function (x) {
+        return x.t === 'c' && [x.a1, x.a2].sort().join('|') === pair;
+      });
+      if (!dup) {
+        this.snapshot();
+        this.slide.items.push({ t: 'c', id: uid('ln'), c: this.color, w: this.width,
+                                a1: this.linkFrom, a2: hitP.id });
+        this.linkFrom = null;
+        this.changed();
+      } else {
+        this.linkFrom = null;
+        this.render();
+      }
       return;
     }
 
@@ -2794,6 +3037,15 @@
     this.snapshot();
     var sel = this.selection;
     this.slide.items = this.items().filter(function (it) { return sel.indexOf(it) < 0; });
+
+    /* Відрізок без точки — це посилання в нікуди. Прибираємо разом: інакше
+       він лишався б невидимим сміттям, яке ще й заважає позначкам. */
+    var alive = {};
+    this.slide.items.forEach(function (it) { if (it.t === 'o' && it.id) alive[it.id] = 1; });
+    this.slide.items = this.slide.items.filter(function (it) {
+      return it.t !== 'c' || (alive[it.a1] && alive[it.a2]);
+    });
+
     this.clearSelection();
     this._shrank();
     this.changed();
@@ -3139,6 +3391,8 @@
   };
 
   Board.prototype.setTool = function (tool) {
+    // незавершене зʼєднання не має переживати перемикання інструмента
+    if (tool !== 'link') this.linkFrom = null;
     this.tool = tool;
     if (tool !== 'select') this.clearSelection();
     this.band = null;
@@ -3187,8 +3441,25 @@
 
     this.syncConstructions();
     var items = this.items();
+    setDrawScope(items);
     for (var i = 0; i < items.length; i++) drawItem(ctx, items[i], this.scale);
     if (this.draft) drawItem(ctx, this.draft, this.scale);
+
+    /* Перша обрана точка зʼєднання. Без цієї позначки незрозуміло, чи
+       клацання взагалі влучило, — і друге клацання робиться навмання. */
+    if (this.tool === 'link' && this.linkFrom) {
+      var lf = idMap(items)[this.linkFrom];
+      var lp = lf && window.Points ? Points.at(lf, idMap(items)) : null;
+      if (lp) {
+        ctx.save();
+        ctx.strokeStyle = '#F79009';
+        ctx.lineWidth = 2.5 / this.scale;
+        ctx.beginPath();
+        ctx.arc(lp[0], lp[1], Math.max(9, this.width * 3.4), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
 
     var self = this;
     var k = 1 / this.scale;
@@ -3300,6 +3571,7 @@
     ctx.fillRect(0, 0, cv.width, cv.height);
     ctx.scale(scale, scale);
     ctx.translate(-b.x1 + pad, -b.y1 + pad);
+    setDrawScope(items);
     items.forEach(function (it) { drawItem(ctx, it, scale); });
     return cv;
   };

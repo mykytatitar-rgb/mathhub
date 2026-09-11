@@ -84,4 +84,66 @@ const GRAMMAR = {
 <tr><td>autumn</td><td>осінь</td></tr>
 <tr><td>winter</td><td>зима</td></tr></table>
 <p>Конкретна дата — <b>on</b>: on July 5th.</p>`,
+
+  13: `<p>Незлічувані (вода, хліб) не мають множини й артикля <b>a</b>: I drink <b>water</b> (не «a water»).</p>
+<p>«Скільки» — <b>how much</b> (незлічуване) / <b>how many</b> (штуки): how much water, how many apples.</p>
+<p>«Мені подобається» — I <b>like</b> + слово: I like tea.</p>`,
+
+  14: `<p>Множина частин тіла часто неправильна:</p>
+<table class="gtab"><tr><th>Одн.</th><th>Мн.</th></tr>
+<tr><td>foot (ступня)</td><td>feet</td></tr>
+<tr><td>tooth (зуб)</td><td>teeth</td></tr>
+<tr><td>hand</td><td>hands</td></tr></table>
+<p>«У мене болить…» — My head <b>hurts</b> або I <b>have a</b> headache.</p>`,
+
+  15: `<p>«Носити / бути вдягненим» — <b>to wear</b>: She <b>wears</b> a hat.</p>
+<p>«Одягати» (дія) — <b>to put on</b>: Put on your shoes.</p>
+<p>Пара-предмети завжди множина: trousers, glasses, jeans → <b>a pair of</b> trousers.</p>`,
+
+  16: `<p>Ввічливе замовлення: <b>Can I have…?</b> або <b>I'd like…</b> (I would like).</p>
+<table class="gtab"><tr><th>Англ</th><th>Укр</th></tr>
+<tr><td>the menu</td><td>меню</td></tr>
+<tr><td>the bill</td><td>рахунок</td></tr>
+<tr><td>How much is it?</td><td>скільки?</td></tr></table>
+<p>«Для мене…» — For me, a coffee, please.</p>`,
+
+  17: `<p>Котра година: <b>It is</b> + година: It is five <b>o'clock</b>.</p>
+<p>Хвилини: <b>past</b> (по) до 30, <b>to</b> (до) після 30: ten <b>past</b> six (6:10), quarter <b>to</b> seven (6:45).</p>
+<p>«О котрій?» — <b>At</b> what time? — <b>At</b> eight.</p>`,
+
+  18: `<p>Про погоду — через <b>It is</b>: It is cold / hot / sunny.</p>
+<p>Дія (дощить) — Present Continuous: It <b>is raining</b>, It <b>is snowing</b>.</p>
+<p>Питання: What's the weather like?</p>`,
+
+  19: `<p>«Є» — <b>there is</b> (одн.) / <b>there are</b> (мн.): <b>There is</b> a bed, <b>there are</b> two chairs.</p>
+<p>Місце — прийменники <b>in / on / under</b>: The cat is <b>in</b> the room.</p>`,
+
+  20: `<p>«Де є…?» — <b>Where is…?</b> Напрямки:</p>
+<table class="gtab"><tr><th>Англ</th><th>Укр</th></tr>
+<tr><td>on the right</td><td>праворуч</td></tr>
+<tr><td>on the left</td><td>ліворуч</td></tr>
+<tr><td>straight on</td><td>прямо</td></tr>
+<tr><td>near / far</td><td>близько / далеко</td></tr></table>`,
+
+  21: `<p>Спосіб пересування — прийменник <b>by</b>: <b>by</b> car, <b>by</b> bus, <b>by</b> train.</p>
+<p>Виняток: <b>on foot</b> (пішки). «Сідати / виходити»: get <b>on</b> / get <b>off</b> the bus.</p>`,
+
+  22: `<p>Ціна: <b>How much is it?</b> Оплата: pay <b>by</b> card / <b>in</b> cash.</p>
+<p>«Приміряти» — <b>try on</b>: Can I try it on? Дешевий/дорогий — cheap / expensive.</p>`,
+
+  23: `<p>Прикметник — <b>перед</b> іменником і не змінюється: a <b>big</b> house, <b>big</b> houses.</p>
+<p>Ступені порівняння:</p>
+<table class="gtab"><tr><th>Тип</th><th>Приклад</th></tr>
+<tr><td>короткі +er</td><td>big → big<b>ger</b></td></tr>
+<tr><td>довгі + more</td><td><b>more</b> expensive</td></tr>
+<tr><td>найвищий</td><td>the big<b>gest</b> / the <b>most</b>…</td></tr></table>`,
+
+  24: `<table class="gtab"><tr><th>Англ</th><th>Укр</th></tr>
+<tr><td>in</td><td>в / всередині</td></tr>
+<tr><td>on</td><td>на (поверхні)</td></tr>
+<tr><td>under</td><td>під</td></tr>
+<tr><td>next to</td><td>поруч з</td></tr>
+<tr><td>between</td><td>між</td></tr>
+<tr><td>behind</td><td>позаду</td></tr></table>
+<p>The cat is <b>under</b> the table.</p>`,
 };

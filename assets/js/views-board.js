@@ -12,21 +12,45 @@
                   { v: 64, l: 'XL' }, { v: 110, l: '2XL' }, { v: 180, l: '3XL' }];
 
   /* Інструменти лівої колонки. opts — які налаштування показувати в підменю. */
+  /* Інструментів стало багато, і суцільним стовпцем вони вже не читаються.
+     У панелі лишається те, чим користуються щохвилини, а решта живе у двох
+     групах. Група не ховає інструмент, а називає його: коли шукаєш, де тут
+     перерізи, думаєш «це геометрія», а не перебираєш тринадцять однакових
+     кружечків. */
   var TOOLS = [
     { id: 'select',  icon: 'cursor',     label: 'Вибір і переміщення (V)' },
     { id: 'pen',     icon: 'pen',        label: 'Олівець (P)',    opts: 'stroke' },
     { id: 'eraser',  icon: 'eraser',     label: 'Гумка (E)' },
     { id: 'text',    icon: 'textT',      label: 'Текст (T)',      opts: 'text' },
-    { id: 'shape',   icon: 'shapes',     label: 'Геометричні фігури (S)', opts: 'shape' },
-    { id: 'line',    icon: 'shapeLine',  label: 'Лінія (L)',      opts: 'stroke' },
-    { id: 'arrow',   icon: 'arrowRight', label: 'Стрілка (A)',    opts: 'stroke' },
-    { id: 'point',   icon: 'dot',        label: 'Точка (O)',        opts: 'stroke' },
-    { id: 'link',    icon: 'link2',      label: 'Зʼєднати точки (C)', opts: 'stroke' },
-    { id: 'numline', icon: 'ruler',      label: 'Числова вісь (N)', opts: 'stroke' },
-    { id: 'plane',   icon: 'axes',       label: 'Координатна площина (K)', opts: 'stroke' },
-    { id: 'solid',   icon: 'cube3d',     label: 'Стереометрія (J)', opts: 'stroke' },
+
+    { id: 'shape',   icon: 'shapes',     label: 'Фігури (S)',       opts: 'shape',  group: 'geo' },
+    { id: 'point',   icon: 'dot',        label: 'Точка (O)',        opts: 'stroke', group: 'geo' },
+    { id: 'link',    icon: 'link2',      label: 'Зʼєднати точки (C)', opts: 'stroke', group: 'geo' },
+    { id: 'line',    icon: 'shapeLine',  label: 'Лінія (L)',        opts: 'stroke', group: 'geo' },
+    { id: 'arrow',   icon: 'arrowRight', label: 'Стрілка (A)',      opts: 'stroke', group: 'geo' },
+    { id: 'solid',   icon: 'cube3d',     label: 'Стереометрія (J)', opts: 'stroke', group: 'geo' },
+
+    { id: 'plane',   icon: 'axes',       label: 'Координатна площина (K)', opts: 'stroke', group: 'alg' },
+    { id: 'numline', icon: 'ruler',      label: 'Числова вісь (N)', opts: 'stroke', group: 'alg' },
+
     { id: 'hand',    icon: 'hand',       label: 'Рука — рух по полотну (H)' }
   ];
+
+  var GROUPS = [
+    { id: 'geo', icon: 'shapes', label: 'Геометрія' },
+    { id: 'alg', icon: 'axes',   label: 'Алгебра' }
+  ];
+
+  function toolsOf(gid) {
+    return TOOLS.filter(function (t) { return t.group === gid; });
+  }
+
+  function groupOf(toolId) {
+    for (var i = 0; i < TOOLS.length; i++) {
+      if (TOOLS[i].id === toolId) return TOOLS[i].group || null;
+    }
+    return null;
+  }
 
   var TOOL_OPTS = {};
   TOOLS.forEach(function (t) { if (t.opts) TOOL_OPTS[t.id] = t.opts; });
@@ -52,11 +76,28 @@
     }
     var st = lesson ? S.get('students', lesson.studentId) : null;
 
-    var tools = TOOLS.map(function (t) {
+    function toolBtn(t) {
       return '<button class="tool-btn' + (t.id === 'pen' ? ' is-active' : '') + '" data-tool="' + t.id +
         '" title="' + U.esc(t.label) + '">' + icon(t.icon, 20) +
         (t.opts ? '<i class="tool-btn__dot"></i>' : '') + '</button>';
-    }).join('');
+    }
+
+    var base = TOOLS.filter(function (t) { return !t.group; });
+    var tools =
+      base.slice(0, 4).map(toolBtn).join('') +
+      '<div class="tool-sep"></div>' +
+      GROUPS.map(function (g) {
+        return '<div class="tool-grp" data-grp="' + g.id + '">' +
+          '<button class="tool-btn" data-group="' + g.id + '" title="' + U.esc(g.label) + '">' +
+            icon(g.icon, 20) + '<i class="tool-btn__caret"></i></button>' +
+          '<div class="tool-fly" hidden>' +
+            '<div class="tool-fly__name">' + U.esc(g.label) + '</div>' +
+            '<div class="tool-fly__row">' + toolsOf(g.id).map(toolBtn).join('') + '</div>' +
+          '</div>' +
+        '</div>';
+      }).join('') +
+      '<div class="tool-sep"></div>' +
+      base.slice(4).map(toolBtn).join('');
 
     return '<div class="board">' +
 
@@ -248,11 +289,24 @@
 
     /* Як у Miro: клік по вже активному інструменту згортає/розгортає його
        підменю, а перехід на інший інструмент завжди показує його налаштування. */
+    U.onClick(root, '[data-group]', function (el) {
+      var gid = el.dataset.group;
+      var box = el.parentNode.querySelector('.tool-fly');
+      var open = box && box.hidden;
+      // відкрита завжди одна: дві розкриті панелі перекривають одна одну
+      U.$$('.tool-fly', root).forEach(function (f) { f.hidden = true; });
+      U.$$('[data-group]', root).forEach(function (b) { b.classList.remove('is-open'); });
+      if (open) { box.hidden = false; el.classList.add('is-open'); }
+    });
+
     U.onClick(root, '[data-tool]', function (el) {
       var id = el.dataset.tool;
       if (id === engine.tool && TOOL_OPTS[id]) { toggleOpts(); return; }
       setOptsHidden(false);
       setTool(id);
+      // інструмент обрано — панель групи більше не потрібна
+      U.$$('.tool-fly', root).forEach(function (f) { f.hidden = true; });
+      U.$$('[data-group]', root).forEach(function (b) { b.classList.remove('is-open'); });
     });
 
     U.onClick(root, '[data-color]', function (el) {
@@ -2089,6 +2143,23 @@
     U.$$('[data-tool]').forEach(function (x) {
       x.classList.toggle('is-active', x.dataset.tool === id);
     });
+
+    /* Кнопка групи світиться, коли обраний інструмент саме з неї, і
+       показує його значок. Інакше після закриття панелі незрозуміло, чим
+       ти зараз малюєш. */
+    var g = groupOf(id);
+    U.$$('[data-group]').forEach(function (b) {
+      var mine = b.dataset.group === g;
+      b.classList.toggle('is-active', mine);
+      var def = GROUPS.filter(function (x) { return x.id === b.dataset.group; })[0];
+      var want = mine ? id : (def && def.icon);
+      var t = TOOLS.filter(function (x) { return x.id === want; })[0];
+      var glyph = mine && t ? t.icon : (def && def.icon);
+      if (glyph && b.dataset.glyph !== glyph) {
+        b.dataset.glyph = glyph;
+        b.innerHTML = icon(glyph, 20) + '<i class="tool-btn__caret"></i>';
+      }
+    });
   }
 
   function updateZoom() {
@@ -2709,7 +2780,15 @@
           chk('sec', !!it.sec, 'Січну через дві точки') +
           chk('tan', !!it.tan, 'Дотичну в x₁') +
           chk('quot', !!it.quot, 'Різницеве відношення') +
-        '</div>',
+          chk('integ', !!it.integ, 'Визначений інтеграл — площа') +
+        '</div>' +
+        '<div class="field-row" style="margin-top:10px">' +
+          C.field('Інтеграл від', C.input('ia', it.ia != null ? it.ia : it.xa, 'inputmode="text"')) +
+          C.field('до', C.input('ib', it.ib != null ? it.ib : it.xb, 'inputmode="text"')) +
+        '</div>' +
+        '<div class="field__hint">Площа рахується між графіком і віссю: там, де ' +
+        'крива нижча за нуль, вона віднімається — така частина фарбується червоним. ' +
+        'Число видно в кутку.</div>',
       onMount: function (root) {
         var box = root.querySelector('[data-plane-check]');
         function refresh() {
@@ -2746,9 +2825,13 @@
             it.xa = xa; it.xb = xb; it.ya = ya; it.yb = yb;
             it.p1 = Math.max(xa, Math.min(xb, p1));
             it.p2 = Math.max(xa, Math.min(xb, p2));
-            ['grid', 'nums', 'pts', 'hlab', 'sec', 'tan', 'quot'].forEach(function (k) {
+            ['grid', 'nums', 'pts', 'hlab', 'sec', 'tan', 'quot', 'integ'].forEach(function (k) {
               it[k] = v[k] ? 1 : 0;
             });
+
+            var ia = numValue(v.ia), ib = numValue(v.ib);
+            it.ia = isNaN(ia) ? xa : Math.max(xa, Math.min(xb, ia));
+            it.ib = isNaN(ib) ? xb : Math.max(xa, Math.min(xb, ib));
             cur.engine.changed();
           } }
       ]

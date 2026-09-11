@@ -99,6 +99,42 @@
 
 .tool-sep { height: 1px; background: var(--line); margin: 5px 4px; flex: 0 0 auto; }
 
+/* ---- групи інструментів ------------------------------------------------
+
+   Панель, що розкривається збоку, а не всередині стовпця: інакше вона
+   розсовувала б решту кнопок, і рука щоразу шукала б їх на новому місці. */
+.tool-grp { position: relative; flex: 0 0 auto; }
+.tool-btn__caret {
+  position: absolute; right: 5px; bottom: 5px;
+  width: 0; height: 0;
+  border-left: 4px solid transparent;
+  border-top: 4px solid currentColor;
+  opacity: .5;
+}
+.tool-btn.is-open { background: var(--blue-50); color: var(--blue-700); }
+
+.tool-fly {
+  position: absolute;
+  left: calc(100% + 10px); top: 50%;
+  transform: translateY(-50%);
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  padding: 10px 12px;
+  z-index: 7;
+}
+.tool-fly__name {
+  font-size: 11.5px; font-weight: 700; letter-spacing: .02em;
+  color: var(--ink-2); margin-bottom: 7px; white-space: nowrap;
+}
+.tool-fly__row { display: flex; gap: 4px; }
+
+/* На вузькому екрані панель не влізає збоку — кладемо її під кнопку. */
+@media (max-width: 700px) {
+  .tool-fly { left: 0; top: calc(100% + 8px); transform: none; }
+  .tool-fly__row { flex-wrap: wrap; max-width: 190px; }
+}
+
 /* ---------- Підменю налаштувань інструмента ---------- */
 
 .board-opts {

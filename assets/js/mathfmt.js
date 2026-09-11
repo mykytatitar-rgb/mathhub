@@ -30,8 +30,23 @@
     Delta: 'Δ', Sigma: 'Σ', Omega: 'Ω',
     in: '∈', notin: '∉', subset: '⊂', cup: '∪', cap: '∩', varnothing: '∅',
     forall: '∀', exists: '∃', sum: '∑', prod: '∏', int: '∫',
+    iint: '∬', iiint: '∭', oint: '∮', oiint: '∯',
+    partial: '∂', nabla: '∇', Int: '∫',
     parallel: '∥', perp: '⊥', sim: '∼', propto: '∝',
     ldots: '…', cdots: '⋯', quad: ' ', qquad: '  '
+  };
+
+  /* stacked — межі зверху й знизу; інакше збоку, як заведено для інтеграла. */
+  var BIGOP = {
+    int:   { glyph: '∫', stacked: false },
+    iint:  { glyph: '∬', stacked: false },
+    iiint: { glyph: '∭', stacked: false },
+    oint:  { glyph: '∮', stacked: false },
+    sum:   { glyph: '∑', stacked: true },
+    prod:  { glyph: '∏', stacked: true },
+    lim:   { glyph: 'lim', stacked: true, fn: true },
+    max:   { glyph: 'max', stacked: true, fn: true },
+    min:   { glyph: 'min', stacked: true, fn: true }
   };
 
   /* Скорочення для тих, хто не хоче пам'ятати похилі риски. Замінюємо до
@@ -124,9 +139,55 @@
           continue;
         }
 
+        /* Диференціал. У «dx» буква d означає дію, а не величину, тож
+           курсив тут неправильний — і в підручнику вона пряма. */
+        if (name === 'd') {
+          var dg = s.charAt(i) === '{' ? readGroup(s, i) : null;
+          if (dg) i = dg.end;
+          out += '<span class="mf-d">d</span>' + (dg ? parse(dg.body) : '');
+          continue;
+        }
+
+        /* Великі оператори: інтеграл, сума, добуток, границя.
+
+           Межі в них стоять не в рядок, а біля самого знака — і по-різному:
+           у суми зверху й знизу, в інтеграла збоку. Це не оформлення, а
+           те, як формулу читають: «сума від i=1 до n» видно одним поглядом,
+           а «∑_i=1^n» доводиться розбирати. */
+        if (BIGOP[name]) {
+          var sub = '', sup = '';
+          for (var g2 = 0; g2 < 2; g2++) {
+            if (s.charAt(i) === '_') { var ra = readArg(s, i + 1); sub = ra.body; i = ra.end; }
+            else if (s.charAt(i) === '^') { var rb = readArg(s, i + 1); sup = rb.body; i = rb.end; }
+            else break;
+          }
+
+          var glyph = BIGOP[name].glyph;
+          var stacked = BIGOP[name].stacked;
+          var head = BIGOP[name].fn
+            ? '<span class="mf-fn">' + glyph + '</span>'
+            : '<span class="mf-opsign">' + glyph + '</span>';
+
+          if (!sub && !sup) { out += head; continue; }
+
+          out += stacked
+            ? '<span class="mf-big">' +
+                '<span class="mf-over">' + (sup ? parse(sup) : '') + '</span>' +
+                head +
+                '<span class="mf-under2">' + (sub ? parse(sub) : '') + '</span>' +
+              '</span>'
+            : '<span class="mf-side">' + head +
+                '<span class="mf-lim">' +
+                  '<span class="mf-sup2">' + (sup ? parse(sup) : '') + '</span>' +
+                  '<span class="mf-sub2">' + (sub ? parse(sub) : '') + '</span>' +
+                '</span>' +
+              '</span>';
+          continue;
+        }
+
         /* Назви функцій ставимо прямим шрифтом: sin x — це функція, а не
            добуток трьох літер, і курсив тут збиває. */
-        if (/^(sin|cos|tg|ctg|tan|cot|log|ln|lg|lim|max|min|arcsin|arccos|arctg)$/.test(name)) {
+        if (/^(sin|cos|tg|ctg|tan|cot|log|ln|lg|arcsin|arccos|arctg|arcctg|sh|ch|th)$/.test(name)) {
           out += '<span class="mf-fn">' + name + '</span>';
           continue;
         }

@@ -1621,6 +1621,26 @@ a { color: inherit; text-decoration: none; }
 .mf-num { padding: 0 .3em 1px; }
 .mf-den { padding: 1px .3em 0; border-top: 2px solid currentColor; }
 
+/* ---- великі оператори: інтеграл, сума, границя -------------------------
+
+   Межі стоять біля знака, а не в рядок. У суми — зверху й знизу, в
+   інтеграла — збоку: саме так їх набирають і саме так читають. */
+.mf-opsign { font-size: 1.6em; line-height: .72; font-style: normal;
+             vertical-align: -.24em; }
+
+.mf-side { display: inline-flex; align-items: center; vertical-align: middle; }
+.mf-side .mf-lim { display: inline-flex; flex-direction: column;
+                   font-size: .58em; line-height: 1.06; margin-left: .08em; }
+.mf-sup2, .mf-sub2 { min-height: 1em; white-space: nowrap; }
+
+.mf-big { display: inline-flex; flex-direction: column; align-items: center;
+          vertical-align: middle; margin: 0 .14em; }
+.mf-big .mf-opsign { vertical-align: 0; }
+.mf-over, .mf-under2 { font-size: .58em; line-height: 1.15; white-space: nowrap; }
+
+/* Диференціал прямий: у «dx» буква d означає дію, а не величину. */
+.mf-d { font-style: normal; }
+
 .mf-root { display: inline-flex; align-items: flex-start; line-height: 1.08; }
 .mf-root .mf-idx { font-size: .6em; transform: translateY(.12em); margin-right: -.3em; }
 .mf-root .mf-sign { transform: scaleY(1.2); }

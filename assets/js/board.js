@@ -795,6 +795,87 @@
   function planeP2(it) { return typeof it.p2 === 'number' ? it.p2 : 2; }
 
   /**
+   * Визначений інтеграл: заштрихована площа під кривою й саме число.
+   *
+   * Площа малюється до осі, а не до низу вікна: інтеграл — це площа між
+   * графіком і віссю, і там, де крива йде нижче нуля, ця площа віднімається.
+   * Тому нижня частина фарбується іншим кольором — інакше «мінус» у
+   * відповіді виглядає як помилка обчислення.
+   */
+  function drawIntegral(ctx, it, m, fn, fsz) {
+    var W = m.win;
+    var a = typeof it.ia === 'number' ? it.ia : W.xa;
+    var b = typeof it.ib === 'number' ? it.ib : W.xb;
+    if (a > b) { var t = a; a = b; b = t; }
+    a = Math.max(a, W.xa); b = Math.min(b, W.xb);
+    if (!(b > a)) return;
+
+    var y0 = m.sy(0);
+    var N = 160;
+
+    /* Малюємо двома смугами — над віссю й під нею. Ділимо в точках, де
+       функція переходить через нуль: якщо цього не робити, одна смуга
+       перекриє другу й обидві стануть однакового кольору. */
+    var band = [], sign = 0;
+
+    function flush() {
+      if (band.length < 2) { band = []; return; }
+      ctx.beginPath();
+      ctx.moveTo(band[0][0], y0);
+      band.forEach(function (p) { ctx.lineTo(p[0], p[1]); });
+      ctx.lineTo(band[band.length - 1][0], y0);
+      ctx.closePath();
+      ctx.fillStyle = sign < 0 ? 'rgba(229,72,77,.22)' : 'rgba(19,88,245,.20)';
+      ctx.fill();
+      band = [];
+    }
+
+    ctx.save();
+    for (var i = 0; i <= N; i++) {
+      var mx = a + (b - a) * i / N;
+      var my = fn(mx);
+      if (isNaN(my)) { flush(); sign = 0; continue; }
+      var s2 = my < 0 ? -1 : 1;
+      if (sign && s2 !== sign) { flush(); }
+      sign = s2;
+      band.push([m.sx(mx), m.sy(my)]);
+    }
+    flush();
+
+    // межі — тонкі вертикальні риски від осі до кривої
+    ctx.strokeStyle = '#1358F5';
+    ctx.lineWidth = Math.max(1.2, (it.w || 2) * 0.7);
+    [a, b].forEach(function (v) {
+      var vy = fn(v);
+      if (isNaN(vy)) return;
+      ctx.beginPath();
+      ctx.moveTo(m.sx(v), y0);
+      ctx.lineTo(m.sx(v), m.sy(vy));
+      ctx.stroke();
+    });
+
+    ctx.font = '600 ' + fsz + 'px "Source Serif 4", Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#1358F5';
+    ctx.fillText(numLabel(a, 0.01), m.sx(a), y0 + fsz * 0.3);
+    ctx.fillText(numLabel(b, 0.01), m.sx(b), y0 + fsz * 0.3);
+
+    /* Саме число. Без нього площа — просто пляма: учень бачить, що щось
+       зафарбовано, але не бачить, скільки це. */
+    if (window.Plot && Plot.integral) {
+      var val = Plot.integral(fn, a, b);
+      if (!isNaN(val)) {
+        ctx.textAlign = 'left';
+        ctx.fillText('∫ від ' + numLabel(a, 0.01) + ' до ' + numLabel(b, 0.01) +
+                     ' = ' + numLabel(val, 0.001),
+                     m.x1 + fsz * 0.6, m.y2 - fsz * 1.6);
+      }
+    }
+    ctx.restore();
+  }
+
+  /**
    * Точки на графіку й усе, що з них випливає.
    *
    * Саме заради цього площина існує одним обʼєктом: січна, дотична,
@@ -1699,6 +1780,9 @@
         ctx.stroke();
         ctx.restore();
       }
+
+      // ---- визначений інтеграл: площа під кривою
+      if (fn && it.integ) drawIntegral(ctx, it, m, fn, fsz);
 
       // ---- точки, проєкції, січна, дотична
       if (fn) drawPlanePoints(ctx, it, m, fn, fsz);

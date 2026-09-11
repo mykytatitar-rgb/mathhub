@@ -2868,18 +2868,40 @@
        Проміжний стан живе в самому рушії, бо він скороминущий: перемкнули
        інструмент — і він зник, нічого по собі не лишивши. */
     if (this.tool === 'link') {
-      var hitP = null;
       var self = this;
+
+      /* Радіус влучання — у пікселях екрана, а не в координатах дошки.
+         Інакше на віддаленому масштабі точка стає недосяжною: вона на
+         вигляд там само, а зона влучання зменшується разом із кресленням. */
+      var grab = Math.max(14, this.width * 4) / this.scale;
+      var byId = idMap(this.items());
+
+      var hitP = null, bestD = Infinity;
       this.items().forEach(function (x) {
         if (x.t !== 'o') return;
-        var q = window.Points ? Points.at(x, idMap(self.items())) : x.p;
+        var q = window.Points ? Points.at(x, byId) : x.p;
         if (!q) return;
-        if (Math.hypot(w.x - q[0], w.y - q[1]) <= Math.max(12, self.width * 4)) hitP = x;
+        var d = Math.hypot(w.x - q[0], w.y - q[1]);
+        if (d <= grab && d < bestD) { bestD = d; hitP = x; }
       });
 
-      if (!hitP) { this.linkFrom = null; this.render(); return; }
+      /* Точки поруч немає — ставимо її тут же й ведемо далі. Раніше клік
+         повз точку мовчки скасовував початий звʼязок: людина клацала двічі
+         й вирішувала, що інструмент не працює. Тепер провести лінію можна
+         з порожнього місця, а точки зʼявляться самі. */
+      if (!hitP) {
+        var snapL = window.Points
+          ? Points.snap(w.x, w.y, this.items())
+          : { p: [w.x, w.y] };
+        this.snapshot();
+        hitP = { t: 'o', id: uid('pt'), c: this.color, w: this.width,
+                 n: window.Points ? Points.nextName(this.items()) : '',
+                 p: [round(snapL.p[0]), round(snapL.p[1])] };
+        if (snapL.on) hitP.on = snapL.on;
+        this.slide.items.push(hitP);
+      }
 
-      if (!this.linkFrom) { this.linkFrom = hitP.id; this.render(); return; }
+      if (!this.linkFrom) { this.linkFrom = hitP.id; this.changed(); return; }
       if (this.linkFrom === hitP.id) { this.linkFrom = null; this.render(); return; }
 
       var pair = [this.linkFrom, hitP.id].sort().join('|');
@@ -2897,7 +2919,7 @@
         this.changed();
       } else {
         this.linkFrom = null;
-        this.render();
+        this.changed();          // могла зʼявитися нова точка — її треба зберегти
       }
       return;
     }
@@ -3633,23 +3655,41 @@
     this.syncConstructions();
     var items = this.items();
     setDrawScope(items);
+    var self0 = this;
     for (var i = 0; i < items.length; i++) drawItem(ctx, items[i], this.scale);
     if (this.draft) drawItem(ctx, this.draft, this.scale);
 
     /* Перша обрана точка зʼєднання. Без цієї позначки незрозуміло, чи
        клацання взагалі влучило, — і друге клацання робиться навмання. */
-    if (this.tool === 'link' && this.linkFrom) {
-      var lf = idMap(items)[this.linkFrom];
-      var lp = lf && window.Points ? Points.at(lf, idMap(items)) : null;
+    if (this.tool === 'link') {
+      var lm = idMap(items);
+
+      /* Поки інструмент активний, кожна точка обведена кільцем. Без цього
+         незрозуміло, у що цілитися, — а точка на кресленні дрібна, і
+         промахнутися легше, ніж влучити. */
+      ctx.save();
+      ctx.lineWidth = 1.6 / this.scale;
+      ctx.strokeStyle = 'rgba(75,63,219,.45)';
+      items.forEach(function (x) {
+        if (x.t !== 'o') return;
+        var q = window.Points ? Points.at(x, lm) : x.p;
+        if (!q) return;
+        ctx.beginPath();
+        ctx.arc(q[0], q[1], Math.max(11, self0.width * 3.8), 0, Math.PI * 2);
+        ctx.stroke();
+      });
+
+      // обрана перша точка — помітніше й іншим кольором
+      var lf = this.linkFrom ? lm[this.linkFrom] : null;
+      var lp = lf && window.Points ? Points.at(lf, lm) : null;
       if (lp) {
-        ctx.save();
         ctx.strokeStyle = '#F79009';
         ctx.lineWidth = 2.5 / this.scale;
         ctx.beginPath();
-        ctx.arc(lp[0], lp[1], Math.max(9, this.width * 3.4), 0, Math.PI * 2);
+        ctx.arc(lp[0], lp[1], Math.max(11, this.width * 3.8), 0, Math.PI * 2);
         ctx.stroke();
-        ctx.restore();
       }
+      ctx.restore();
     }
 
     var self = this;

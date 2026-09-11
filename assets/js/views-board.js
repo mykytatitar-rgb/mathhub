@@ -52,6 +52,11 @@
     return null;
   }
 
+  var LINK_HINT = 'mathhub.hint.link';
+  function linkHinted() {
+    try { return localStorage.getItem(LINK_HINT) === '1'; } catch (e) { return true; }
+  }
+
   var TOOL_OPTS = {};
   TOOLS.forEach(function (t) { if (t.opts) TOOL_OPTS[t.id] = t.opts; });
 
@@ -161,8 +166,10 @@
 
         '<div class="board-empty-hint" data-empty hidden>' +
           '<b>Порожній слайд</b>' +
-          '<span>Пишіть олівцем, додавайте текст, фігури й картинки. Колесо миші — масштаб, ' +
-          'пробіл або права кнопка — рух по полотну. Місця тут стільки, скільки треба.</span>' +
+          '<span>Пишіть олівцем, додавайте текст, фігури й картинки. ' +
+          'У групі «Геометрія» — точки та лінії між ними, у «Алгебрі» — координатна ' +
+          'площина й числова пряма. Колесо миші — масштаб, пробіл або права кнопка — ' +
+          'рух по полотну. Місця тут стільки, скільки треба.</span>' +
         '</div>' +
 
         '<div class="board-tools">' + tools +
@@ -369,6 +376,17 @@
       if (id === engine.tool && TOOL_OPTS[id]) { toggleOpts(); return; }
       setOptsHidden(false);
       setTool(id);
+
+      /* Підказка на перший раз. Інструмент працює у два кліки, і без слова
+         про це людина клацає один раз, нічого не бачить і вирішує, що він
+         не працює. Далі підказка не повторюється — вона потрібна, поки
+         правило не відоме. */
+      if (id === 'link' && !linkHinted()) {
+        U.toast('Клацніть точку, потім другу — між ними зʼявиться лінія. ' +
+                'Клік у порожньому місці створить точку сам.', 'ok');
+        try { localStorage.setItem(LINK_HINT, '1'); } catch (e) {}
+      }
+
       // інструмент обрано — панель групи більше не потрібна
       U.$$('.tool-fly', root).forEach(function (f) { f.hidden = true; });
       U.$$('[data-group]', root).forEach(function (b) { b.classList.remove('is-open'); });

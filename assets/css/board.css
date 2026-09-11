@@ -103,6 +103,11 @@
 
    Панель, що розкривається збоку, а не всередині стовпця: інакше вона
    розсовувала б решту кнопок, і рука щоразу шукала б їх на новому місці. */
+/* Види ліній ширші за значки фігур: у них видно самі кінці, а квадратна
+   комірка обрізала б їх. */
+.shape-grid--wide { grid-template-columns: repeat(2, 1fr) !important; }
+.shape-grid--wide .shape-btn { width: auto; padding: 6px 8px; }
+
 .tool-grp { position: relative; flex: 0 0 auto; }
 .tool-btn__caret {
   position: absolute; right: 5px; bottom: 5px;

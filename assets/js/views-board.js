@@ -25,7 +25,7 @@
 
     { id: 'shape',   icon: 'shapes',     label: 'Фігури (S)',       opts: 'shape',  group: 'geo' },
     { id: 'point',   icon: 'dot',        label: 'Точка (O)',        opts: 'stroke', group: 'geo' },
-    { id: 'link',    icon: 'link2',      label: 'Зʼєднати точки (C)', opts: 'stroke', group: 'geo' },
+    { id: 'link',    icon: 'link2',      label: 'Провести від точки (C)', opts: 'link', group: 'geo' },
     { id: 'line',    icon: 'shapeLine',  label: 'Лінія (L)',        opts: 'stroke', group: 'geo' },
     { id: 'arrow',   icon: 'arrowRight', label: 'Стрілка (A)',      opts: 'stroke', group: 'geo' },
     { id: 'solid',   icon: 'cube3d',     label: 'Стереометрія (J)', opts: 'stroke', group: 'geo' },
@@ -353,6 +353,17 @@
     U.onClick(root, '[data-shape]', function (el) {
       engine.setShape(el.dataset.shape);
       renderOpts();
+    });
+
+    U.onClick(root, '[data-linkkind]', function (el) {
+      engine.setLinkKind(el.dataset.linkkind);
+      renderOpts();
+    });
+
+    root.addEventListener('change', function (e) {
+      var box = e.target.closest ? e.target.closest('[data-linkdash]') : null;
+      if (!box) return;
+      engine.setLinkDash(box.checked);
     });
 
     U.onClick(root, '[data-shape-group]', function (el) {
@@ -1989,6 +2000,38 @@
       tabs + grid + fill + meas + labs + flip + info + '</div>';
   }
 
+  /* Що проводимо від точки. Малюємо самі значки, а не підписи: між
+     відрізком, променем і прямою різниця саме у вигляді, і побачити її
+     швидше, ніж прочитати. */
+  function linkKindsHtml() {
+    var cur2 = cur.engine.linkKind || 'seg';
+    var glyphs = {
+      seg:  '<svg viewBox="0 0 34 20" width="34" height="20"><circle cx="7" cy="10" r="2.6" fill="currentColor"/>' +
+            '<circle cx="27" cy="10" r="2.6" fill="currentColor"/>' +
+            '<path d="M7 10h20" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>',
+      ray:  '<svg viewBox="0 0 34 20" width="34" height="20"><circle cx="7" cy="10" r="2.6" fill="currentColor"/>' +
+            '<path d="M7 10h26" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>',
+      line: '<svg viewBox="0 0 34 20" width="34" height="20">' +
+            '<path d="M1 10h32" stroke="currentColor" stroke-width="1.8" fill="none"/>' +
+            '<circle cx="12" cy="10" r="2.6" fill="currentColor"/>' +
+            '<circle cx="24" cy="10" r="2.6" fill="currentColor"/></svg>',
+      vec:  '<svg viewBox="0 0 34 20" width="34" height="20"><circle cx="6" cy="10" r="2.6" fill="currentColor"/>' +
+            '<path d="M6 10h20M22 6l5 4-5 4" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>'
+    };
+
+    var row = Object.keys(window.Board.LINK_KINDS).map(function (k) {
+      return '<button class="shape-btn' + (k === cur2 ? ' is-active' : '') +
+        '" data-linkkind="' + k + '" title="' + U.esc(Board.LINK_KINDS[k].label) + '">' +
+        glyphs[k] + '</button>';
+    }).join('');
+
+    return '<div class="board-opts__label">Що проводимо</div>' +
+      '<div class="shape-grid shape-grid--wide">' + row + '</div>' +
+      '<label class="check" style="padding:6px 2px 0">' +
+        '<input type="checkbox" data-linkdash' + (cur.engine.linkDash ? ' checked' : '') + '>' +
+        '<span>Пунктиром — допоміжна</span></label>';
+  }
+
   function renderOpts() {
     if (!cur) return;
     var panel = document.querySelector('[data-opts]');
@@ -2012,6 +2055,8 @@
           ? '<div class="w-sep"></div><div class="w-smooth">' + stripSmoothHtml() + '</div>'
           : '');
     }
+    else if (kind === 'link') inner = linkKindsHtml() + '<div class="w-sep"></div>' +
+      strokeWidthHtml() + '<div class="w-sep"></div>' + stripColorsHtml();
     else if (kind === 'text') inner = colorsHtml() + sizesHtml();
     else if (kind === 'shape') inner = shapesHtml() + colorsHtml() + widthsHtml();
 

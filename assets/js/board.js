@@ -472,6 +472,9 @@
       var ca = window.Points ? Points.at(cm[it.a1], cm) : null;
       var cb = window.Points ? Points.at(cm[it.a2], cm) : null;
       if (!ca || !cb) return null;
+      /* Межі рахуємо по самих точках, а не по намальованих кінцях: інакше
+         одна пряма розтягнула б рамку на пів екрана, і «вписати в екран»
+         зробило б усе інше крапкою. */
       return { x1: Math.min(ca[0], cb[0]), y1: Math.min(ca[1], cb[1]),
                x2: Math.max(ca[0], cb[0]), y2: Math.max(ca[1], cb[1]) };
     }
@@ -580,7 +583,9 @@
       var ha = window.Points ? Points.at(hm[it.a1], hm) : null;
       var hb = window.Points ? Points.at(hm[it.a2], hm) : null;
       if (!ha || !hb) return false;
-      return distToSegment(x, y, ha[0], ha[1], hb[0], hb[1]) <= tol + (it.w || 3) / 2;
+      // тицяти можна в усю намальовану лінію, а не лише між точками
+      var he = linkEnds(ha, hb, it.k || 'seg');
+      return distToSegment(x, y, he[0][0], he[0][1], he[1][0], he[1][1]) <= tol + (it.w || 3) / 2;
     }
 
     // тіло й площина — прямокутники: тицяти можна будь-де всередині
@@ -1074,6 +1079,43 @@
      Геометричні точки й відрізки між ними
      ============================================================ */
 
+  /* Що саме проводять від точки до точки.
+
+     Відрізок має кінці, промінь — один кінець, пряма не має жодного, а
+     вектор має напрям. У геометрії це різні речі, і креслення, де пряму
+     намалювали відрізком, читається неправильно. */
+  var LINK_KINDS = {
+    seg:  { label: 'Відрізок' },
+    ray:  { label: 'Промінь' },
+    line: { label: 'Пряма' },
+    vec:  { label: 'Вектор' }
+  };
+
+  Board.LINK_KINDS = LINK_KINDS;
+
+  /**
+   * Кінці того, що малюємо: відрізок лишається собою, промінь тягнеться за
+   * другу точку, пряма — за обидві.
+   *
+   * «Нескінченно» тут означає «достатньо далеко, щоб перетнути креслення».
+   * Справжня нескінченність зіпсувала б і межі обʼєкта, і вписування дошки
+   * в екран: одна пряма зробила б усе решта крапкою в кутку.
+   */
+  function linkEnds(A, B, kind) {
+    if (kind !== 'ray' && kind !== 'line') return [A, B];
+
+    var dx = B[0] - A[0], dy = B[1] - A[1];
+    var L = Math.hypot(dx, dy);
+    if (L < 1e-6) return [A, B];
+
+    var ext = Math.max(700, L * 5);
+    var ux = dx / L, uy = dy / L;
+
+    var from = kind === 'line' ? [A[0] - ux * ext, A[1] - uy * ext] : A;
+    var to = [B[0] + ux * ext, B[1] + uy * ext];
+    return [from, to];
+  }
+
   /** Швидкий доступ до обʼєктів слайда за id — потрібен точкам. */
   function idMap(items) {
     var m = {};
@@ -1099,7 +1141,11 @@
       if (it.t !== 'c' || !it.a1 || !it.a2) return;
       var A = Points.at(by[it.a1], by), B2 = Points.at(by[it.a2], by);
       if (!A || !B2) return;
-      segs.push({ id: it.id, a: A, b: B2, len: Math.hypot(B2[0] - A[0], B2[1] - A[1]) });
+      /* Рівність довжин стосується лише того, що має кінці. Промінь і
+         пряма нескінченні, і порівнювати їх довжини безглуздо — але для
+         прямого кута їхній напрям потрібен так само. */
+      segs.push({ id: it.id, a: A, b: B2, kind: it.k || 'seg',
+                  len: Math.hypot(B2[0] - A[0], B2[1] - A[1]) });
     });
 
     var sig = segs.map(function (s) {
@@ -1109,7 +1155,8 @@
     if (markCache.sig === sig) return markCache.data;
 
     var ticks = {};
-    Points.equalGroups(segs).forEach(function (g, gi) {
+    var finite = segs.filter(function (s2) { return s2.kind === 'seg' || s2.kind === 'vec'; });
+    Points.equalGroups(finite).forEach(function (g, gi) {
       g.items.forEach(function (s) { ticks[s.id] = gi + 1; });
     });
 
@@ -1822,10 +1869,30 @@
       var B2 = window.Points ? Points.at(byc[it.a2], byc) : null;
       if (!A || !B2) return;
 
+      var kd = it.k || 'seg';
+      var ends = linkEnds(A, B2, kd);
+
+      var wasDash = it.dash ? [7, 5] : [];
+      ctx.save();
+      ctx.setLineDash(wasDash);
       ctx.beginPath();
-      ctx.moveTo(A[0], A[1]);
-      ctx.lineTo(B2[0], B2[1]);
+      ctx.moveTo(ends[0][0], ends[0][1]);
+      ctx.lineTo(ends[1][0], ends[1][1]);
       ctx.stroke();
+      ctx.setLineDash([]);
+
+      // у вектора — вістря на другій точці
+      if (kd === 'vec') {
+        var an = Math.atan2(B2[1] - A[1], B2[0] - A[0]);
+        var hd = Math.max(10, (it.w || 3) * 3.4);
+        ctx.beginPath();
+        ctx.moveTo(B2[0], B2[1]);
+        ctx.lineTo(B2[0] - hd * Math.cos(an - 0.42), B2[1] - hd * Math.sin(an - 0.42));
+        ctx.moveTo(B2[0], B2[1]);
+        ctx.lineTo(B2[0] - hd * Math.cos(an + 0.42), B2[1] - hd * Math.sin(an + 0.42));
+        ctx.stroke();
+      }
+      ctx.restore();
 
       if (it.marks === 0) return;
       var mk = linkMarks(drawItems || []);
@@ -2794,8 +2861,11 @@
       });
       if (!dup) {
         this.snapshot();
-        this.slide.items.push({ t: 'c', id: uid('ln'), c: this.color, w: this.width,
-                                a1: this.linkFrom, a2: hitP.id });
+        var nl = { t: 'c', id: uid('ln'), c: this.color, w: this.width,
+                   a1: this.linkFrom, a2: hitP.id };
+        if (this.linkKind && this.linkKind !== 'seg') nl.k = this.linkKind;
+        if (this.linkDash) nl.dash = 1;
+        this.slide.items.push(nl);
         this.linkFrom = null;
         this.changed();
       } else {
@@ -3472,6 +3542,16 @@
     this._shrank();
     this.changed();
     return true;
+  };
+
+  Board.prototype.setLinkKind = function (k) {
+    this.linkKind = Board.LINK_KINDS[k] ? k : 'seg';
+    if (this.opts.onToolChange) this.opts.onToolChange(this.tool);
+  };
+
+  Board.prototype.setLinkDash = function (on) {
+    this.linkDash = !!on;
+    if (this.opts.onToolChange) this.opts.onToolChange(this.tool);
   };
 
   Board.prototype.setTool = function (tool) {

@@ -146,4 +146,113 @@ const GRAMMAR = {
 <tr><td>between</td><td>між</td></tr>
 <tr><td>behind</td><td>позаду</td></tr></table>
 <p>The cat is <b>under</b> the table.</p>`,
+
+  25: `<p>«Їхати до» — <b>go to</b>: I go <b>to</b> London. «Бути в» — be <b>in</b>.</p>
+<p>Слова: ticket, airport, hotel, luggage, to book (бронювати).</p>
+<p>«Скільки коштує квиток?» — How much is the ticket?</p>`,
+
+  26: `<p>«Працювати ким» — work <b>as</b>: I work <b>as</b> a teacher.</p>
+<p>«Чим займаєшся?» — What do you do?</p>
+<p>Слова: office, boss, salary, meeting, deadline.</p>`,
+
+  27: `<p>Скарги: My head <b>hurts</b> або I <b>have a</b> headache / a cold.</p>
+<p>«Я почуваюся…» — I feel + прикметник: I feel sick / tired.</p>
+<p>«Мені треба лікар» — I need a doctor.</p>`,
+
+  29: `<p>Стан і почуття — з <b>to be</b> або <b>feel</b>: I <b>am</b> happy, I <b>feel</b> tired.</p>
+<p>Питання: How do you feel? Прикметники не змінюються за родом.</p>`,
+
+  30: `<p>Два способи майбутнього:</p>
+<table class="gtab"><tr><th>Форма</th><th>Коли</th></tr>
+<tr><td><b>will</b> + дієслово</td><td>рішення / прогноз: I <b>will</b> help.</td></tr>
+<tr><td><b>going to</b> + дієслово</td><td>план / намір: I'm <b>going to</b> travel.</td></tr></table>
+<p>Скорочення: I'll, he'll, we'll.</p>`,
+
+  31: `<p>Незлічувані слова природи — без «a»: water, air, snow.</p>
+<p>Слова: tree, river, mountain, sea, sky, forest, flower.</p>
+<p>«Мені подобається природа» — I like nature.</p>`,
+
+  32: `<p>Висловити думку: <b>I think (that)…</b>, <b>In my opinion…</b>, <b>I believe…</b></p>
+<p>Згода/незгода: I agree / I don't agree (disagree).</p>
+<p>Зв’язки: because (бо), but (але), also (також), however (однак).</p>`,
+
+  33: `<p>Лексика: company, client, contract, meeting, market, profit.</p>
+<p>«Домовитись» — to make a deal. «Інвестувати» — to invest.</p>`,
+
+  34: `<p>Теми: government, law, rights, freedom, elections, society.</p>
+<p>«Треба / належить» — <b>should</b> / <b>have to</b>: We <b>should</b> vote.</p>`,
+
+  35: `<p>Фразове дієслово — дієслово + прийменник, зі зміненим значенням:</p>
+<table class="gtab"><tr><th>Вислів</th><th>Значення</th></tr>
+<tr><td>give up</td><td>здатися</td></tr>
+<tr><td>look for</td><td>шукати</td></tr>
+<tr><td>find out</td><td>дізнатися</td></tr></table>
+<p>💡 Вчи їх цілком — значення не складається зі слів.</p>`,
+
+  36: `<p>Багато міжнародних слів: internet, application (app), online, file, password.</p>
+<p>«Завантажити / зберегти» — download / save. «Увімкнути / вимкнути» — turn on / turn off.</p>`,
+
+  37: `<p>Множина зазвичай -s: dog → dogs. Але є винятки:</p>
+<table class="gtab"><tr><th>Одн.</th><th>Мн.</th></tr>
+<tr><td>mouse</td><td>mice</td></tr>
+<tr><td>fish</td><td>fish</td></tr>
+<tr><td>sheep</td><td>sheep</td></tr></table>`,
+
+  38: `<p>«Люблю робити…» — I like + <b>-ing</b>: I like read<b>ing</b> / swimm<b>ing</b>.</p>
+<p>«Грати в гру» — play + гра; «грати на інструменті» — play <b>the</b> guitar.</p>`,
+
+  39: `<p>Ввічливо: <b>Could I have…?</b> / For me, … Рахунок: Can we have the bill?</p>
+<p>Слова: starter (закуска), main course (основна), dessert, tip (чайові).</p>`,
+
+  40: `<p><b>learn</b> = вчити(ся), <b>teach</b> = навчати, <b>study</b> = навчатися/вивчати.</p>
+<p>Слова: lesson, exam, teacher, homework, mark/grade.</p>`,
+
+  41: `<p>Теми: environment, climate, pollution, energy, to recycle, to protect.</p>
+<p>«Ми повинні захищати планету» — We should protect the planet.</p>`,
+
+  42: `<p>Слова: news (завжди однина!), newspaper, article, TV, radio, journalist.</p>
+<p>«За даними…» — According to… «Повідомляти» — to report.</p>`,
+
+  43: `<p>Щоденні дії, багато — фразові дієслова:</p>
+<table class="gtab"><tr><th>Дієслово</th><th>Значення</th></tr>
+<tr><td>get up</td><td>вставати</td></tr>
+<tr><td>have breakfast</td><td>снідати</td></tr>
+<tr><td>go to bed</td><td>лягати спати</td></tr></table>
+<p>3-я особа +s: he get<b>s</b> up.</p>`,
+
+  44: `<p>Питання: <b>How do I get to…?</b></p>
+<table class="gtab"><tr><th>Англ</th><th>Укр</th></tr>
+<tr><td>turn right / left</td><td>поверни праворуч / ліворуч</td></tr>
+<tr><td>go straight</td><td>прямо</td></tr>
+<tr><td>corner</td><td>ріг</td></tr></table>`,
+
+  45: `<p>Слова: bank, ATM, letter, stamp (марка), queue (черга), to send.</p>
+<p>«Зняти гроші» — withdraw money. «Заповнити форму» — fill in a form.</p>`,
+
+  46: `<p>Слова: science, number, result, question / answer, idea, example.</p>
+<p>«Наприклад» — for example. «Отже / тому» — so / therefore.</p>`,
+
+  49: `<p>«Готувати» — cook. Способи: fry (смажити), boil (варити), bake (запікати).</p>
+<p>Наказ у рецепті: <b>Add</b> salt; <b>Mix</b> well; <b>Cut</b> the onion.</p>`,
+
+  50: `<p>Слова: party, birthday, gift/present, to celebrate, guest.</p>
+<p>«З днем народження!» — Happy birthday! «На вечірці» — at the party.</p>`,
+
+  51: `<p>Країни, мови й національності — <b>з великої</b> літери: England, English, French.</p>
+<p>«Говорити мовою» — speak + мова: I speak English.</p>`,
+
+  52: `<p>Слова: friend, neighbour, couple, relationship, to trust, to meet.</p>
+<p>Після <b>to</b> — базова форма: I want <b>to meet</b> you.</p>`,
+
+  53: `<p>«Грати в гру» — <b>play</b> football/tennis. «Ходити на…» — go swimm<b>ing</b> / runn<b>ing</b>.</p>
+<p>Слова: team, player, goal, to win, to lose, match.</p>`,
+
+  54: `<p>«Грати на інструменті» — play <b>the</b> guitar (з артиклем the).</p>
+<p>Слова: music, song, art, picture, artist, concert, to sing, to dance.</p>`,
+
+  55: `<p>Професія — з артиклем <b>a/an</b>: She is <b>a</b> doctor. He is <b>an</b> engineer.</p>
+<p>«Ким ти працюєш?» — What do you do? Багато на -er/-or: teacher, actor, driver.</p>`,
+
+  56: `<p>Злічувані (яблука) мають множину: apple → apples. Деякі незлічувані: fruit (зазвичай без -s).</p>
+<p>«Мені подобаються…» — I like apples / bananas.</p>`,
 };

@@ -1,5 +1,5 @@
 /* Anglo — service worker для офлайн-режиму. */
-const CACHE = 'anglo-v34';
+const CACHE = 'anglo-v35';
 const ASSETS = [
   './',
   './index.html',

@@ -793,7 +793,35 @@
        на діапазоні 3.5 виходило вісімнадцять поділок замість семи. */
     var n = Math.round((raw / pow) * 1e6) / 1e6;
     var mult = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10;
-    return mult * pow;
+    var step = mult * pow;
+
+    /* Крок мусить бути додатним скінченним числом. На виродженому діапазоні
+       — нульовому, відʼємному чи нескінченному — звідси виходили 0, NaN або
+       Infinity, і сітка бралася малюватися невідомо чим. */
+    return (isFinite(step) && step > 0) ? step : 1;
+  }
+
+  /* Значення поділок сітки — готовим списком, а не циклом по числах.
+
+     Цикл виду «поки k·крок ≤ межі» тримається на арифметиці з комою, і
+     дивне число в кроці робить його поведінку непередбачуваною. Тут
+     кількість рахується наперед і обмежена: гірше, ніж рідша сітка, з
+     цього вийти не може. */
+  function gridTicks(from, to, step) {
+    var out = [];
+    if (!(isFinite(from) && isFinite(to) && isFinite(step) && step > 0 && to > from)) return out;
+
+    var total = Math.floor((to - from) / step) + 2;
+    if (!(total > 0) || total > 2000) return out;     // такої сітки все одно не видно
+
+    var k0 = Math.ceil(from / step);
+    for (var i = 0; i < total; i++) {
+      var k = k0 + i;
+      var v = k * step;
+      if (v > to + 1e-9) break;
+      out.push({ k: k, v: v });
+    }
+    return out;
   }
 
   function planeP1(it) { return typeof it.p1 === 'number' ? it.p1 : 0.5; }
@@ -1719,7 +1747,6 @@
       }
 
       var stepX = niceStep(W.xb - W.xa), stepY = niceStep(W.yb - W.ya);
-      var gx, gy, k;
 
       // ---- сітка
       if (it.grid !== 0) {
@@ -1727,14 +1754,14 @@
         ctx.globalAlpha = 0.34;
         ctx.lineWidth = thin;
         ctx.beginPath();
-        for (k = Math.ceil(W.xa / stepX); k * stepX <= W.xb + 1e-9; k++) {
-          gx = m.sx(k * stepX);
-          ctx.moveTo(gx, m.y1); ctx.lineTo(gx, m.y2);
-        }
-        for (k = Math.ceil(W.ya / stepY); k * stepY <= W.yb + 1e-9; k++) {
-          gy = m.sy(k * stepY);
-          ctx.moveTo(m.x1, gy); ctx.lineTo(m.x2, gy);
-        }
+        gridTicks(W.xa, W.xb, stepX).forEach(function (t) {
+          var g = m.sx(t.v);
+          ctx.moveTo(g, m.y1); ctx.lineTo(g, m.y2);
+        });
+        gridTicks(W.ya, W.yb, stepY).forEach(function (t) {
+          var g = m.sy(t.v);
+          ctx.moveTo(m.x1, g); ctx.lineTo(m.x2, g);
+        });
         ctx.stroke();
         ctx.restore();
       }
@@ -1779,21 +1806,21 @@
         ctx.save();
         ctx.globalAlpha = 0.85;
         var labY = onX ? oy : m.y2;
-        for (k = Math.ceil(W.xa / stepX); k * stepX <= W.xb + 1e-9; k++) {
-          if (k % everyX || k === 0) continue;
-          gx = m.sx(k * stepX);
-          if (gx > m.x2 - head * 1.6) continue;
-          ctx.fillText(numLabel(k * stepX, stepX), gx, labY + fsz * 0.34);
-        }
+        gridTicks(W.xa, W.xb, stepX).forEach(function (t) {
+          if (t.k % everyX || t.k === 0) return;
+          var g = m.sx(t.v);
+          if (g > m.x2 - head * 1.6) return;
+          ctx.fillText(numLabel(t.v, stepX), g, labY + fsz * 0.34);
+        });
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
         var labX = onY ? ox : m.x1;
-        for (k = Math.ceil(W.ya / stepY); k * stepY <= W.yb + 1e-9; k++) {
-          if (k % everyY || k === 0) continue;
-          gy = m.sy(k * stepY);
-          if (gy < m.y1 + head * 1.6) continue;
-          ctx.fillText(numLabel(k * stepY, stepY), labX - fsz * 0.34, gy);
-        }
+        gridTicks(W.ya, W.yb, stepY).forEach(function (t) {
+          if (t.k % everyY || t.k === 0) return;
+          var g = m.sy(t.v);
+          if (g < m.y1 + head * 1.6) return;
+          ctx.fillText(numLabel(t.v, stepY), labX - fsz * 0.34, g);
+        });
         if (onX && onY) {
           ctx.textAlign = 'right'; ctx.textBaseline = 'top';
           ctx.fillText('0', ox - fsz * 0.28, oy + fsz * 0.3);

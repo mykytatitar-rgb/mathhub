@@ -2708,6 +2708,8 @@
             '><span>Підписи вершин</span></label>' +
           '<label class="check"><input type="checkbox" name="hid"' + (it.hid !== 0 ? ' checked' : '') +
             '><span>Невидимі ребра пунктиром</span></label>' +
+          '<label class="check"><input type="checkbox" name="live"' + (it.live ? ' checked' : '') +
+            '><span>Учень може обертати</span></label>' +
         '</div>' +
         '<div class="field__hint" style="margin-top:10px">Тіло можна обертати й мишею — ' +
         'помаранчевий маркер над ним: убік крутить, вгору-вниз нахиляє. ' +
@@ -2831,6 +2833,7 @@
             it.pitch = Math.max(-80, Math.min(80, Number(vv.pitch) || 0));
             it.lb = vv.lb ? 1 : 0;
             it.hid = vv.hid ? 1 : 0;
+            it.live = vv.live ? 1 : 0;
 
             var cons = [];
             if (window.Solids) {
@@ -2891,6 +2894,7 @@
           chk('tan', !!it.tan, 'Дотичну в x₁') +
           chk('quot', !!it.quot, 'Різницеве відношення') +
           chk('integ', !!it.integ, 'Визначений інтеграл — площа') +
+          chk('live', !!it.live, 'Учень може рухати точку') +
         '</div>' +
         '<div class="field-row" style="margin-top:10px">' +
           C.field('Інтеграл від', C.input('ia', it.ia != null ? it.ia : it.xa, 'inputmode="text"')) +
@@ -2935,7 +2939,7 @@
             it.xa = xa; it.xb = xb; it.ya = ya; it.yb = yb;
             it.p1 = Math.max(xa, Math.min(xb, p1));
             it.p2 = Math.max(xa, Math.min(xb, p2));
-            ['grid', 'nums', 'pts', 'hlab', 'sec', 'tan', 'quot', 'integ'].forEach(function (k) {
+            ['grid', 'nums', 'pts', 'hlab', 'sec', 'tan', 'quot', 'integ', 'live'].forEach(function (k) {
               it[k] = v[k] ? 1 : 0;
             });
 
@@ -4264,7 +4268,13 @@
        обертати тіло, хоч у нього немає ні обчислювача формул, ні
        стереометрії. Сторінка уроку — один самодостатній файл, і вантажити
        в неї модулі не можна: сайт за захистом, а учень не входить. */
-    if ((it.t === 'f' || it.t === 's') && window.Board.bakeFrames) {
+    /* Кадри для тягання робимо лише тоді, коли їх справді просили.
+
+       Вони важать десятки кілобайтів на обʼєкт, а урок перевидається учневі
+       через кілька секунд після кожної правки. Вмикати це всім означало б
+       гнати мережею зайве при кожному штриху — заради можливості, яка на
+       більшості уроків не потрібна. */
+    if ((it.t === 'f' || it.t === 's') && it.live && window.Board.bakeFrames) {
       var fr = window.Board.bakeFrames(it);
       if (fr) {
         return [{ t: 'q', k: fr.kind, st: fr.stat, fr: fr.frames,

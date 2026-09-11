@@ -83,21 +83,29 @@
     }
 
     var base = TOOLS.filter(function (t) { return !t.group; });
+
+    /* Кнопки груп стоять у рейці, а самі панелі — поруч із нею.
+
+       Усередині рейки їх обрізало: у неї прокрутка, а прокрутка ріже все,
+       що виходить за межі, навіть якщо воно розташоване абсолютно. Панель
+       ставала шматком завширшки з рейку, і від слова «Алгебра» лишалося
+       «Ал». */
     var tools =
       base.slice(0, 4).map(toolBtn).join('') +
       '<div class="tool-sep"></div>' +
       GROUPS.map(function (g) {
-        return '<div class="tool-grp" data-grp="' + g.id + '">' +
-          '<button class="tool-btn" data-group="' + g.id + '" title="' + U.esc(g.label) + '">' +
-            icon(g.icon, 20) + '<i class="tool-btn__caret"></i></button>' +
-          '<div class="tool-fly" hidden>' +
-            '<div class="tool-fly__name">' + U.esc(g.label) + '</div>' +
-            '<div class="tool-fly__row">' + toolsOf(g.id).map(toolBtn).join('') + '</div>' +
-          '</div>' +
-        '</div>';
+        return '<button class="tool-btn tool-grp" data-group="' + g.id + '" ' +
+          'title="' + U.esc(g.label) + '">' +
+          icon(g.icon, 20) + '<i class="tool-btn__caret"></i></button>';
       }).join('') +
-      '<div class="tool-sep"></div>' +
       base.slice(4).map(toolBtn).join('');
+
+    var flys = GROUPS.map(function (g) {
+      return '<div class="tool-fly" data-fly="' + g.id + '" hidden>' +
+        '<div class="tool-fly__name">' + U.esc(g.label) + '</div>' +
+        '<div class="tool-fly__row">' + toolsOf(g.id).map(toolBtn).join('') + '</div>' +
+      '</div>';
+    }).join('');
 
     return '<div class="board">' +
 
@@ -168,6 +176,8 @@
           '<button class="tool-btn" data-act="board-redo" disabled title="Крок вперед (Ctrl+Shift+Z)">' +
             icon('redo', 20) + '</button>' +
         '</div>' +
+
+        flys +
 
         /* Окремої кнопки «показати налаштування» немає навмисно: вона робила
            те саме, що клік по вже активному інструменту, і просто висіла
@@ -289,14 +299,69 @@
 
     /* Як у Miro: клік по вже активному інструменту згортає/розгортає його
        підменю, а перехід на інший інструмент завжди показує його налаштування. */
+    /* Клік повз панель закриває її. Без цього вона висить над кресленням,
+       поки не ткнеш у групу вдруге, — а рука в цей час уже малює. */
+    root.addEventListener('pointerdown', function (e) {
+      if (!root.querySelector('.tool-fly:not([hidden])')) return;
+      if (e.target.closest && (e.target.closest('.tool-fly') || e.target.closest('[data-group]'))) return;
+      U.$$('.tool-fly', root).forEach(function (f) { f.hidden = true; });
+      U.$$('[data-group]', root).forEach(function (b) { b.classList.remove('is-open'); });
+      renderOpts();
+    }, true);
+
     U.onClick(root, '[data-group]', function (el) {
-      var gid = el.dataset.group;
-      var box = el.parentNode.querySelector('.tool-fly');
+      var box = root.querySelector('[data-fly="' + el.dataset.group + '"]');
       var open = box && box.hidden;
+
       // відкрита завжди одна: дві розкриті панелі перекривають одна одну
       U.$$('.tool-fly', root).forEach(function (f) { f.hidden = true; });
       U.$$('[data-group]', root).forEach(function (b) { b.classList.remove('is-open'); });
-      if (open) { box.hidden = false; el.classList.add('is-open'); }
+
+      /* Поки група відкрита, налаштування інструмента ховаємо. Вони стоять
+         у тому самому місці біля рейки, і разом виходить дві картки одна на
+         одній — не зрозуміти, де що. Щойно інструмент обрано, налаштування
+         повертаються самі, уже для нього. */
+      var opts = root.querySelector('[data-opts]');
+      if (opts) opts.hidden = true;
+
+      if (!open || !box) { renderOpts(); return; }
+
+      box.hidden = false;
+      el.classList.add('is-open');
+
+      /* Ставимо панель навпроти самої кнопки. Рахуємо, а не покладаємось на
+         CSS: панель тепер не всередині рейки, і «сто відсотків» їй більше
+         ні від чого рахувати. */
+      /* Шукаємо вгору від самої кнопки, а не вниз від кореня: кнопка вже
+         всередині дошки, і пошук серед нащадків її не знаходив — через це
+         положення не рахувалося зовсім. */
+      var wrap = el.closest ? el.closest('.board') : null;
+      var rail = wrap ? wrap.querySelector('.board-tools') : null;
+      if (!wrap || !rail) return;
+      var wb = wrap.getBoundingClientRect();
+      var bb = el.getBoundingClientRect();
+      var rb = rail.getBoundingClientRect();
+      box.style.left = (rb.right - wb.left + 10) + 'px';
+      box.style.top = (bb.top - wb.top + bb.height / 2) + 'px';
+
+      /* Тепер міряємо, куди панель справді стала, і доводимо на різницю.
+         Відлік іде від найближчого розташованого предка, а він не завжди
+         той, який ми взяли, — і панель сідала навскіс від кнопки. Замість
+         вгадувати предка, просто дивимось на результат. */
+      var got = box.getBoundingClientRect();
+      var dy = (bb.top + bb.height / 2) - (got.top + got.height / 2);
+      var dx = (rb.right + 10) - got.left;
+      box.style.top = (parseFloat(box.style.top) + dy) + 'px';
+      box.style.left = (parseFloat(box.style.left) + dx) + 'px';
+
+      // якщо знизу не влазить — піднімаємо, щоб не ховалася за краєм
+      var fin = box.getBoundingClientRect();
+      if (fin.bottom > wb.bottom - 8) {
+        box.style.top = (parseFloat(box.style.top) - (fin.bottom - (wb.bottom - 8))) + 'px';
+      }
+      if (fin.top < wb.top + 8) {
+        box.style.top = (parseFloat(box.style.top) + ((wb.top + 8) - fin.top)) + 'px';
+      }
     });
 
     U.onClick(root, '[data-tool]', function (el) {

@@ -123,7 +123,18 @@ const LESSONS = [
   },
   {
     id: 6, level: 'A0', icon: '👉', title: 'Це і той', subtitle: 'Показуємо на речі',
-    grammar: '<b>este/esta</b> — близько, <b>ese/esa</b> — далі, <b>aquel</b> — далеко.',
+    grammar: '<p><b>este / esta / esto</b> — усі означають «це», але вибір залежить від роду слова:</p>'
+      + '<table class="gtab"><tr><th>Форма</th><th>Рід</th><th>Приклад</th></tr>'
+      + '<tr><td><b>este</b></td><td>чол.</td><td>este libro — ця книга</td></tr>'
+      + '<tr><td><b>esta</b></td><td>жін.</td><td>esta casa — цей дім</td></tr>'
+      + '<tr><td><b>esto</b></td><td>без роду</td><td>¿Qué es esto? — Що це?</td></tr></table>'
+      + '<p><b>este / esta</b> завжди стоять <u>поряд з іменником</u> і підлаштовуються під його рід. '
+      + '<b>esto</b> — самостійне: коли предмет невідомий або йдеться про ідею.</p>'
+      + '<p><b>Три рівні відстані:</b></p>'
+      + '<table class="gtab"><tr><th>Близько (це)</th><th>Далі (те)</th><th>Далеко (он те)</th></tr>'
+      + '<tr><td>este / esta / esto</td><td>ese / esa / eso</td><td>aquel / aquella / aquello</td></tr></table>'
+      + '<p><b>Приклади:</b><br>este café — ця кава (у руці)<br>ese café — та кава (трохи далі)<br>aquel café — та кава (аж там)</p>'
+      + '<p>💡 <b>Порада:</b> не впевнений у роді — просто тицяй пальцем і кажи <b>esto</b>: ¿Qué es esto?</p>',
     cards: [
       { en: 'esto',    ua: 'це',       tr: '[е]сто' },
       { en: 'eso',     ua: 'те',       tr: '[е]со' },

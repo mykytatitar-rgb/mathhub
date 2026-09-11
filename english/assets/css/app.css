@@ -206,6 +206,11 @@ button.stat.goal:active{transform:scale(.97)}
 .grammar-head .chev{color:var(--pink)}
 .grammar-body{padding:0 14px 14px;font-size:14px;line-height:1.5;color:#3a3a44}
 .grammar-body b{color:var(--pink)}
+.grammar-body p{margin:8px 0}
+.grammar-body u{text-decoration-color:var(--pink)}
+.grammar-body .gtab{width:100%;border-collapse:collapse;margin:8px 0;font-size:13px}
+.grammar-body .gtab th,.grammar-body .gtab td{border:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top}
+.grammar-body .gtab th{background:rgba(230,21,127,.08);font-weight:800;color:var(--ink)}
 
 /* ---- review banner ---- */
 .review-banner{display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,#fff,#fdeef6);

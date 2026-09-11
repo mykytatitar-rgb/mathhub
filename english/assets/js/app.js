@@ -15,6 +15,8 @@ async function doInstall(){
 }
 
 /* ---------- тема (світла / темна / авто) ---------- */
+/* об'єднати розширену теорію з grammar.js, якщо підключено */
+try{ if(typeof GRAMMAR!=='undefined' && typeof LESSONS!=='undefined'){ LESSONS.forEach(function(l){ if(GRAMMAR[l.id]) l.grammar = GRAMMAR[l.id]; }); } }catch(e){}
 const THEME_KEY = 'anglo.theme';
 function storedTheme(){ try{ return localStorage.getItem(THEME_KEY) || 'auto'; }catch(e){ return 'auto'; } }
 function effectiveTheme(){ const t = storedTheme(); if(t==='auto'){ return (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light'; } return t; }

@@ -366,7 +366,7 @@ function renderHome(){
       </div>
       <div class="stats">
         <div class="stat"><div class="stat-num">🔥 ${displayStreak()}</div><div class="stat-lbl">днів поспіль</div></div>
-        <button class="stat goal" id="goalTile"><div class="stat-num">🎯 ${todayCount()}/${streakData.goal}${todayCount()>=streakData.goal?' ✓':''}</div><div class="stat-lbl">ціль сьогодні</div></button>
+        <button class="stat goal" id="goalTile"><div class="stat-num">🎯 ${Math.min(todayCount(),streakData.goal)}/${streakData.goal}${todayCount()>=streakData.goal?' ✓':''}</div><div class="stat-lbl">ціль сьогодні</div></button>
       </div>
       ${currentId ? `<button class="continue-btn" id="continueBtn">▶ Продовжити навчання</button>` : `<div class="continue-done">🎉 Курс пройдено! Повторюй слова, щоб не забути.</div>`}
     </div>

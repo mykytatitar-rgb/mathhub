@@ -1,5 +1,5 @@
 /* Deutsch — service worker для офлайн-режиму. */
-const CACHE = 'german-v2';
+const CACHE = 'german-v3';
 const ASSETS = [
   './',
   './index.html',

@@ -1,5 +1,5 @@
 /* Esperanto — service worker для офлайн-режиму. */
-const CACHE = 'esperanto-v2';
+const CACHE = 'esperanto-v3';
 const ASSETS = [
   './',
   './index.html',

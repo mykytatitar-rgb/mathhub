@@ -1,5 +1,5 @@
 /* 中文 — service worker для офлайн-режиму. */
-const CACHE = 'chinese-v2';
+const CACHE = 'chinese-v3';
 const ASSETS = [
   './',
   './index.html',

@@ -24,7 +24,7 @@
     { id: 'text',    icon: 'textT',      label: 'Текст (T)',      opts: 'text' },
 
     { id: 'shape',   icon: 'shapes',     label: 'Фігури (S)',       opts: 'shape',  group: 'geo' },
-    { id: 'point',   icon: 'dot',        label: 'Точка (O)',        opts: 'stroke', group: 'geo' },
+    { id: 'point',   icon: 'dot',        label: 'Точка (O)',        opts: 'point',  group: 'geo' },
     { id: 'link',    icon: 'link2',      label: 'Провести від точки (C)', opts: 'link', group: 'geo' },
     { id: 'line',    icon: 'shapeLine',  label: 'Лінія (L)',        opts: 'stroke', group: 'geo' },
     { id: 'arrow',   icon: 'arrowRight', label: 'Стрілка (A)',      opts: 'stroke', group: 'geo' },
@@ -424,6 +424,27 @@
       if (val) val.textContent = w;
 
       applyToSelection({ w: w });
+    });
+
+    /* Шкала розміру точки. Як і з товщиною, панель на кожен рух не
+       перемальовуємо — інакше повзунок вислизає з-під пальця. */
+    root.addEventListener('input', function (e) {
+      var pe = e.target.closest ? e.target.closest('[data-psize-range]') : null;
+      if (!pe) return;
+      var r = +pe.value;
+      engine.setPointSize(r);
+      pe.title = 'Розмір точки ' + r + ' px';
+
+      var pd = root.querySelector('[data-psize-dot]');
+      if (pd) {
+        var dd = Math.max(4, Math.min(28, r * 2));
+        pd.style.width = dd + 'px';
+        pd.style.height = dd + 'px';
+      }
+      var pv = root.querySelector('[data-psize-val]');
+      if (pv) pv.textContent = r;
+
+      applyToSelection({ r: r }, 'o');
     });
 
     U.onClick(root, '[data-size]', function (el) {
@@ -1978,6 +1999,7 @@
   function stepFont(dir) {
     if (!cur) return;
     var e = cur.engine;
+    holdSelBar();
     var next = dir > 0 ? Math.ceil(e.fontSize * 1.18) : Math.floor(e.fontSize / 1.18);
     e.fontSize = U.clamp(next, 6, 800);
     var out = document.querySelector('[data-size-val]');
@@ -1986,6 +2008,35 @@
       x.classList.toggle('is-active', +x.dataset.size === e.fontSize);
     });
     applyToSelection({ s: e.fontSize }, 'x');
+    updateSelBar();
+  }
+
+  /* Змінює розмір виділених точок.
+     Кожна точка росте від власного розміру, а не від спільного: якщо на
+     кресленні центр кола зумисне більший за вершини, після «+» він має
+     лишитися більшим. */
+  function stepPoint(dir) {
+    if (!cur) return;
+    var e = cur.engine;
+    var touched = 0;
+
+    e.selection.forEach(function (it) {
+      if (it.t !== 'o') return;
+      var r = (window.Board && Board.pointR) ? Board.pointR(it) : (it.r || 6);
+      var next = dir > 0 ? Math.ceil(r * 1.25) : Math.floor(r / 1.25);
+      it.r = U.clamp(next, R_MIN, R_MAX);
+      touched++;
+    });
+
+    if (!touched) return;
+    // наступна точка ставиться таким самим розміром, як щойно налаштована
+    var last = e.selection.filter(function (it) { return it.t === 'o'; }).pop();
+    if (last) e.setPointSize(last.r);
+
+    holdSelBar();
+    e.snapshot();
+    e.changed();
+    renderOpts();
     updateSelBar();
   }
 
@@ -2006,6 +2057,25 @@
         '<input class="w-range" type="range" data-width-range min="' + W_MIN + '" max="' + W_MAX +
           '" step="1" value="' + w + '" title="Товщина ' + w + ' px">' +
         '<span class="w-val" data-width-val>' + w + '</span>' +
+      '</div></div>';
+  }
+
+  var R_MIN = 2, R_MAX = 40;
+
+  /* Розмір точки — окрема шкала, не товщина лінії.
+     Точка на кресленні виконує іншу роботу, ніж штрих: вершину треба бачити
+     здалеку, а сторони при цьому лишати тонкими. Поки розмір був похідним
+     від товщини пера, збільшити точку означало потовщити все інше. */
+  function pointSizeHtml() {
+    var r = cur.engine.pointSize || 6;
+    var d = Math.max(4, Math.min(28, r * 2));
+    return '<div><div class="board-opts__label">Розмір точки</div>' +
+      '<div class="w-row">' +
+        '<span class="w-preview"><i class="w-dot" data-psize-dot style="width:' + d +
+          'px;height:' + d + 'px;background:' + cur.engine.color + '"></i></span>' +
+        '<input class="w-range" type="range" data-psize-range min="' + R_MIN + '" max="' + R_MAX +
+          '" step="1" value="' + r + '" title="Розмір точки ' + r + ' px">' +
+        '<span class="w-val" data-psize-val>' + r + '</span>' +
       '</div></div>';
   }
 
@@ -2138,14 +2208,17 @@
           ? '<div class="w-sep"></div><div class="w-smooth">' + stripSmoothHtml() + '</div>'
           : '');
     }
+    else if (kind === 'point') inner = pointSizeHtml() +
+      '<div class="w-sep"></div>' + stripColorsHtml();
     else if (kind === 'link') inner = linkKindsHtml() + '<div class="w-sep"></div>' +
-      strokeWidthHtml() + '<div class="w-sep"></div>' + stripColorsHtml();
+      strokeWidthHtml() + '<div class="w-sep"></div>' + pointSizeHtml() +
+      '<div class="w-sep"></div>' + stripColorsHtml();
     else if (kind === 'text') inner = colorsHtml() + sizesHtml();
     else if (kind === 'shape') inner = shapesHtml() + colorsHtml() + widthsHtml();
 
     panel.innerHTML = inner;
     panel.classList.toggle('board-opts--wide', kind === 'shape');
-    panel.classList.toggle('board-opts--stroke', kind === 'stroke');
+    panel.classList.toggle('board-opts--stroke', kind === 'stroke' || kind === 'point');
   }
 
   function toggleOpts() {
@@ -2165,6 +2238,7 @@
       Object.keys(patch).forEach(function (k) {
         if (k === 's' && it.t !== 'x') return;
         if (k === 'w' && it.t === 'x') return;
+        if (k === 'r' && it.t !== 'o') return;
         it[k] = patch[k];
         if (k === 'c' && it.t === 'g' && it.f) it.f = fillFromColor(patch[k]);
       });
@@ -2183,6 +2257,20 @@
   /* ============================================================
      Панель дій над виділеним
      ============================================================ */
+
+  /* Поки людина натискає кнопки розміру, панель стоїть на місці.
+
+     Кнопки «більше/менше» змінюють сам виділений обʼєкт, той росте, межі
+     ростуть разом із ним — і панель тікає з-під пальця вже після першого
+     натискання. Другий клік потрапляв у полотно й знімав виділення, тож
+     збільшити щось на кілька кроків було неможливо.
+
+     Тримаємо позицію короткий час після кожного кроку: цього досить, щоб
+     серія натискань спрацювала, і мало, щоб панель не застрягла осторонь,
+     коли людина перейшла до іншого обʼєкта. */
+  var barHold = 0;
+
+  function holdSelBar() { barHold = Date.now(); }
 
   function updateSelBar() {
     if (!cur) return;
@@ -2228,6 +2316,13 @@
         '<button class="sel-bar__btn" data-act="board-ineq" title="Нерівність: точки та інтервали">' +
           icon('sigma', 16) + '</button>' +
         '<span class="sel-bar__sep"></span>';
+    } else if (e.selection.some(function (i) { return i.t === 'o'; })) {
+      extra =
+        '<button class="sel-bar__btn" data-act="board-point-down" title="Менші точки">' +
+          '<b style="font-size:9px">●−</b></button>' +
+        '<button class="sel-bar__btn" data-act="board-point-up" title="Більші точки">' +
+          '<b style="font-size:14px">●+</b></button>' +
+        '<span class="sel-bar__sep"></span>';
     } else if (e.selection.some(function (i) { return i.t === 'x'; })) {
       extra =
         '<button class="sel-bar__btn" data-act="board-font-down" title="Дрібніший текст">' +
@@ -2250,6 +2345,7 @@
     var tl = e.toScreen(b.x1, b.y1);
     var tr = e.toScreen(b.x2, b.y1);
     bar.hidden = false;
+    if (bar.style.left && Date.now() - barHold < 900) return;
 
     var w = bar.offsetWidth || 190;
     var cx = (tl.x + tr.x) / 2;
@@ -3211,6 +3307,8 @@
       if (n) U.toast('Дубльовано ' + U.pl(n, 'об’єкт', 'об’єкти', 'об’єктів'), 'ok');
     },
     'board-delete': function () { cur.engine.deleteSelection(); },
+    'board-point-up': function () { stepPoint(1); },
+    'board-point-down': function () { stepPoint(-1); },
     'board-font-up': function () { stepFont(1); },
     'board-font-down': function () { stepFont(-1); },
     'board-dims': function () {

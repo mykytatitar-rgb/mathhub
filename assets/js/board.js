@@ -464,7 +464,7 @@
     if (it.t === 'o') {
       var op = window.Points ? Points.at(it, drawMap || {}) : it.p;
       if (!op) return null;
-      var orr = Math.max(6, (it.w || 3) * 3);
+      var orr = Math.max(6, pointR(it) * 2);
       return { x1: op[0] - orr, y1: op[1] - orr, x2: op[0] + orr, y2: op[1] + orr };
     }
     if (it.t === 'c') {
@@ -576,7 +576,7 @@
     if (it.t === 'o') {
       var hp = window.Points ? Points.at(it, drawMap || {}) : it.p;
       if (!hp) return false;
-      return Math.hypot(x - hp[0], y - hp[1]) <= Math.max(9, (it.w || 3) * 3.2) + tol;
+      return Math.hypot(x - hp[0], y - hp[1]) <= Math.max(9, pointR(it) * 1.8) + tol;
     }
     if (it.t === 'c') {
       var hm = drawMap || {};
@@ -1143,6 +1143,21 @@
     var to = [B[0] + ux * ext, B[1] + uy * ext];
     return [from, to];
   }
+
+  /**
+   * Розмір точки.
+   *
+   * Власне поле, а не похідне від товщини пера: точка й лінія — різні речі.
+   * На кресленні часто потрібні помітні точки й тонкі лінії між ними, а
+   * спільна товщина такого не дозволяла — товста точка тягла за собою
+   * товсті відрізки.
+   */
+  function pointR(it) {
+    var r = Number(it && it.r);
+    return r > 0 ? r : Math.max(3.5, ((it && it.w) || 3) * 1.5);
+  }
+
+  Board.pointR = pointR;
 
   /** Швидкий доступ до обʼєктів слайда за id — потрібен точкам. */
   function idMap(items) {
@@ -1869,14 +1884,16 @@
     if (it.t === 'o') {
       var pp = window.Points ? Points.at(it, drawMap) : (it.p || null);
       if (!pp) return;
-      var pr = Math.max(3.5, (it.w || 3) * 1.5);
+      var pr = pointR(it);
 
       ctx.beginPath();
       ctx.arc(pp[0], pp[1], pr, 0, Math.PI * 2);
       ctx.fill();
 
       if (it.n && it.lb !== 0) {
-        var pfs = Math.max(12, (it.w || 3) * 5);
+        // літера росте разом із точкою: дрібний підпис біля великої крапки
+        // виглядає загубленим
+        var pfs = Math.max(12, pr * 2.6);
         ctx.font = '600 ' + pfs + 'px "Source Serif 4", Georgia, serif';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'bottom';
@@ -2168,6 +2185,10 @@
     this.color = '#0D2149';
     this.width = 3;
     this.fontSize = 26;
+    /* Розмір точки живе окремо від товщини пера. На кресленні вершини мають
+       бути помітними, а відрізки між ними — тонкими, і одна спільна товщина
+       такого поєднання не давала. */
+    this.pointSize = 6;
     this.fillOn = false;
     this.showMeasures = false;  // підписи сторін і кутів — лише за командою
     this.showLabels = true;     // підписи вершин A, B, C — як у підручнику
@@ -2741,6 +2762,24 @@
     this.syncConstructions();
     var tol = 8 / this.scale;
     var items = this.items();
+
+    /* Точка виграє в лінії, що крізь неї проходить.
+       Звичайне «зверху лежить — того й беремо» робило вершину недосяжною:
+       відрізок додається після точок, отже накриває їх, і клік по вершині
+       щоразу виділяв сторону. Точка — дрібніша ціль, і якщо палець потрапив
+       у неї, людина цілилася саме в неї. */
+    var best = null, bestD = Infinity, hitMap = null;
+    for (var j = items.length - 1; j >= 0; j--) {
+      var it = items[j];
+      if (it.t !== 'o' || !hitItem(it, x, y, tol)) continue;
+      if (!hitMap) hitMap = idMap(items);
+      var q = window.Points ? Points.at(it, hitMap) : it.p;
+      if (!q) continue;
+      var d = Math.hypot(x - q[0], y - q[1]);
+      if (d < bestD) { bestD = d; best = it; }
+    }
+    if (best) return best;
+
     for (var i = items.length - 1; i >= 0; i--) {
       if (hitItem(items[i], x, y, tol)) return items[i];
     }
@@ -2856,6 +2895,7 @@
         ? Points.snap(w.x, w.y, this.items())
         : { p: [w.x, w.y] };
       var np = { t: 'o', id: uid('pt'), c: this.color, w: this.width,
+                 r: this.pointSize || 0,
                  n: window.Points ? Points.nextName(this.items()) : '',
                  p: [round(snapP.p[0]), round(snapP.p[1])] };
       if (snapP.on) np.on = snapP.on;
@@ -2882,7 +2922,9 @@
         var q = window.Points ? Points.at(x, byId) : x.p;
         if (!q) return;
         var d = Math.hypot(w.x - q[0], w.y - q[1]);
-        if (d <= grab && d < bestD) { bestD = d; hitP = x; }
+        // у великої точки зона влучання не менша за саму точку
+        var g = Math.max(grab, pointR(x) * 1.4);
+        if (d <= g && d < bestD) { bestD = d; hitP = x; }
       });
 
       /* Точки поруч немає — ставимо її тут же й ведемо далі. Раніше клік
@@ -2895,6 +2937,7 @@
           : { p: [w.x, w.y] };
         this.snapshot();
         hitP = { t: 'o', id: uid('pt'), c: this.color, w: this.width,
+                 r: this.pointSize || 0,
                  n: window.Points ? Points.nextName(this.items()) : '',
                  p: [round(snapL.p[0]), round(snapL.p[1])] };
         if (snapL.on) hitP.on = snapL.on;
@@ -3593,6 +3636,13 @@
     return true;
   };
 
+  /* Панель тут не перемальовуємо: розмір тягнуть повзунком, а перемальовка
+     вирвала б його з-під пальця посеред руху. Підпис і кружечок поруч
+     оновлює сама панель. */
+  Board.prototype.setPointSize = function (r) {
+    this.pointSize = Math.max(2, Math.min(40, Number(r) || 0));
+  };
+
   Board.prototype.setLinkKind = function (k) {
     this.linkKind = Board.LINK_KINDS[k] ? k : 'seg';
     if (this.opts.onToolChange) this.opts.onToolChange(this.tool);
@@ -3675,7 +3725,7 @@
         var q = window.Points ? Points.at(x, lm) : x.p;
         if (!q) return;
         ctx.beginPath();
-        ctx.arc(q[0], q[1], Math.max(11, self0.width * 3.8), 0, Math.PI * 2);
+        ctx.arc(q[0], q[1], Math.max(11, pointR(x) * 2), 0, Math.PI * 2);
         ctx.stroke();
       });
 
@@ -3686,7 +3736,7 @@
         ctx.strokeStyle = '#F79009';
         ctx.lineWidth = 2.5 / this.scale;
         ctx.beginPath();
-        ctx.arc(lp[0], lp[1], Math.max(11, this.width * 3.8), 0, Math.PI * 2);
+        ctx.arc(lp[0], lp[1], Math.max(11, pointR(lf) * 2), 0, Math.PI * 2);
         ctx.stroke();
       }
       ctx.restore();

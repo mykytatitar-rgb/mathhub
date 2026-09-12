@@ -3713,6 +3713,28 @@
     if (!window.Points || !p1 || !p2) return null;
     var moved = null;
 
+    /* Спершу центр. Його ставлять на око, і поки він ні до чого не
+       привʼязаний, радіуси виходять різної довжини: рисочок рівності
+       немає, прямий кут біля дотичної під питанням, а коло не посунеш —
+       «центр» лишиться стояти окремо. Привʼязка лагодить усе разом. */
+    [[p1, p2], [p2, p1]].forEach(function (pair) {
+      if (moved) return;
+      var pt = pair[0], other = pair[1];
+      if (!other.on || !other.on.pid) return;
+
+      var chost = byId[other.on.pid];
+      if (!chost) return;
+
+      var con = Points.centerSnap(pt, chost);
+      if (!con) return;
+
+      pt.on = con;
+      var cp = Points.at(pt, byId);
+      if (cp) pt.p = [Math.round(cp[0]), Math.round(cp[1])];
+      moved = { kind: 'center', name: pt.n || '·' };
+    });
+    if (moved) return moved;
+
     [[p1, p2], [p2, p1]].forEach(function (pair) {
       if (moved) return;
       var pt = pair[0], other = pair[1];
@@ -3728,7 +3750,7 @@
       pt.on.t = t;
       var np = Points.at(pt, byId);
       if (np) pt.p = [Math.round(np[0]), Math.round(np[1])];
-      moved = pt.n || '·';
+      moved = { kind: 'tangent', name: pt.n || '·' };
     });
 
     return moved;

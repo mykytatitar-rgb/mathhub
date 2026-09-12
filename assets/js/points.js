@@ -325,6 +325,24 @@
   };
 
   /**
+   * Якщо вільна точка стоїть майже в центрі кола — повертає сам центр.
+   *
+   * Центр ставлять на око, і тоді він ні до чого не привʼязаний: радіуси
+   * виходять різної довжини, рисочок рівності немає, а коло не можна
+   * посунути — точка лишиться на місці. Привʼязка лагодить усе одразу.
+   */
+  P.centerSnap = function (pt, host) {
+    if (!pt || (pt.on && pt.on.pid)) return null;        // вже кудись привʼязана
+    var circle = P.circleOf(host);
+    if (!circle) return null;
+
+    var p = pt.p;
+    if (!p) return null;
+    if (dist(p, [circle.cx, circle.cy]) > Math.max(6, circle.r * 0.06)) return null;
+    return { pid: host.id, kind: 'center' };
+  };
+
+  /**
    * Усе, що випливає з проведених дотичних.
    *
    * Дотична дає одразу дві теореми, і розпізнавати їх треба разом, одним
@@ -390,16 +408,24 @@
        квадратик має стояти так само трохи скошено — інакше позначка
        сперечалася б із лінією, під якою стоїть. */
     touch.forEach(function (t) {
+      var circle = P.circleOf(byId[t.pid]);
+      if (!circle) return;
+      /* Центр упізнаємо по місцю, а не лише по привʼязці. Точку центра
+         часто ставлять на око — і тоді формально вона ні до чого не
+         привʼязана, хоча відрізок із неї все одно радіус. Допуск беремо
+         часткою радіуса: на великому колі похибка в кілька пікселів нічого
+         не означає, на дрібному — означає все. */
+      var near = Math.max(6, circle.r * 0.06);
+
       (segs || []).forEach(function (s) {
         if (s.id === t.id || !s.p1 || !s.p2) return;
-        var ends = [[s.p1, s.p2], [s.p2, s.p1]];
-        ends.forEach(function (e) {
+        [[s.p1, s.p2], [s.p2, s.p1]].forEach(function (e) {
           if (!e[0] || e[0].id !== t.tid) return;
-          var c = e[1];
-          if (!c.on || c.on.kind !== 'center' || c.on.pid !== t.pid) return;
 
-          var cp = P.at(c, byId);
+          var cp = P.at(e[1], byId);
           if (!cp) return;
+          if (dist(cp, [circle.cx, circle.cy]) > near) return;
+
           var rx = cp[0] - t.at[0], ry = cp[1] - t.at[1];
           var rl = Math.hypot(rx, ry);
           if (rl < 6) return;

@@ -240,6 +240,14 @@
       onViewChange: function () { updateZoom(); updateSelBar(); },
       onSelect: function () { refreshUndo(); updateSelBar(); },
       onToolChange: function (t) { syncToolButtons(t); renderOpts(); },
+      /* Точку підвели до місця дотику — про це треба сказати вголос.
+         Мовчки зрушити чуже креслення не можна: людина має бачити, що
+         саме змінилося, і знати, що це скасовується. */
+      onTangent: function (name) {
+        U.toast(name && name !== '·'
+          ? 'Дотичну вирівняно: точка ' + name + ' стала точкою дотику'
+          : 'Дотичну вирівняно за місцем дотику', 'ok');
+      },
       onTextPlace: function (world, screen) { openTextInput(world, screen); }
     });
 
@@ -3966,7 +3974,17 @@
             list(facts.props) + '</div>' +
           '<div><div class="board-opts__label" style="margin-bottom:10px">Формули</div>' +
             list(facts.formulas, 'facts-list--mono') + '</div>' +
-        '</div>',
+        '</div>' +
+        /* Окремим блоком на всю ширину, бо саме ці факти й потрібні на
+           уроці: фігуру рідко розглядають саму собою, а щойно проводиш у
+           ній відрізок — починається теорема. */
+        (facts.lines && facts.lines.length
+          ? '<div class="facts-more">' +
+              '<div class="board-opts__label" style="margin-bottom:10px">' +
+                'Побудови: відрізки, діагоналі, дотичні</div>' +
+              list(facts.lines) +
+            '</div>'
+          : ''),
       buttons: [
         { label: 'Закрити', kind: 'btn--primary', act: 'ok' }
       ]

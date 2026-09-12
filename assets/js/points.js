@@ -203,6 +203,137 @@
     return out;
   };
 
+  /* ============================================================
+     Дотичні
+     ============================================================ */
+
+  /**
+   * Коло як центр і радіус — або null, якщо це не коло.
+   *
+   * Еліпс сюди не потрапляє навмисно: у нього дотичні з однієї точки
+   * різної довжини, і теорема про рівність відрізків дотичних для нього
+   * просто неправильна.
+   */
+  P.circleOf = function (host) {
+    var B = window.Board;
+    if (!B || !host || host.t !== 'g') return null;
+    var sh = B.SHAPES[host.sh] || {};
+    if (!sh.round) return null;
+
+    var b = B.itemBounds(host);
+    if (!b) return null;
+    var rx = (b.x2 - b.x1) / 2, ry = (b.y2 - b.y1) / 2;
+    if (rx < 2 || ry < 2) return null;
+    if (Math.abs(rx - ry) > Math.max(rx, ry) * 0.02) return null;   // це еліпс
+
+    return { cx: (b.x1 + b.x2) / 2, cy: (b.y1 + b.y2) / 2, r: (rx + ry) / 2 };
+  };
+
+  /**
+   * Два кути на колі, у яких його торкаються дотичні з точки B.
+   *
+   * Кут рахуємо в тій самій системі, що й P.at: проти годинникової,
+   * від правого краю, з віссю y догори. Тому знак y перевернутий.
+   */
+  P.tangentAngles = function (circle, B) {
+    if (!circle || !B) return null;
+    var dx = B[0] - circle.cx, dy = -(B[1] - circle.cy);
+    var d = Math.hypot(dx, dy);
+    if (d <= circle.r * 1.001) return null;            // точка не зовні кола
+
+    var base = Math.atan2(dy, dx);
+    var half = Math.acos(circle.r / d);
+    var deg = 180 / Math.PI;
+    return [(base + half) * deg, (base - half) * deg];
+  };
+
+  /** Різниця кутів у межах ±180°. */
+  function angDiff(a, b) {
+    var d = (a - b) % 360;
+    if (d > 180) d -= 360;
+    if (d < -180) d += 360;
+    return d;
+  }
+
+  /**
+   * Якщо точка на колі майже стоїть у місці дотику — повертає точний кут.
+   *
+   * Від руки дотичну не проводять: лінія або трішки січе коло, або не
+   * достає до нього. Тому точку підводимо до справжнього місця дотику —
+   * і тоді креслення стає правдивим, а не просто підписаним як правильне.
+   * Далі рівність відрізків виходить сама собою, бо вони справді рівні.
+   */
+  P.tangentSnap = function (pt, host, other, tolDeg) {
+    if (!pt || !pt.on || pt.on.kind !== 'circle') return null;
+    var circle = P.circleOf(host);
+    if (!circle) return null;
+
+    var angs = P.tangentAngles(circle, other);
+    if (!angs) return null;
+
+    var cur = pt.on.t || 0;
+    var best = null;
+    angs.forEach(function (a) {
+      var d = Math.abs(angDiff(a, cur));
+      if (!best || d < best.d) best = { a: a, d: d };
+    });
+    if (!best || best.d > (tolDeg || 6)) return null;
+
+    return Math.round(best.a * 10) / 10;
+  };
+
+  /**
+   * Пари відрізків дотичних, проведених з однієї точки до одного кола.
+   *
+   * Теорема проста: відрізки дотичних, проведених до кола з однієї точки,
+   * рівні. Позначити це окремо потрібно тому, що дотичну часто проводять
+   * променем або прямою, а їх довжини не порівнюють — нескінченність ні з
+   * чим не дорівняєш. Значущий тут саме шматок від зовнішньої точки до
+   * місця дотику, і його рівність видно з побудови, а не з вимірювання.
+   */
+  P.tangentPairs = function (segs, byId) {
+    var B = window.Board;
+    if (!B) return [];
+
+    var touch = [];      // {id, pid (коло), vid (зовнішня точка)}
+    (segs || []).forEach(function (s) {
+      if (!s.p1 || !s.p2) return;
+      [[s.p1, s.p2], [s.p2, s.p1]].forEach(function (pair) {
+        var on = pair[0], out = pair[1];
+        if (!on.on || on.on.kind !== 'circle') return;
+        if (out.on && out.on.pid === on.on.pid) return;      // хорда, не дотична
+        var host = byId[on.on.pid];
+        var circle = P.circleOf(host);
+        if (!circle) return;
+
+        var op = P.at(out, byId), tp = P.at(on, byId);
+        if (!op || !tp) return;
+
+        // дотична: радіус у точці дотику перпендикулярний до лінії
+        var rv = [tp[0] - circle.cx, tp[1] - circle.cy];
+        var lv = [op[0] - tp[0], op[1] - tp[1]];
+        var lr = Math.hypot(rv[0], rv[1]), ll = Math.hypot(lv[0], lv[1]);
+        if (lr < 2 || ll < 6) return;
+        var cos = (rv[0] * lv[0] + rv[1] * lv[1]) / (lr * ll);
+        if (Math.abs(cos) > 0.03) return;
+
+        touch.push({ id: s.id, pid: on.on.pid, vid: out.id });
+      });
+    });
+
+    // рівні лише ті, що вийшли з однієї точки до одного кола
+    var buckets = {};
+    touch.forEach(function (t) {
+      if (!t.vid) return;
+      var k = t.pid + '|' + t.vid;
+      (buckets[k] = buckets[k] || []).push(t.id);
+    });
+
+    return Object.keys(buckets)
+      .map(function (k) { return buckets[k]; })
+      .filter(function (g) { return g.length > 1; });
+  };
+
   P.EPS = EPS;
   window.Points = P;
 })();

@@ -1188,6 +1188,7 @@
          пряма нескінченні, і порівнювати їх довжини безглуздо — але для
          прямого кута їхній напрям потрібен так само. */
       segs.push({ id: it.id, a: A, b: B2, kind: it.k || 'seg',
+                  p1: by[it.a1], p2: by[it.a2],
                   len: Math.hypot(B2[0] - A[0], B2[1] - A[1]) });
     });
 
@@ -1199,8 +1200,26 @@
 
     var ticks = {};
     var finite = segs.filter(function (s2) { return s2.kind === 'seg' || s2.kind === 'vec'; });
-    Points.equalGroups(finite).forEach(function (g, gi) {
-      g.items.forEach(function (s) { ticks[s.id] = gi + 1; });
+    var groups = Points.equalGroups(finite).map(function (g) {
+      return g.items.map(function (s) { return s.id; });
+    });
+
+    /* Відрізки дотичних із однієї точки рівні за теоремою, а не за
+       вимірюванням. Окрема гілка потрібна тому, що дотичну проводять і
+       променем, і прямою, а їх до порівняння довжин не беруть. */
+    Points.tangentPairs(segs, by).forEach(function (g) {
+      var same = null;
+      groups.forEach(function (ex, i) {
+        if (same === null && ex.indexOf(g[0]) >= 0) same = i;
+      });
+      if (same === null) { groups.push(g.slice()); return; }
+      g.forEach(function (id) {
+        if (groups[same].indexOf(id) < 0) groups[same].push(id);
+      });
+    });
+
+    groups.forEach(function (g, gi) {
+      g.forEach(function (id) { ticks[id] = gi + 1; });
     });
 
     var data = { ticks: ticks, right: Points.rightAngles(segs), segs: segs };
@@ -2960,6 +2979,7 @@
       });
       if (!dup) {
         this.snapshot();
+        var aligned = this._alignTangent(byId[this.linkFrom], hitP, byId);
         var nl = { t: 'c', id: uid('ln'), c: this.color, w: this.linkW(),
                    a1: this.linkFrom, a2: hitP.id };
         if (this.linkKind && this.linkKind !== 'seg') nl.k = this.linkKind;
@@ -2967,6 +2987,7 @@
         this.slide.items.push(nl);
         this.linkFrom = null;
         this.changed();
+        if (aligned && this.opts.onTangent) this.opts.onTangent(aligned);
       } else {
         this.linkFrom = null;
         this.changed();          // могла зʼявитися нова точка — її треба зберегти
@@ -3654,6 +3675,42 @@
      більшим за лінію — вершина помітна, сторона не губиться. При типовому
      розмірі точки 6 це дає звичні 3 пікселі, тож старі креслення
      виглядають як раніше. */
+  /**
+   * Підводить точку на колі до справжнього місця дотику.
+   *
+   * Від руки дотичну не проводять: лінія або трішки січе коло, або не
+   * достає до нього. Виправляти це рисочками «вони рівні» було б обманом —
+   * позначка каже правду про креслення, а не про наміри. Тому рухаємо саму
+   * точку: щойно дотик справжній, рівність відрізків виходить сама.
+   *
+   * Ворушимо лише те, що вже майже стоїть на місці, і лише один кінець —
+   * той, що на колі. Дію видно в історії, тож скасувати її просто.
+   */
+  Board.prototype._alignTangent = function (p1, p2, byId) {
+    if (!window.Points || !p1 || !p2) return null;
+    var moved = null;
+
+    [[p1, p2], [p2, p1]].forEach(function (pair) {
+      if (moved) return;
+      var pt = pair[0], other = pair[1];
+      if (!pt.on || pt.on.kind !== 'circle') return;
+
+      var host = byId[pt.on.pid];
+      var op = Points.at(other, byId);
+      if (!host || !op) return;
+
+      var t = Points.tangentSnap(pt, host, op);
+      if (t === null || t === pt.on.t) return;
+
+      pt.on.t = t;
+      var np = Points.at(pt, byId);
+      if (np) pt.p = [Math.round(np[0]), Math.round(np[1])];
+      moved = pt.n || '·';
+    });
+
+    return moved;
+  };
+
   Board.prototype.linkW = function () {
     if (this.linkWidth) return this.linkWidth;
     return Math.max(2, Math.min(24, Math.round((this.pointSize || 6) / 2)));

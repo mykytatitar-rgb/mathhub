@@ -42,6 +42,22 @@
 
     var sh = B.SHAPES[host.sh] || {};
 
+    /* Центр фігури. Для кола це те саме O, від якого йдуть радіуси, і без
+       нього не побудувати ні радіус у точку дотику, ні діагоналі квадрата
+       з їхнього перетину. Місце рахуємо щоразу, тож фігуру можна тягати. */
+    if (pt.on.kind === 'center') {
+      if (sh.round) {
+        var cb = B.itemBounds(host);
+        if (!cb) return pt.p ? pt.p.slice() : null;
+        return [(cb.x1 + cb.x2) / 2, (cb.y1 + cb.y2) / 2];
+      }
+      var cp = B.shapePoints(host);
+      if (!cp || !cp.length) return pt.p ? pt.p.slice() : null;
+      var sx = 0, sy = 0;
+      cp.forEach(function (v) { sx += v[0]; sy += v[1]; });
+      return [sx / cp.length, sy / cp.length];
+    }
+
     if (sh.round) {
       var b = B.itemBounds(host);
       if (!b) return pt.p ? pt.p.slice() : null;
@@ -90,6 +106,11 @@
         if (!b) return;
         var cx = (b.x1 + b.x2) / 2, cy = (b.y1 + b.y2) / 2;
         var rx = (b.x2 - b.x1) / 2 || 1, ry = (b.y2 - b.y1) / 2 || 1;
+
+        /* Центр — така сама ціль, як вершина, і навіть частіша: радіус,
+           діаметр і відстань до хорди всі починаються звідти. */
+        offer({ on: { pid: it.id, kind: 'center' }, p: [cx, cy] }, dist([x, y], [cx, cy]), 1);
+
         var ang = Math.atan2(-(y - cy) / ry, (x - cx) / rx);
         var on = [cx + rx * Math.cos(ang), cy - ry * Math.sin(ang)];
         offer({ on: { pid: it.id, kind: 'circle', t: Math.round(ang * 180 / Math.PI * 10) / 10 },
@@ -99,6 +120,12 @@
 
       var pts = B.shapePoints(it);
       if (!pts) return;
+
+      // центр многокутника: звідти йдуть радіуси описаного кола й апофеми
+      var mx = 0, my = 0;
+      pts.forEach(function (v) { mx += v[0]; my += v[1]; });
+      mx /= pts.length; my /= pts.length;
+      offer({ on: { pid: it.id, kind: 'center' }, p: [mx, my] }, dist([x, y], [mx, my]), 1);
 
       pts.forEach(function (v, i) {
         offer({ on: { pid: it.id, kind: 'vertex', i: i }, p: v.slice() }, dist([x, y], v), 1);
@@ -122,6 +149,21 @@
     });
 
     return best ? { on: best.on, p: best.p } : { p: [x, y] };
+  };
+
+  /**
+   * Імʼя для щойно поставленої точки.
+   *
+   * Центр кола в задачах називають O, а не «наступною вільною літерою» —
+   * і саме так його підписано на самій фігурі. Коли O вже зайняте, беремо
+   * звичайну чергу: двох центрів з однією назвою бути не має.
+   */
+  P.nameFor = function (snap, items) {
+    if (snap && snap.on && snap.on.kind === 'center') {
+      var taken = (items || []).some(function (it) { return it.t === 'o' && it.n === 'O'; });
+      if (!taken) return 'O';
+    }
+    return P.nextName(items);
   };
 
   /** Наступне вільне імʼя: A, B, C… далі A₁, B₁… */

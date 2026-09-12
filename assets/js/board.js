@@ -1516,7 +1516,13 @@
     var pts;
 
     if (sh && sh.round) {
-      // у кола вершин немає — підписуємо центр, як заведено
+      /* У кола вершин немає — підписуємо центр, як заведено. Але якщо в
+         центрі вже стоїть справжня точка, літеру не малюємо: два підписи
+         один на одному виглядають як брудна пляма. */
+      var taken = (drawItems || []).some(function (x) {
+        return x.t === 'o' && x.on && x.on.kind === 'center' && x.on.pid === it.id && x.n;
+      });
+      if (taken) return;
       pts = [[(it.a[0] + it.a[2]) / 2, (it.a[1] + it.a[3]) / 2]];
     } else {
       pts = shapePoints(it);
@@ -2922,7 +2928,7 @@
         : { p: [w.x, w.y] };
       var np = { t: 'o', id: uid('pt'), c: this.color, w: this.width,
                  r: this.pointSize || 0,
-                 n: window.Points ? Points.nextName(this.items()) : '',
+                 n: window.Points ? Points.nameFor(snapP, this.items()) : '',
                  p: [round(snapP.p[0]), round(snapP.p[1])] };
       if (snapP.on) np.on = snapP.on;
       this.slide.items.push(np);
@@ -2964,7 +2970,7 @@
         this.snapshot();
         hitP = { t: 'o', id: uid('pt'), c: this.color, w: this.width,
                  r: this.pointSize || 0,
-                 n: window.Points ? Points.nextName(this.items()) : '',
+                 n: window.Points ? Points.nameFor(snapL, this.items()) : '',
                  p: [round(snapL.p[0]), round(snapL.p[1])] };
         if (snapL.on) hitP.on = snapL.on;
         this.slide.items.push(hitP);

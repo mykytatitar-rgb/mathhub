@@ -2189,6 +2189,13 @@
        бути помітними, а відрізки між ними — тонкими, і одна спільна товщина
        такого поєднання не давала. */
     this.pointSize = 6;
+    /* Товщина зʼєднань. 0 означає «рахуй від розміру точки».
+
+       Розчепити розмір точки й товщину пера було правильно, але лишити
+       їх без жодного звʼязку — ні: великі вершини й волосяна лінія між
+       ними виглядають як помилка. Тож поки товщину не задали руками,
+       вона йде за точкою; щойно задали — слухається тільки руки. */
+    this.linkWidth = 0;
     this.fillOn = false;
     this.showMeasures = false;  // підписи сторін і кутів — лише за командою
     this.showLabels = true;     // підписи вершин A, B, C — як у підручнику
@@ -2953,7 +2960,7 @@
       });
       if (!dup) {
         this.snapshot();
-        var nl = { t: 'c', id: uid('ln'), c: this.color, w: this.width,
+        var nl = { t: 'c', id: uid('ln'), c: this.color, w: this.linkW(),
                    a1: this.linkFrom, a2: hitP.id };
         if (this.linkKind && this.linkKind !== 'seg') nl.k = this.linkKind;
         if (this.linkDash) nl.dash = 1;
@@ -3641,6 +3648,19 @@
      оновлює сама панель. */
   Board.prototype.setPointSize = function (r) {
     this.pointSize = Math.max(2, Math.min(40, Number(r) || 0));
+  };
+
+  /* Відрізок удвічі тонший за радіус точки: діаметр виходить учетверо
+     більшим за лінію — вершина помітна, сторона не губиться. При типовому
+     розмірі точки 6 це дає звичні 3 пікселі, тож старі креслення
+     виглядають як раніше. */
+  Board.prototype.linkW = function () {
+    if (this.linkWidth) return this.linkWidth;
+    return Math.max(2, Math.min(24, Math.round((this.pointSize || 6) / 2)));
+  };
+
+  Board.prototype.setLinkWidth = function (w) {
+    this.linkWidth = Math.max(1, Math.min(24, Number(w) || 0));
   };
 
   Board.prototype.setLinkKind = function (k) {

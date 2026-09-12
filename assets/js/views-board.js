@@ -444,7 +444,44 @@
       var pv = root.querySelector('[data-psize-val]');
       if (pv) pv.textContent = r;
 
+      /* Поки товщину лінії не задали руками, вона йде за точкою — і це
+         видно тут же, на сусідній шкалі. Інакше людина ставить великі
+         вершини, зʼєднує їх і аж потім помічає, що лінія волосяна. */
+      var lr = root.querySelector('[data-lw-range]');
+      if (lr && !engine.linkWidth) {
+        var lw = engine.linkW();
+        lr.value = lw;
+        lr.title = 'Товщина лінії ' + lw + ' px';
+        var ld = root.querySelector('[data-lw-dot]');
+        if (ld) {
+          var dd2 = Math.max(4, Math.min(26, lw * 1.25 + 3));
+          ld.style.width = dd2 + 'px';
+          ld.style.height = dd2 + 'px';
+        }
+        var lv2 = root.querySelector('[data-lw-val]');
+        if (lv2) lv2.textContent = lw;
+      }
+
       applyToSelection({ r: r }, 'o');
+    });
+
+    root.addEventListener('input', function (e) {
+      var le = e.target.closest ? e.target.closest('[data-lw-range]') : null;
+      if (!le) return;
+      var lw = +le.value;
+      engine.setLinkWidth(lw);
+      le.title = 'Товщина лінії ' + lw + ' px';
+
+      var ld = root.querySelector('[data-lw-dot]');
+      if (ld) {
+        var ld2 = Math.max(4, Math.min(26, lw * 1.25 + 3));
+        ld.style.width = ld2 + 'px';
+        ld.style.height = ld2 + 'px';
+      }
+      var lv = root.querySelector('[data-lw-val]');
+      if (lv) lv.textContent = lw;
+
+      applyToSelection({ w: lw }, 'c');
     });
 
     U.onClick(root, '[data-size]', function (el) {
@@ -2040,6 +2077,41 @@
     updateSelBar();
   }
 
+  /* Змінює товщину виділених ліній.
+
+     Потрібне тим самим, чим кнопки розміру точки: креслення вже зроблене,
+     і виявилося, що сторони надто тонкі поруч із вершинами. Без цього
+     довелося б перемальовувати все заново. */
+  function stepStroke(dir) {
+    if (!cur) return;
+    var e = cur.engine;
+    var touched = 0;
+
+    holdSelBar();
+    e.selection.forEach(function (it) {
+      if (it.t === 'x' || it.t === 'i' || it.t === 'o') return;
+      var w = it.w || 3;
+      var next = dir > 0 ? Math.ceil(w * 1.3) : Math.floor(w / 1.3);
+      it.w = U.clamp(next, W_MIN, W_MAX);
+      touched++;
+    });
+
+    if (!touched) return;
+    // наступна лінія проводиться такою ж, як щойно налаштована
+    var last = e.selection.filter(function (it) {
+      return it.t !== 'x' && it.t !== 'i' && it.t !== 'o';
+    }).pop();
+    if (last) {
+      if (last.t === 'c') e.setLinkWidth(last.w);
+      else e.width = last.w;
+    }
+
+    e.snapshot();
+    e.changed();
+    renderOpts();
+    updateSelBar();
+  }
+
   /* --- Панель олівця, лінії та стрілки --- */
 
   var W_MIN = 1, W_MAX = 24;
@@ -2076,6 +2148,22 @@
         '<input class="w-range" type="range" data-psize-range min="' + R_MIN + '" max="' + R_MAX +
           '" step="1" value="' + r + '" title="Розмір точки ' + r + ' px">' +
         '<span class="w-val" data-psize-val>' + r + '</span>' +
+      '</div></div>';
+  }
+
+  /* У зʼєднання власна товщина, не спільна з олівцем.
+     Спільна означала б, що товсті сторони фігури роблять товстим і почерк,
+     а це різні речі. Поки її не чіпали, вона йде за розміром точки. */
+  function linkWidthHtml() {
+    var w = cur.engine.linkW();
+    var d = Math.max(4, Math.min(26, w * 1.25 + 3));
+    return '<div><div class="board-opts__label">Товщина лінії</div>' +
+      '<div class="w-row">' +
+        '<span class="w-preview"><i class="w-dot" data-lw-dot style="width:' + d +
+          'px;height:' + d + 'px;background:' + cur.engine.color + '"></i></span>' +
+        '<input class="w-range" type="range" data-lw-range min="' + W_MIN + '" max="' + W_MAX +
+          '" step="1" value="' + w + '" title="Товщина лінії ' + w + ' px">' +
+        '<span class="w-val" data-lw-val>' + w + '</span>' +
       '</div></div>';
   }
 
@@ -2211,7 +2299,7 @@
     else if (kind === 'point') inner = pointSizeHtml() +
       '<div class="w-sep"></div>' + stripColorsHtml();
     else if (kind === 'link') inner = linkKindsHtml() + '<div class="w-sep"></div>' +
-      strokeWidthHtml() + '<div class="w-sep"></div>' + pointSizeHtml() +
+      pointSizeHtml() + '<div class="w-sep"></div>' + linkWidthHtml() +
       '<div class="w-sep"></div>' + stripColorsHtml();
     else if (kind === 'text') inner = colorsHtml() + sizesHtml();
     else if (kind === 'shape') inner = shapesHtml() + colorsHtml() + widthsHtml();
@@ -2284,6 +2372,20 @@
     var b = e.selectionBounds();
     if (!b) { bar.hidden = true; return; }
 
+    /* Товщина — для всього, що має обведення. Розмір точки живе поруч,
+       бо на кресленні їх і підбирають разом: вершини помітні, сторони
+       тонші за них. */
+    var strokeBtns =
+      '<button class="sel-bar__btn" data-act="board-stroke-down" title="Тонші лінії">' +
+        '<b style="font-size:13px">−</b></button>' +
+      '<button class="sel-bar__btn" data-act="board-stroke-up" title="Товщі лінії">' +
+        '<b style="font-size:13px">+</b></button>';
+
+    var hasStroke = e.selection.some(function (i) {
+      return i.t !== 'x' && i.t !== 'i' && i.t !== 'o';
+    });
+    var hasPoint = e.selection.some(function (i) { return i.t === 'o'; });
+
     // контекстні дії: залежать від того, що саме виділено
     var extra = '';
     if (n === 1 && e.selection[0].t === 'g') {
@@ -2316,13 +2418,16 @@
         '<button class="sel-bar__btn" data-act="board-ineq" title="Нерівність: точки та інтервали">' +
           icon('sigma', 16) + '</button>' +
         '<span class="sel-bar__sep"></span>';
-    } else if (e.selection.some(function (i) { return i.t === 'o'; })) {
+    } else if (hasPoint) {
       extra =
         '<button class="sel-bar__btn" data-act="board-point-down" title="Менші точки">' +
           '<b style="font-size:9px">●−</b></button>' +
         '<button class="sel-bar__btn" data-act="board-point-up" title="Більші точки">' +
           '<b style="font-size:14px">●+</b></button>' +
+        (hasStroke ? strokeBtns : '') +
         '<span class="sel-bar__sep"></span>';
+    } else if (hasStroke) {
+      extra = strokeBtns + '<span class="sel-bar__sep"></span>';
     } else if (e.selection.some(function (i) { return i.t === 'x'; })) {
       extra =
         '<button class="sel-bar__btn" data-act="board-font-down" title="Дрібніший текст">' +
@@ -3307,6 +3412,8 @@
       if (n) U.toast('Дубльовано ' + U.pl(n, 'об’єкт', 'об’єкти', 'об’єктів'), 'ok');
     },
     'board-delete': function () { cur.engine.deleteSelection(); },
+    'board-stroke-up': function () { stepStroke(1); },
+    'board-stroke-down': function () { stepStroke(-1); },
     'board-point-up': function () { stepPoint(1); },
     'board-point-down': function () { stepPoint(-1); },
     'board-font-up': function () { stepFont(1); },

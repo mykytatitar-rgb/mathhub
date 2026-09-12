@@ -1204,10 +1204,13 @@
       return g.items.map(function (s) { return s.id; });
     });
 
-    /* Відрізки дотичних із однієї точки рівні за теоремою, а не за
-       вимірюванням. Окрема гілка потрібна тому, що дотичну проводять і
-       променем, і прямою, а їх до порівняння довжин не беруть. */
-    Points.tangentPairs(segs, by).forEach(function (g) {
+    /* Дотична дає дві теореми одразу: рівність відрізків і прямий кут із
+       радіусом. Розпізнаємо їх одним рішенням, інакше креслення потрапляє
+       у проміжок між двома допусками — рисочки стоять, а квадратика немає,
+       хоча кажуть вони про ту саму дотичну. */
+    var tang = Points.tangents(segs, by);
+
+    tang.equal.forEach(function (g) {
       var same = null;
       groups.forEach(function (ex, i) {
         if (same === null && ex.indexOf(g[0]) >= 0) same = i;
@@ -1222,7 +1225,21 @@
       g.forEach(function (id) { ticks[id] = gi + 1; });
     });
 
-    var data = { ticks: ticks, right: Points.rightAngles(segs), segs: segs };
+    /* Прямі кути з дотичних додаємо до знайдених вимірюванням, але без
+       повторів: той самий квадратик, намальований двічі, лише потовщав би. */
+    var right = Points.rightAngles(segs);
+    var seen = {};
+    right.forEach(function (r) {
+      seen[Math.round(r.at[0]) + ',' + Math.round(r.at[1])] = 1;
+    });
+    tang.right.forEach(function (r) {
+      var k = Math.round(r.at[0]) + ',' + Math.round(r.at[1]);
+      if (seen[k]) return;
+      seen[k] = 1;
+      right.push(r);
+    });
+
+    var data = { ticks: ticks, right: right, segs: segs };
     markCache = { sig: sig, data: data };
     return data;
   }

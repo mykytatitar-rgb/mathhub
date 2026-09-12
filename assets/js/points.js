@@ -325,30 +325,39 @@
   };
 
   /**
-   * Пари відрізків дотичних, проведених з однієї точки до одного кола.
+   * Усе, що випливає з проведених дотичних.
    *
-   * Теорема проста: відрізки дотичних, проведених до кола з однієї точки,
-   * рівні. Позначити це окремо потрібно тому, що дотичну часто проводять
-   * променем або прямою, а їх довжини не порівнюють — нескінченність ні з
-   * чим не дорівняєш. Значущий тут саме шматок від зовнішньої точки до
-   * місця дотику, і його рівність видно з побудови, а не з вимірювання.
+   * Дотична дає одразу дві теореми, і розпізнавати їх треба разом, одним
+   * рішенням. Раніше рівність відрізків і прямий кут перевірялися нарізно
+   * й різними допусками — і креслення потрапляло у проміжок: рисочки
+   * рівності стояли, а квадратика прямого кута не було, хоча обидві
+   * позначки кажуть про ту саму дотичну.
+   *
+   * equal — групи відрізків дотичних, проведених з однієї точки до одного
+   * кола: вони рівні. Окремо від вимірювання довжин тому, що дотичну часто
+   * проводять променем або прямою, а нескінченність ні з чим не дорівняєш.
+   *
+   * right — прямі кути в точках дотику з тими радіусами, які справді
+   * проведені. Радіус шукаємо серед намальованого: позначати кут із лінією,
+   * якої на кресленні немає, не можна.
    */
-  P.tangentPairs = function (segs, byId) {
+  P.tangents = function (segs, byId) {
     var B = window.Board;
-    if (!B) return [];
+    var out = { equal: [], right: [] };
+    if (!B) return out;
 
-    var touch = [];      // {id, pid (коло), vid (зовнішня точка)}
+    var touch = [];      // {id, pid, vid, at, dir}
     (segs || []).forEach(function (s) {
       if (!s.p1 || !s.p2) return;
       [[s.p1, s.p2], [s.p2, s.p1]].forEach(function (pair) {
-        var on = pair[0], out = pair[1];
+        var on = pair[0], outer = pair[1];
         if (!on.on || on.on.kind !== 'circle') return;
-        if (out.on && out.on.pid === on.on.pid) return;      // хорда, не дотична
+        if (outer.on && outer.on.pid === on.on.pid) return;   // хорда, не дотична
         var host = byId[on.on.pid];
         var circle = P.circleOf(host);
         if (!circle) return;
 
-        var op = P.at(out, byId), tp = P.at(on, byId);
+        var op = P.at(outer, byId), tp = P.at(on, byId);
         if (!op || !tp) return;
 
         // дотична: радіус у точці дотику перпендикулярний до лінії
@@ -359,7 +368,9 @@
         var cos = (rv[0] * lv[0] + rv[1] * lv[1]) / (lr * ll);
         if (Math.abs(cos) > 0.03) return;
 
-        touch.push({ id: s.id, pid: on.on.pid, vid: out.id });
+        touch.push({ id: s.id, pid: on.on.pid, vid: outer.id,
+                     tid: on.id, at: tp,
+                     dir: [lv[0] / ll, lv[1] / ll] });
       });
     });
 
@@ -370,10 +381,36 @@
       var k = t.pid + '|' + t.vid;
       (buckets[k] = buckets[k] || []).push(t.id);
     });
-
-    return Object.keys(buckets)
+    out.equal = Object.keys(buckets)
       .map(function (k) { return buckets[k]; })
       .filter(function (g) { return g.length > 1; });
+
+    /* Прямий кут ставимо там, де радіус проведено. Напрямок беремо з самих
+       відрізків, а не з теорії: якщо рука схибила на півтора градуса,
+       квадратик має стояти так само трохи скошено — інакше позначка
+       сперечалася б із лінією, під якою стоїть. */
+    touch.forEach(function (t) {
+      (segs || []).forEach(function (s) {
+        if (s.id === t.id || !s.p1 || !s.p2) return;
+        var ends = [[s.p1, s.p2], [s.p2, s.p1]];
+        ends.forEach(function (e) {
+          if (!e[0] || e[0].id !== t.tid) return;
+          var c = e[1];
+          if (!c.on || c.on.kind !== 'center' || c.on.pid !== t.pid) return;
+
+          var cp = P.at(c, byId);
+          if (!cp) return;
+          var rx = cp[0] - t.at[0], ry = cp[1] - t.at[1];
+          var rl = Math.hypot(rx, ry);
+          if (rl < 6) return;
+
+          out.right.push({ owner: s.id, at: t.at.slice(),
+                           d1: [rx / rl, ry / rl], d2: t.dir.slice() });
+        });
+      });
+    });
+
+    return out;
   };
 
   P.EPS = EPS;

@@ -2085,6 +2085,50 @@
     updateSelBar();
   }
 
+  /**
+   * Перероблює вже проведені лінії на інший вид.
+   *
+   * Відрізок, промінь, пряма й вектор відрізняються лише тим, як далеко
+   * тягнуться від своїх двох точок. Самі точки лишаються на місці, тож
+   * перемикати вид можна скільки завгодно й нічого не губиться.
+   */
+  function setLinkKindOf(kind) {
+    if (!cur || !window.Board.LINK_KINDS[kind]) return;
+    var e = cur.engine;
+    var touched = 0;
+
+    holdSelBar();
+    e.selection.forEach(function (it) {
+      if (it.t !== 'c') return;
+      if ((it.k || 'seg') === kind) return;
+      if (kind === 'seg') delete it.k; else it.k = kind;
+      touched++;
+    });
+    if (!touched) return;
+
+    // наступна лінія проводиться така сама
+    e.setLinkKind(kind);
+    e.snapshot();
+    e.changed();
+    updateSelBar();
+  }
+
+  /** Суцільна лінія чи допоміжна пунктирна. */
+  function toggleLinkDash() {
+    if (!cur) return;
+    var e = cur.engine;
+    var lines = e.selection.filter(function (it) { return it.t === 'c'; });
+    if (!lines.length) return;
+
+    var on = !lines.every(function (it) { return it.dash; });
+    holdSelBar();
+    lines.forEach(function (it) { if (on) it.dash = 1; else delete it.dash; });
+    e.setLinkDash(on);
+    e.snapshot();
+    e.changed();
+    updateSelBar();
+  }
+
   /* Змінює товщину виділених ліній.
 
      Потрібне тим самим, чим кнопки розміру точки: креслення вже зроблене,
@@ -2252,9 +2296,10 @@
   /* Що проводимо від точки. Малюємо самі значки, а не підписи: між
      відрізком, променем і прямою різниця саме у вигляді, і побачити її
      швидше, ніж прочитати. */
-  function linkKindsHtml() {
-    var cur2 = cur.engine.linkKind || 'seg';
-    var glyphs = {
+  /* Значки видів ліній. Винесені окремо, бо потрібні двічі: у панелі
+     інструмента — щоб обрати, що проводити, і в панелі виділеного — щоб
+     передумати вже після побудови. */
+  var LINK_GLYPHS = {
       seg:  '<svg viewBox="0 0 34 20" width="34" height="20"><circle cx="7" cy="10" r="2.6" fill="currentColor"/>' +
             '<circle cx="27" cy="10" r="2.6" fill="currentColor"/>' +
             '<path d="M7 10h20" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>',
@@ -2266,7 +2311,11 @@
             '<circle cx="24" cy="10" r="2.6" fill="currentColor"/></svg>',
       vec:  '<svg viewBox="0 0 34 20" width="34" height="20"><circle cx="6" cy="10" r="2.6" fill="currentColor"/>' +
             '<path d="M6 10h20M22 6l5 4-5 4" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>'
-    };
+  };
+
+  function linkKindsHtml() {
+    var cur2 = cur.engine.linkKind || 'seg';
+    var glyphs = LINK_GLYPHS;
 
     var row = Object.keys(window.Board.LINK_KINDS).map(function (k) {
       return '<button class="shape-btn' + (k === cur2 ? ' is-active' : '') +
@@ -2425,6 +2474,26 @@
           icon('target', 16) + '</button>' +
         '<button class="sel-bar__btn" data-act="board-ineq" title="Нерівність: точки та інтервали">' +
           icon('sigma', 16) + '</button>' +
+        '<span class="sel-bar__sep"></span>';
+    } else if (e.selection.every(function (i) { return i.t === 'c'; })) {
+      /* Що саме проводили — відрізок, промінь чи пряму — видно аж на
+         кресленні, і передумати тут природніше, ніж перемальовувати.
+         Значок показує поточний вид, підсвічений — обраний. */
+      var kinds = {};
+      e.selection.forEach(function (i) { kinds[i.k || 'seg'] = 1; });
+      var one = Object.keys(kinds).length === 1 ? Object.keys(kinds)[0] : null;
+
+      extra = Object.keys(window.Board.LINK_KINDS).map(function (k) {
+        return '<button class="sel-bar__btn sel-bar__btn--kind' +
+          (k === one ? ' is-on' : '') + '" data-act="board-link-kind" data-arg="' + k +
+          '" title="' + U.esc(Board.LINK_KINDS[k].label) + '">' + LINK_GLYPHS[k] + '</button>';
+      }).join('') +
+        '<button class="sel-bar__btn' +
+          (e.selection.every(function (i) { return i.dash; }) ? ' is-on' : '') +
+          '" data-act="board-link-dash" title="Пунктиром — допоміжна">' +
+          '<svg viewBox="0 0 20 20" width="16" height="16"><path d="M2 10h4M9 10h3M15 10h3" ' +
+          'stroke="currentColor" stroke-width="2" fill="none"/></svg></button>' +
+        strokeBtns +
         '<span class="sel-bar__sep"></span>';
     } else if (hasPoint) {
       extra =
@@ -3420,6 +3489,8 @@
       if (n) U.toast('Дубльовано ' + U.pl(n, 'об’єкт', 'об’єкти', 'об’єктів'), 'ok');
     },
     'board-delete': function () { cur.engine.deleteSelection(); },
+    'board-link-kind': function (arg) { setLinkKindOf(arg); },
+    'board-link-dash': function () { toggleLinkDash(); },
     'board-stroke-up': function () { stepStroke(1); },
     'board-stroke-down': function () { stepStroke(-1); },
     'board-point-up': function () { stepPoint(1); },

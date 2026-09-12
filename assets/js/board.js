@@ -1210,16 +1210,23 @@
        хоча кажуть вони про ту саму дотичну. */
     var tang = Points.tangents(segs, by);
 
-    tang.equal.forEach(function (g) {
+    /* Рівність, що випливає з побудови, а не з вимірювання: відрізки
+       дотичних з однієї точки й радіуси одного кола. Обидві рівності
+       очевидні тому, хто дивиться на креслення, але не збігаються до
+       пікселя, бо центр і точку дотику ставлять рукою. */
+    function merge(g) {
       var same = null;
       groups.forEach(function (ex, i) {
-        if (same === null && ex.indexOf(g[0]) >= 0) same = i;
+        if (same === null && g.some(function (id) { return ex.indexOf(id) >= 0; })) same = i;
       });
       if (same === null) { groups.push(g.slice()); return; }
       g.forEach(function (id) {
         if (groups[same].indexOf(id) < 0) groups[same].push(id);
       });
-    });
+    }
+
+    tang.equal.forEach(merge);
+    Points.radiusGroups(segs, by).forEach(merge);
 
     groups.forEach(function (g, gi) {
       g.forEach(function (id) { ticks[id] = gi + 1; });

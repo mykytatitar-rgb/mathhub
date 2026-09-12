@@ -338,8 +338,62 @@
 
     var p = pt.p;
     if (!p) return null;
-    if (dist(p, [circle.cx, circle.cy]) > Math.max(6, circle.r * 0.06)) return null;
+    if (dist(p, [circle.cx, circle.cy]) > P.centerTol(circle)) return null;
     return { pid: host.id, kind: 'center' };
+  };
+
+  /**
+   * Наскільки близько до центра ще вважаємо, що це центр.
+   *
+   * Часткою радіуса, а не в пікселях: на великому колі кілька пікселів
+   * нічого не означають, на дрібному означають усе.
+   */
+  P.centerTol = function (circle) {
+    return Math.max(6, circle.r * 0.06);
+  };
+
+  /**
+   * Групи радіусів — відрізків від центра кола до точки на ньому.
+   *
+   * Радіуси одного кола рівні за означенням, а не за вимірюванням. Різниця
+   * не теоретична: центр ставлять на око, тож намальовані радіуси майже
+   * ніколи не збігаються до пікселя, і порівняння довжин мовчки не давало
+   * рисочок там, де рівність очевидна кожному, хто дивиться на креслення.
+   *
+   * Коло впізнаємо те саме, що й для дотичних, і тим самим допуском: одна
+   * фігура — одне рішення про те, де в неї центр.
+   */
+  P.radiusGroups = function (segs, byId) {
+    var B = window.Board;
+    if (!B) return [];
+
+    var byCircle = {};
+    (segs || []).forEach(function (s) {
+      if (!s.p1 || !s.p2) return;
+      [[s.p1, s.p2], [s.p2, s.p1]].forEach(function (pair) {
+        var mid = pair[0], rim = pair[1];
+
+        /* Коло беремо в того кінця, що на ньому стоїть: лише так відомо,
+           про яке саме коло йдеться, коли їх на слайді кілька. */
+        var pid = rim.on && rim.on.pid;
+        if (!pid) return;
+        var circle = P.circleOf(byId[pid]);
+        if (!circle) return;
+
+        var c = [circle.cx, circle.cy];
+        var mp = P.at(mid, byId), rp = P.at(rim, byId);
+        if (!mp || !rp) return;
+
+        if (dist(mp, c) > P.centerTol(circle)) return;                  // не з центра
+        if (Math.abs(dist(rp, c) - circle.r) > Math.max(4, circle.r * 0.04)) return;
+
+        (byCircle[pid] = byCircle[pid] || []).push(s.id);
+      });
+    });
+
+    return Object.keys(byCircle)
+      .map(function (k) { return byCircle[k]; })
+      .filter(function (g) { return g.length > 1; });
   };
 
   /**
@@ -415,7 +469,7 @@
          привʼязана, хоча відрізок із неї все одно радіус. Допуск беремо
          часткою радіуса: на великому колі похибка в кілька пікселів нічого
          не означає, на дрібному — означає все. */
-      var near = Math.max(6, circle.r * 0.06);
+      var near = P.centerTol(circle);
 
       (segs || []).forEach(function (s) {
         if (s.id === t.id || !s.p1 || !s.p2) return;

@@ -352,10 +352,65 @@
     return obj;
   };
 
+  /* ============================================================
+     Звільнені місця постійного розкладу
+     ============================================================
+
+     Постійний розклад іде в календар однією повторюваною подією: «щопонеділка
+     о 17:30». Коли урок із цього слота перетягують на інший день або
+     видаляють, повторення про це не знає — і в Google урок стояв далі на
+     старому місці, поруч із новим. Не до наступного оновлення, а назавжди.
+
+     Вгадати звільнене місце з порожнечі в розкладі не можна: порожньо буває
+     і там, звідки урок забрали, і там, куди застосунок уроки ще не створив.
+     Тому місце записуємо в момент, коли його звільняють, — прямо на учні,
+     бо самого уроку після видалення вже немає. */
+
+  function inCurrentSlot(st, iso) {
+    if (!st || !st.schedule || !iso) return false;
+    var d = U.toDate(iso);
+    if (isNaN(d.getTime())) return false;
+    var wd = d.getDay() === 0 ? 7 : d.getDay();
+    var hhmm = String(iso).slice(11, 16);
+    return st.schedule.some(function (s) { return Number(s.day) === wd && s.time === hhmm; });
+  }
+
+  function markSlotGone(lesson) {
+    if (!lesson || !lesson.fromTemplate) return;
+    var st = S.get('students', lesson.studentId);
+    var iso = String(lesson.date || '').slice(0, 16);
+
+    /* Лише місце, яке й досі є в розкладі. Коли розклад змінюють, старі
+       уроки прибираються, — але їхні дні вже не повторюються, і пам'ятати
+       їх нема для чого. */
+    if (!inCurrentSlot(st, iso)) return;
+
+    var now = new Date();
+    if (!(U.toDate(iso) > now)) return;                  // минуле не чіпаємо
+
+    // заразом прибираємо те, що вже минуло або випало з розкладу
+    var keep = (st.slotGone || []).filter(function (x) {
+      return x !== iso && U.toDate(x) > now && inCurrentSlot(st, x);
+    });
+    keep.push(iso);
+    st.slotGone = keep.sort();
+    st.updatedAt = now.toISOString();
+    sync('students', st.id);
+  }
+
   S.update = function (name, id, patch) {
     var item = S.get(name, id);
     if (!item) return null;
+    var moved = name === 'lessons' && patch && patch.date && patch.date !== item.date;
+    if (moved) markSlotGone(item);
     Object.keys(patch).forEach(function (k) { item[k] = patch[k]; });
+
+    /* Урок, який переставили рукою, більше не належить шаблону. Інакше при
+       наступній зміні постійного розкладу прибирання вважало його «старим
+       уроком за попереднім розкладом» і мовчки видаляло — хоча його місце
+       людина обрала сама. Знімаємо позначку вже після латки: форма уроку
+       може повернути її назад разом з усіма полями. */
+    if (moved && item.fromTemplate) delete item.fromTemplate;
     item.updatedAt = new Date().toISOString();
     S.save();
     sync(name, id);
@@ -1321,6 +1376,7 @@
 
   /** Видалити урок разом із його дошкою та прив'язаним платежем. */
   S.removeLesson = function (lessonId) {
+    markSlotGone(S.get('lessons', lessonId));
     S.removeBoard(lessonId);
     db.payments = db.payments.filter(function (p) { return p.lessonId !== lessonId; });
     return S.remove('lessons', lessonId);

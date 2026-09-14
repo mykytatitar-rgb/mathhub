@@ -217,16 +217,45 @@
            Тоді з повторення його треба виключити, інакше в календарі
            стоятимуть обидва. */
         var ex = [];
+        var taken = {};                                  // які входження слота зайняті уроком
         lessons.forEach(function (l) {
           if (l.studentId !== st.id) return;
           var d = new Date(l.date);
           if (isNaN(d.getTime()) || d < now) return;     // минуле лишається як є
           if (!inSlot(l, slot)) return;
 
+          taken[String(l.date).slice(0, 10)] = 1;
           var plain = l.fromTemplate && l.status === 'planned' && !l.topic && !l.note;
           if (plain) covered[l.id] = 1;
           else ex.push(d);
         });
+
+        /* Звільнені місця. Урок перетягнули на інший день чи час або
+           видалили — повторення про це не знає й далі ставить урок сюди
+           щотижня. Без цього перенесений урок стояв у Google двічі: на
+           новому місці й на старому, і старе не зникало ніколи.
+
+           Беремо лише явно записані місця (див. slotGone у сховищі), а не
+           вгадуємо з порожнечі: порожньо буває і там, куди уроки просто ще
+           не створені. Якщо урок повернули назад, місце знову зайняте — і
+           виключати його не можна. */
+        (st.slotGone || []).forEach(function (iso) {
+          var g = U.toDate(iso);
+          if (isNaN(g.getTime()) || g < now) return;
+          if (String(iso).slice(11, 16) !== slot.time) return;
+          if ((((g.getDay() + 6) % 7) + 1) !== Number(slot.day)) return;
+          if (taken[String(iso).slice(0, 10)]) return;      // урок уже повернули на місце
+          ex.push(g);
+        });
+
+        // той самий момент міг потрапити у винятки двічі — лишаємо один
+        var seenEx = {};
+        ex = ex.filter(function (d) {
+          var k = localStamp(d);
+          if (seenEx[k]) return false;
+          seenEx[k] = 1;
+          return true;
+        }).sort(function (a, b) { return a - b; });
 
         var mins = Number(st.duration) > 0 ? Number(st.duration) : 60;
         var end = new Date(first.getTime() + mins * 60000);

@@ -1862,7 +1862,7 @@ a { color: inherit; text-decoration: none; }
 /* У «Векторі» немає загального [hidden] { display: none }, а власний display
    у цих блоках перебиває атрибут — і прихована шухляда висіла б порожньою
    білою панеллю поверх сторінки. */
-.mm-drawer[hidden], .mm-qlist[hidden], .mm-undo[hidden], .mm-maphint[hidden] { display: none; }
+.mm-drawer[hidden], .mm-qlist[hidden], .mm-undo[hidden], .mm-maphint[hidden], .mm-caption[hidden] { display: none; }
 
 /* Межа учнівської карти: те, що за нею, видно, але не кричить. */
 .mm-scope { flex: 0 0 auto; }
@@ -1994,6 +1994,7 @@ a { color: inherit; text-decoration: none; }
 
 .mm-doms { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px 22px; }
 .mm-dom__name { font-size: 12px; font-weight: 750; letter-spacing: .4px; text-transform: uppercase; margin-bottom: 8px; }
+.mm-dom__q { display: block; margin-top: 2px; font-size: 13px; font-weight: 550; letter-spacing: 0; text-transform: none; color: var(--muted); font-style: italic; }
 .mm-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .mm-chip {
   display: inline-flex; align-items: center; gap: 7px;
@@ -2023,6 +2024,8 @@ a { color: inherit; text-decoration: none; }
 .mm-band { fill: none; stroke-width: 64; cursor: pointer; }
 .mm-band:hover { opacity: .9; }
 .mm-bandlbl { fill: #fff; font-weight: 750; pointer-events: none; }
+.mm-bandq { font-weight: 650; font-style: italic; opacity: .8; pointer-events: none; }
+#mm-svg.lod-2 .mm-bandq { display: none; }
 .mm-root { fill: var(--ink); }
 .mm-roottxt { fill: #fff; font-weight: 750; text-anchor: middle; pointer-events: none; }
 .mm-sec { cursor: pointer; }
@@ -2058,7 +2061,7 @@ a { color: inherit; text-decoration: none; }
 /* ---- Шухляда теми ---- */
 
 .mm-drawer {
-  position: fixed; z-index: 60; top: 16px; right: 16px; bottom: 16px; width: 410px;
+  position: fixed; z-index: 60; top: 16px; right: 16px; bottom: 16px; width: 520px;
   background: #fff; border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow-lg);
   display: flex; flex-direction: column; overflow: hidden;
 }
@@ -2087,6 +2090,62 @@ a { color: inherit; text-decoration: none; }
 .mm-lock { margin-top: 12px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--amber-bg); color: #8A5409; font-size: 13px; line-height: 1.5; }
 .mm-ok { margin-top: 12px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--green-bg); color: #0C7A48; font-size: 13px; line-height: 1.5; }
 .mm-note { width: 100%; min-height: 90px; resize: vertical; }
+.mm-mini { display: flex; flex-wrap: wrap; gap: 6px; }
+.mm-mini .mm-chip { font-size: 12.5px; padding: 4px 10px 4px 7px; }
+
+/* ---- Конспект теми: теорія, практика, у реальному світі ---- */
+
+.mm-studies { display: grid; gap: 10px; margin-top: 16px; }
+.mm-study { border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 14px 10px; background: #fff; }
+.mm-study__h { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 750; letter-spacing: .5px; text-transform: uppercase; color: var(--ink-2); margin-bottom: 6px; }
+.mm-study__h svg { color: var(--c, var(--brand-600)); }
+.mm-study ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.mm-study li { position: relative; padding-left: 16px; font-size: 13.5px; line-height: 1.5; color: var(--ink-2); }
+.mm-study li::before { content: ''; position: absolute; left: 3px; top: .62em; width: 5px; height: 5px; border-radius: 50%; background: var(--c, var(--brand-600)); opacity: .7; }
+.mm-study.is-applied { border-color: color-mix(in srgb, var(--c, #4B3FDB) 35%, #fff); background: color-mix(in srgb, var(--c, #4B3FDB) 7%, #fff); }
+.mm-study.is-applied .mm-study__h { color: var(--c, var(--brand-600)); }
+.mm-study.is-applied li { color: var(--ink); }
+.mm-study__why { font-size: 12.5px; color: var(--muted); font-style: italic; margin: -2px 0 8px; line-height: 1.45; }
+.mm-study--wait { color: var(--muted); font-size: 13.5px; }
+
+/* ---- Підпис до домену чи розділу, як у Codex ---- */
+
+.mm-caption {
+  position: absolute; right: 16px; top: 16px; width: 330px; max-width: calc(100% - 32px);
+  background: #fff; border: 1px solid var(--line); border-left: 5px solid var(--c, var(--brand-600));
+  border-radius: var(--r-md); box-shadow: var(--shadow); padding: 12px 38px 12px 14px;
+}
+.mm-caption__q { font-size: 12px; font-weight: 700; color: var(--c, var(--muted)); font-style: italic; }
+.mm-caption__t { font-size: 17px; font-weight: 800; letter-spacing: -.2px; margin: 2px 0 4px; }
+.mm-caption__w { font-size: 13.5px; line-height: 1.5; color: var(--ink-2); }
+.mm-caption__n { margin-top: 8px; font-size: 12px; color: var(--muted); }
+.mm-caption__x { position: absolute; right: 8px; top: 8px; width: 28px; height: 28px; border: 0; background: transparent; border-radius: var(--r-sm); color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+.mm-caption__x:hover { background: var(--brand-50); color: var(--ink); }
+
+/* ---- Майнд-меп ---- */
+
+#mm-tree { width: 100%; height: 100%; display: block; cursor: grab; user-select: none; touch-action: none; font-family: Manrope, 'Segoe UI', system-ui, sans-serif; }
+#mm-tree.is-drag { cursor: grabbing; }
+.mt-link { fill: none; stroke: #CFCBE3; stroke-width: 1.8; }
+.mt-link.is-out { stroke-dasharray: 5 6; opacity: .6; }
+.mt-node { cursor: pointer; }
+.mt-pill { stroke-width: 1.3; transition: filter .12s; }
+.mt-node:hover .mt-pill { filter: drop-shadow(0 2px 6px rgba(23, 22, 58, .14)); }
+.mt-node.is-out { opacity: .5; }
+.mt-node.is-sel .mt-pill { stroke: #17163A; stroke-width: 2.4; }
+.mt-rootlbl { fill: #fff; font-size: 17px; font-weight: 750; }
+.mt-lbl { fill: #17163A; font-weight: 750; }
+.mt-lbl--dom { font-size: 15px; }
+.mt-lbl--sec { font-size: 14px; }
+.mt-sub { fill: #6B6A85; font-size: 12px; font-weight: 550; }
+.mt-prog { font-size: 11.5px; font-weight: 650; }
+.mt-tlbl { fill: #17163A; font-size: 13.5px; font-weight: 600; }
+.mt-badge { fill: #8E8CA8; font-size: 11px; font-weight: 650; }
+.mt-chev circle { fill: #fff; stroke: #CFCBE3; stroke-width: 1.3; }
+.mt-chev text { fill: #4B3FDB; font-size: 16px; font-weight: 800; }
+.mt-chev:hover circle { fill: #4B3FDB; stroke: #4B3FDB; }
+.mt-chev:hover text { fill: #fff; }
+.mm-treebtns { display: flex; gap: 6px; background: #fff; border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow); padding: 6px; }
 
 .mm-undo {
   position: fixed; z-index: 90; left: 50%; bottom: 24px; transform: translateX(-50%);
@@ -2104,6 +2163,8 @@ a { color: inherit; text-decoration: none; }
 }
 @media (max-width: 760px) {
   .mm-drawer { width: auto; left: 12px; }
+  .mm-caption { left: 16px; width: auto; }
+  .mm-treebtns { flex-wrap: wrap; }
   .mm-drow { grid-template-columns: 130px minmax(0, 1fr) 56px; }
   .mm-metro__track { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 30px; }
   .mm-metro__line { display: none; }

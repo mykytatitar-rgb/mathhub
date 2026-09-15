@@ -51,9 +51,10 @@
     { id: 'alg.abs',     domain: 'alg',   name: 'Абстрактна алгебра' },
 
     { id: 'geo.plane',   domain: 'geo',   name: 'Планіметрія' },
-    { id: 'geo.coord',   domain: 'geo',   name: 'Координати й вектори' },
+    { id: 'geo.coord',   domain: 'geo',   name: 'Аналітична геометрія' },
     { id: 'geo.solid',   domain: 'geo',   name: 'Стереометрія' },
-    { id: 'geo.high',    domain: 'geo',   name: 'Вища геометрія' },
+    { id: 'geo.proj',    domain: 'geo',   name: 'Проєктивна й неевклідова' },
+    { id: 'geo.diff',    domain: 'geo',   name: 'Диференціальна геометрія' },
 
     { id: 'an.fn',       domain: 'an',    name: 'Функції та графіки' },
     { id: 'an.trig',     domain: 'an',    name: 'Тригонометрія' },
@@ -283,19 +284,19 @@
   T('geo.volumes', 'geo.solid', 3, 'Обʼєми й площі поверхонь',
     'Обʼєми й площі поверхонь многогранників і тіл обертання', ['geo.polyhedra', 'geo.rotation']);
 
-  T('geo.projective', 'geo.high', 5, 'Проєктивна геометрія',
+  T('geo.projective', 'geo.proj', 5, 'Проєктивна геометрія',
     'Проєктивна площина, двоїстість, подвійне відношення, теорема Дезарга', ['geo.conics', 'alg.vectorspaces']);
-  T('geo.noneuclid', 'geo.high', 5, 'Неевклідові геометрії',
+  T('geo.noneuclid', 'geo.proj', 5, 'Неевклідові геометрії',
     'Геометрія Лобачевського, моделі Пуанкаре й Клейна, сферична геометрія', ['geo.projective', 'found.axiomatic']);
-  T('geo.diffgeo', 'geo.high', 5, 'Диференціальна геометрія кривих і поверхонь',
+  T('geo.diffgeo', 'geo.diff', 5, 'Диференціальна геометрія кривих і поверхонь',
     'Кривина й скрут, перша й друга квадратичні форми, гауссова кривина', ['an.multivar', 'geo.quadrics']);
-  T('geo.manifolds', 'geo.high', 5, 'Гладкі многовиди',
+  T('geo.manifolds', 'geo.diff', 5, 'Гладкі многовиди',
     'Карти й атласи, дотичний простір, векторні поля, розбиття одиниці', ['geo.diffgeo', 'top.general']);
-  T('geo.riemannian', 'geo.high', 6, 'Ріманова геометрія',
+  T('geo.riemannian', 'geo.diff', 6, 'Ріманова геометрія',
     'Метрика, звʼязність Леві-Чивіти, тензор кривини, геодезичні', ['geo.manifolds', 'alg.tensors']);
-  T('geo.algebraic', 'geo.high', 6, 'Алгебраїчна геометрія',
+  T('geo.algebraic', 'geo.proj', 6, 'Алгебраїчна геометрія',
     'Афінні й проєктивні многовиди, схеми, пучки', ['alg.commutative', 'geo.projective']);
-  T('geo.symplectic', 'geo.high', 6, 'Симплектична геометрія',
+  T('geo.symplectic', 'geo.diff', 6, 'Симплектична геометрія',
     'Симплектичні многовиди, гамільтонові потоки, теорема Дарбу', ['geo.manifolds', 'an.difforms']);
 
   /* ---------------- Аналіз ---------------- */

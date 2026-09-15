@@ -7,7 +7,7 @@
 
    Версію треба піднімати щоразу, коли змінюється склад файлів. */
 
-var VERSION = 'vektor-v75';
+var VERSION = 'vektor-v76';
 
 var SHELL = [
   './',
@@ -45,6 +45,7 @@ var SHELL = [
   './assets/js/views-student.js',
   './assets/js/views-board.js',
   './assets/js/mathmap-data.js',
+  './assets/js/mathmap-content.js',
   './assets/js/views-mathmap.js',
   './assets/js/app.js'
 ];

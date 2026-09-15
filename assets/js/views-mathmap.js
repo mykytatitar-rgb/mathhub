@@ -292,9 +292,40 @@
 
   var selected = null;
 
+  /* ============================================================
+     Зміст тем: теорія, практика, у реальному світі
+     ============================================================
+
+     Зміст важить удесятеро більше за саму карту й потрібен лише тут,
+     тому його не тягнемо разом з усім кабінетом, а підвантажуємо, коли
+     карту відкривають уперше. Поки вантажиться — карта вже працює. */
+
+  var contentState = window.MATH_CONTENT ? 'ready' : 'idle';
+  var contentWaiters = [];
+
+  function content() { return window.MATH_CONTENT || null; }
+
+  function ensureContent(done) {
+    if (window.MATH_CONTENT) { contentState = 'ready'; if (done) done(); return; }
+    if (done) contentWaiters.push(done);
+    if (contentState === 'loading') return;
+    contentState = 'loading';
+    var sc = document.createElement('script');
+    sc.src = 'assets/js/mathmap-content.js';
+    function finish(ok) {
+      contentState = ok && window.MATH_CONTENT ? 'ready' : 'failed';
+      var list = contentWaiters;
+      contentWaiters = [];
+      list.forEach(function (fn) { try { fn(); } catch (e) { console.warn('Зміст карти:', e); } });
+    }
+    sc.onload = function () { finish(true); };
+    sc.onerror = function () { finish(false); };
+    document.head.appendChild(sc);
+  }
+
   /** Вкладка — з адреси: і в моєму розділі, і в картці учня це «?v=». */
   function currentView() {
-    var m = /[?&]v=(map|road)\b/.exec(location.hash);
+    var m = /[?&]v=(map|road|tree)\b/.exec(location.hash);
     return m ? m[1] : 'home';
   }
 
@@ -302,7 +333,7 @@
     invalidate();
     var view = currentView();
 
-    var tabs = [['home', who ? 'Де зараз' : 'Де я'], ['map', 'Карта'], ['road', 'Роудмап']].map(function (x) {
+    var tabs = [['home', who ? 'Де зараз' : 'Де я'], ['map', 'Карта'], ['tree', 'Майнд-меп'], ['road', 'Роудмап']].map(function (x) {
       return '<button class="tab' + (view === x[0] ? ' is-active' : '') + '" data-mm="tab" data-arg="' + x[0] + '">' +
         x[1] + '</button>';
     }).join('');
@@ -316,7 +347,7 @@
         '</div>';
     }
 
-    var body = view === 'map' ? mapShell() : view === 'road' ? roadHtml() : homeHtml();
+    var body = view === 'map' ? mapShell() : view === 'tree' ? treeShell() : view === 'road' ? roadHtml() : homeHtml();
 
     return '<div class="mm mm--' + view + '" data-who="' + esc(who || '') + '">' +
       (ERRORS.length
@@ -575,6 +606,7 @@
       '<span><span class="mm-chip is-next">можна брати</span></span>' +
       '<span><span class="mm-chip is-locked">ще закрита</span></span></div>';
 
+    var askedDom = {};           // питання домену — лише там, де домен зустрівся вперше
     var lanes = MAP.stages.filter(function (Sg) { return Sg.id <= max; }).map(function (Sg) {
       var list = stageTopics(Sg.id);
       var s = statsOf(list);
@@ -584,7 +616,10 @@
         var mine = list.filter(function (t) { return domOf(t) === d; })
           .sort(function (a, b) { return secOf(a).order - secOf(b).order || a.order - b.order; });
         if (!mine.length) return '';
-        return '<div class="mm-dom"><div class="mm-dom__name" style="color:' + d.color + '">' + esc(d.name) + '</div>' +
+        var dq = !askedDom[d.id] && content() && content().domains[d.id];
+        askedDom[d.id] = 1;
+        return '<div class="mm-dom"><div class="mm-dom__name" style="color:' + d.color + '">' + esc(d.name) +
+          (dq ? '<span class="mm-dom__q">' + esc(dq.q) + '</span>' : '') + '</div>' +
           '<div class="mm-chips">' + mine.map(function (t) {
             var sv = st(t.id), op = open(t);
             var c = (sv === 0 && !op ? ' is-locked' : '') + (sv === 0 && op ? ' is-next' : '') +
@@ -742,8 +777,56 @@
             [0, 1, 2, 3].map(function (s) { return '<div>' + glyph(s, '#17163A', 14) + esc(tx.status[s]) + '</div>'; }).join('') +
           '</div>' +
         '</div>' +
-        '<div class="mm-maphint">Колесо — масштаб · тягни — рух · клік по темі — деталі</div>' +
+        '<div class="mm-caption" id="mm-caption" hidden></div>' +
+        '<div class="mm-maphint">Колесо — масштаб · тягни — рух · клік по домену, розділу чи темі — пояснення</div>' +
       '</div>';
+  }
+
+  /* Пояснення до домену чи розділу — як у Cognitive Bias Codex: спершу
+     навіщо ця частина математики існує, а вже потім її теми. */
+  var captionFor = null;
+
+  function showCaption(kind, id) {
+    var el = $('#mm-caption');
+    if (!el) return;
+    captionFor = { kind: kind, id: id };
+    var K = content();
+    var d, title, q = '', why = '', list;
+    if (kind === 'dom') {
+      d = domById[id];
+      if (!d) return;
+      title = d.name;
+      if (K && K.domains[id]) { q = K.domains[id].q; why = K.domains[id].why; }
+      list = MAP.topics.filter(function (t) { return domOf(t) === d; });
+    } else {
+      var sc = secById[id];
+      if (!sc) return;
+      d = domById[sc.domain];
+      title = sc.name;
+      q = d.name;
+      why = K ? (K.sections[id] || '') : '';
+      list = MAP.topics.filter(function (t) { return t.section === id; });
+    }
+    var inScope2 = list.filter(inScope);
+    var ss = statsOf(inScope2);
+    el.style.setProperty('--c', d.color);
+    el.innerHTML =
+      '<button class="mm-caption__x" data-mm="caption-close" title="Сховати">' + icon('x', 14) + '</button>' +
+      '<div class="mm-caption__q">' + esc(q) + '</div>' +
+      '<div class="mm-caption__t">' + esc(title) + '</div>' +
+      (why ? '<div class="mm-caption__w">' + esc(why) + '</div>'
+           : (contentState === 'loading' ? '<div class="mm-caption__w muted">Завантажую пояснення…</div>' : '')) +
+      '<div class="mm-caption__n">' + pl(list.length, 'тема', 'теми', 'тем') +
+        (inScope2.length ? ' · ' + T().know + ' ' + ss.known + ' з ' + inScope2.length : '') + '</div>';
+    el.hidden = false;
+    var hint = $('.mm-maphint');
+    if (hint) hint.hidden = true;
+  }
+
+  function hideCaption() {
+    captionFor = null;
+    var el = $('#mm-caption');
+    if (el) el.hidden = true;
   }
 
   function mapBox() {
@@ -751,7 +834,7 @@
     return el ? { w: el.clientWidth, h: el.clientHeight } : { w: 1000, h: 640 };
   }
 
-  function drawerSpace(b) { return selected && b.w > 900 ? 430 : 0; }
+  function drawerSpace(b) { return selected && b.w > 900 ? 550 : 0; }
 
   function homeView() {
     var b = mapBox();
@@ -830,6 +913,23 @@
       out.push('<path id="mm-arc-' + d.id + '" fill="none" d="' + arcPath(R_BAND, dp.a0, dp.a1, rev) + '"/>');
       out.push('<text class="mm-bandlbl" style="font-size:' + f1(fs) + 'px" dy="' + f1(fs * 0.35) + '">' +
         '<textPath href="#mm-arc-' + d.id + '" startOffset="50%" text-anchor="middle">' + esc(name) + '</textPath></text>');
+
+      /* Питання домену — всередині кільця, як пояснення в Codex. Згори
+         кола літери ростуть назовні від лінії, знизу — всередину, тож і
+         радіус лінії там різний: інакше текст налазив би на кільце. */
+      var K = content();
+      var dq = K && K.domains[d.id] ? K.domains[d.id].q : '';
+      if (dq) {
+        var qLen = 290 * span * Math.PI / 180 - 16;
+        var qfs = Math.min(17, qLen / (dq.length * 0.56));
+        /* Вузький домен отримує дрібніший шрифт: при наближенні він читається. */
+        if (qfs >= 6.5) {
+          var qr = rev ? 288 : 288 - qfs * 0.72;
+          out.push('<path id="mm-qarc-' + d.id + '" fill="none" d="' + arcPath(qr, dp.a0, dp.a1, rev) + '"/>');
+          out.push('<text class="mm-bandq" fill="' + d.color + '" style="font-size:' + f1(qfs) + 'px">' +
+            '<textPath href="#mm-qarc-' + d.id + '" startOffset="50%" text-anchor="middle">' + esc(dq) + '</textPath></text>');
+        }
+      }
     });
 
     /* центр */
@@ -999,17 +1099,369 @@
 
       var band = el.closest && el.closest('[data-dom]');
       if (band) {
-        var dp = layout().dom[band.getAttribute('data-dom')];
+        var did = band.getAttribute('data-dom');
+        var dp = layout().dom[did];
         fitSector(dp.a0, dp.a1, R_BAND - 40, rTopic(6) + 260);
+        showCaption('dom', did);
         return;
       }
       var sec = el.closest && el.closest('[data-sec]');
       if (sec) {
-        var sp = layout().sec[sec.getAttribute('data-sec')];
+        var sid = sec.getAttribute('data-sec');
+        var sp = layout().sec[sid];
         fitSector(sp.a0 - 1, sp.a1 + 1, R_SEC - 260, rTopic(6) + 300);
+        showCaption('sec', sid);
         return;
       }
-      if (el.closest && el.closest('[data-root]')) { VIEW = homeView(); applyView(); return; }
+      if (el.closest && el.closest('[data-root]')) { VIEW = homeView(); applyView(); hideCaption(); return; }
+      hideCaption();
+      if (selected) closeDrawer();
+    });
+  }
+
+  /* ============================================================
+     Майнд-меп — розгортуване дерево, як у NotebookLM
+     ============================================================
+
+     Кругла карта показує все одразу — і тому здалеку назви тем не
+     прочитати. Дерево показує лише те, що розгорнули: математика →
+     домени → розділи → теми. Гілку відкривають стрілкою, і вона росте
+     праворуч, а вузол, на який клацнули, лишається на тому самому місці
+     екрана — інакше після кожного кліку доводилося б його шукати.
+
+     У доменів і розділів під назвою — навіщо вони, як у Codex. */
+
+  var TREE_OPEN = { root: 1 };
+  var TVIEW = null;
+  var treeMoved = false;       // рухав дерево сам — не підганяти його під екран без попиту
+  var treeSvg = null, treeWorld = null, treePos = {};
+  var measureCtx = null;
+
+  function textW(str, size, weight) {
+    if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d');
+    measureCtx.font = (weight || 600) + ' ' + size + 'px Manrope, "Segoe UI", system-ui, sans-serif';
+    return measureCtx.measureText(String(str || '')).width;
+  }
+
+  function wrapWords(str, maxChars) {
+    var lines = [], cur = '';
+    String(str || '').split(' ').forEach(function (w) {
+      if (cur && (cur + ' ' + w).length > maxChars) { lines.push(cur); cur = w; }
+      else cur = cur ? cur + ' ' + w : w;
+    });
+    if (cur) lines.push(cur);
+    return lines;
+  }
+
+  function hexA(hex, a) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+    if (!m) return 'rgba(23,22,58,' + a + ')';
+    var n = parseInt(m[1], 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+
+  function treeData() {
+    var K = content();
+    var stu = student();
+    var root = { key: 'root', kind: 'root', label: 'Математика' + (stu ? ' · ' + String(stu.name || '').split(' ')[0] : ''), children: [] };
+    MAP.domains.forEach(function (d) {
+      var dn = { key: 'd:' + d.id, kind: 'dom', dom: d, label: d.name,
+                 sub: K && K.domains[d.id] ? K.domains[d.id].q : '', children: [], topics: [] };
+      MAP.sections.filter(function (x) { return x.domain === d.id; }).forEach(function (sc) {
+        var sn = { key: 's:' + sc.id, kind: 'sec', dom: d, label: sc.name,
+                   sub: K ? (K.sections[sc.id] || '') : '', children: [], topics: [] };
+        MAP.topics.filter(function (t) { return t.section === sc.id; })
+          .sort(function (a, b) { return a.stage - b.stage || a.order - b.order; })
+          .forEach(function (t) {
+            sn.children.push({ key: 't:' + t.id, kind: 'topic', dom: d, topic: t, label: t.name, children: [] });
+            sn.topics.push(t);
+            dn.topics.push(t);
+          });
+        dn.children.push(sn);
+      });
+      root.children.push(dn);
+    });
+    return root;
+  }
+
+  var GAPX = 74;
+
+  function measureNode(n) {
+    var out = n.topic && n.topic.stage > maxStage();
+    n.out = !!out;
+    if (n.kind === 'root') {
+      n.lines = [];
+      n.w = Math.ceil(textW(n.label, 17, 750) + 44);
+      n.h = 48;
+      return;
+    }
+    if (n.kind === 'topic') {
+      n.lines = [];
+      n.badge = 'р.' + n.topic.stage;
+      n.w = Math.ceil(40 + textW(n.label, 13.5, 600) + 12 + textW(n.badge, 11, 650) + 16);
+      n.h = 32;
+      return;
+    }
+    var sc = n.topics.filter(inScope);
+    var ss = statsOf(sc);
+    n.prog = sc.length ? ss.known + '/' + sc.length : '';
+    n.out = !sc.length;
+    n.lines = n.sub ? wrapWords(n.sub, n.kind === 'dom' ? 34 : 44) : [];
+    var labelW = textW(n.label, n.kind === 'dom' ? 15 : 14, 750) + (n.prog ? 14 + textW(n.prog, 11.5, 650) : 0);
+    var subW = n.lines.reduce(function (m, l) { return Math.max(m, textW(l, 12, 550)); }, 0);
+    n.w = Math.ceil(Math.max(labelW, subW) + 34);
+    n.h = 36 + n.lines.length * 16;
+  }
+
+  function layoutTree() {
+    var root = treeData();
+    var colW = [];
+    (function walk(n, depth) {
+      measureNode(n);
+      n.depth = depth;
+      colW[depth] = Math.max(colW[depth] || 0, n.w);
+      if (TREE_OPEN[n.key]) n.children.forEach(function (c) { c.parent = n.key; walk(c, depth + 1); });
+    })(root, 0);
+
+    var colX = [0];
+    for (var i = 1; i < colW.length; i++) colX[i] = colX[i - 1] + colW[i - 1] + GAPX;
+
+    var y = 0;
+    (function place(n) {
+      n.x = colX[n.depth];
+      if (TREE_OPEN[n.key] && n.children.length) {
+        n.children.forEach(place);
+        n.y = (n.children[0].y + n.children[n.children.length - 1].y) / 2;
+      } else {
+        var slot = n.h + (n.kind === 'topic' ? 8 : 16);
+        n.y = y + slot / 2;
+        y += slot;
+      }
+    })(root);
+
+    return { root: root, height: y, width: colX[colX.length - 1] + colW[colW.length - 1] + 40 };
+  }
+
+  function treeMarkup() {
+    var L = layoutTree();
+    var links = [], nodes = [];
+    var tx = T();
+    treePos = {};
+
+    (function draw(n) {
+      treePos[n.key] = { x: n.x, y: n.y, w: n.w, h: n.h, parent: n.parent };
+      var open = TREE_OPEN[n.key] && n.children.length;
+      if (open) {
+        n.children.forEach(function (c) {
+          var x1 = n.x + n.w + 12, y1 = n.y, x2 = c.x, y2 = c.y;
+          links.push('<path class="mt-link' + (c.out ? ' is-out' : '') + '" d="M' + f1(x1) + ' ' + f1(y1) +
+            ' C' + f1(x1 + GAPX * 0.55) + ' ' + f1(y1) + ' ' + f1(x2 - GAPX * 0.55) + ' ' + f1(y2) + ' ' + f1(x2) + ' ' + f1(y2) + '"/>');
+          draw(c);
+        });
+      }
+
+      var c0 = n.dom ? n.dom.color : '#17163A';
+      var top = n.y - n.h / 2;
+      var cls = 'mt-node mt-' + n.kind + (n.out ? ' is-out' : '') +
+        (n.topic && selected === n.topic.id ? ' is-sel' : '');
+      var fill = n.kind === 'root' ? '#17163A' : n.kind === 'topic' ? '#FFFFFF' : hexA(c0, n.kind === 'dom' ? 0.15 : 0.07);
+      var stroke = n.kind === 'root' ? '#17163A' : n.kind === 'topic' ? '#E2E0EE' : hexA(c0, n.kind === 'dom' ? 0.55 : 0.32);
+      var g = ['<g class="' + cls + '" data-tk="' + esc(n.key) + '">'];
+      g.push('<rect class="mt-pill" x="' + f1(n.x) + '" y="' + f1(top) + '" width="' + n.w + '" height="' + n.h +
+        '" rx="' + (n.kind === 'topic' ? 10 : 13) + '" fill="' + fill + '" stroke="' + stroke + '"/>');
+
+      if (n.kind === 'root') {
+        g.push('<text class="mt-rootlbl" x="' + f1(n.x + n.w / 2) + '" y="' + f1(n.y) + '" dy="0.35em" text-anchor="middle">' + esc(n.label) + '</text>');
+      } else if (n.kind === 'topic') {
+        var sv = st(n.topic.id);
+        g.push('<g transform="translate(' + f1(n.x + 12) + ',' + f1(n.y - 9) + ') scale(1.125)">' + glyphInner(sv, c0) + '</g>');
+        g.push('<text class="mt-tlbl" x="' + f1(n.x + 40) + '" y="' + f1(n.y) + '" dy="0.35em">' + esc(n.label) + '</text>');
+        g.push('<text class="mt-badge" x="' + f1(n.x + n.w - 12) + '" y="' + f1(n.y) + '" dy="0.35em" text-anchor="end">' + esc(n.badge) + '</text>');
+        g.push('<title>' + esc(n.label + ' — ' + tx.status[sv]) + '</title>');
+      } else {
+        g.push('<text class="mt-lbl mt-lbl--' + n.kind + '" x="' + f1(n.x + 17) + '" y="' + f1(top + 22) + '">' + esc(n.label) + '</text>');
+        if (n.prog) {
+          g.push('<text class="mt-prog" fill="' + c0 + '" x="' + f1(n.x + n.w - 14) + '" y="' + f1(top + 22) + '" text-anchor="end">' + esc(n.prog) + '</text>');
+        }
+        n.lines.forEach(function (ln, i) {
+          g.push('<text class="mt-sub" x="' + f1(n.x + 17) + '" y="' + f1(top + 40 + i * 16) + '">' + esc(ln) + '</text>');
+        });
+      }
+
+      if (n.children.length) {
+        g.push('<g class="mt-chev" data-tt="' + esc(n.key) + '"><circle cx="' + f1(n.x + n.w) + '" cy="' + f1(n.y) + '" r="11"/>' +
+          '<text x="' + f1(n.x + n.w) + '" y="' + f1(n.y) + '" dy="0.36em" text-anchor="middle">' + (open ? '‹' : '›') + '</text></g>');
+      }
+      g.push('</g>');
+      nodes.push(g.join(''));
+    })(L.root);
+
+    return { html: links.join('') + nodes.join(''), height: L.height, width: L.width, rootY: L.root.y };
+  }
+
+  var lastTree = null;
+
+  function redrawTree() {
+    if (!treeWorld) return;
+    lastTree = treeMarkup();
+    treeWorld.innerHTML = lastTree.html;
+    applyTreeView();
+  }
+
+  function applyTreeView() {
+    if (!treeWorld || !TVIEW) return;
+    treeWorld.setAttribute('transform', 'translate(' + f1(TVIEW.tx) + ',' + f1(TVIEW.ty) + ') scale(' + TVIEW.k.toFixed(4) + ')');
+  }
+
+  function fitTree() {
+    var b = mapBox();
+    var h = b.h - 64;            // знизу — кнопки
+    var k = Math.max(0.75, Math.min(1, (h - 30) / Math.max(1, lastTree ? lastTree.height : 600)));
+    var tall = lastTree && lastTree.height * k > h - 30;
+    TVIEW = { k: k, tx: 36, ty: tall ? 16 : h / 2 - (lastTree ? lastTree.rootY : 0) * k };
+    treeMoved = false;
+    applyTreeView();
+  }
+
+  /** Розгорнути чи згорнути гілку так, щоб вузол лишився на тому самому місці екрана. */
+  function toggleBranch(key, force) {
+    treeMoved = true;
+    var before = treePos[key];
+    if (force === undefined) TREE_OPEN[key] = !TREE_OPEN[key]; else TREE_OPEN[key] = force;
+    redrawTree();
+    var after = treePos[key];
+    if (before && after && TVIEW) {
+      TVIEW.tx += (before.x - after.x) * TVIEW.k;
+      TVIEW.ty += (before.y - after.y) * TVIEW.k;
+      if (TREE_OPEN[key]) bringKidsIntoView(key);
+      applyTreeView();
+    }
+  }
+
+  /* Розгорнута гілка не має ховатися за краєм: зсуваємо дерево рівно
+     настільки, щоб діти стали видні, але сам вузол з екрана не зникав. */
+  function bringKidsIntoView(key) {
+    var kids = Object.keys(treePos).filter(function (k) { return treePos[k].parent === key; });
+    if (!kids.length) return;
+    var b = mapBox(), k = TVIEW.k, pad = 14;
+    var right = b.w - drawerSpace(b) - pad, bottom = b.h - 64;
+    var p = treePos[key];
+    var y0 = Infinity, y1 = -Infinity, x1 = -Infinity;
+    kids.forEach(function (id) {
+      var q = treePos[id];
+      y0 = Math.min(y0, q.y - q.h / 2); y1 = Math.max(y1, q.y + q.h / 2); x1 = Math.max(x1, q.x + q.w);
+    });
+    var sy0 = TVIEW.ty + y0 * k, sy1 = TVIEW.ty + y1 * k, sx1 = TVIEW.tx + x1 * k;
+    var dy = 0, dx = 0;
+    if (sy1 - sy0 <= bottom - pad * 2) {
+      if (sy0 < pad) dy = pad - sy0;
+      else if (sy1 > bottom - pad) dy = bottom - pad - sy1;
+    } else {
+      dy = (bottom / 2) - (TVIEW.ty + p.y * k);       // не влазить — ставимо вузол посередині
+    }
+    if (sx1 > right) dx = right - sx1;
+    var px = TVIEW.tx + p.x * k + dx;
+    if (px < pad) dx += pad - px;                      // сам вузол лишається на екрані
+    TVIEW.tx += dx;
+    TVIEW.ty += dy;
+  }
+
+  function revealInTree(id) {
+    var t = byId[id];
+    if (!t || !treeWorld) return;
+    treeMoved = true;
+    TREE_OPEN['d:' + domOf(t).id] = 1;
+    TREE_OPEN['s:' + t.section] = 1;
+    redrawTree();
+    var pos = treePos['t:' + id];
+    if (!pos || !TVIEW) return;
+    var b = mapBox(), free = b.w - drawerSpace(b);
+    TVIEW.k = Math.max(TVIEW.k, 0.85);
+    TVIEW.tx = free / 2 - (pos.x + pos.w / 2) * TVIEW.k;
+    TVIEW.ty = b.h / 2 - pos.y * TVIEW.k;
+    applyTreeView();
+  }
+
+  /** Тема, по якій клацнули, не має опинитися під шухлядою. */
+  function keepTopicClear(id) {
+    var pos = treePos['t:' + id];
+    if (!pos || !TVIEW) return;
+    var b = mapBox(), right = b.w - drawerSpace(b) - 20;
+    var sx1 = TVIEW.tx + (pos.x + pos.w) * TVIEW.k;
+    if (sx1 > right) { TVIEW.tx -= sx1 - right; applyTreeView(); }
+  }
+
+  function treeZoom(mx, my, factor) {
+    var k2 = Math.max(0.2, Math.min(2.5, TVIEW.k * factor));
+    var wx = (mx - TVIEW.tx) / TVIEW.k, wy = (my - TVIEW.ty) / TVIEW.k;
+    TVIEW.tx = mx - wx * k2;
+    TVIEW.ty = my - wy * k2;
+    TVIEW.k = k2;
+    applyTreeView();
+  }
+
+  function treeShell() {
+    return '<div class="card mm-mapwrap mm-treewrap">' +
+        '<svg id="mm-tree" xmlns="http://www.w3.org/2000/svg"><g id="mm-tworld"></g></svg>' +
+        '<div class="mm-mapui">' +
+          '<div class="mm-zoom">' +
+            '<button data-mm="tzoom" data-arg="in" title="Наблизити">+</button>' +
+            '<button data-mm="tzoom" data-arg="out" title="Віддалити">−</button>' +
+            '<button data-mm="tzoom" data-arg="fit" title="Вмістити">◎</button>' +
+          '</div>' +
+          '<div class="mm-treebtns">' +
+            '<button class="btn btn--soft btn--sm" data-mm="tree" data-arg="domains">Розділи</button>' +
+            '<button class="btn btn--soft btn--sm" data-mm="tree" data-arg="all">Усі теми</button>' +
+            '<button class="btn btn--ghost btn--sm" data-mm="tree" data-arg="none">Згорнути</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="mm-maphint">Стрілка розгортає гілку · клік по темі відкриває конспект · колесо — масштаб</div>' +
+      '</div>';
+  }
+
+  function bindTree() {
+    var drag = null;
+
+    treeSvg.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      var r = treeSvg.getBoundingClientRect();
+      treeMoved = true;
+      treeZoom(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0016));
+    }, { passive: false });
+
+    treeSvg.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      drag = { x: e.clientX, y: e.clientY, tx: TVIEW.tx, ty: TVIEW.ty, moved: false, target: e.target };
+      try { treeSvg.setPointerCapture(e.pointerId); } catch (err) { /* не критично */ }
+    });
+    treeSvg.addEventListener('pointermove', function (e) {
+      if (!drag) return;
+      var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+      drag.moved = true;
+      treeMoved = true;
+      treeSvg.classList.add('is-drag');
+      TVIEW.tx = drag.tx + dx;
+      TVIEW.ty = drag.ty + dy;
+      applyTreeView();
+    });
+    treeSvg.addEventListener('pointerup', function () {
+      if (!drag) return;
+      var d = drag;
+      drag = null;
+      treeSvg.classList.remove('is-drag');
+      if (d.moved) return;
+
+      var el = d.target;
+      var chev = el.closest && el.closest('[data-tt]');
+      if (chev) { toggleBranch(chev.getAttribute('data-tt')); return; }
+      var node = el.closest && el.closest('[data-tk]');
+      if (node) {
+        var key = node.getAttribute('data-tk');
+        if (key.indexOf('t:') === 0) openTopic(key.slice(2), { keepView: true });
+        else if (key !== 'root' || !TREE_OPEN.root) toggleBranch(key);
+        return;
+      }
       if (selected) closeDrawer();
     });
   }
@@ -1018,7 +1470,8 @@
   V.mountMathmap = function () {
     var root = $('.mm');
     if (!root) {
-      svgEl = worldEl = null;
+      svgEl = worldEl = treeSvg = treeWorld = null;
+      captionFor = null;
       selected = null;
       hideDrawer();
       return;
@@ -1030,17 +1483,48 @@
 
     svgEl = $('#mm-svg');
     worldEl = $('#mm-world');
+    captionFor = null;
     if (svgEl && worldEl) {
-      bindMap();
+      if (!svgEl.mmBound) { svgEl.mmBound = true; bindMap(); }
       if (!VIEW) VIEW = homeView();
       redrawWorld();
-      var hint = $('.mm-maphint');
-      if (hint) setTimeout(function () { hint.hidden = true; }, 6000);
     } else {
       svgEl = worldEl = null;
     }
 
+    treeSvg = $('#mm-tree');
+    treeWorld = $('#mm-tworld');
+    if (treeSvg && treeWorld) {
+      if (!treeSvg.mmBound) { treeSvg.mmBound = true; bindTree(); }
+      redrawTree();
+      if (!TVIEW) fitTree(); else applyTreeView();
+      /* Ширину підписів міряємо шрифтом; поки Manrope не приїхав, мірки
+         чужі, і довгі назви вилазили б за плашки. */
+      if (document.fonts && document.fonts.status !== 'loaded') {
+        document.fonts.ready.then(function () { if (treeWorld) redrawTree(); });
+      }
+    } else {
+      treeSvg = treeWorld = null;
+    }
+
+    var hint = $('.mm-maphint');
+    if (hint) setTimeout(function () { hint.hidden = true; }, 6000);
+
     if (selected && byId[selected]) renderDrawer();
+
+    /* Зміст підтягуємо один раз. Коли він приїде — домальовуємо те, що
+       вже на екрані, а не всю сторінку: інакше загубилась би прокрутка й
+       відкрита гілка дерева. */
+    if (contentState === 'idle') {
+      ensureContent(function () {
+        if (!window.MATH_CONTENT || !$('.mm')) return;
+        if (worldEl) redrawWorld();
+        if (treeWorld) { redrawTree(); if (!treeMoved) fitTree(); }
+        if (captionFor) showCaption(captionFor.kind, captionFor.id);
+        if (selected && byId[selected]) renderDrawer();
+        if (currentView() === 'road') rerender();
+      });
+    }
   };
 
   /* ============================================================
@@ -1077,6 +1561,8 @@
     if (svgEl && worldEl) {
       redrawWorld();
       if (!(opts && opts.keepView)) centerOnTopic(id);
+    } else if (treeWorld) {
+      if (opts && opts.keepView) { redrawTree(); keepTopicClear(id); } else revealInTree(id);
     } else {
       rerender();
     }
@@ -1086,6 +1572,7 @@
     selected = null;
     hideDrawer();
     if (svgEl && worldEl) redrawWorld();
+    else if (treeWorld) redrawTree();
     else if (currentView() === 'road') rerender();
   }
 
@@ -1098,15 +1585,6 @@
     var view = currentView();
     var stu = student();
 
-    function list(ids, empty) {
-      if (!ids.length) return '<div class="mm-empty">' + empty + '</div>';
-      return '<div class="mm-list">' + ids.map(function (id) {
-        var x = byId[id], dx = domOf(x);
-        return '<button class="mm-row" data-mm="open" data-arg="' + id + '">' + glyph(st(id), dx.color, 17) +
-          '<span class="mm-row__name">' + esc(x.name) + '<small>' + esc(dx.name) + ' · рівень ' + x.stage + '</small></span></button>';
-      }).join('') + '</div>';
-    }
-
     var missing = t.req.filter(function (r) { return !known(r); });
     var hint = '';
     if (missing.length && s < 2) {
@@ -1117,6 +1595,39 @@
     }
 
     var when = e.at ? U.fmtDate(e.at) : '';
+
+    /* Конспект теми, як у NotebookLM: теорія, практика, і окремо — де це
+       в житті. Останній блок підсвічено кольором домену: саме він відповідає
+       на вічне учнівське «а навіщо мені це». */
+    var K = content(), c = K && K.topics[t.id];
+    function card(title, ic, items, cls, extra) {
+      return '<section class="mm-study' + (cls ? ' ' + cls : '') + '">' +
+        '<div class="mm-study__h">' + icon(ic, 16) + title + '</div>' +
+        (extra || '') +
+        '<ul>' + items.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></section>';
+    }
+    var study;
+    if (c) {
+      var secWhy = K.sections[t.section];
+      study = card('Теорія', 'book', c.th) +
+        card('Практика', 'edit', c.pr) +
+        card('У реальному світі', 'globe', c.ap, 'is-applied',
+          secWhy ? '<div class="mm-study__why">' + esc(secWhy) + '</div>' : '');
+    } else if (contentState === 'failed') {
+      study = '<div class="mm-empty">Не вдалося завантажити теорію й практику. Перевірте інтернет і відкрийте тему ще раз.</div>';
+    } else {
+      study = '<div class="mm-study mm-study--wait">Завантажую теорію, практику й приклади з життя…</div>';
+      ensureContent(function () { if (selected === t.id) renderDrawer(); });
+    }
+
+    function chips(ids, empty) {
+      if (!ids.length) return '<div class="mm-empty">' + empty + '</div>';
+      return '<div class="mm-mini">' + ids.map(function (id) {
+        var x = byId[id], dx = domOf(x);
+        return '<button class="mm-chip" data-mm="open" data-arg="' + id + '" title="' + esc(dx.name + ' · рівень ' + x.stage) + '">' +
+          glyph(st(id), dx.color, 14) + esc(x.name) + '</button>';
+      }).join('') + '</div>';
+    }
 
     dr.innerHTML =
       '<div class="mm-dr__head" style="--c:' + d.color + '">' +
@@ -1132,16 +1643,18 @@
             glyph(v, v === s ? '#fff' : d.color, 18) + esc(tx.status[v]) + '</button>';
         }).join('') + '</div>' +
         hint +
+        '<div class="mm-studies" style="--c:' + d.color + '">' + study + '</div>' +
         '<div class="mm-dr__h">Спирається на · ' + t.req.length + '</div>' +
-        list(t.req, 'Ні на що — з цієї теми все починається.') +
+        chips(t.req, 'Ні на що — з цієї теми все починається.') +
         '<div class="mm-dr__h">Відкриває · ' + unlocks[t.id].length + '</div>' +
-        list(unlocks[t.id], 'Далі на карті нічого — це одна з вершин.') +
+        chips(unlocks[t.id], 'Далі на карті нічого — це одна з вершин.') +
         '<div class="mm-dr__h">Нотатка</div>' +
         '<textarea class="textarea mm-note" id="mm-note" placeholder="' + esc(tx.notePh) + '">' +
           esc(e.note || '') + '</textarea>' +
         (when ? '<div class="mm-dr__meta">Змінено ' + esc(when) + '</div>' : '') +
         '<div class="mm-dr__foot">' +
-          (view !== 'map' ? '<button class="btn btn--soft btn--sm" data-mm="showmap">' + icon('target', 15) + 'Показати на карті</button>' : '') +
+          (view !== 'map' ? '<button class="btn btn--soft btn--sm" data-mm="showmap">' + icon('target', 15) + 'На карті</button>' : '') +
+          (view !== 'tree' ? '<button class="btn btn--ghost btn--sm" data-mm="showtree">У майнд-мепі</button>' : '') +
           (view !== 'road' ? '<button class="btn btn--ghost btn--sm" data-mm="showroad">У роудмапі</button>' : '') +
         '</div>' +
       '</div>';
@@ -1301,7 +1814,35 @@
       S.setMapTopic(selected, { s: +arg }, who);
       invalidate();
       if (svgEl && worldEl) { redrawWorld(); renderDrawer(); navCount(); }
+      else if (treeWorld) { redrawTree(); renderDrawer(); navCount(); }
       else rerender();
+      return;
+    }
+
+    if (act === 'caption-close') { hideCaption(); return; }
+
+    if (act === 'tree' && treeWorld) {
+      if (arg === 'none') TREE_OPEN = { root: 1 };
+      if (arg === 'domains' || arg === 'all') {
+        TREE_OPEN = { root: 1 };
+        MAP.domains.forEach(function (d) { TREE_OPEN['d:' + d.id] = 1; });
+        if (arg === 'all') MAP.sections.forEach(function (x) { TREE_OPEN['s:' + x.id] = 1; });
+      }
+      redrawTree();
+      fitTree();
+      return;
+    }
+    if (act === 'tzoom' && TVIEW) {
+      var tb = mapBox();
+      if (arg === 'in') treeZoom(tb.w / 2, tb.h / 2, 1.3);
+      if (arg === 'out') treeZoom(tb.w / 2, tb.h / 2, 1 / 1.3);
+      if (arg === 'fit') fitTree();
+      return;
+    }
+    if (act === 'showtree') {
+      var tid = selected;
+      window.App.setQuery({ v: 'tree' });
+      setTimeout(function () { if (tid) { selected = tid; revealInTree(tid); renderDrawer(); } }, 30);
       return;
     }
 

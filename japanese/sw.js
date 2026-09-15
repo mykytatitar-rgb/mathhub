@@ -1,5 +1,5 @@
 /* Nihongo — service worker для офлайн-режиму. */
-const CACHE = 'nihongo-v4';
+const CACHE = 'nihongo-v5';
 const ASSETS = [
   './',
   './index.html',

@@ -1,5 +1,5 @@
 /* Português — service worker для офлайн-режиму. */
-const CACHE = 'portuguese-v3';
+const CACHE = 'portuguese-v4';
 const ASSETS = [
   './',
   './index.html',

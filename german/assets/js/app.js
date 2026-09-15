@@ -733,7 +733,7 @@ function renderLesson(id){
   /* --- режим «Слова»: флешкарти --- */
   function study(){
     const items = lesson.cards;
-    let i = 0, revealed = false;
+    let i = 0, revealed = true;
     function draw(autospeak){
       const c = items[i];
       const pic = emojiFor(c.ua);
@@ -766,7 +766,7 @@ function renderLesson(id){
       const gt = root.querySelector('#gtoggle'); if(gt) gt.onclick=()=>{ grammarOpen=!grammarOpen; draw(false); };
       root.querySelector('#wcard').onclick = (e)=>{ if(e.target && e.target.id==='say'){ speak(c.en); return; } if(!revealed){ revealed=true; draw(false); speak(c.en); } };
       if(autospeak!==false) speak(c.en);
-      const go = d => { revealed=false; i=(i+d+items.length)%items.length; draw(); };
+      const go = d => { revealed=true; i=(i+d+items.length)%items.length; draw(); };
       root.querySelector('#prev').onclick = ()=>go(-1);
       root.querySelector('#next').onclick = ()=>go(1);
       root.querySelector('#know').onclick = ()=>{ markKnown(lesson.id,c.en,true); bumpDaily(); go(1); };

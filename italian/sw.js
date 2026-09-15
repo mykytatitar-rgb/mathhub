@@ -1,5 +1,5 @@
 /* Italiano — service worker для офлайн-режиму. */
-const CACHE = 'italian-v3';
+const CACHE = 'italian-v4';
 const ASSETS = [
   './',
   './index.html',

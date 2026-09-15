@@ -219,7 +219,8 @@
             '<div class="stu-card__sub truncate" title="' + U.esc(s.goal) + '">' +
             U.esc(s.grade) + ' · ' + U.esc(s.goal) + '</div>' +
           '</div>' +
-          C.ring(stat.avgProgress, 44, 5) +
+          /* Кільце — скільки з карти учень уже знає, у межах його карти. */
+          C.ring(V.studentMapProgress ? V.studentMapProgress(s.id).pct : 0, 44, 5) +
         '</div>' +
 
         '<div style="margin-top:14px">' + C.balanceBadge(stat.balance, s.price, S.curOf(s.id)) +

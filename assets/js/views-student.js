@@ -7,15 +7,13 @@
 
   /* Окремої вкладки «Домашка» немає навмисно: завдання дають на уроці,
      тому вони й живуть усередині уроку — і в списку, і на дошці. */
-  /* «Роудмап» і «Прогрес» були про одне й те саме — які теми проходимо і
-     наскільки вони засвоєні, — тільки з різних боків. Тепер це один шлях:
-     етапи по порядку, і рівень засвоєння прямо на етапі. */
+  /* Окремого «Шляху» теж немає. Він відповідав на те саме питання, що й
+     карта, — що вже пройдено й що попереду, — тільки грубіше: дванадцять
+     великих тем замість двохсот зі звʼязками між ними. Два списки про одне
+     доводилося вести двічі, тож лишилася карта. */
   var TABS = [
     { id: 'overview', label: 'Огляд' },
     { id: 'lessons',  label: 'Уроки' },
-    { id: 'path',     label: 'Шлях' },
-    /* «Шлях» — план під ціль, «Карта» — де учень у всій математиці. Одне
-       не замінює інше: план каже, що робимо, карта — що вже на місці. */
     { id: 'map',      label: 'Карта' },
     { id: 'payments', label: 'Оплати' },
     { id: 'notes',    label: 'Нотатки' }
@@ -33,14 +31,13 @@
     tab = tab || 'overview';
     // старі адреси вкладок ще можуть бути в закладках або історії
     if (tab === 'homework') tab = 'lessons';
-    if (tab === 'roadmap' || tab === 'progress') tab = 'path';
+    if (tab === 'roadmap' || tab === 'progress' || tab === 'path') tab = 'map';
     var stat = S.studentStats(id);
     var next = stat.nextLesson;
     var cur = S.curOf(id);
 
     var counts = {
       lessons: stat.total,
-      path: S.roadmapOf(id).length,
       map: V.studentMapCount ? V.studentMapCount(id) : 0,
       payments: S.paymentsOf(id).length,
       notes: S.notesOf(id).length
@@ -53,7 +50,7 @@
     }).join('');
 
     var bodies = {
-      overview: overview, lessons: lessons, path: pathTab,
+      overview: overview, lessons: lessons,
       map: function (s) { return V.studentMap ? V.studentMap(s) : ''; },
       payments: payments, notes: notes
     };
@@ -109,153 +106,6 @@
      Огляд
      ============================================================ */
 
-  /* ============================================================
-     Шлях: план підготовки разом із засвоєнням тем
-     ============================================================
-
-     Раніше це були дві вкладки. «Роудмап» відповідав, що проходимо і в
-     якому порядку, «Прогрес» — наскільки засвоєно. Але це одне й те саме
-     питання з різних боків, і тримати теми у двох списках означало вести
-     їх двічі. Тепер етап знає свій рівень засвоєння, а сама дорога
-     показує, де ми зараз. */
-
-  /** Один вузол дороги. Бік чергується, щоб вийшла змійка, а не стовпчик. */
-  function pathNode(st, r, n, side) {
-    var status = r.status || 'todo';
-    var meta = S.ROADMAP_STATUS[status] || S.ROADMAP_STATUS.todo;
-    var level = r.topic ? S.progressLevel(st.id, r.topic) : null;
-
-    /* Кільце засвоєння малюємо прямо на вузлі: видно не лише «пройшли»,
-       а й наскільки міцно. */
-    var ring = '';
-    if (level != null) {
-      var C0 = 2 * Math.PI * 25;
-      ring = '<svg class="pnode__ring" viewBox="0 0 56 56" aria-hidden="true">' +
-        '<circle cx="28" cy="28" r="25" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="4"/>' +
-        '<circle cx="28" cy="28" r="25" fill="none" stroke="currentColor" stroke-width="4" ' +
-        'stroke-linecap="round" stroke-dasharray="' + C0 + '" ' +
-        'stroke-dashoffset="' + (C0 * (1 - U.clamp(level, 0, 100) / 100)) + '" ' +
-        'transform="rotate(-90 28 28)"/></svg>';
-    }
-
-    var face = status === 'done' ? icon('check', 20)
-             : status === 'skip' ? '<span class="pnode__n">—</span>'
-             : '<span class="pnode__n">' + n + '</span>';
-
-    return '<div class="pstep pstep--' + side + ' is-' + status + '">' +
-      '<button class="pnode" data-act="roadmap-edit" data-arg="' + r.id + '" ' +
-        'title="' + U.esc((r.title || r.topic || 'Етап') + ' — ' + meta.label) + '">' +
-        ring + face +
-      '</button>' +
-      '<div class="pinfo">' +
-        '<div class="pinfo__t">' + U.esc(r.title || r.topic || 'Етап') + '</div>' +
-        '<div class="pinfo__m">' + C.badge(meta.label, meta.badge) +
-          (level != null ? '<span class="pinfo__pct">' + level + '%</span>' : '') +
-          (r.due ? '<span class="muted small">до ' + U.fmtDate(r.due) + '</span>' : '') +
-        '</div>' +
-        (r.note ? '<div class="pinfo__n">' + U.esc(r.note) + '</div>' : '') +
-        '<div class="pinfo__a">' +
-          '<button class="icon-btn" data-act="roadmap-status" data-arg="' + r.id + '" ' +
-            'title="Наступний стан">' + icon('check', 15) + '</button>' +
-          '<button class="icon-btn" data-act="roadmap-up" data-arg="' + r.id + '" ' +
-            'title="Вище">' + icon('chevronL', 15) + '</button>' +
-          '<button class="icon-btn" data-act="roadmap-down" data-arg="' + r.id + '" ' +
-            'title="Нижче">' + icon('chevronR', 15) + '</button>' +
-        '</div>' +
-      '</div></div>';
-  }
-
-  function pathTab(st, stat) {
-    var list = S.roadmapOf(st.id);
-    var rs = S.roadmapStats(st.id);
-
-    if (!list.length) {
-      return '<div class="card">' +
-        C.empty('target', 'Шляху ще немає',
-          'Складіть його з готового набору тем під ціль «' + st.goal + '» — ' +
-          'потім можна переставляти, дописувати своє і викидати зайве.',
-          '<button class="btn btn--primary" data-act="roadmap-fill" data-arg="' + st.id + '">' +
-          icon('plus', 16) + 'Скласти шлях під ціль</button>') +
-        '</div>';
-    }
-
-    var nCount = 0;
-    var steps = list.map(function (r, i) {
-      if (r.status !== 'skip') nCount++;
-      return pathNode(st, r, r.status === 'skip' ? '' : nCount, i % 2 ? 'right' : 'left');
-    }).join('');
-
-    /* Теми, які оцінювали, але яких у шляху немає. Раніше вони жили в
-       окремій вкладці, і після злиття просто зникли б з очей. */
-    var inPath = list.map(function (r) { return (r.topic || r.title || '').toLowerCase(); });
-    var orphans = S.progressOf(st.id).filter(function (p) {
-      return inPath.indexOf((p.topic || '').toLowerCase()) < 0;
-    });
-
-    return '<div class="grid grid--main">' +
-      '<div class="stack">' +
-        '<div class="card card--pad0">' +
-          '<div class="card-head" style="padding:22px 24px 10px;margin:0">' +
-            '<div><h3 class="card-title">Шлях до цілі</h3>' +
-            '<div class="card-sub">' + U.esc(st.goal) + ' · ' +
-            U.pl(rs.total, 'етап', 'етапи', 'етапів') + '</div></div>' +
-            '<button class="btn btn--soft btn--sm spacer" data-act="roadmap-add" data-arg="' + st.id + '">' +
-            icon('plus', 15) + 'Свій етап</button>' +
-          '</div>' +
-          '<div class="path" style="--done:' + rs.percent + '%">' + steps + '</div>' +
-        '</div>' +
-
-        (orphans.length ? '<div class="card">' +
-          '<div class="card-head"><div><h3 class="card-title">Теми поза шляхом</h3>' +
-          '<div class="card-sub">оцінені, але не поставлені в план</div></div></div>' +
-          '<div class="orph">' + orphans.map(function (p) {
-            return '<button class="orph__i" data-act="roadmap-adopt" data-arg="' +
-              st.id + '|' + U.esc(p.topic) + '" title="Додати в шлях">' +
-              U.esc(p.topic) + '<b>' + p.level + '%</b>' + icon('plus', 13) + '</button>';
-          }).join('') + '</div></div>' : '') +
-      '</div>' +
-
-      '<div class="stack">' +
-        '<div class="card center">' +
-          '<div class="card-head" style="justify-content:center"><div>' +
-          '<h3 class="card-title">Пройдено шляху</h3>' +
-          '<div class="card-sub">' + rs.done + ' з ' + rs.total + '</div></div></div>' +
-          '<div style="display:grid;place-items:center;padding:6px 0 14px">' +
-          C.ring(rs.percent, 128, 12) + '</div>' +
-          (rs.doing
-            ? '<div class="small muted" style="line-height:1.5">Зараз: <b style="color:var(--ink)">' +
-              U.esc(rs.doing.title || rs.doing.topic) + '</b></div>'
-            : rs.next
-              ? '<div class="small muted" style="line-height:1.5">Далі: <b style="color:var(--ink)">' +
-                U.esc(rs.next.title || rs.next.topic) + '</b></div>'
-              : '<div class="small muted">Увесь шлях пройдено.</div>') +
-          '<button class="btn btn--soft btn--block mt-2" data-act="roadmap-fill" data-arg="' + st.id + '">' +
-          icon('plus', 16) + 'Дописати теми з шаблону</button>' +
-        '</div>' +
-
-        '<div class="card center">' +
-          '<div class="card-head" style="justify-content:center"><div>' +
-          '<h3 class="card-title">Засвоєння</h3>' +
-          '<div class="card-sub">середнє по оцінених темах</div></div></div>' +
-          '<div style="display:grid;place-items:center;padding:6px 0 12px">' +
-          C.ring(stat.avgProgress, 112, 11) + '</div>' +
-          '<div class="small muted" style="line-height:1.5">Оцінено ' +
-          U.pl(stat.topicsCovered, 'тему', 'теми', 'тем') + '</div>' +
-        '</div>' +
-
-        '<div class="card">' +
-          '<div class="card-head"><div><h3 class="card-title">Як це працює</h3></div></div>' +
-          '<div class="small muted" style="line-height:1.65">' +
-          'Клік по кружечку відкриває етап: там і назва, і рівень засвоєння теми. ' +
-          'Кнопка з галочкою перемикає стан: попереду → у роботі → пройдено → ' +
-          'пропускаємо. Пропущені не рахуються в поступі взагалі — щоб відсоток ' +
-          'не падав через теми, які ви свідомо не берете.' +
-          '</div>' +
-        '</div>' +
-      '</div>' +
-    '</div>';
-  }
-
   function overview(st, stat) {
     var boards = S.boardsOf(st.id);
     var recent = S.lessonsOf(st.id).filter(function (l) { return l.status === 'done'; }).slice(0, 4);
@@ -310,37 +160,21 @@
       '</div>' +
 
       '<div class="stack">' +
-        '<div class="card center">' +
-          '<div class="card-head" style="justify-content:center"><div><h3 class="card-title">Готовність до цілі</h3>' +
-          '<div class="card-sub">' + U.esc(st.goal) + '</div></div></div>' +
-          '<div style="display:grid;place-items:center;padding:6px 0 14px">' + C.ring(stat.avgProgress, 128, 12) + '</div>' +
-          '<div class="small muted" style="line-height:1.5">Середній рівень засвоєння за ' +
-          U.pl(stat.topicsCovered, 'темою', 'темами', 'темами') + '</div>' +
-          '<button class="btn btn--soft btn--block mt-2" data-act="progress-edit" data-arg="' + st.id + '">' +
-          icon('edit', 16) + 'Оновити прогрес</button>' +
-        '</div>' +
-
-        /* Куди рухаємось: на огляді досить одного рядка — що зараз і що далі. */
+        /* Де учень у математиці: на огляді досить одного погляду — скільки
+           вже на місці, на якому він рівні й що брати далі. */
         (function () {
-          var rs = S.roadmapStats(st.id);
-          if (!rs.total) {
-            return '<button class="card card--btn" data-act="tab" data-arg="path">' +
-              '<div class="card-head"><div><h3 class="card-title">План підготовки</h3>' +
-              '<div class="card-sub">ще не складений</div></div>' +
-              '<span class="spacer">' + icon('chevronR', 18, 'style="color:var(--muted-2)"') + '</span></div>' +
-              '<div class="small muted">Розкласти ціль «' + U.esc(st.goal) +
-              '» на етапи — тоді видно, що вже пройдено, а що попереду.</div></button>';
-          }
-          var now = rs.doing || rs.next;
-          return '<button class="card card--btn" data-act="tab" data-arg="path">' +
-            '<div class="card-head"><div><h3 class="card-title">План підготовки</h3>' +
-            '<div class="card-sub">' + rs.done + ' з ' + rs.total + ' етапів</div></div>' +
-            '<span class="spacer">' + icon('chevronR', 18, 'style="color:var(--muted-2)"') + '</span></div>' +
-            C.bar(rs.percent) +
-            (now ? '<div class="small muted mt-2">' +
-              (rs.doing ? 'Зараз: ' : 'Далі: ') + '<b style="color:var(--ink)">' +
-              U.esc(now.title || now.topic) + '</b></div>'
-                 : '<div class="small muted mt-2">Увесь план пройдено.</div>') +
+          var p = V.studentMapProgress ? V.studentMapProgress(st.id) : null;
+          if (!p) return '';
+          return '<button class="card card--btn center" data-act="tab" data-arg="map">' +
+            '<div class="card-head" style="justify-content:center"><div><h3 class="card-title">Карта математики</h3>' +
+            '<div class="card-sub">' + U.esc(p.scopeLabel) + ' · знає ' + p.known + ' з ' + p.n + '</div></div></div>' +
+            '<div style="display:grid;place-items:center;padding:6px 0 14px">' + C.ring(p.pct, 128, 12) + '</div>' +
+            (p.marked
+              ? '<div class="small muted" style="line-height:1.55">Зараз тут: <b style="color:var(--ink)">' +
+                U.esc(p.stageName) + '</b>' +
+                (p.next ? '<br>Можна брати: <b style="color:var(--ink)">' + U.esc(p.next) + '</b>' : '') + '</div>'
+              : '<div class="small muted" style="line-height:1.55">Ще нічого не позначено. Відкрийте карту й відмітьте, ' +
+                'що учень уже знає, — тоді тут буде видно, де він.</div>') +
             '</button>';
         })() +
 
@@ -591,136 +425,6 @@
         { label: 'Закрити', kind: 'btn--primary', act: 'ok' }
       ]
     });
-  };
-
-  /* Стан етапу перемикаємо по колу: перебирати варіанти в діалозі заради
-     одного кліка — задорого, а станів усього чотири. */
-  var RM_CYCLE = ['todo', 'doing', 'done', 'skip'];
-
-  V.roadmapCycle = function (id) {
-    var r = S.get('roadmap', id);
-    if (!r) return;
-    var i = RM_CYCLE.indexOf(r.status || 'todo');
-    var next = RM_CYCLE[(i + 1) % RM_CYCLE.length];
-    S.update('roadmap', id, { status: next });
-    U.toast(S.ROADMAP_STATUS[next].label);
-    window.App.render();
-  };
-
-  V.roadmapMove = function (id, dir) {
-    if (S.moveRoadmapStep(id, dir)) window.App.render();
-  };
-
-  V.roadmapFill = function (studentId) {
-    var n = S.fillRoadmap(studentId);
-    U.toast(n ? 'Додано ' + U.pl(n, 'етап', 'етапи', 'етапів') : 'Усі теми шаблону вже є', n ? 'ok' : undefined);
-    window.App.render();
-  };
-
-  /** Створити або відредагувати етап. */
-  V.roadmapEdit = function (arg, studentId) {
-    var r = studentId ? null : S.get('roadmap', arg);
-    var sid = studentId || (r && r.studentId);
-    if (!sid) return;
-
-    var topics = S.TOPICS.slice();
-    S.roadmapOf(sid).forEach(function (x) {
-      if (x.topic && topics.indexOf(x.topic) < 0) topics.push(x.topic);
-    });
-
-    var lvlNow = (r && r.topic) ? S.progressLevel(sid, r.topic) : null;
-    var hasLvl = lvlNow != null;
-    var lvl0 = hasLvl ? lvlNow : 0;
-
-    C.modal({
-      title: r ? 'Етап шляху' : 'Новий етап',
-      body:
-        C.field('Назва', '<input class="input" data-rm-title value="' +
-          U.esc(r ? (r.title || '') : '') + '" placeholder="напр. Тригонометрія">') +
-        C.field('Тема з довідника',
-          '<input class="input" list="rm-topics" data-rm-topic value="' +
-          U.esc(r ? (r.topic || '') : '') + '" placeholder="необов’язково">' +
-          '<datalist id="rm-topics">' +
-          topics.map(function (t) { return '<option value="' + U.esc(t) + '">'; }).join('') +
-          '</datalist>',
-          'Тема потрібна для оцінки засвоєння — вона показується кільцем навколо етапу.') +
-
-        /* Рівень засвоєння живе тут, а не в окремій вкладці: тема і те,
-           наскільки вона дається, — одна думка, і вести їх нарізно означало
-           двічі шукати те саме. */
-        C.field('Засвоєно',
-          '<div class="lvl-row">' +
-            '<input class="lvl-range" type="range" min="0" max="100" step="5" ' +
-            'data-rm-level value="' + lvl0 + '">' +
-            '<input class="input lvl-num" type="number" min="0" max="100" step="1" ' +
-            'data-rm-level-num value="' + lvl0 + '">' +
-            '<span class="muted">%</span>' +
-          '</div>',
-          hasLvl ? '' : 'Поки не оцінено. Посуньте повзунок, щоб зафіксувати рівень.') +
-
-        C.field('Орієнтовний строк', '<input class="input" type="date" data-rm-due value="' +
-          U.esc(r ? (r.due || '') : '') + '">') +
-        C.field('Нотатка', '<textarea class="input" rows="3" data-rm-note>' +
-          U.esc(r ? (r.note || '') : '') + '</textarea>'),
-      buttons: [
-        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' }
-      ].concat(r ? [{
-        label: 'Видалити', kind: 'btn--danger', act: 'del',
-        onClick: function () {
-          S.remove('roadmap', r.id);
-          U.toast('Етап прибрано');
-          window.App.render();
-        }
-      }] : []).concat([{
-        label: 'Зберегти', kind: 'btn--primary', act: 'ok',
-        onClick: function (root) {
-          var patch = {
-            title: root.querySelector('[data-rm-title]').value.trim(),
-            topic: root.querySelector('[data-rm-topic]').value.trim(),
-            due:   root.querySelector('[data-rm-due]').value,
-            note:  root.querySelector('[data-rm-note]').value.trim()
-          };
-          if (!patch.title && !patch.topic) {
-            U.toast('Впишіть назву етапу', 'err');
-            return false;
-          }
-          if (!patch.title) patch.title = patch.topic;
-          if (r) S.update('roadmap', r.id, patch);
-          else S.addRoadmapStep(sid, patch);
-
-          /* Рівень пишемо лише коли є тема: він зберігається за назвою теми,
-             і без неї його нікуди покласти. Незайманий нуль теж не пишемо —
-             інакше «ще не оцінювали» стало б «оцінили на нуль». */
-          var lvlEl = root.querySelector('[data-rm-level]');
-          if (patch.topic && lvlEl) {
-            var lvl = U.clamp(+lvlEl.value || 0, 0, 100);
-            if (hasLvl || lvl > 0) S.setProgress(sid, patch.topic, lvl);
-          }
-          window.App.render();
-        }
-      }]),
-      // повзунок і число показують одне значення й ходять разом
-      onMount: function (root) {
-        var rng = root.querySelector('[data-rm-level]');
-        var num = root.querySelector('[data-rm-level-num]');
-        if (!rng || !num) return;
-        rng.addEventListener('input', function () { num.value = rng.value; });
-        num.addEventListener('input', function () {
-          var v = U.clamp(+num.value || 0, 0, 100);
-          rng.value = v;
-        });
-      }
-    });
-  };
-
-  /** Тема, оцінена поза шляхом, стає його етапом. */
-  V.roadmapAdopt = function (arg) {
-    var parts = String(arg || '').split('|');
-    var sid = parts[0], topic = parts.slice(1).join('|');
-    if (!sid || !topic) return;
-    S.addRoadmapStep(sid, { title: topic, topic: topic });
-    U.toast('Додано в шлях', 'ok');
-    window.App.render();
   };
 
   /* ============================================================

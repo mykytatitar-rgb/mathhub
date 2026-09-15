@@ -1245,54 +1245,6 @@
   };
 
   /* ============================================================
-     Прогрес по темах
-     ============================================================ */
-
-  F.progress = function (studentId) {
-    var st = S.get('students', studentId);
-    var rows = S.TOPICS.map(function (t) {
-      var lvl = S.progressLevel(studentId, t);
-      return '<div style="padding:12px 0;border-bottom:1px solid var(--line)">' +
-        '<div class="row" style="gap:10px">' +
-        '<div style="flex:1;font-size:13.5px;font-weight:600">' + U.esc(t) + '</div>' +
-        '<output style="font-size:13px;font-weight:750;color:var(--blue-700);width:42px;text-align:right" ' +
-        'data-out="' + U.esc(t) + '">' + (lvl == null ? '—' : lvl + '%') + '</output>' +
-        '</div>' +
-        '<input type="range" min="0" max="100" step="5" value="' + (lvl == null ? 0 : lvl) + '" ' +
-        'data-topic="' + U.esc(t) + '" style="width:100%;margin-top:8px;accent-color:var(--blue-600);cursor:pointer">' +
-        '</div>';
-    }).join('');
-
-    C.modal({
-      title: 'Рівень засвоєння тем',
-      sub: st ? st.name : '',
-      wide: true,
-      body: '<div class="field__hint mb-2">Пересуньте повзунок для кожної теми, яку вже проходили. 0% — тему ще не чіпали.</div>' + rows,
-      buttons: [
-        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
-        { label: 'Зберегти', kind: 'btn--primary', act: 'save', icon: 'check',
-          onClick: function (root) {
-            U.$$('[data-topic]', root).forEach(function (el) {
-              var v = +el.value;
-              var topic = el.dataset.topic;
-              var existing = S.progressLevel(studentId, topic);
-              if (v > 0 || existing != null) S.setProgress(studentId, topic, v);
-            });
-            U.toast('Прогрес оновлено', 'ok'); refresh();
-          } }
-      ],
-      onMount: function (root) {
-        U.$$('[data-topic]', root).forEach(function (el) {
-          el.addEventListener('input', function () {
-            var out = root.querySelector('[data-out="' + CSS.escape(el.dataset.topic) + '"]');
-            if (out) out.textContent = el.value + '%';
-          });
-        });
-      }
-    });
-  };
-
-  /* ============================================================
      Згенерувати уроки на тиждень за постійним розкладом
      ============================================================ */
 

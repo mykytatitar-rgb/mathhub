@@ -2108,3 +2108,6 @@ a { color: inherit; text-decoration: none; }
   .mm-metro__track { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 30px; }
   .mm-metro__line { display: none; }
 }
+
+/* Перенесення зі старого «Шляху»: помітно, але не тривожно. */
+.mm-legacy { margin-bottom: 18px; border-color: var(--brand-300); background: var(--brand-50); }

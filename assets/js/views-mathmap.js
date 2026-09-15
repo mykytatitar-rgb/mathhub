@@ -72,6 +72,93 @@
   })();
 
   /* ============================================================
+     Старий «Шлях» — що з нього перенести
+     ============================================================
+
+     До карти в учнів був «Шлях»: дванадцять великих тем зі статусом і
+     відсотками засвоєння. Вкладку прибрано, але позначки в ньому — робота,
+     і губити її не можна. Тут записано, які теми карти стоять за кожною
+     старою темою. Лише шкільні рівні: «Числа і вирази», пройдені у восьмому
+     класі, не означають логарифмів. */
+
+  var LEGACY = {
+    'Числа і вирази': ['arith.natural', 'arith.order', 'arith.powers', 'arith.divisibility', 'arith.gcd',
+      'arith.units', 'arith.fractions', 'arith.decimals', 'arith.integers', 'arith.rational', 'arith.abs',
+      'arith.roots', 'arith.realnums', 'arith.numsets', 'arith.approx', 'alg.expressions', 'alg.polys',
+      'alg.formulas', 'alg.factoring', 'alg.ratexpr', 'alg.intpowers'],
+    'Рівняння і нерівності': ['alg.lineq', 'alg.systems', 'alg.linineq', 'alg.quadratic', 'alg.ratequations',
+      'alg.quadineq', 'alg.nonlinsys', 'alg.modeq', 'alg.parameters', 'an.irrational'],
+    'Текстові задачі та відсотки': ['alg.wordproblems', 'arith.percent', 'arith.ratio', 'arith.compound'],
+    'Функції та графіки': ['an.fnconcept', 'an.linearfn', 'an.hyperbola', 'an.quadraticfn', 'an.graphtransform',
+      'an.fnprops', 'an.inversefn', 'an.powerfn', 'an.expfn', 'an.log', 'an.logfn'],
+    'Числові послідовності': ['alg.sequences'],
+    'Тригонометрія': ['an.radian', 'an.trigfn', 'an.trigidentities', 'an.trigformulas', 'an.arcfn', 'an.trigeq'],
+    'Похідна та її застосування': ['an.limitintro', 'an.derivative', 'an.diffrules', 'an.fninvestigation', 'an.extremum'],
+    'Інтеграл і первісна': ['an.antiderivative', 'an.definite'],
+    'Планіметрія': ['geo.figures', 'geo.basicarea', 'geo.circlebasic', 'geo.angles', 'geo.triangles', 'geo.trilines',
+      'geo.circle', 'geo.quads', 'geo.inscribed', 'geo.similarity', 'geo.pythagoras', 'geo.righttrig', 'geo.areas',
+      'geo.solvetri', 'geo.polygons', 'geo.transforms'],
+    'Стереометрія': ['geo.axioms', 'geo.perp', 'geo.spaceangles', 'geo.polyhedra', 'geo.sections', 'geo.rotation', 'geo.volumes'],
+    'Координати і вектори': ['geo.coords', 'geo.lineeq', 'geo.vectors', 'geo.space'],
+    'Комбінаторика, ймовірність, статистика': ['disc.counting', 'disc.combschool', 'disc.binomial', 'prob.data',
+      'prob.classical', 'prob.events', 'prob.sample']
+  };
+
+  Object.keys(LEGACY).forEach(function (k) {
+    LEGACY[k].forEach(function (id) {
+      if (!byId[id]) ERRORS.push('стара тема «' + k + '» посилається на невідому «' + id + '»');
+    });
+  });
+
+  /**
+   * Що старий «Шлях» учня дає карті.
+   *
+   * Пройдений етап або засвоєння від 70% — «знає», етап у роботі або від
+   * 30% — «вивчаємо». Уже позначене на карті не чіпаємо: там свіжіше.
+   */
+  function legacyPlan(studentId) {
+    var steps = S.roadmapOf ? S.roadmapOf(studentId) : [];
+    var prog = S.progressOf ? S.progressOf(studentId) : [];
+    if (!steps.length && !prog.length) return null;
+
+    var want = {};
+    function give(name, v) {
+      (LEGACY[name] || []).forEach(function (id) { if ((want[id] || 0) < v) want[id] = v; });
+    }
+    var done = 0, custom = 0;
+    steps.forEach(function (r) {
+      var name = r.topic || r.title;
+      if (!LEGACY[name]) { custom++; return; }
+      if (r.status === 'done') { give(name, 2); done++; }
+      else if (r.status === 'doing') give(name, 1);
+    });
+    prog.forEach(function (x) {
+      if (!LEGACY[x.topic]) return;
+      if (x.level >= 70) give(x.topic, 2);
+      else if (x.level >= 30) give(x.topic, 1);
+    });
+
+    /* Стара тема широка: «Функції та графіки», пройдені у восьмому класі, —
+       це лінійна й квадратична функції, а не логарифми. Тому переносимо
+       лише рівні, які учень за своїм класом уже міг проходити. */
+    var stu = S.get('students', studentId);
+    var gm = /(\d{1,2})/.exec(String((stu && stu.grade) || ''));
+    var cap = gm && Number(gm[1]) <= 9 ? 2 : 3;
+
+    var have = S.mapEntries(studentId);
+    var changes = Object.keys(want).filter(function (id) {
+      return byId[id] && byId[id].stage <= cap && !(have[id] && Number(have[id].s) > 0);
+    }).map(function (id) { return { id: id, s: want[id] }; });
+
+    return {
+      cap: cap,
+      steps: steps.length, done: done, custom: custom, rated: prog.length, changes: changes,
+      know: changes.filter(function (c) { return c.s === 2; }).length,
+      learn: changes.filter(function (c) { return c.s === 1; }).length
+    };
+  }
+
+  /* ============================================================
      Чия карта
      ============================================================ */
 
@@ -382,9 +469,34 @@
         '<span class="mm-station__pct">' + (out ? 'поза картою' : Math.round(p * 100) + '%') + '</span></button>';
     }).join('');
 
+    /* ---- Перенесення зі старого «Шляху» ---- */
+    var legacy = '';
+    var stu = student();
+    if (stu && !stu.mapImported) {
+      var plan = legacyPlan(stu.id);
+      if (plan && plan.changes.length) {
+        legacy = '<div class="card mm-legacy"><h3 class="mm-h3">Зі старого «Шляху»</h3>' +
+          '<div class="mm-sub">Там було ' + pl(plan.steps, 'етап', 'етапи', 'етапів') +
+            (plan.done ? ', пройдено ' + plan.done : '') +
+            (plan.rated ? ', і ' + pl(plan.rated, 'оцінка', 'оцінки', 'оцінок') + ' засвоєння' : '') + '. ' +
+            'Можу перенести це на карту: ' +
+            (plan.know ? pl(plan.know, 'тема стане', 'теми стануть', 'тем стануть') + ' «Знає»' : '') +
+            (plan.know && plan.learn ? ', ' : '') +
+            (plan.learn ? pl(plan.learn, 'тема', 'теми', 'тем') + ' — «Вивчаємо»' : '') + '. ' +
+            (plan.cap === 2 ? 'Беру лише теми до 9 класу — старші учень ще не проходив. ' : '') +
+            'Уже позначене на карті не чіпаю' +
+            (plan.custom ? ', а ' + pl(plan.custom, 'власний етап', 'власні етапи', 'власних етапів') +
+              ' з назвою поза довідником перенести не вийде' : '') + '.</div>' +
+          '<div class="row" style="gap:8px">' +
+            '<button class="btn btn--primary btn--sm" data-mm="import">Перенести на карту</button>' +
+            '<button class="btn btn--ghost btn--sm" data-mm="import-skip">Не треба</button>' +
+          '</div></div>';
+      }
+    }
+
     /* ---- Швидкий старт ---- */
     var quick = '';
-    if (marked === 0) {
+    if (marked === 0 && !legacy) {
       quick = '<div class="card mm-quick"><h3 class="mm-h3">Швидкий старт</h3>' +
         '<div class="mm-sub">' + tx.quickSub + '</div>' +
         MAP.stages.filter(function (s) { return s.id <= max; }).map(function (s) {
@@ -438,6 +550,7 @@
       '</div>' +
       '<div class="card mm-metro"><div class="mm-metro__track"><div class="mm-metro__line"><div class="mm-metro__fill" style="width:' +
         fill + '%"></div></div>' + stations + '</div></div>' +
+      legacy +
       quick +
       '<div class="grid grid--2">' +
         '<div class="card"><h3 class="mm-h3">Наступні кроки</h3><div class="mm-sub">' + tx.nextSub + '</div>' +
@@ -1155,6 +1268,28 @@
     if (act === 'close') { closeDrawer(); return; }
     if (act === 'bulk') { var p = arg.split(':'); bulk(+p[0], +p[1]); return; }
 
+    if (act === 'import' && who) {
+      var plan = legacyPlan(who);
+      if (!plan || !plan.changes.length) return;
+      var owner = who;
+      var undoList = plan.changes.map(function (c) { return { id: c.id, s: 0 }; });
+      setTopics(plan.changes);
+      S.update('students', owner, { mapImported: 1 });
+      rerender();
+      showUndo('Перенесено на карту: ' + pl(plan.changes.length, 'тема', 'теми', 'тем'), function () {
+        S.setMapTopics(undoList, owner);
+        S.update('students', owner, { mapImported: 0 });
+        invalidate();
+        if (who === owner) rerender();
+      });
+      return;
+    }
+    if (act === 'import-skip' && who) {
+      S.update('students', who, { mapImported: 1 });
+      rerender();
+      return;
+    }
+
     if (act === 'scope' && who) {
       S.update('students', who, { mapScope: +arg === 6 ? 6 : 3 });
       if (selected && byId[selected] && byId[selected].stage > maxStage()) { selected = null; hideDrawer(); }
@@ -1238,16 +1373,33 @@
     if (e.key === 'Escape' && selected && !typing) closeDrawer();
   });
 
-  /** Для «Огляду» й перевірок: де зараз той, чию карту показано. */
-  V.mathmapSummary = function (studentId) {
+  /**
+   * Коротко про карту учня — для огляду в картці й кільця в списку учнів.
+   *
+   * Рахується з тих самих позначок і в тих самих межах, що й сама карта:
+   * якби огляд показував одне, а карта інше, довіряти не можна було б
+   * жодному.
+   */
+  V.studentMapProgress = function (studentId) {
     var keep = who;
     who = studentId || null;
     invalidate();
-    var cs = currentStage(), max = maxStage();
-    var res = { stage: cs, max: max, name: cs > max ? 'Пройдено' : stageOf(cs).name, all: statsOf(scopeTopics()) };
-    who = keep;
-    invalidate();
-    return res;
+    try {
+      var max = maxStage(), list = scopeTopics(), s0 = statsOf(list), cs = currentStage();
+      var next = frontier()[0];
+      return {
+        pct: s0.n ? Math.round(s0.known / s0.n * 100) : 0,
+        known: s0.known, n: s0.n,
+        marked: list.filter(function (t) { return st(t.id) > 0; }).length,
+        stage: cs, max: max,
+        stageName: cs > max ? 'намічене пройдено' : 'рівень ' + cs + ' · ' + stageOf(cs).name,
+        next: next ? next.name : '',
+        scopeLabel: max === 3 ? 'Школа й НМТ' : 'Уся математика'
+      };
+    } finally {
+      who = keep;
+      invalidate();
+    }
   };
 
   window.V = V;

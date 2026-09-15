@@ -14,6 +14,9 @@
     { id: 'overview', label: 'Огляд' },
     { id: 'lessons',  label: 'Уроки' },
     { id: 'path',     label: 'Шлях' },
+    /* «Шлях» — план під ціль, «Карта» — де учень у всій математиці. Одне
+       не замінює інше: план каже, що робимо, карта — що вже на місці. */
+    { id: 'map',      label: 'Карта' },
     { id: 'payments', label: 'Оплати' },
     { id: 'notes',    label: 'Нотатки' }
   ];
@@ -38,6 +41,7 @@
     var counts = {
       lessons: stat.total,
       path: S.roadmapOf(id).length,
+      map: V.studentMapCount ? V.studentMapCount(id) : 0,
       payments: S.paymentsOf(id).length,
       notes: S.notesOf(id).length
     };
@@ -50,6 +54,7 @@
 
     var bodies = {
       overview: overview, lessons: lessons, path: pathTab,
+      map: function (s) { return V.studentMap ? V.studentMap(s) : ''; },
       payments: payments, notes: notes
     };
     var body = (bodies[tab] || overview)(st, stat);

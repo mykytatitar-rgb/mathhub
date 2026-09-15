@@ -129,6 +129,7 @@
       roadmap: [],    // {id, studentId, title, topic, status, due, note, ord}
       desk: [],       // мої власні справи: {id, title, note, status, tag}
       mathmap: [],    // моя карта математики: {id: тема, s: 0..3, note, at}
+      stumap: [],     // карта учня: {id: учень~тема, studentId, topic, s: 0..3, note, at}
       materials: [],
       notes: [],
       boards: []      // {id, lessonId, slides:[{id,title,bg,items:[]}], updatedAt}
@@ -438,7 +439,8 @@
       .map(function (l) { return l.id; });
     db.boards = db.boards.filter(function (b) { return lessonIds.indexOf(b.lessonId) < 0; });
     boardsDirty = true;                 // інакше дошки зникали з пам'яті, але лишались у сховищі
-    ['lessons', 'homeworks', 'payments', 'progress', 'roadmap', 'notes'].forEach(function (name) {
+    ['lessons', 'homeworks', 'payments', 'progress', 'roadmap', 'notes', 'stumap'].forEach(function (name) {
+      if (!Array.isArray(db[name])) return;
       var gone = db[name].filter(function (x) { return x.studentId === id; });
       db[name] = db[name].filter(function (x) { return x.studentId !== id; });
       syncDelMany(name, gone);
@@ -1255,65 +1257,92 @@
   };
 
   /* ============================================================
-     Карта математики — позначки самого репетитора
+     Карта математики — позначки репетитора й учнів
      ============================================================
 
      Запис на тему, а не один документ на всю карту. Так само, як учні й
      уроки: позначка «знаю» на ноутбуці й нотатка до іншої теми з телефона
      не можуть затерти одна одну, бо це різні записи.
 
+     Мої позначки лежать у mathmap (id — сама тема), учнівські — у stumap
+     (id — «учень~тема»). Окремі колекції, а не одна з полем «чиє»: мої
+     записи не мають змішуватися з учнівськими ні в синхронізації, ні при
+     видаленні учня.
+
      Тема без позначки й без нотатки запису не має зовсім: «не вивчено» —
      це відсутність, а не ще один рядок на сервері. */
 
   S.MAP_STATUS = ['Не вивчено', 'Вивчаю', 'Знаю', 'Можу пояснити'];
+  S.STUMAP_STATUS = ['Не вивчали', 'Вивчаємо', 'Знає', 'Впевнено'];
 
-  function mapIndex() {
-    if (!Array.isArray(db.mathmap)) db.mathmap = [];
-    return db.mathmap;
+  function mapColl(studentId) {
+    var name = studentId ? 'stumap' : 'mathmap';
+    if (!Array.isArray(db[name])) db[name] = [];
+    return name;
   }
 
-  S.mapEntry = function (topicId) {
-    var list = mapIndex();
-    for (var i = 0; i < list.length; i++) if (list[i].id === topicId) return list[i];
+  function mapRecId(topicId, studentId) {
+    return studentId ? studentId + '~' + topicId : topicId;
+  }
+
+  S.mapEntry = function (topicId, studentId) {
+    var list = db[mapColl(studentId)];
+    var id = mapRecId(topicId, studentId);
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
     return null;
   };
 
-  S.mapStatus = function (topicId) {
-    var e = S.mapEntry(topicId);
+  S.mapStatus = function (topicId, studentId) {
+    var e = S.mapEntry(topicId, studentId);
     return e ? (Number(e.s) | 0) : 0;
+  };
+
+  /** Усі позначки одним проходом: {тема: запис}. Карта питає про сотні тем за раз. */
+  S.mapEntries = function (studentId) {
+    var out = {};
+    db[mapColl(studentId)].forEach(function (e) {
+      if (!e || !e.id) return;
+      if (studentId) { if (e.studentId === studentId && e.topic) out[e.topic] = e; }
+      else out[e.id] = e;
+    });
+    return out;
   };
 
   /* Застосувати зміни до кількох тем одним збереженням.
 
-     Масова позначка — «знаю весь рівень» — чіпає десятки тем. Зберігати
+     Масова позначка — «знає весь рівень» — чіпає десятки тем. Зберігати
      базу після кожної означало б десятки повних перезаписів і стільки ж
      поштовхів синхронізації, календарю й порталам. */
-  S.setMapTopics = function (changes) {
-    var list = mapIndex();
+  S.setMapTopics = function (changes, studentId) {
+    var name = mapColl(studentId);
+    var list = db[name];
     var now = new Date().toISOString();
     var touched = 0;
 
     (changes || []).forEach(function (c) {
       if (!c || !c.id) return;
+      var rid = mapRecId(c.id, studentId);
       var i = -1;
-      for (var k = 0; k < list.length; k++) if (list[k].id === c.id) { i = k; break; }
+      for (var k = 0; k < list.length; k++) if (list[k].id === rid) { i = k; break; }
       var cur = i >= 0 ? list[i] : null;
 
-      var s = c.s !== undefined ? (Number(c.s) | 0) : (cur ? (Number(cur.s) | 0) : 0);
+      var sv = c.s !== undefined ? (Number(c.s) | 0) : (cur ? (Number(cur.s) | 0) : 0);
       var note = c.note !== undefined ? String(c.note || '') : (cur ? (cur.note || '') : '');
-      if (cur && (Number(cur.s) | 0) === s && (cur.note || '') === note) return;
+      if (cur && (Number(cur.s) | 0) === sv && (cur.note || '') === note) return;
 
-      if (!s && !note) {
+      if (!sv && !note) {
         if (i < 0) return;
         list.splice(i, 1);
-        syncDel('mathmap', c.id);
+        syncDel(name, rid);
         touched++;
         return;
       }
 
-      var rec = { id: c.id, s: s, note: note, at: now };
+      var rec = studentId
+        ? { id: rid, studentId: studentId, topic: c.id, s: sv, note: note, at: now }
+        : { id: rid, s: sv, note: note, at: now };
       if (i >= 0) list[i] = rec; else list.push(rec);
-      sync('mathmap', c.id);
+      sync(name, rid);
       touched++;
     });
 
@@ -1321,8 +1350,8 @@
     return touched;
   };
 
-  S.setMapTopic = function (topicId, patch) {
-    return S.setMapTopics([Object.assign({ id: topicId }, patch || {})]);
+  S.setMapTopic = function (topicId, patch, studentId) {
+    return S.setMapTopics([Object.assign({ id: topicId }, patch || {})], studentId);
   };
 
   /**

@@ -1,16 +1,22 @@
-/* Карта математики — моя, а не учнівська.
+/* Карта математики — моя й кожного учня.
 
    Три погляди на те саме:
-     «Де я»    — на якому рівні я зараз і що вже можна брати далі;
+     «Де я»    — на якому рівні зараз і що вже можна брати далі;
      «Карта»   — уся математика колом: у центрі основи, назовні вершини;
      «Роудмап» — рівні один за одним, від лічби до досліджень.
 
-   Позначка теми — чотири стани: не вивчено, вивчаю, знаю, можу пояснити.
-   Останній не прикраса: репетитору важливо не лише знати тему, а й уміти
-   її донести, і це різні речі.
+   Карта одна для всіх — у mathmap-data.js. Різниться лише те, чиї позначки
+   на ній стоять: мої (розділ «Карта математики») чи учня (вкладка «Карта»
+   в його картці). Тому весь код нижче питає не «який статус теми», а «який
+   статус теми в того, чию карту зараз показано».
 
-   Сама карта — у mathmap-data.js, однакова для всіх. Позначки — у сховищі,
-   запис на тему, і синхронізуються так само, як учні й уроки. */
+   Позначка — чотири стани. Для мене: не вивчено, вивчаю, знаю, можу
+   пояснити — репетитору знати тему й уміти її донести не одне й те саме.
+   Для учня: не вивчали, вивчаємо, знає, впевнено.
+
+   Учнівська карта за замовчуванням обмежена шкільною програмою: для
+   восьмикласника «знає 20% математики», порахованих разом із теорією
+   Галуа, нічого не каже. Усю математику можна ввімкнути одним перемикачем. */
 
 (function () {
   'use strict';
@@ -66,14 +72,86 @@
   })();
 
   /* ============================================================
-     Стан і прогрес
+     Чия карта
      ============================================================ */
 
-  var STATUS = S.MAP_STATUS;
+  var who = null;            // null — моя, інакше id учня
+  var cache = null;          // позначки поточного власника: {тема: запис}
+
+  function student() { return who ? S.get('students', who) : null; }
+  function entries() { if (!cache) cache = S.mapEntries(who); return cache; }
+  function entry(id) { return entries()[id] || null; }
+  function st(id) { var e = entries()[id]; return e ? (Number(e.s) | 0) : 0; }
+  function invalidate() { cache = null; }
+
+  function setTopics(changes) {
+    S.setMapTopics(changes, who);
+    invalidate();
+  }
+
+  /** Слова, що залежать від того, чия це карта. */
+  function T() {
+    if (who) {
+      var s = student();
+      var first = s ? String(s.name || '').split(' ')[0] : 'учень';
+      return {
+        status: S.STUMAP_STATUS,
+        here: 'Зараз тут',
+        allDone: 'Намічену математику пройдено',
+        allDoneHint: 'Можна розширити карту до всієї математики — перемикач угорі.',
+        know: 'знає', learn: 'вивчає',
+        learningTitle: 'Зараз вивчає',
+        learningSub: 'Позначене «Вивчаємо» — найсвіжіше вгорі.',
+        learningEmpty: 'Тема з позначкою «Вивчаємо» зʼявиться тут, щоб не губилась.',
+        nextSub: 'Теми, для яких у ' + esc(first) + ' уже все є: жодна не спирається на незнане.',
+        bulkKnow: 'Знає все', bulkSure: 'Впевнено все',
+        laneKnow: 'Позначити все «Знає»', laneSure: '…«Впевнено»',
+        quickSub: 'Щоб карта показала, де ' + esc(first) + ', відмітьте рівні, які вже пройдено. Окремі теми потім ' +
+          'уточните — позначка на рівні лише перший начерк.',
+        okHint: 'Усе, на що ця тема спирається, учень уже знає — можна брати.',
+        notePh: 'Де плутається, які задачі давали, що повторити…',
+        ringDark: 'Темне — знає, світле — вивчає.',
+        rootWord: 'знає'
+      };
+    }
+    return {
+      status: S.MAP_STATUS,
+      here: 'Я тут',
+      allDone: 'Усі шість рівнів пройдено',
+      allDoneHint: 'Далі — глибина: вершини, які ще не мої.',
+      know: 'знаю', learn: 'вивчаю',
+      learningTitle: 'Зараз вивчаю',
+      learningSub: 'Позначене «Вивчаю» — найсвіжіше вгорі.',
+      learningEmpty: 'Тема з позначкою «Вивчаю» зʼявиться тут, щоб не губилась.',
+      nextSub: 'Теми, для яких уже все є: жодна не спирається на незнане.',
+      bulkKnow: 'Знаю все', bulkSure: 'Можу пояснити все',
+      laneKnow: 'Позначити все «Знаю»', laneSure: '…«Можу пояснити»',
+      quickSub: 'Щоб карта показала, де я, варто відмітити рівні, які вже пройдено. Окремі теми потім ' +
+        'уточню — позначка на рівні лише перший начерк.',
+      okHint: 'Усе, на що ця тема спирається, я вже знаю — можна брати.',
+      notePh: 'Що саме тут іще не моє, джерела, як пояснювати учням…',
+      ringDark: 'Темне — знаю, світле — вивчаю.',
+      rootWord: 'знаю'
+    };
+  }
+
+  /* Межа карти. Для учня за замовчуванням — шкільна програма й НМТ (рівні
+     1–3), для мене — уся математика. */
+  function maxStage() {
+    var s = student();
+    if (!s) return 6;
+    return Number(s.mapScope) === 6 ? 6 : 3;
+  }
+  function inScope(t) { return t.stage <= maxStage(); }
+  function scopeTopics() { return MAP.topics.filter(inScope); }
+
+  /* ============================================================
+     Прогрес
+     ============================================================ */
+
   var WEIGHT = [0, 0.35, 1, 1];        // «вивчаю» — уже рух, але ще не знання
   var PASS = 0.8;                      // рівень пройдено, коли покрито 80%
 
-  function st(id) { return S.mapStatus(id); }
   function known(id) { return st(id) >= 2; }
   function open(t) { return t.req.every(known); }
 
@@ -85,15 +163,16 @@
 
   function stageTopics(k) { return MAP.topics.filter(function (t) { return t.stage === k; }); }
 
-  /** Рівень, на якому я зараз: перший, що ще не покритий на 80%. 7 — усе пройдено. */
+  /** Рівень, на якому зараз: перший у межах карти, що ще не покритий на 80%. */
   function currentStage() {
-    for (var k = 1; k <= 6; k++) if (statsOf(stageTopics(k)).pct < PASS) return k;
-    return 7;
+    var max = maxStage();
+    for (var k = 1; k <= max; k++) if (statsOf(stageTopics(k)).pct < PASS) return k;
+    return max + 1;
   }
 
-  /** Що можна брати наступним: ще не почате, а все, на що спирається, — знаю. */
+  /** Що можна брати наступним: ще не почате, а все, на що спирається, — знає. */
   function frontier() {
-    return MAP.topics.filter(function (t) { return st(t.id) === 0 && open(t); })
+    return scopeTopics().filter(function (t) { return st(t.id) === 0 && open(t); })
       .sort(function (a, b) {
         return a.stage - b.stage || unlocks[b.id].length - unlocks[a.id].length || a.order - b.order;
       });
@@ -104,7 +183,7 @@
      ============================================================
 
      Колір — домен, заповнення — стан. Так на карті видно водночас і де
-     тема живе, і наскільки вона моя, без другої веселки кольорів. */
+     тема живе, і наскільки вона засвоєна, без другої веселки кольорів. */
 
   function glyphInner(s, c) {
     if (s === 1) return '<circle cx="8" cy="8" r="5.6" fill="#fff" stroke="' + c + '" stroke-width="1.8"/>' +
@@ -121,58 +200,95 @@
   }
 
   /* ============================================================
-     Сторінка
+     Панель
      ============================================================ */
 
   var selected = null;
-  var lastQuery = {};
 
-  function tabOf(query) {
-    var v = query && query.v;
-    return v === 'map' || v === 'road' ? v : 'home';
+  /** Вкладка — з адреси: і в моєму розділі, і в картці учня це «?v=». */
+  function currentView() {
+    var m = /[?&]v=(map|road)\b/.exec(location.hash);
+    return m ? m[1] : 'home';
   }
 
-  V.mathmap = function (query) {
-    lastQuery = query || {};
-    var tab = tabOf(lastQuery);
+  function panelHtml() {
+    invalidate();
+    var view = currentView();
 
-    var tabs = [['home', 'Де я'], ['map', 'Карта'], ['road', 'Роудмап']].map(function (x) {
-      return '<button class="tab' + (tab === x[0] ? ' is-active' : '') + '" data-mm="tab" data-arg="' + x[0] + '">' +
+    var tabs = [['home', who ? 'Де зараз' : 'Де я'], ['map', 'Карта'], ['road', 'Роудмап']].map(function (x) {
+      return '<button class="tab' + (view === x[0] ? ' is-active' : '') + '" data-mm="tab" data-arg="' + x[0] + '">' +
         x[1] + '</button>';
     }).join('');
 
-    var body = tab === 'map' ? mapShell() : tab === 'road' ? roadHtml() : homeHtml();
+    var scope = '';
+    if (who) {
+      var max = maxStage();
+      scope = '<div class="seg mm-scope" title="Які рівні рахувати">' +
+        '<button class="seg__btn' + (max === 3 ? ' is-active' : '') + '" data-mm="scope" data-arg="3">Школа й НМТ</button>' +
+        '<button class="seg__btn' + (max === 6 ? ' is-active' : '') + '" data-mm="scope" data-arg="6">Уся математика</button>' +
+        '</div>';
+    }
 
-    return C.hero({
-      short: true,
-      title: 'Карта математики',
-      sub: 'уся математика — і де в ній я'
-    }) +
-    '<div class="page mm mm--' + tab + '">' +
+    var body = view === 'map' ? mapShell() : view === 'road' ? roadHtml() : homeHtml();
+
+    return '<div class="mm mm--' + view + '" data-who="' + esc(who || '') + '">' +
       (ERRORS.length
         ? '<div class="card mm-err"><b>У даних карти є помилки</b> — частина звʼязків може показуватися неправильно:<br>' +
           ERRORS.slice(0, 6).map(esc).join('<br>') + '</div>'
         : '') +
       '<div class="mm-bar">' +
         '<div class="tabs">' + tabs + '</div>' +
+        scope +
         '<div class="mm-search">' + icon('search', 16) +
           '<input id="mm-q" type="search" placeholder="Знайти тему…  ( / )" autocomplete="off" spellcheck="false">' +
           '<div class="mm-qlist" id="mm-qlist" hidden></div>' +
         '</div>' +
       '</div>' +
       body +
-    '</div>' +
-    '<aside class="mm-drawer" id="mm-drawer" hidden></aside>';
+    '</div>';
+  }
+
+  function switchTo(newWho) {
+    if (newWho !== who) { selected = null; hideDrawer(); }
+    who = newWho;
+    invalidate();
+  }
+
+  /** Мій розділ «Карта математики». */
+  V.mathmap = function () {
+    switchTo(null);
+    return C.hero({
+      short: true,
+      title: 'Карта математики',
+      sub: 'уся математика — і де в ній я'
+    }) + '<div class="page">' + panelHtml() + '</div>';
   };
 
-  /** Перемалювати лише свою сторінку — без сайдбара й без стрибка догори. */
+  /** Вкладка «Карта» в картці учня. */
+  V.studentMap = function (stu) {
+    if (!stu) return '';
+    switchTo(stu.id);
+    return panelHtml();
+  };
+
+  /** Скільки тем учень знає в межах своєї карти — для лічильника вкладки. */
+  V.studentMapCount = function (stuId) {
+    var s = S.get('students', stuId);
+    var max = s && Number(s.mapScope) === 6 ? 6 : 3;
+    var all = S.mapEntries(stuId);
+    return Object.keys(all).filter(function (k) {
+      return byId[k] && byId[k].stage <= max && Number(all[k].s) >= 2;
+    }).length;
+  };
+
+  /** Перемалювати лише панель карти — без решти сторінки й без стрибка догори. */
   function rerender() {
-    var main = document.getElementById('main');
-    if (!main || !$('.mm', main)) return;
-    var y = window.scrollY;
-    main.innerHTML = V.mathmap(lastQuery);
+    var el = $('.mm');
+    if (!el) return;
+    var tmp = document.createElement('div');
+    tmp.innerHTML = panelHtml();
+    el.parentNode.replaceChild(tmp.firstChild, el);
     V.mountMathmap();
-    window.scrollTo(0, y);
     navCount();
   }
 
@@ -190,7 +306,7 @@
   }
 
   /* ============================================================
-     Де я
+     Де зараз
      ============================================================ */
 
   function progressBar(stats) {
@@ -209,34 +325,38 @@
   }
 
   function homeHtml() {
+    var tx = T();
+    var max = maxStage();
     var cs = currentStage();
-    var all = statsOf(MAP.topics);
+    var scopeList = scopeTopics();
+    var all = statsOf(scopeList);
     var stats = MAP.stages.map(function (s) { return statsOf(stageTopics(s.id)); });
-    var marked = MAP.topics.filter(function (t) { return st(t.id) > 0; }).length;
+    var marked = scopeList.filter(function (t) { return st(t.id) > 0; }).length;
 
-    /* ---- Я тут ---- */
+    /* ---- Тут ---- */
     var here;
-    if (cs === 7) {
-      here = '<div class="mm-here__eyebrow">Я тут</div>' +
-        '<div class="mm-here__title">Усі шість рівнів пройдено</div>' +
-        '<div class="mm-here__hint">Далі — глибина: вершини, які ще не мої.</div>';
+    if (cs > max) {
+      here = '<div class="mm-here__eyebrow">' + tx.here + '</div>' +
+        '<div class="mm-here__title">' + tx.allDone + '</div>' +
+        '<div class="mm-here__hint">' + tx.allDoneHint + '</div>';
     } else {
       var Sg = stageOf(cs), ss = stats[cs - 1];
       var need = Math.max(0, Math.ceil(PASS * ss.n - (ss.known + ss.c[1] * WEIGHT[1])));
-      here = '<div class="mm-here__eyebrow">Я тут · рівень ' + cs + ' з 6</div>' +
+      var subj = who ? 'Знає' : 'Знаю';
+      here = '<div class="mm-here__eyebrow">' + tx.here + ' · рівень ' + cs + ' з ' + max + '</div>' +
         '<div class="mm-here__title">' + esc(Sg.name) + '</div>' +
         '<div class="mm-here__hint">' + esc(Sg.hint) + '</div>' +
         '<div class="mm-here__row">' + progressBar(ss) +
           '<span class="mm-here__pct">' + Math.round(ss.pct * 100) + '%</span></div>' +
-        '<div class="mm-here__note">Знаю ' + ss.known + ' з ' + pl(ss.n, 'теми', 'тем', 'тем') + ' цього рівня' +
-          (ss.c[1] ? ', ще ' + ss.c[1] + ' вивчаю' : '') + '. ' +
+        '<div class="mm-here__note">' + subj + ' ' + ss.known + ' з ' + pl(ss.n, 'теми', 'тем', 'тем') + ' цього рівня' +
+          (ss.c[1] ? ', ще ' + ss.c[1] + ' ' + tx.learn : '') + '. ' +
           (need ? 'Рівень пройдено від 80% — бракує приблизно ' + pl(need, 'теми', 'тем', 'тем') + '.'
                 : 'Ще трохи — і рівень пройдено.') + '</div>';
     }
 
     /* ---- Кільце загального прогресу ---- */
     var R = 46, CIRC = 2 * Math.PI * R;
-    var kLen = all.known / all.n * CIRC, lLen = all.c[1] / all.n * CIRC;
+    var kLen = all.n ? all.known / all.n * CIRC : 0, lLen = all.n ? all.c[1] / all.n * CIRC : 0;
     var ring = '<svg width="116" height="116" viewBox="0 0 120 120" aria-hidden="true">' +
       '<circle cx="60" cy="60" r="' + R + '" fill="none" stroke="#EEEDF6" stroke-width="12"/>' +
       '<circle cx="60" cy="60" r="' + R + '" fill="none" stroke="#E07C0B" stroke-width="12"' +
@@ -245,32 +365,33 @@
         ' stroke-dasharray="' + kLen + ' ' + CIRC + '" transform="rotate(-90 60 60)"/>' +
       '</svg>';
     var legend = [3, 2, 1, 0].map(function (s) {
-      return '<div>' + glyph(s, '#17163A', 14) + esc(STATUS[s]) + '<b>' + all.c[s] + '</b></div>';
+      return '<div>' + glyph(s, '#17163A', 14) + esc(tx.status[s]) + '<b>' + all.c[s] + '</b></div>';
     }).join('');
 
     /* ---- Лінія рівнів ---- */
-    var fill = cs === 7 ? 100 : (cs - 1) / 5 * 100;
+    var fill = cs > max ? (max - 1) / 5 * 100 : (cs - 1) / 5 * 100;
     var stations = MAP.stages.map(function (s, i) {
       var p = stats[i].pct;
-      var cls = (p >= PASS ? ' is-done' : '') + (s.id === cs ? ' is-here' : '');
-      return '<button class="mm-station' + cls + '" data-mm="stage" data-arg="' + s.id + '">' +
-        (s.id === cs ? '<span class="mm-station__here">я тут</span>' : '') +
-        '<span class="mm-station__dot">' + (p >= PASS ? '✓' : s.id) + '</span>' +
+      var out = s.id > max;
+      var cls = (p >= PASS && !out ? ' is-done' : '') + (s.id === cs ? ' is-here' : '') + (out ? ' is-out' : '');
+      return '<button class="mm-station' + cls + '" data-mm="stage" data-arg="' + s.id + '"' +
+        (out ? ' title="За межами карти учня — перемкніть на «Уся математика»"' : '') + '>' +
+        (s.id === cs ? '<span class="mm-station__here">' + tx.here.toLowerCase() + '</span>' : '') +
+        '<span class="mm-station__dot">' + (p >= PASS && !out ? '✓' : s.id) + '</span>' +
         '<span class="mm-station__name">' + esc(s.name) + '</span>' +
-        '<span class="mm-station__pct">' + Math.round(p * 100) + '%</span></button>';
+        '<span class="mm-station__pct">' + (out ? 'поза картою' : Math.round(p * 100) + '%') + '</span></button>';
     }).join('');
 
     /* ---- Швидкий старт ---- */
     var quick = '';
     if (marked === 0) {
       quick = '<div class="card mm-quick"><h3 class="mm-h3">Швидкий старт</h3>' +
-        '<div class="mm-sub">Щоб карта показала, де я, варто відмітити рівні, які вже пройдено. Окремі теми потім ' +
-        'уточню — позначка на рівні лише перший начерк.</div>' +
-        MAP.stages.map(function (s) {
+        '<div class="mm-sub">' + tx.quickSub + '</div>' +
+        MAP.stages.filter(function (s) { return s.id <= max; }).map(function (s) {
           return '<div class="mm-qrow"><div class="mm-qrow__name"><b>' + s.id + ' · ' + esc(s.name) + '</b>' +
             '<small>' + esc(s.hint) + ' · ' + pl(stats[s.id - 1].n, 'тема', 'теми', 'тем') + '</small></div>' +
-            '<button class="btn btn--soft btn--sm" data-mm="bulk" data-arg="' + s.id + ':2">Знаю все</button>' +
-            '<button class="btn btn--soft btn--sm" data-mm="bulk" data-arg="' + s.id + ':3">Можу пояснити все</button></div>';
+            '<button class="btn btn--soft btn--sm" data-mm="bulk" data-arg="' + s.id + ':2">' + tx.bulkKnow + '</button>' +
+            '<button class="btn btn--soft btn--sm" data-mm="bulk" data-arg="' + s.id + ':3">' + tx.bulkSure + '</button></div>';
         }).join('') + '</div>';
     }
 
@@ -278,23 +399,24 @@
     var next = frontier().slice(0, 8);
     var nextHtml = next.length
       ? next.map(function (t) {
-          var u = unlocks[t.id].length;
+          var u = unlocks[t.id].filter(function (x) { return inScope(byId[x]); }).length;
           return topicRow(t, 'рівень ' + t.stage + (u ? ' · відкриє ' + u : ''));
         }).join('')
       : '<div class="mm-empty">Відкритих, але не почато тем немає — або все пройдено, або бракує позначок на попередніх темах.</div>';
 
-    var learning = MAP.topics.filter(function (t) { return st(t.id) === 1; })
+    var learning = scopeList.filter(function (t) { return st(t.id) === 1; })
       .sort(function (a, b) {
-        return String((S.mapEntry(b.id) || {}).at || '').localeCompare(String((S.mapEntry(a.id) || {}).at || ''));
+        return String((entry(b.id) || {}).at || '').localeCompare(String((entry(a.id) || {}).at || ''));
       });
     var learnHtml = learning.length
       ? learning.slice(0, 10).map(function (t) { return topicRow(t, 'рівень ' + t.stage); }).join('') +
         (learning.length > 10 ? '<div class="mm-empty">і ще ' + (learning.length - 10) + '</div>' : '')
-      : '<div class="mm-empty">Тема з позначкою «Вивчаю» зʼявиться тут, щоб не губилась.</div>';
+      : '<div class="mm-empty">' + tx.learningEmpty + '</div>';
 
     /* ---- Домени ---- */
     var doms = MAP.domains.map(function (d) {
-      var list = MAP.topics.filter(function (t) { return domOf(t) === d; });
+      var list = scopeList.filter(function (t) { return domOf(t) === d; });
+      if (!list.length) return '';                // у шкільній карті топології ще немає
       var s = statsOf(list);
       return '<div class="mm-drow"><div class="mm-drow__name"><span class="mm-drow__sw" style="background:' + d.color + '"></span>' +
         esc(d.name) + '</div>' +
@@ -303,24 +425,27 @@
         '<div class="mm-drow__n">' + s.known + ' / ' + s.n + '</div></div>';
     }).join('');
 
+    var totalTitle = who ? (max === 3 ? 'Школа й НМТ' : 'Уся математика') : 'Уся математика';
+    var totalSub = pl(all.n, 'тема', 'теми', 'тем') + (max === 6 ? ' на шести рівнях' : ' на рівнях 1–3');
+
     return '<div class="mm-hero">' +
         '<div class="card mm-here">' + here + '</div>' +
-        '<div class="card"><h3 class="mm-h3">Уся математика</h3><div class="mm-sub">' + pl(all.n, 'тема', 'теми', 'тем') +
-          ' на шести рівнях</div>' +
-          '<div class="mm-ring">' + ring + '<div><div class="mm-ring__big">' + Math.round(all.known / all.n * 100) + '%</div>' +
-          '<div class="muted small" style="margin-bottom:10px">знаю</div><div class="mm-ring__legend">' + legend + '</div></div></div>' +
+        '<div class="card"><h3 class="mm-h3">' + totalTitle + '</h3><div class="mm-sub">' + totalSub + '</div>' +
+          '<div class="mm-ring">' + ring + '<div><div class="mm-ring__big">' +
+            (all.n ? Math.round(all.known / all.n * 100) : 0) + '%</div>' +
+          '<div class="muted small" style="margin-bottom:10px">' + tx.rootWord + '</div><div class="mm-ring__legend">' + legend + '</div></div></div>' +
         '</div>' +
       '</div>' +
       '<div class="card mm-metro"><div class="mm-metro__track"><div class="mm-metro__line"><div class="mm-metro__fill" style="width:' +
         fill + '%"></div></div>' + stations + '</div></div>' +
       quick +
       '<div class="grid grid--2">' +
-        '<div class="card"><h3 class="mm-h3">Наступні кроки</h3><div class="mm-sub">Теми, для яких уже все є: жодна не спирається на незнане.</div>' +
+        '<div class="card"><h3 class="mm-h3">Наступні кроки</h3><div class="mm-sub">' + tx.nextSub + '</div>' +
           '<div class="mm-list">' + nextHtml + '</div></div>' +
-        '<div class="card"><h3 class="mm-h3">Зараз вивчаю</h3><div class="mm-sub">Позначене «Вивчаю» — найсвіжіше вгорі.</div>' +
+        '<div class="card"><h3 class="mm-h3">' + tx.learningTitle + '</h3><div class="mm-sub">' + tx.learningSub + '</div>' +
           '<div class="mm-list">' + learnHtml + '</div></div>' +
       '</div>' +
-      '<div class="card" style="margin-top:18px"><h3 class="mm-h3">За доменами</h3><div class="mm-sub">Темне — знаю, світле — вивчаю.</div>' +
+      '<div class="card" style="margin-top:18px"><h3 class="mm-h3">За доменами</h3><div class="mm-sub">' + tx.ringDark + '</div>' +
         doms + '</div>';
   }
 
@@ -329,13 +454,15 @@
      ============================================================ */
 
   function roadHtml() {
+    var tx = T();
+    var max = maxStage();
     var cs = currentStage();
     var legend = '<div class="mm-legend">' +
-      [0, 1, 2, 3].map(function (s) { return '<span>' + glyph(s, '#17163A', 15) + esc(STATUS[s]) + '</span>'; }).join('') +
+      [0, 1, 2, 3].map(function (s) { return '<span>' + glyph(s, '#17163A', 15) + esc(tx.status[s]) + '</span>'; }).join('') +
       '<span><span class="mm-chip is-next">можна брати</span></span>' +
       '<span><span class="mm-chip is-locked">ще закрита</span></span></div>';
 
-    var lanes = MAP.stages.map(function (Sg) {
+    var lanes = MAP.stages.filter(function (Sg) { return Sg.id <= max; }).map(function (Sg) {
       var list = stageTopics(Sg.id);
       var s = statsOf(list);
       var cls = (s.pct >= PASS ? ' is-done' : '') + (Sg.id === cs ? ' is-here' : '');
@@ -363,19 +490,34 @@
           '<div class="mm-lane__head">' +
             '<span class="mm-lane__title">Рівень ' + Sg.id + ' · ' + esc(Sg.name) + '</span>' +
             '<span class="mm-lane__hint">' + esc(Sg.hint) + '</span>' +
-            (Sg.id === cs ? '<span class="mm-lane__here">я тут</span>' : '') +
+            (Sg.id === cs ? '<span class="mm-lane__here">' + tx.here.toLowerCase() + '</span>' : '') +
             '<span class="mm-lane__prog">' + progressBar(s) + '<b>' + s.known + ' / ' + s.n + '</b></span>' +
           '</div>' +
           '<div class="mm-lane__acts">' +
-            '<button class="btn btn--ghost btn--sm" data-mm="bulk" data-arg="' + Sg.id + ':2">Позначити все «Знаю»</button>' +
-            '<button class="btn btn--ghost btn--sm" data-mm="bulk" data-arg="' + Sg.id + ':3">…«Можу пояснити»</button>' +
+            '<button class="btn btn--ghost btn--sm" data-mm="bulk" data-arg="' + Sg.id + ':2">' + tx.laneKnow + '</button>' +
+            '<button class="btn btn--ghost btn--sm" data-mm="bulk" data-arg="' + Sg.id + ':3">' + tx.laneSure + '</button>' +
             '<button class="btn btn--ghost btn--sm" data-mm="bulk" data-arg="' + Sg.id + ':0">Скинути рівень</button>' +
           '</div>' +
           '<div class="mm-doms">' + groups + '</div>' +
         '</div></section>';
     }).join('');
 
-    return legend + '<div class="mm-road">' + lanes + '</div>';
+    /* Учневі університет не потрібен щодня, але знати, що він є, корисно:
+       одна картка замість трьох порожніх смуг. */
+    var beyond = '';
+    if (max < 6) {
+      var rest = MAP.topics.filter(function (t) { return t.stage > max; }).length;
+      beyond = '<section class="mm-lane is-out">' +
+        '<div class="mm-lane__rail"><div class="mm-lane__dot">…</div></div>' +
+        '<div class="card mm-beyond">' +
+          '<div><div class="mm-lane__title">Далі — університетська математика</div>' +
+          '<div class="mm-lane__hint">Рівні ' + (max + 1) + '–6 · ' + pl(rest, 'тема', 'теми', 'тем') +
+            ' — від матаналізу до досліджень</div></div>' +
+          '<button class="btn btn--soft btn--sm" data-mm="scope" data-arg="6">Показати всю математику</button>' +
+        '</div></section>';
+    }
+
+    return legend + '<div class="mm-road">' + lanes + beyond + '</div>';
   }
 
   /* ============================================================
@@ -384,8 +526,8 @@
 
      Уся математика колом. У центрі — «Математика», навколо неї кільце
      доменів, далі розділи, а теми лежать на концентричних колах за рівнями:
-     ближче до центру основи, далі — вершини. Тому межа того, що я знаю,
-     на карті видна як кільце, і «де я» читається одним поглядом.
+     ближче до центру основи, далі — вершини. Тому межа того, що знаєш,
+     на карті видна як кільце, і «де зараз» читається одним поглядом.
 
      Кут відраховуємо від півночі за годинниковою стрілкою. Нагорі лишається
      порожній клин — туди стають підписи рівнів. */
@@ -473,6 +615,7 @@
   var svgEl = null, worldEl = null;
 
   function mapShell() {
+    var tx = T();
     return '<div class="card mm-mapwrap">' +
         '<svg id="mm-svg" xmlns="http://www.w3.org/2000/svg"><g id="mm-world"></g></svg>' +
         '<div class="mm-mapui">' +
@@ -483,7 +626,7 @@
             '<button data-mm="zoom" data-arg="all" title="Показати всю карту">⤢</button>' +
           '</div>' +
           '<div class="mm-maplegend">' +
-            [0, 1, 2, 3].map(function (s) { return '<div>' + glyph(s, '#17163A', 14) + esc(STATUS[s]) + '</div>'; }).join('') +
+            [0, 1, 2, 3].map(function (s) { return '<div>' + glyph(s, '#17163A', 14) + esc(tx.status[s]) + '</div>'; }).join('') +
           '</div>' +
         '</div>' +
         '<div class="mm-maphint">Колесо — масштаб · тягни — рух · клік по темі — деталі</div>' +
@@ -512,7 +655,9 @@
   }
 
   function worldMarkup() {
+    var tx = T();
     var L = layout();
+    var max = maxStage();
     var cs = currentStage();
     var out = [];
 
@@ -521,13 +666,15 @@
 
     /* кільця рівнів */
     MAP.stages.forEach(function (Sg) {
-      out.push('<circle class="mm-stagering' + (Sg.id === cs ? ' is-here' : '') + '" r="' + rTopic(Sg.id) + '"/>');
+      out.push('<circle class="mm-stagering' + (Sg.id === cs ? ' is-here' : '') + (Sg.id > max ? ' is-out' : '') +
+        '" r="' + rTopic(Sg.id) + '"/>');
     });
     MAP.stages.forEach(function (Sg) {
       var r = rTopic(Sg.id), here = Sg.id === cs;
-      var label = (here ? 'Я тут · ' : '') + Sg.id + ' · ' + Sg.name;
+      var label = (here ? tx.here + ' · ' : '') + Sg.id + ' · ' + Sg.name;
       var w = label.length * 9.6 + 28;
-      out.push('<g class="mm-ringlbl' + (here ? ' is-here' : '') + '" transform="translate(0,' + (-r) + ')">' +
+      out.push('<g class="mm-ringlbl' + (here ? ' is-here' : '') + (Sg.id > max ? ' is-out' : '') +
+        '" transform="translate(0,' + (-r) + ')">' +
         '<rect x="' + f1(-w / 2) + '" y="-17" width="' + f1(w) + '" height="34" rx="17"/>' +
         '<text text-anchor="middle" dy="6">' + esc(label) + '</text></g>');
     });
@@ -537,7 +684,8 @@
       var sp = L.sec[t.section], tp = L.t[t.id], d = domOf(t);
       var rm = (R_SEC + tp.r) / 2;
       var p0 = polar(R_SEC + 12, sp.a), c1 = polar(rm, sp.a), c2 = polar(rm, tp.a), p1 = polar(tp.r - 11, tp.a);
-      out.push('<path class="mm-edge" data-e="' + t.id + '" stroke="' + d.color + '" d="M' + f1(p0[0]) + ' ' + f1(p0[1]) +
+      out.push('<path class="mm-edge' + (t.stage > max ? ' is-out' : '') + '" data-e="' + t.id + '" stroke="' + d.color +
+        '" d="M' + f1(p0[0]) + ' ' + f1(p0[1]) +
         ' C' + f1(c1[0]) + ' ' + f1(c1[1]) + ' ' + f1(c2[0]) + ' ' + f1(c2[1]) + ' ' + f1(p1[0]) + ' ' + f1(p1[1]) + '"/>');
     });
 
@@ -572,11 +720,14 @@
     });
 
     /* центр */
-    var all = statsOf(MAP.topics);
+    var all = statsOf(scopeTopics());
+    var s0 = student();
     out.push('<g data-root="1" style="cursor:pointer"><circle class="mm-root" r="' + R_ROOT + '"/>' +
-      '<text class="mm-roottxt" y="-8" style="font-size:34px">Математика</text>' +
-      '<text class="mm-roottxt" y="30" style="font-size:19px;font-weight:600;opacity:.75">' +
-        all.known + ' з ' + all.n + ' тем</text></g>');
+      '<text class="mm-roottxt" y="' + (s0 ? -22 : -8) + '" style="font-size:34px">Математика</text>' +
+      (s0 ? '<text class="mm-roottxt" y="16" style="font-size:22px;font-weight:650;opacity:.9">' +
+        esc(String(s0.name || '').split(' ')[0]) + '</text>' : '') +
+      '<text class="mm-roottxt" y="' + (s0 ? 50 : 30) + '" style="font-size:19px;font-weight:600;opacity:.75">' +
+        tx.rootWord + ' ' + all.known + ' з ' + all.n + '</text></g>');
 
     /* розділи */
     MAP.sections.forEach(function (s) {
@@ -601,12 +752,12 @@
       var lbl = right
         ? '<text class="mm-tlbl" text-anchor="start" dy="0.35em" transform="rotate(' + f1(phi) + ') translate(16,0)">'
         : '<text class="mm-tlbl" text-anchor="end" dy="0.35em" transform="rotate(' + f1(phi + 180) + ') translate(-16,0)">';
-      out.push('<g class="mm-t' + (selected === t.id ? ' is-cur' : '') + '" data-id="' + t.id + '" transform="translate(' +
-        f1(p[0]) + ',' + f1(p[1]) + ')">' +
+      out.push('<g class="mm-t' + (selected === t.id ? ' is-cur' : '') + (t.stage > max ? ' is-out' : '') +
+        '" data-id="' + t.id + '" transform="translate(' + f1(p[0]) + ',' + f1(p[1]) + ')">' +
         '<circle class="mm-hit" r="15"/>' +
         '<g transform="translate(-11,-11) scale(1.375)">' + glyphInner(s, d.color) + '</g>' +
         (selected === t.id ? '<circle class="mm-focusring" r="17"/>' : '') +
-        lbl + esc(t.name) + '</text><title>' + esc(t.name + ' — ' + STATUS[s]) + '</title></g>');
+        lbl + esc(t.name) + '</text><title>' + esc(t.name + ' — ' + tx.status[s]) + '</title></g>');
     });
 
     out.push('<g id="mm-links"></g>');
@@ -750,10 +901,19 @@
     });
   }
 
-  /** Після кожного рендеру сторінки: оживити карту й шухляду. */
+  /** Після кожного рендеру: оживити карту й шухляду — або прибрати їх, якщо карти на сторінці немає. */
   V.mountMathmap = function () {
     var root = $('.mm');
-    if (!root) return;
+    if (!root) {
+      svgEl = worldEl = null;
+      selected = null;
+      hideDrawer();
+      return;
+    }
+
+    var w = root.getAttribute('data-who') || null;
+    if (w !== who) switchTo(w);
+    invalidate();
 
     svgEl = $('#mm-svg');
     worldEl = $('#mm-world');
@@ -776,6 +936,27 @@
 
   var noteTimer = null;
 
+  /* Шухляда живе поза сторінкою: у картці учня панель карти — лише одна
+     з вкладок, і вбудована в неї шухляда обрізалася б краями картки. */
+  function drawerEl() {
+    var d = document.getElementById('mm-drawer');
+    if (!d) {
+      d = document.createElement('aside');
+      d.id = 'mm-drawer';
+      d.className = 'mm-drawer';
+      d.hidden = true;
+      document.body.appendChild(d);
+    }
+    return d;
+  }
+
+  function hideDrawer() {
+    var d = document.getElementById('mm-drawer');
+    if (d) d.hidden = true;
+    var u = document.getElementById('mm-undo');
+    if (u) u.hidden = true;
+  }
+
   function openTopic(id, opts) {
     if (!byId[id]) return;
     selected = id;
@@ -790,19 +971,19 @@
 
   function closeDrawer() {
     selected = null;
-    var dr = $('#mm-drawer');
-    if (dr) dr.hidden = true;
+    hideDrawer();
     if (svgEl && worldEl) redrawWorld();
-    else if (tabOf(lastQuery) === 'road') rerender();
+    else if (currentView() === 'road') rerender();
   }
 
   function renderDrawer() {
-    var dr = $('#mm-drawer');
+    var dr = drawerEl();
     var t = byId[selected];
-    if (!dr) return;
     if (!t) { dr.hidden = true; return; }
-    var d = domOf(t), Sg = stageOf(t.stage), s = st(t.id), e = S.mapEntry(t.id) || {};
-    var tab = tabOf(lastQuery);
+    var tx = T();
+    var d = domOf(t), Sg = stageOf(t.stage), s = st(t.id), e = entry(t.id) || {};
+    var view = currentView();
+    var stu = student();
 
     function list(ids, empty) {
       if (!ids.length) return '<div class="mm-empty">' + empty + '</div>';
@@ -819,14 +1000,14 @@
       hint = '<div class="mm-lock">Спершу варто закрити: ' +
         missing.map(function (r) { return '<b>' + esc(byId[r].name) + '</b>'; }).join(', ') + '.</div>';
     } else if (!missing.length && s === 0 && t.req.length) {
-      hint = '<div class="mm-ok">Усе, на що ця тема спирається, я вже знаю — можна брати.</div>';
+      hint = '<div class="mm-ok">' + tx.okHint + '</div>';
     }
 
     var when = e.at ? U.fmtDate(e.at) : '';
 
     dr.innerHTML =
       '<div class="mm-dr__head" style="--c:' + d.color + '">' +
-        '<div class="mm-dr__crumb">' + esc(d.name) + ' › ' + esc(secOf(t).name) + '</div>' +
+        '<div class="mm-dr__crumb">' + (stu ? esc(stu.name) + ' · ' : '') + esc(d.name) + ' › ' + esc(secOf(t).name) + '</div>' +
         '<button class="mm-dr__close" data-mm="close" title="Закрити (Esc)">' + icon('x', 18) + '</button>' +
         '<h2 class="mm-dr__title">' + esc(t.name) + '</h2>' +
         '<div class="mm-dr__stage">Рівень ' + t.stage + ' · ' + esc(Sg.name) + ' · ' + esc(Sg.hint) + '</div>' +
@@ -835,7 +1016,7 @@
         '<p class="mm-dr__inside">' + esc(t.inside) + '</p>' +
         '<div class="mm-seg">' + [0, 1, 2, 3].map(function (v) {
           return '<button class="' + (v === s ? 'is-on' : '') + '" data-mm="status" data-arg="' + v + '">' +
-            glyph(v, v === s ? '#fff' : d.color, 18) + esc(STATUS[v]) + '</button>';
+            glyph(v, v === s ? '#fff' : d.color, 18) + esc(tx.status[v]) + '</button>';
         }).join('') + '</div>' +
         hint +
         '<div class="mm-dr__h">Спирається на · ' + t.req.length + '</div>' +
@@ -843,12 +1024,12 @@
         '<div class="mm-dr__h">Відкриває · ' + unlocks[t.id].length + '</div>' +
         list(unlocks[t.id], 'Далі на карті нічого — це одна з вершин.') +
         '<div class="mm-dr__h">Нотатка</div>' +
-        '<textarea class="textarea mm-note" id="mm-note" placeholder="Що саме тут іще не моє, джерела, як пояснювати учням…">' +
+        '<textarea class="textarea mm-note" id="mm-note" placeholder="' + esc(tx.notePh) + '">' +
           esc(e.note || '') + '</textarea>' +
         (when ? '<div class="mm-dr__meta">Змінено ' + esc(when) + '</div>' : '') +
         '<div class="mm-dr__foot">' +
-          (tab !== 'map' ? '<button class="btn btn--soft btn--sm" data-mm="showmap">' + icon('target', 15) + 'Показати на карті</button>' : '') +
-          (tab !== 'road' ? '<button class="btn btn--ghost btn--sm" data-mm="showroad">У роудмапі</button>' : '') +
+          (view !== 'map' ? '<button class="btn btn--soft btn--sm" data-mm="showmap">' + icon('target', 15) + 'Показати на карті</button>' : '') +
+          (view !== 'road' ? '<button class="btn btn--ghost btn--sm" data-mm="showroad">У роудмапі</button>' : '') +
         '</div>' +
       '</div>';
     dr.hidden = false;
@@ -859,23 +1040,26 @@
      ============================================================ */
 
   function bulk(stage, s) {
+    var tx = T();
     var list = stageTopics(stage).filter(function (t) {
-      if (s === 2) return st(t.id) < 2;          // «знаю все» не знижує тих, що «можу пояснити»
+      if (s === 2) return st(t.id) < 2;          // «знає все» не знижує тих, що «впевнено»
       return st(t.id) !== s;
     });
     if (!list.length) { U.toast('На цьому рівні вже все так позначено'); return; }
 
+    var owner = who;
     var prev = list.map(function (t) {
-      var e = S.mapEntry(t.id);
+      var e = entry(t.id);
       return { id: t.id, s: e ? (Number(e.s) | 0) : 0, note: e ? (e.note || '') : '' };
     });
-    S.setMapTopics(list.map(function (t) { return { id: t.id, s: s }; }));
+    setTopics(list.map(function (t) { return { id: t.id, s: s }; }));
     rerender();
 
-    var what = s === 0 ? 'Скинуто' : 'Позначено «' + STATUS[s] + '»';
+    var what = s === 0 ? 'Скинуто' : 'Позначено «' + tx.status[s] + '»';
     showUndo(what + ': ' + pl(list.length, 'тема', 'теми', 'тем'), function () {
-      S.setMapTopics(prev);
-      rerender();
+      S.setMapTopics(prev, owner);
+      invalidate();
+      if (who === owner) rerender();
     });
   }
 
@@ -941,10 +1125,17 @@
   }
 
   /* ============================================================
-     Події — делеговано, лише в межах цієї сторінки
+     Події — делеговано, лише коли карта є на сторінці
      ============================================================ */
 
   function onPage() { return !!$('.mm'); }
+
+  function scrollToLane(k) {
+    setTimeout(function () {
+      var lane = document.getElementById('mm-lane-' + k);
+      if (lane) lane.scrollIntoView({ block: 'start' });
+    }, 30);
+  }
 
   document.addEventListener('click', function (e) {
     if (!onPage()) return;
@@ -964,19 +1155,26 @@
     if (act === 'close') { closeDrawer(); return; }
     if (act === 'bulk') { var p = arg.split(':'); bulk(+p[0], +p[1]); return; }
 
+    if (act === 'scope' && who) {
+      S.update('students', who, { mapScope: +arg === 6 ? 6 : 3 });
+      if (selected && byId[selected] && byId[selected].stage > maxStage()) { selected = null; hideDrawer(); }
+      rerender();
+      return;
+    }
+
     if (act === 'status' && selected) {
-      S.setMapTopic(selected, { s: +arg });
+      S.setMapTopic(selected, { s: +arg }, who);
+      invalidate();
       if (svgEl && worldEl) { redrawWorld(); renderDrawer(); navCount(); }
       else rerender();
       return;
     }
 
     if (act === 'stage') {
+      var k = +arg;
+      if (who && k > maxStage()) S.update('students', who, { mapScope: 6 });
       window.App.setQuery({ v: 'road' });
-      setTimeout(function () {
-        var lane = document.getElementById('mm-lane-' + arg);
-        if (lane) lane.scrollIntoView({ block: 'start' });
-      }, 30);
+      scrollToLane(k);
       return;
     }
 
@@ -988,11 +1186,9 @@
     }
     if (act === 'showroad') {
       var sid = selected;
+      if (who && sid && byId[sid].stage > maxStage()) S.update('students', who, { mapScope: 6 });
       window.App.setQuery({ v: 'road' });
-      setTimeout(function () {
-        var lane = sid && document.getElementById('mm-lane-' + byId[sid].stage);
-        if (lane) lane.scrollIntoView({ block: 'start' });
-      }, 30);
+      if (sid) scrollToLane(byId[sid].stage);
       return;
     }
 
@@ -1009,9 +1205,12 @@
     if (!onPage()) return;
     if (e.target.id === 'mm-q') { runSearch(e.target); return; }
     if (e.target.id === 'mm-note' && selected) {
-      var id = selected, text = e.target.value;
+      var id = selected, owner = who, text = e.target.value;
       clearTimeout(noteTimer);
-      noteTimer = setTimeout(function () { S.setMapTopic(id, { note: text }); }, 450);
+      noteTimer = setTimeout(function () {
+        S.setMapTopic(id, { note: text }, owner);
+        if (who === owner) invalidate();
+      }, 450);
     }
   });
 
@@ -1039,22 +1238,16 @@
     if (e.key === 'Escape' && selected && !typing) closeDrawer();
   });
 
-  /* Коли йдемо зі сторінки, обрана тема не має чекати на повернення:
-     відкриваєш карту знову — і бачиш карту, а не вчорашню шухляду. */
-  window.addEventListener('hashchange', function () {
-    if (location.hash.indexOf('#/mathmap') !== 0) {
-      selected = null;
-      var dr = document.getElementById('mm-drawer');
-      if (dr) dr.hidden = true;
-      var u = document.getElementById('mm-undo');
-      if (u) u.hidden = true;
-    }
-  });
-
-  /** Для «Огляду» й перевірок: де я зараз. */
-  V.mathmapSummary = function () {
-    var cs = currentStage();
-    return { stage: cs, name: cs === 7 ? 'Усе пройдено' : stageOf(cs).name, all: statsOf(MAP.topics) };
+  /** Для «Огляду» й перевірок: де зараз той, чию карту показано. */
+  V.mathmapSummary = function (studentId) {
+    var keep = who;
+    who = studentId || null;
+    invalidate();
+    var cs = currentStage(), max = maxStage();
+    var res = { stage: cs, max: max, name: cs > max ? 'Пройдено' : stageOf(cs).name, all: statsOf(scopeTopics()) };
+    who = keep;
+    invalidate();
+    return res;
   };
 
   window.V = V;

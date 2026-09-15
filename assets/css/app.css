@@ -1864,6 +1864,18 @@ a { color: inherit; text-decoration: none; }
    білою панеллю поверх сторінки. */
 .mm-drawer[hidden], .mm-qlist[hidden], .mm-undo[hidden], .mm-maphint[hidden] { display: none; }
 
+/* Межа учнівської карти: те, що за нею, видно, але не кричить. */
+.mm-scope { flex: 0 0 auto; }
+.mm-scope .seg__btn { white-space: nowrap; padding: 8px 14px; }
+.mm-station.is-out { opacity: .45; }
+.mm-lane.is-out .mm-lane__dot { border-style: dashed; }
+.mm-beyond { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: space-between; border-style: dashed; box-shadow: none; }
+#mm-svg .mm-t.is-out { opacity: .28; }
+#mm-svg .mm-edge.is-out { opacity: .12; }
+#mm-svg .mm-stagering.is-out { opacity: .5; }
+#mm-svg .mm-ringlbl.is-out { opacity: .55; }
+#mm-svg.is-focus .mm-t.is-out.hl { opacity: .75; }
+
 .mm-g { width: 15px; height: 15px; flex: 0 0 auto; display: block; }
 .mm-h3 { margin: 0 0 4px; font-size: 16px; font-weight: 750; letter-spacing: -.2px; }
 .mm-sub { color: var(--muted); font-size: 13px; margin-bottom: 14px; line-height: 1.5; }

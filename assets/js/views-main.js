@@ -1979,7 +1979,8 @@
     }
     bindRefSearch();
     V.hydratePhotos();
-    if (route && route.parts && route.parts[0] === 'mathmap' && V.mountMathmap) V.mountMathmap(route);
+    // карта буває і в «Карті математики», і в картці учня; без неї — прибирає за собою шухляду
+    if (V.mountMathmap) V.mountMathmap(route);
     if (V.scrollScheduleToWork) V.scrollScheduleToWork();
 
     // курс НБУ потрібен розкладу й фінансам — тягнемо один раз на день

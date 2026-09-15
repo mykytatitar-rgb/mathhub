@@ -27,7 +27,7 @@
   /* Види записів, які живуть на сервері рядками. Дошки тут не згадані:
      у них своя таблиця, бо вони важкі й змінюються поштучно щосекунди. */
   R.KINDS = ['students', 'lessons', 'payments', 'homeworks', 'progress',
-             'roadmap', 'desk', 'materials', 'notes', 'mathmap'];
+             'roadmap', 'desk', 'materials', 'notes', 'mathmap', 'stumap'];
 
   /* Який набір видів бачив цей пристрій минулого разу.
 

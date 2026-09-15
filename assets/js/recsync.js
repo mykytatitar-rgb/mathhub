@@ -27,7 +27,19 @@
   /* Види записів, які живуть на сервері рядками. Дошки тут не згадані:
      у них своя таблиця, бо вони важкі й змінюються поштучно щосекунди. */
   R.KINDS = ['students', 'lessons', 'payments', 'homeworks', 'progress',
-             'roadmap', 'desk', 'materials', 'notes'];
+             'roadmap', 'desk', 'materials', 'notes', 'mathmap'];
+
+  /* Який набір видів бачив цей пристрій минулого разу.
+
+     Читання йде «усе новіше за мітку». Стара версія програми не знала
+     про новий вид і пропускала його рядки — але мітку зсувала далі. Після
+     оновлення коду ці рядки лишилися б позаду назавжди. Тому щойно набір
+     видів змінився, один раз читаємо все з початку. */
+  var KINDS_KEY = 'mathhub.rec.kinds';
+
+  function kindsChanged() {
+    try { return localStorage.getItem(KINDS_KEY) !== R.KINDS.join(','); } catch (e) { return false; }
+  }
 
   var OUT = 'mathhub.rec.outbox';    // що не встигло поїхати: {"kind/id": 1|"del"}
   var SINCE = 'mathhub.rec.since';   // мітка часу останнього вдалого читання
@@ -168,7 +180,10 @@
         return res.json();
       })
       .then(function (rows) {
-        if (!rows || !rows.length) return 0;
+        if (!rows || !rows.length) {
+          if (full) { try { localStorage.setItem(KINDS_KEY, R.KINDS.join(',')); } catch (e) {} }
+          return 0;
+        }
 
         var changed = 0;
         var newest = since;
@@ -183,6 +198,7 @@
 
         since = newest;
         saveState();
+        if (full) { try { localStorage.setItem(KINDS_KEY, R.KINDS.join(',')); } catch (e) {} }
         if (changed) S.save();
         return changed;
       })
@@ -261,7 +277,7 @@
        сервері ще немає, і лише тоді забирати чуже. */
     R.flush()
       .then(function () { return R.migrate(); })
-      .then(function () { return R.pull(!since); })
+      .then(function () { return R.pull(!since || kindsChanged()); })
       .then(function (n) {
         if (n && window.App && App.render) App.render();
       });

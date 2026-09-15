@@ -70,6 +70,7 @@
     textT:     '<path d="M4 6V4h16v2"/><path d="M12 4v16"/><path d="M8.5 20h7"/>',
     shapeLine: '<path d="M5 19 19 5"/>',
     shapes:    '<path d="M8.2 3.5 13.4 12H3z"/><rect x="12.5" y="12.5" width="8.5" height="8" rx="1.6"/><circle cx="17" cy="7" r="3.6"/>',
+    mathmap:   '<circle cx="12" cy="12" r="2.6"/><path d="M12 9.4V4.6M14.3 13.3l4.4 2.5M9.7 13.3l-4.4 2.5"/><circle cx="12" cy="3.2" r="1.6"/><circle cx="20" cy="16.6" r="1.6"/><circle cx="4" cy="16.6" r="1.6"/>',
     compass:   '<circle cx="12" cy="4.4" r="1.7"/><path d="M12 6.1 6 20"/><path d="M12 6.1 18 20"/><path d="M8.8 14h6.4"/>',
     shapeRect: '<rect x="3.5" y="5.5" width="17" height="13" rx="2"/>',
     shapeCirc: '<circle cx="12" cy="12" r="8.5"/>',

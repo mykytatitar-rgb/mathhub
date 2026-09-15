@@ -128,6 +128,7 @@
       progress: [],   // {id, studentId, topic, level 0..100, updatedAt}
       roadmap: [],    // {id, studentId, title, topic, status, due, note, ord}
       desk: [],       // мої власні справи: {id, title, note, status, tag}
+      mathmap: [],    // моя карта математики: {id: тема, s: 0..3, note, at}
       materials: [],
       notes: [],
       boards: []      // {id, lessonId, slides:[{id,title,bg,items:[]}], updatedAt}
@@ -1251,6 +1252,77 @@
     if (window.BoardOps) BoardOps.drop(id);
     if (window.BoardSync) BoardSync.remove(id);
     return true;
+  };
+
+  /* ============================================================
+     Карта математики — позначки самого репетитора
+     ============================================================
+
+     Запис на тему, а не один документ на всю карту. Так само, як учні й
+     уроки: позначка «знаю» на ноутбуці й нотатка до іншої теми з телефона
+     не можуть затерти одна одну, бо це різні записи.
+
+     Тема без позначки й без нотатки запису не має зовсім: «не вивчено» —
+     це відсутність, а не ще один рядок на сервері. */
+
+  S.MAP_STATUS = ['Не вивчено', 'Вивчаю', 'Знаю', 'Можу пояснити'];
+
+  function mapIndex() {
+    if (!Array.isArray(db.mathmap)) db.mathmap = [];
+    return db.mathmap;
+  }
+
+  S.mapEntry = function (topicId) {
+    var list = mapIndex();
+    for (var i = 0; i < list.length; i++) if (list[i].id === topicId) return list[i];
+    return null;
+  };
+
+  S.mapStatus = function (topicId) {
+    var e = S.mapEntry(topicId);
+    return e ? (Number(e.s) | 0) : 0;
+  };
+
+  /* Застосувати зміни до кількох тем одним збереженням.
+
+     Масова позначка — «знаю весь рівень» — чіпає десятки тем. Зберігати
+     базу після кожної означало б десятки повних перезаписів і стільки ж
+     поштовхів синхронізації, календарю й порталам. */
+  S.setMapTopics = function (changes) {
+    var list = mapIndex();
+    var now = new Date().toISOString();
+    var touched = 0;
+
+    (changes || []).forEach(function (c) {
+      if (!c || !c.id) return;
+      var i = -1;
+      for (var k = 0; k < list.length; k++) if (list[k].id === c.id) { i = k; break; }
+      var cur = i >= 0 ? list[i] : null;
+
+      var s = c.s !== undefined ? (Number(c.s) | 0) : (cur ? (Number(cur.s) | 0) : 0);
+      var note = c.note !== undefined ? String(c.note || '') : (cur ? (cur.note || '') : '');
+      if (cur && (Number(cur.s) | 0) === s && (cur.note || '') === note) return;
+
+      if (!s && !note) {
+        if (i < 0) return;
+        list.splice(i, 1);
+        syncDel('mathmap', c.id);
+        touched++;
+        return;
+      }
+
+      var rec = { id: c.id, s: s, note: note, at: now };
+      if (i >= 0) list[i] = rec; else list.push(rec);
+      sync('mathmap', c.id);
+      touched++;
+    });
+
+    if (touched) S.save();
+    return touched;
+  };
+
+  S.setMapTopic = function (topicId, patch) {
+    return S.setMapTopics([Object.assign({ id: topicId }, patch || {})]);
   };
 
   /**

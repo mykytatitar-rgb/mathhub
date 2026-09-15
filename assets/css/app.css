@@ -1851,3 +1851,248 @@ a { color: inherit; text-decoration: none; }
 .mat-peek { display: flex; flex-direction: column; gap: 6px; }
 .mat-peek__r { background: var(--bg); border-radius: var(--r-sm); padding: 6px 10px;
                text-align: center; overflow-x: auto; }
+
+/* ============================================================
+   Карта математики
+   ============================================================
+
+   Кольори несуть домени, а все інше тримається токенами «Вектора»,
+   щоб сторінка лишалася своєю, а не вставкою з іншої програми. */
+
+/* У «Векторі» немає загального [hidden] { display: none }, а власний display
+   у цих блоках перебиває атрибут — і прихована шухляда висіла б порожньою
+   білою панеллю поверх сторінки. */
+.mm-drawer[hidden], .mm-qlist[hidden], .mm-undo[hidden], .mm-maphint[hidden] { display: none; }
+
+.mm-g { width: 15px; height: 15px; flex: 0 0 auto; display: block; }
+.mm-h3 { margin: 0 0 4px; font-size: 16px; font-weight: 750; letter-spacing: -.2px; }
+.mm-sub { color: var(--muted); font-size: 13px; margin-bottom: 14px; line-height: 1.5; }
+.mm-empty { color: var(--muted); font-size: 13.5px; padding: 6px 0; line-height: 1.5; }
+.mm-err { margin-bottom: 18px; background: var(--red-bg); border-color: #F5C9CC; color: #9B2A31; font-size: 13.5px; }
+
+.mm-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
+.mm-search { position: relative; margin-left: auto; }
+.mm-search > svg { position: absolute; left: 13px; top: 12px; color: var(--muted-2); pointer-events: none; }
+.mm-search input {
+  width: 300px; height: 42px; padding: 0 14px 0 38px;
+  border: 1px solid var(--line); border-radius: var(--r-md); background: #fff;
+  font: inherit; font-size: 14px; color: var(--ink); outline: none; box-shadow: var(--shadow-sm);
+}
+.mm-search input:focus { border-color: var(--brand-300); box-shadow: 0 0 0 3px var(--brand-50); }
+.mm-qlist {
+  position: absolute; top: 48px; right: 0; z-index: 40; width: 430px; max-height: 430px; overflow: auto;
+  background: #fff; border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow-lg); padding: 6px;
+}
+.mm-qitem {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  border: 0; background: transparent; text-align: left; cursor: pointer;
+  padding: 8px 10px; border-radius: var(--r-sm); color: var(--ink); font: inherit; font-size: 14px;
+}
+.mm-qitem:hover, .mm-qitem.is-on { background: var(--brand-50); }
+.mm-qitem small { display: block; color: var(--muted); font-size: 12px; }
+.mm-qempty { padding: 12px; color: var(--muted); }
+
+.mm-progress { height: 8px; background: #EEEDF6; border-radius: 99px; overflow: hidden; display: flex; flex: 1; }
+.mm-progress i { display: block; height: 100%; }
+
+/* ---- Де я ---- */
+
+.mm-hero { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 18px; margin-bottom: 18px; }
+.mm-here__eyebrow { font-size: 12px; font-weight: 750; letter-spacing: .6px; text-transform: uppercase; color: var(--brand-600); }
+.mm-here__title { font-size: 30px; font-weight: 800; letter-spacing: -.7px; margin: 6px 0 2px; line-height: 1.15; }
+.mm-here__hint { color: var(--muted); margin-bottom: 18px; }
+.mm-here__row { display: flex; align-items: center; gap: 14px; }
+.mm-here__row .mm-progress { height: 10px; }
+.mm-here__pct { font-weight: 750; font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }
+.mm-here__note { margin-top: 12px; font-size: 13.5px; color: var(--ink-2); line-height: 1.5; }
+
+.mm-ring { display: flex; align-items: center; gap: 22px; }
+.mm-ring svg { flex: 0 0 auto; }
+.mm-ring__big { font-size: 34px; font-weight: 800; letter-spacing: -.8px; line-height: 1; }
+.mm-ring__legend { display: grid; gap: 7px; font-size: 13px; }
+.mm-ring__legend div { display: flex; align-items: center; gap: 8px; }
+.mm-ring__legend b { margin-left: auto; padding-left: 14px; font-variant-numeric: tabular-nums; }
+
+/* Лінія метро: шість рівнів і місце, де я зараз. */
+.mm-metro { margin-bottom: 18px; padding: 30px 26px 18px; }
+.mm-metro__track { position: relative; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.mm-metro__line { position: absolute; left: 8.33%; right: 8.33%; top: 15px; height: 4px; background: #E6E4F1; border-radius: 4px; }
+.mm-metro__fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--ink); border-radius: 4px; }
+.mm-station { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; background: none; border: 0; cursor: pointer; font: inherit; color: inherit; padding: 0 4px; }
+.mm-station__dot {
+  width: 34px; height: 34px; margin-bottom: 8px; border-radius: 50%;
+  background: #fff; border: 3px solid #D9D6E8; display: grid; place-items: center;
+  font-weight: 750; font-size: 13px; color: var(--muted); position: relative; z-index: 1;
+}
+.mm-station.is-done .mm-station__dot { background: var(--ink); border-color: var(--ink); color: #fff; }
+.mm-station.is-here .mm-station__dot { border-color: var(--brand-600); color: var(--brand-600); box-shadow: 0 0 0 6px var(--brand-50); }
+.mm-station__name { font-weight: 650; font-size: 13px; line-height: 1.3; text-align: center; }
+.mm-station__pct { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.mm-station__here {
+  position: absolute; top: -24px; left: 50%; transform: translateX(-50%);
+  font-size: 11px; font-weight: 750; color: #fff; background: var(--brand-600);
+  padding: 2px 8px; border-radius: 99px; white-space: nowrap;
+}
+
+.mm-list { display: grid; gap: 2px; }
+.mm-row {
+  display: flex; align-items: center; gap: 11px; width: calc(100% + 20px);
+  padding: 8px 10px; margin: 0 -10px; border-radius: var(--r-sm);
+  border: 0; background: transparent; text-align: left; cursor: pointer; color: var(--ink); font: inherit; font-size: 14px;
+}
+.mm-row:hover { background: var(--brand-50); }
+.mm-row__name { flex: 1; min-width: 0; font-weight: 600; }
+.mm-row__name small { display: block; color: var(--muted); font-size: 12px; font-weight: 500; }
+.mm-row__tag { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+.mm-drow { display: grid; grid-template-columns: 190px minmax(0, 1fr) 70px; align-items: center; gap: 14px; padding: 6px 0; }
+.mm-drow__name { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 13.5px; }
+.mm-drow__sw { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+.mm-drow__n { text-align: right; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+
+.mm-quick { margin-bottom: 18px; border-style: dashed; border-color: var(--brand-300); }
+.mm-qrow { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.mm-qrow__name { flex: 1; min-width: 220px; }
+.mm-qrow__name small { color: var(--muted); margin-left: 6px; }
+
+/* ---- Роудмап ---- */
+
+.mm-legend { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 13px; color: var(--ink-2); margin-bottom: 18px; }
+.mm-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.mm-legend .mm-chip { cursor: default; }
+
+.mm-road { position: relative; }
+.mm-road::before { content: ""; position: absolute; left: 25px; top: 36px; bottom: 36px; width: 4px; background: #E6E4F1; border-radius: 4px; }
+.mm-lane { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 18px; margin-bottom: 18px; scroll-margin-top: 20px; }
+.mm-lane__rail { position: relative; display: flex; justify-content: center; padding-top: 18px; }
+.mm-lane__dot {
+  width: 38px; height: 38px; border-radius: 50%; background: #fff; border: 3px solid #D9D6E8;
+  display: grid; place-items: center; font-weight: 750; color: var(--muted); position: relative; z-index: 1;
+}
+.mm-lane.is-done .mm-lane__dot { background: var(--ink); border-color: var(--ink); color: #fff; }
+.mm-lane.is-here .mm-lane__dot { border-color: var(--brand-600); color: var(--brand-600); box-shadow: 0 0 0 6px var(--brand-50); }
+.mm-lane__head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.mm-lane__title { font-size: 17px; font-weight: 750; letter-spacing: -.3px; }
+.mm-lane__hint { color: var(--muted); font-size: 13px; }
+.mm-lane__here { font-size: 11.5px; font-weight: 750; color: #fff; background: var(--brand-600); padding: 2px 9px; border-radius: 99px; }
+.mm-lane__prog { display: flex; align-items: center; gap: 10px; margin-left: auto; min-width: 210px; }
+.mm-lane__prog b { font-variant-numeric: tabular-nums; font-size: 13px; }
+.mm-lane__acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; margin-bottom: 14px; }
+.mm-lane__acts .btn { border-color: transparent; color: var(--muted); }
+
+.mm-doms { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px 22px; }
+.mm-dom__name { font-size: 12px; font-weight: 750; letter-spacing: .4px; text-transform: uppercase; margin-bottom: 8px; }
+.mm-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mm-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 5px 11px 5px 8px; border-radius: 99px;
+  border: 1px solid var(--line); background: #fff; color: var(--ink);
+  font: inherit; font-size: 13px; font-weight: 550; cursor: pointer; text-align: left; line-height: 1.3;
+}
+.mm-chip:hover { border-color: var(--brand-300); box-shadow: var(--shadow-sm); }
+.mm-chip.is-locked { color: var(--muted-2); background: #FBFAFE; }
+.mm-chip.is-next { border-color: var(--brand-600); box-shadow: 0 0 0 2px var(--brand-50); }
+.mm-chip.is-sel { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+/* ---- Карта ---- */
+
+.mm-mapwrap { position: relative; padding: 0; overflow: hidden; height: max(540px, calc(100vh - 260px)); background: #FAF9FE; }
+#mm-svg { width: 100%; height: 100%; display: block; cursor: grab; user-select: none; touch-action: none; }
+#mm-svg.is-drag { cursor: grabbing; }
+
+.mm-stagering { fill: none; stroke: #DEDBEC; stroke-width: 1.5; stroke-dasharray: 6 8; }
+.mm-stagering.is-here { stroke: var(--brand-600); stroke-width: 3; stroke-dasharray: none; opacity: .55; }
+.mm-ringlbl rect { fill: #fff; stroke: #DEDBEC; }
+.mm-ringlbl text { font-size: 17px; font-weight: 650; fill: var(--muted); }
+.mm-ringlbl.is-here rect { fill: var(--brand-600); stroke: var(--brand-600); }
+.mm-ringlbl.is-here text { fill: #fff; }
+
+.mm-edge { fill: none; stroke-width: 1.6; opacity: .38; }
+.mm-band { fill: none; stroke-width: 64; cursor: pointer; }
+.mm-band:hover { opacity: .9; }
+.mm-bandlbl { fill: #fff; font-weight: 750; pointer-events: none; }
+.mm-root { fill: var(--ink); }
+.mm-roottxt { fill: #fff; font-weight: 750; text-anchor: middle; pointer-events: none; }
+.mm-sec { cursor: pointer; }
+.mm-seclbl { font-size: 17px; font-weight: 750; paint-order: stroke; stroke: #FAF9FE; stroke-width: 6px; stroke-linejoin: round; pointer-events: none; }
+.mm-t { cursor: pointer; }
+.mm-tlbl { font-size: 15px; fill: var(--ink-2); paint-order: stroke; stroke: #FAF9FE; stroke-width: 5px; stroke-linejoin: round; pointer-events: none; }
+.mm-t:hover .mm-tlbl { fill: var(--ink); font-weight: 650; }
+.mm-hit { fill: transparent; }
+
+/* Рівень деталізації: здалеку підписи тем лише заважають. */
+#mm-svg.lod-1 .mm-tlbl { display: none; }
+#mm-svg.lod-2 .mm-seclbl { display: none; }
+
+/* Фокус на темі: решта карти відходить на задній план. */
+#mm-svg.is-focus .mm-t, #mm-svg.is-focus .mm-edge, #mm-svg.is-focus .mm-sec { opacity: .14; }
+#mm-svg.is-focus .mm-t.hl, #mm-svg.is-focus .mm-sec.hl { opacity: 1; }
+#mm-svg.is-focus .mm-edge.hl { opacity: .55; }
+#mm-svg.is-focus .mm-t.hl .mm-tlbl { display: block; }
+.mm-link { fill: none; stroke-width: 3; }
+.mm-link--req { stroke: var(--ink); opacity: .7; }
+.mm-link--next { stroke-dasharray: 8 7; opacity: .75; }
+.mm-focusring { fill: none; stroke: var(--ink); stroke-width: 3; }
+
+.mm-mapui { position: absolute; left: 16px; bottom: 16px; display: flex; gap: 8px; align-items: flex-end; }
+.mm-zoom { display: flex; flex-direction: column; background: #fff; border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow); overflow: hidden; }
+.mm-zoom button { width: 38px; height: 38px; border: 0; background: #fff; font-size: 17px; cursor: pointer; color: var(--ink-2); }
+.mm-zoom button + button { border-top: 1px solid var(--line); }
+.mm-zoom button:hover { background: var(--brand-50); color: var(--brand-700); }
+.mm-maplegend { background: #fff; border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow); padding: 10px 14px; font-size: 12.5px; display: grid; gap: 5px; }
+.mm-maplegend div { display: flex; align-items: center; gap: 8px; }
+.mm-maphint { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); background: rgba(23, 22, 58, .82); color: #fff; font-size: 12.5px; padding: 6px 12px; border-radius: 99px; pointer-events: none; white-space: nowrap; }
+
+/* ---- Шухляда теми ---- */
+
+.mm-drawer {
+  position: fixed; z-index: 60; top: 16px; right: 16px; bottom: 16px; width: 410px;
+  background: #fff; border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.mm-dr__head { padding: 18px 20px 14px; border-top: 5px solid var(--c, var(--brand-600)); position: relative; }
+.mm-dr__crumb { font-size: 12px; font-weight: 750; letter-spacing: .4px; color: var(--c, var(--muted)); text-transform: uppercase; padding-right: 36px; }
+.mm-dr__title { margin: 4px 0 4px; font-size: 22px; font-weight: 800; line-height: 1.25; letter-spacing: -.4px; }
+.mm-dr__stage { font-size: 13px; color: var(--muted); }
+.mm-dr__close { position: absolute; right: 12px; top: 12px; width: 34px; height: 34px; border: 0; border-radius: var(--r-sm); background: transparent; cursor: pointer; color: var(--muted); display: grid; place-items: center; }
+.mm-dr__close:hover { background: var(--brand-50); color: var(--ink); }
+.mm-dr__body { padding: 4px 20px 20px; overflow: auto; flex: 1; }
+.mm-dr__inside { margin: 0 0 16px; color: var(--ink-2); font-size: 14px; line-height: 1.55; }
+.mm-dr__h { margin: 18px 0 6px; font-size: 12px; font-weight: 750; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); }
+.mm-dr__meta { margin-top: 12px; font-size: 12px; color: var(--muted-2); }
+.mm-dr__foot { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+
+.mm-seg { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.mm-seg button {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 10px 4px 9px; border-radius: var(--r-md); border: 1px solid var(--line); background: #fff;
+  font: inherit; font-size: 12px; font-weight: 650; color: var(--ink-2); cursor: pointer; line-height: 1.2; text-align: center;
+}
+.mm-seg button:hover { border-color: var(--brand-300); }
+.mm-seg button.is-on { border-color: var(--ink); background: var(--ink); color: #fff; }
+.mm-seg .mm-g { width: 18px; height: 18px; }
+
+.mm-lock { margin-top: 12px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--amber-bg); color: #8A5409; font-size: 13px; line-height: 1.5; }
+.mm-ok { margin-top: 12px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--green-bg); color: #0C7A48; font-size: 13px; line-height: 1.5; }
+.mm-note { width: 100%; min-height: 90px; resize: vertical; }
+
+.mm-undo {
+  position: fixed; z-index: 90; left: 50%; bottom: 24px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 14px;
+  background: var(--ink); color: #fff; padding: 10px 12px 10px 18px; border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg); font-size: 13.5px;
+}
+.mm-undo button { background: rgba(255, 255, 255, .14); color: #fff; border: 0; border-radius: var(--r-sm); padding: 6px 11px; font: inherit; font-weight: 650; cursor: pointer; }
+.mm-undo button:hover { background: rgba(255, 255, 255, .24); }
+
+@media (max-width: 1100px) {
+  .mm-hero { grid-template-columns: minmax(0, 1fr); }
+  .mm-search { margin-left: 0; }
+  .mm-search input { width: 240px; }
+}
+@media (max-width: 760px) {
+  .mm-drawer { width: auto; left: 12px; }
+  .mm-drow { grid-template-columns: 130px minmax(0, 1fr) 56px; }
+  .mm-metro__track { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 30px; }
+  .mm-metro__line { display: none; }
+}

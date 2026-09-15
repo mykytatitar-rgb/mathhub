@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v72';
+  App.BUILD = 'v73';
   window.APP_BUILD = App.BUILD;
 
   var NAV = [
@@ -32,7 +32,12 @@
     /* Власна математика окремо від учнівської: те, у чому розбираєшся сам,
        не має домішуватися в розклад, фінанси й портали. */
     { hash: '#/desk',      icon: 'compass',   label: 'Моє',       count: function () {
-        return (S.deskItems() || []).filter(function (d) { return d.status !== 'done'; }).length; } }
+        return (S.deskItems() || []).filter(function (d) { return d.status !== 'done'; }).length; } },
+    /* Карта всієї математики — теж моя, а не учнівська: де я в ній, що
+       вже закрито й що можна брати далі. Лічильник — теми, які зараз
+       вивчаю: саме вони й мають бути перед очима. */
+    { hash: '#/mathmap',   icon: 'mathmap',   label: 'Карта математики', count: function () {
+        return (S.db().mathmap || []).filter(function (m) { return Number(m.s) === 1; }).length; } }
   ];
 
   /* ============================================================
@@ -225,6 +230,8 @@
           html = V.sheet(route.parts[1], route.query); break;
         case 'desk':
           html = V.desk(route.query); break;
+        case 'mathmap':
+          html = V.mathmap ? V.mathmap(route.query) : ''; break;
         case 'settings':
           html = V.settings(); break;
         default:

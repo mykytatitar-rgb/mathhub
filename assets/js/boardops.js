@@ -262,6 +262,20 @@
     });
   };
 
+  /** Хто власник обʼєкта: true — учень, false — репетитор, null — такого немає. */
+  function ownedIn(board) {
+    return function (id) {
+      var found = null;
+      (board.slides || []).some(function (sl) {
+        return (sl.items || []).some(function (it) {
+          if (it && it.id === id) { found = it.by === 'student'; return true; }
+          return false;
+        });
+      });
+      return found;
+    };
+  }
+
   /** Для порівняння потрібен лише вміст: службові поля тільки заважають. */
   function strip(board) {
     return { slides: (board.slides || []).map(function (sl) {
@@ -308,9 +322,19 @@
 
         var changed = 0;
         rows.forEach(function (row) {
+          seen[boardId] = Math.max(seen[boardId] || 0, row.id);
+
+          /* Учнівська дія проходить лише над учнівським: додати своє, змінити
+             чи стерти своє. База перевіряє це сама, але стара база без
+             перевірки не повинна мати змоги зіпсувати дошку репетитора. */
+          if (row.author === 'student' && window.BoardCore &&
+              !BoardCore.studentAllowed(row.op, ownedIn(board))) {
+            console.warn('Відкинуто дію учня над чужим обʼєктом:', row.op && row.op.t);
+            return;
+          }
+
           if (O.apply(board, row.op)) changed++;
           O.apply(known, row.op);
-          seen[boardId] = Math.max(seen[boardId] || 0, row.id);
         });
 
         base[boardId] = JSON.stringify(strip(known));

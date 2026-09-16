@@ -948,9 +948,11 @@
     if (!token) return;
     var lessonId = cur.lessonId;
 
-    cur.live = Live.join(token, function (event) {
+    cur.live = Live.join(token, function (event, data) {
       if (!cur || cur.lessonId !== lessonId) return;
       if (event === 'ink' || event === 'hw') pullContributions();
+      // учень на живій дошці записав свої дії в журнал — забираємо одразу
+      if (event === 'ops' && data && data.from === 'student') pullOps();
       // сторінці учня бракує нового слайда чи картинки — перевидаємо негайно
       if (event === 'need') {
         cur.structural = true;
@@ -968,7 +970,18 @@
           ((op.t === 'i+' || op.t === 'i~') && op.it && op.it.t === 'i');
       });
       if (structural) cur.structural = true;
-      if (cur.live) cur.live.send('ops', { ops: ops });
+      if (!cur.live) return;
+
+      /* Прихований слайд учневі не показується ніде — і в каналі теж.
+         Сама зміна видимості їде: учень має прибрати слайд чи попросити його. */
+      var hidden = {};
+      cur.board.slides.forEach(function (s) { if (s.hidden) hidden[s.id] = 1; });
+      var shown = ops.filter(function (op) {
+        if (op.t === 's+') return !(op.sl && op.sl.hidden);
+        if (op.t === 's~') return true;
+        return !(op.s && hidden[op.s]);
+      });
+      if (shown.length) cur.live.send('ops', { ops: shown });
     };
   }
 
@@ -1162,6 +1175,8 @@
       renderRail();
       refreshEmpty();
       updateSlideName();
+      // учень міг покласти на живу дошку фото — забираємо файл собі
+      healStudentImages();
     });
   }
 

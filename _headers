@@ -20,3 +20,8 @@
 
 /assets/*
   Cache-Control: public, max-age=0, must-revalidate
+
+# Рушій дошки — спільний для кабінету й сторінки учня, тож завжди свіжий
+/share/engine/*
+  Cache-Control: public, max-age=0, must-revalidate
+  X-Content-Type-Options: nosniff

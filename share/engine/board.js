@@ -1494,22 +1494,43 @@
 
   var imgCache = {};
 
-  function loadImage(key, onReady) {
+  /* Звідки брати файл картинки.
+
+     У кабінеті файли лежать у сховищі браузера (IndexedDB). На сторінці
+     учня такого сховища немає — там картинки приходять адресою з сервера.
+     Тому рушій не знає, де вони: це каже той, хто його запускає, через
+     Board.imageSource(ключ, обʼєкт) → обіцянка з файлом або адресою. */
+  function sourceOf(key, item) {
+    if (Board.imageSource) return Board.imageSource(key, item);
+    if (window.ImgStore) return window.ImgStore.get(key);
+    return null;
+  }
+
+  function loadImage(key, onReady, item) {
     if (imgCache[key]) return imgCache[key];
     var e = imgCache[key] = { state: 'loading', img: null };
-    if (!window.ImgStore) { e.state = 'fail'; return e; }
+    var src = sourceOf(key, item);
+    if (!src) { e.state = 'fail'; return e; }
 
-    window.ImgStore.get(key).then(function (blob) {
-      if (!blob) { e.state = 'fail'; if (onReady) onReady(); return; }
-      var url = URL.createObjectURL(blob);
+    Promise.resolve(src).then(function (got) {
+      if (!got) { e.state = 'fail'; if (onReady) onReady(); return; }
+      var own = typeof got !== 'string';
+      var url = own ? URL.createObjectURL(got) : got;
       var img = new Image();
+      if (!own) img.crossOrigin = 'anonymous';
       img.onload = function () { e.img = img; e.url = url; e.state = 'ok'; if (onReady) onReady(); };
-      img.onerror = function () { e.state = 'fail'; URL.revokeObjectURL(url); if (onReady) onReady(); };
+      img.onerror = function () { e.state = 'fail'; if (own) URL.revokeObjectURL(url); if (onReady) onReady(); };
       img.src = url;
     }).catch(function () { e.state = 'fail'; if (onReady) onReady(); });
 
     return e;
   }
+
+  /** Забути картинку, що не завантажилась, — наступне малювання спробує знову. */
+  Board.forgetImage = function (key) {
+    var e = imgCache[key];
+    if (e && e.state !== 'ok') delete imgCache[key];
+  };
 
   function imageKeysIn(slides) {
     var keys = [];
@@ -2414,9 +2435,18 @@
 
   Board.prototype.ensureImages = function () {
     var self = this;
-    imageKeysIn([this.slide]).forEach(function (k) {
-      if (!imgCache[k]) loadImage(k, function () { self.render(); });
+    ((this.slide && this.slide.items) || []).forEach(function (it) {
+      if (it.t === 'i' && it.k && !imgCache[it.k]) loadImage(it.k, function () { self.render(); }, it);
     });
+  };
+
+  /* Чи можна цей обʼєкт виділяти, рухати й стирати.
+
+     У кабінеті — будь-який. На сторінці учня — лише написане самим учнем:
+     дошку репетитора учень бачить і доповнює, але не зіпсує. Правило задає
+     той, хто запускає рушій, через opts.canEdit(обʼєкт). */
+  Board.prototype.editable = function (it) {
+    return !this.opts.canEdit || !!this.opts.canEdit(it);
   };
 
   /* ---------- Історія ---------- */
@@ -2827,7 +2857,7 @@
     var best = null, bestD = Infinity, hitMap = null;
     for (var j = items.length - 1; j >= 0; j--) {
       var it = items[j];
-      if (it.t !== 'o' || !hitItem(it, x, y, tol)) continue;
+      if (it.t !== 'o' || !this.editable(it) || !hitItem(it, x, y, tol)) continue;
       if (!hitMap) hitMap = idMap(items);
       var q = window.Points ? Points.at(it, hitMap) : it.p;
       if (!q) continue;
@@ -2837,7 +2867,7 @@
     if (best) return best;
 
     for (var i = items.length - 1; i >= 0; i--) {
-      if (hitItem(items[i], x, y, tol)) return items[i];
+      if (this.editable(items[i]) && hitItem(items[i], x, y, tol)) return items[i];
     }
     return null;
   };
@@ -2846,7 +2876,9 @@
   Board.prototype._itemsInRect = function (r) {
     var x1 = Math.min(r.x0, r.x1), x2 = Math.max(r.x0, r.x1);
     var y1 = Math.min(r.y0, r.y1), y2 = Math.max(r.y0, r.y1);
+    var self = this;
     return this.items().filter(function (it) {
+      if (!self.editable(it)) return false;
       var b = itemBounds(it);
       return b && b.x1 <= x2 && b.x2 >= x1 && b.y1 <= y2 && b.y2 >= y1;
     });
@@ -3262,7 +3294,7 @@
     var items = this.items();
     var before = items.length;
     for (var i = items.length - 1; i >= 0; i--) {
-      if (hitItem(items[i], x, y, r)) items.splice(i, 1);
+      if (this.editable(items[i]) && hitItem(items[i], x, y, r)) items.splice(i, 1);
     }
     if (items.length !== before) { this._shrank(); this.render(); }
   };

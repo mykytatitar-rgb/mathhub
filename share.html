@@ -311,6 +311,9 @@
         if (msg.event !== 'broadcast' || !msg.payload) return;
         var ev = msg.payload.event, data = msg.payload.payload || {};
 
+        // жива дошка сама вирішує, що робити з повідомленням
+        if (api.onMessage) { try { api.onMessage(ev, data); } catch (e) { console.warn(e); } return; }
+
         // зміни репетитора — одразу в сторінку уроку
         if (ev === 'ops' && data.ops && frame.contentWindow) {
           frame.contentWindow.postMessage({ mathhub: 'ops', ops: data.ops }, '*');
@@ -338,7 +341,8 @@
 
     window.addEventListener('online', function () { if (!ws) { wait = 1000; connect(); } });
 
-    return { connect: connect, send: send, alive: function () { return joined; } };
+    var api = { connect: connect, send: send, alive: function () { return joined; }, onMessage: null };
+    return api;
   })();
 
   /* Стежимо за змінами дешево: питаємо лише номер версії, а сам урок
@@ -653,16 +657,103 @@
     }
   });
 
-  load()
-    .then(function () { live.connect(); watch(); })
-    .catch(function (e) {
-      if (e && e.message === 'revoked') {
-        fail('Урок більше не доступний', 'Репетитор закрив доступ за цим посиланням.');
-      } else if (e && e.message === 'setup') {
-        fail('Урок ще не готовий', 'Зверніться до репетитора — він має завершити налаштування.');
-      } else {
-        fail('Не вдалося відкрити урок', 'Перевірте інтернет і спробуйте ще раз.');
-      }
+  /* ============================================================
+     Жива дошка — той самий рушій, що в репетитора
+     ============================================================
+
+     Якщо в базі вже є функції живої дошки й знімок цієї дошки, сторінка
+     вантажить справжній рушій і читає стан прямо з бази — без жодного
+     перевидання. Інакше (база ще не оновлена, дошку ніколи не зберігали)
+     урок відкривається по-старому, окремою копією. Учень різниці в
+     посиланні не помічає. */
+
+  var ENGINE = ['points', 'constructions', 'plot', 'solids', 'board', 'ops', 'student'];
+
+  function loadScript(src) {
+    return new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = function () { reject(new Error('не завантажився ' + src)); };
+      document.head.appendChild(s);
+    });
+  }
+
+  function loadEngine() {
+    return ENGINE.reduce(function (chain, name) {
+      return chain.then(function () { return loadScript('share/engine/' + name + '.js'); });
+    }, Promise.resolve());
+  }
+
+  /* Матеріали, домашнє й адреси картинок лежать у тому, що кабінет
+     публікує для уроку. Старий формат — сторінка з даними всередині,
+     новий — самі дані. Читаємо обидва. */
+  function readMeta() {
+    return rpc('share_read', { p_token: token })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (rows) {
+        var raw = rows && rows[0] && rows[0].data;
+        if (!raw) return null;
+        if (raw.charAt(0) === '{') return JSON.parse(raw);
+        var m = /var DATA = (\{[\s\S]*?\});\n/.exec(raw);
+        return m ? JSON.parse(m[1]) : null;
+      })
+      .catch(function () { return null; });
+  }
+
+  function startLive(row) {
+    return Promise.all([readMeta(), loadEngine()]).then(function (res) {
+      msg.style.display = 'none';
+      frame.style.display = 'none';
+      var root = document.createElement('div');
+      root.style.height = '100%';
+      document.body.appendChild(root);
+      var back = document.querySelector('.back-portal');
+      if (back) document.body.appendChild(back);          // «до розкладу» лишається зверху
+
+      return window.StudentBoard.start({
+        token: token,
+        uid: path.split('/')[0],
+        API: API,
+        KEY: KEY,
+        rpc: rpc,
+        live: live,
+        row: row,
+        meta: res[0],
+        root: root,
+        readMeta: readMeta,
+        shrink: shrink,
+        uploadPhoto: uploadPhoto,
+        sendHomework: sendHomework
+      });
+    });
+  }
+
+  function startLegacy() {
+    return load()
+      .then(function () { live.connect(); watch(); })
+      .catch(function (e) {
+        if (e && e.message === 'revoked') {
+          fail('Урок більше не доступний', 'Репетитор закрив доступ за цим посиланням.');
+        } else if (e && e.message === 'setup') {
+          fail('Урок ще не готовий', 'Зверніться до репетитора — він має завершити налаштування.');
+        } else {
+          fail('Не вдалося відкрити урок', 'Перевірте інтернет і спробуйте ще раз.');
+        }
+      });
+  }
+
+  rpc('share_board', { p_token: token })
+    .then(function (res) { return res.ok ? res.json() : null; })
+    .catch(function () { return null; })
+    .then(function (rows) {
+      var row = rows && rows[0];
+      if (!row || !row.data) return startLegacy();
+      return startLive(row).catch(function (e) {
+        // жива дошка не піднялась — учень однаково має побачити урок
+        console.warn('Жива дошка не запустилась:', e && e.message);
+        return startLegacy();
+      });
     });
 
   /* ============================================================

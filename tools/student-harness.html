@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Стенд сторінки учня</title>
+<style>
+  html,body{margin:0;height:100%;font-family:Manrope,"Segoe UI",system-ui,sans-serif}
+  #dev{position:fixed;right:10px;top:60px;z-index:50;background:#FFF7E6;border:1px solid #F2A93B;border-radius:10px;padding:8px;font-size:12px;display:flex;flex-direction:column;gap:6px}
+  #dev button{font:inherit;font-size:12px;padding:4px 8px;cursor:pointer}
+</style>
+</head>
+<body>
+<!--
+  Стенд для перевірки сторінки учня без справжньої бази.
+
+  «База» — це localStorage цієї сторінки: знімок дошки й журнал дій. Кілька
+  вкладок стенду бачать одну «базу», а живий канал імітує BroadcastChannel.
+  Правила учня перевіряє той самий BoardCore.studentAllowed, що й кабінет.
+
+  Відкрийте: /tools/student-harness.html          — учень
+             /tools/student-harness.html#tutor    — кнопки «репетитора»
+-->
+<div id="dev">
+  <b>Стенд</b>
+  <button id="t-add">Репетитор: додати штрих</button>
+  <button id="t-shape">Репетитор: додати трикутник</button>
+  <button id="t-hide">Репетитор: сховати слайд 2</button>
+  <button id="t-reset">Скинути базу</button>
+  <span id="t-log"></span>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var KEY = 'harness.server';
+  var bc = new BroadcastChannel('harness-live');
+
+  function uid(p) { return p + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+  function seed() {
+    return {
+      nextId: 1,
+      ops: [],
+      snapshot: {
+        slides: [
+          { id: 'sl_a', title: 'Задача 1', bg: 'grid', kind: 'lesson', hidden: 0, items: [
+            { id: 'it_t1', t: 'x', c: '#0D2149', s: 26, p: [-260, -150], v: 'Знайдіть гіпотенузу' },
+            { id: 'sh_1', t: 'g', sh: 'tri-right', c: '#4B3FDB', w: 3, f: null, m: 1, lb: 1, fx: 0, a: [-220, -90, 60, 140] },
+            { id: 'it_p1', t: 'p', c: '#E24A4A', w: 3, d: [120, -60, 160, -40, 210, -50, 250, -20] }
+          ] },
+          { id: 'sl_b', title: 'Задача 2', bg: 'grid', kind: 'lesson', hidden: 0, items: [
+            { id: 'it_t2', t: 'x', c: '#0D2149', s: 26, p: [-200, -100], v: 'Друга задача' }
+          ] },
+          { id: 'sl_h', title: 'Приховане', bg: 'grid', kind: 'lesson', hidden: 1, items: [
+            { id: 'it_secret', t: 'x', c: '#E24A4A', s: 26, p: [0, 0], v: 'ВІДПОВІДІ' }
+          ] },
+          { id: 'sl_hw', title: 'ДЗ', bg: 'grid', kind: 'hw', hidden: 0, items: [] }
+        ]
+      }
+    };
+  }
+
+  function db() {
+    try { return JSON.parse(localStorage.getItem(KEY)) || seed(); } catch (e) { return seed(); }
+  }
+  function save(d) { localStorage.setItem(KEY, JSON.stringify(d)); }
+  if (!localStorage.getItem(KEY)) save(seed());
+
+  function stateOf(d) {
+    var st = JSON.parse(JSON.stringify(d.snapshot));
+    d.ops.forEach(function (r) { BoardCore.apply(st, r.op); });
+    return st;
+  }
+
+  function hiddenIds(d) {
+    return d.snapshot.slides.filter(function (s) { return s.hidden; }).map(function (s) { return s.id; });
+  }
+
+  function visibleOp(op, hidden) {
+    if (op.t === 's+') return !(op.sl && op.sl.hidden);
+    if (op.s) return hidden.indexOf(op.s) < 0;
+    return true;
+  }
+
+  function reply(status, body) {
+    return Promise.resolve({
+      ok: status < 300, status: status,
+      json: function () { return Promise.resolve(body); },
+      text: function () { return Promise.resolve(typeof body === 'string' ? body : JSON.stringify(body)); }
+    });
+  }
+
+  /* Імітація функцій бази з supabase/live-board.sql */
+  function rpc(name, body) {
+    var d = db();
+    var hidden = hiddenIds(d);
+
+    if (name === 'share_board') {
+      var snap = JSON.parse(JSON.stringify(d.snapshot));
+      snap.slides = snap.slides.filter(function (s) { return !s.hidden; });
+      return reply(200, [{ data: snap, since: '1970-01-01T00:00:00Z', can_write: true, owner_id: 'u' }]);
+    }
+    if (name === 'share_board_ops') {
+      return reply(200, d.ops.filter(function (r) { return visibleOp(r.op, hidden); }));
+    }
+    if (name === 'share_ops_read') {
+      return reply(200, d.ops.filter(function (r) { return r.id > (body.p_after || 0) && visibleOp(r.op, hidden); }));
+    }
+    if (name === 'share_ops_write') {
+      var st = stateOf(d);
+      var owned = function (id) {
+        var f = null;
+        st.slides.forEach(function (s) { (s.items || []).forEach(function (it) { if (it.id === id) f = it.by === 'student'; }); });
+        return f;
+      };
+      for (var i = 0; i < body.p_ops.length; i++) {
+        var op = body.p_ops[i];
+        if (!BoardCore.studentAllowed(op, owned) || (op.s && hidden.indexOf(op.s) >= 0)) {
+          log('база відхилила ' + op.t);
+          return reply(400, { message: 'Можна змінювати лише своє' });
+        }
+      }
+      body.p_ops.forEach(function (op) { d.ops.push({ id: d.nextId++, op: op, author: 'student', at: new Date().toISOString() }); });
+      save(d);
+      log('учень записав ' + body.p_ops.length + ' дій');
+      return reply(200, d.nextId - 1);
+    }
+    if (name === 'share_read') {
+      return reply(200, [{ data: JSON.stringify({ title: 'Теорема Піфагора', student: 'Тест Учень', date: 'сьогодні',
+        notes: 'Повторити формулу', images: {}, materials: [], homework: [{ id: 'hw1', title: 'Задачі 1–5', desc: 'Розвʼязати', photos: [], sent: 0 }] }) }]);
+    }
+    return reply(404, {});
+  }
+
+  function tutorOp(op) {
+    var d = db();
+    d.ops.push({ id: d.nextId++, op: op, author: 'tutor', at: new Date().toISOString() });
+    if (op.t === 's~' && op.p && 'hidden' in op.p) {
+      d.snapshot.slides.forEach(function (s) { if (s.id === op.s) s.hidden = op.p.hidden; });
+    }
+    save(d);
+    bc.postMessage({ event: 'ops', data: { ops: [op] } });
+  }
+
+  function log(t) { var l = document.getElementById('t-log'); if (l) l.textContent = t; console.log('[стенд]', t); }
+  window.__harness = { db: db, stateOf: stateOf, log: log };
+
+  document.getElementById('t-add').onclick = function () {
+    var y = Math.round(Math.random() * 200 - 100);
+    tutorOp({ t: 'i+', s: 'sl_a', it: { id: uid('it'), t: 'p', c: '#16A34A', w: 4, d: [-300, y, -100, y + 30, 100, y] } });
+    log('репетитор додав штрих');
+  };
+  document.getElementById('t-shape').onclick = function () {
+    tutorOp({ t: 'i+', s: 'sl_a', it: { id: uid('sh'), t: 'g', sh: 'tri-eq', c: '#F2A93B', w: 3, f: null, m: 0, lb: 1, fx: 0, a: [150, 60, 330, 216] } });
+    log('репетитор додав трикутник');
+  };
+  document.getElementById('t-hide').onclick = function () {
+    tutorOp({ t: 's~', s: 'sl_b', p: { title: 'Задача 2', bg: 'grid', kind: 'lesson', hidden: 1 } });
+    log('репетитор сховав слайд 2');
+  };
+  document.getElementById('t-reset').onclick = function () { save(seed()); location.reload(); };
+
+  var live = {
+    onMessage: null,
+    connect: function () {},
+    alive: function () { return true; },
+    send: function (event, data) { bc.postMessage({ event: event, data: data }); return true; }
+  };
+  bc.onmessage = function (e) { if (live.onMessage) live.onMessage(e.data.event, e.data.data); };
+
+  var ENGINE = ['points', 'constructions', 'plot', 'solids', 'board', 'ops', 'student'];
+  ENGINE.reduce(function (chain, n) {
+    return chain.then(function () {
+      return new Promise(function (res, rej) {
+        var s = document.createElement('script');
+        s.src = '../share/engine/' + n + '.js?t=' + Date.now();
+        s.onload = res; s.onerror = rej;
+        document.head.appendChild(s);
+      });
+    });
+  }, Promise.resolve()).then(function () {
+    var root = document.createElement('div');
+    root.style.height = '100%';
+    document.body.appendChild(root);
+    return rpc('share_board', { p_token: 't' }).then(function (r) { return r.json(); }).then(function (rows) {
+      return rpc('share_read', {}).then(function (r) { return r.json(); }).then(function (m) {
+        return StudentBoard.start({
+          token: 'harness', uid: 'u', API: 'http://localhost', KEY: 'k',
+          rpc: rpc, live: live, row: rows[0], meta: JSON.parse(m[0].data), root: root,
+          readMeta: function () { return Promise.resolve(null); },
+          shrink: function () { return Promise.reject(new Error('немає')); },
+          uploadPhoto: function () { return Promise.reject(new Error('немає')); },
+          sendHomework: function () { return Promise.resolve([]); }
+        });
+      });
+    });
+  }).then(function () { log('сторінка учня запущена'); }, function (e) { log('помилка: ' + e.message); console.error(e); });
+})();
+</script>
+</body>
+</html>

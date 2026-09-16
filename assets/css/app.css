@@ -2228,6 +2228,7 @@ a { color: inherit; text-decoration: none; }
 }
 .mm-wishdone svg { flex: 0 0 auto; margin-top: 2px; }
 .mm-wishes .mm-row__name small { white-space: normal; }
+.mm-wishbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
 
 /* ---- Інтерактивні вставки теми ---- */
 
@@ -2246,7 +2247,27 @@ a { color: inherit; text-decoration: none; }
 .mx-step__f { margin-top: 6px; text-align: center; font-size: 16px; }
 @keyframes mx-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
-.mx-tri { display: grid; gap: 4px; justify-items: center; overflow-x: auto; padding: 4px 0; }
+.mx-tri-wrap { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.mx-tri { display: grid; gap: 4px; justify-items: center; overflow-x: auto; padding: 4px 0 4px 26px; flex: 1 1 200px; min-width: 0; }
+.mx-tri.is-big .mx-cell { min-width: 28px; height: 26px; font-size: 11.5px; padding: 0 3px; }
+
+/* Формула поруч із трикутником: велика, у кольорах клітинок, завжди на видноті */
+.mx-formula {
+  flex: 1 1 170px; max-width: 100%;
+  border: 2px solid var(--c, var(--brand-600)); border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--c, #4B3FDB) 6%, #fff);
+  padding: 10px 12px; text-align: center;
+}
+.mx-formula__h { font-size: 11px; font-weight: 750; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); margin: 2px 0 4px; }
+.mx-formula__h + .mx-formula__big { margin-bottom: 10px; }
+.mx-formula__big { font-size: 20px; line-height: 1.5; }
+.mx-formula__big--sm { font-size: 16px; }
+.mx-formula__note { font-size: 12px; color: var(--muted); line-height: 1.45; }
+.mx-f { display: inline-block; padding: 1px 5px; border-radius: 7px; }
+.mx-f.is-pick-c { background: var(--c, var(--brand-600)); color: #fff; }
+.mx-f.is-pick-c .mf { color: #fff; }
+.mx-f.is-parent-c { background: color-mix(in srgb, var(--c, #4B3FDB) 18%, #fff); box-shadow: inset 0 0 0 1.5px var(--c, var(--brand-600)); }
+.mx-f-num { font-size: 16px; margin-top: 4px; }
 .mx-row { display: flex; gap: 4px; align-items: center; position: relative; }
 .mx-rown { position: absolute; left: -26px; font-size: 10.5px; color: var(--muted-2); width: 20px; text-align: right; }
 .mx-cell {

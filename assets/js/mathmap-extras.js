@@ -19,14 +19,26 @@
      Що вже зроблено з побажань
      ============================================================ */
 
+  /* На одну тему побажань буває кілька, і виконуються вони по черзі.
+     Кожне впізнається за шматком свого тексту (match); у картці показується
+     відповідь саме на те побажання, що зараз стоїть у полі. */
   window.MATH_WISHES_DONE = {
-    'disc.binomial': {
-      match: 'трикутник паскаля',
-      at: '16.09.2026',
-      reply: 'Додано покрокове виведення формули з дужок, доведення через правило ' +
-        'трикутника й інтерактивний трикутник Паскаля: його можна будувати по ' +
-        'клітинці, а клік по числу показує, з яких двох воно складається.'
-    }
+    'disc.binomial': [
+      {
+        match: 'трикутник паскаля',
+        at: '16.09.2026',
+        reply: 'Додано покрокове виведення формули з дужок, доведення через правило ' +
+          'трикутника й інтерактивний трикутник Паскаля: його можна будувати по ' +
+          'клітинці, а клік по числу показує, з яких двох воно складається.'
+      },
+      {
+        match: 'формула щоб поруч',
+        at: '16.09.2026',
+        reply: 'Поруч із трикутником тепер велика картка з формулами: правило трикутника ' +
+          'й формула через факторіали. Кольори в ній ті самі, що й у клітинках, а при ' +
+          'кліку на число обидві формули одразу розписуються з цими числами.'
+      }
+    ]
   };
 
   /* ============================================================
@@ -113,8 +125,12 @@
         '<div class="mx-h">Трикутник Паскаля</div>' +
         '<div class="mx-sub">Кожне число — сума двох над ним. Натисніть на число, щоб побачити, ' +
           'з яких воно складається, або будуйте трикутник по клітинці.</div>' +
-        '<div class="mx-tri" data-mx-tri></div>' +
-        '<div class="mx-sum" data-mx-sum></div>' +
+        /* Формула — поруч із трикутником і в тих самих кольорах, що клітинки:
+           щоб очі бачили число й правило одночасно, а не шукали пояснення нижче. */
+        '<div class="mx-tri-wrap">' +
+          '<div class="mx-tri" data-mx-tri></div>' +
+          '<aside class="mx-formula" data-mx-formula></aside>' +
+        '</div>' +
         '<div class="mx-nav">' +
           '<button class="btn btn--ghost btn--sm" data-mx="less">−</button>' +
           '<span class="mx-count" data-mx-n></span>' +
@@ -142,6 +158,46 @@
        рахуємо їх зверху вниз, зліва направо. */
     function cellIndex(n, k) { return n * (n + 1) / 2 + k; }
 
+    /* Картка з формулами. Шматки формули розфарбовані так само, як
+       клітинки: результат — суцільним кольором, два доданки — світлим. */
+    function part(cls, src) { return '<span class="mx-f ' + cls + '">' + M(src) + '</span>'; }
+
+    function fact(n) { var r = 1; for (var i = 2; i <= n; i++) r *= i; return r; }
+
+    function formulaCard(p) {
+      var rule, byFact, note;
+
+      if (p && p.n > 0 && p.k > 0 && p.k < p.n) {
+        var a = C(p.n - 1, p.k - 1), b = C(p.n - 1, p.k), c = C(p.n, p.k);
+        rule =
+          part('is-pick-c', 'C_{' + p.n + '}^{' + p.k + '}') + ' = ' +
+          part('is-parent-c', 'C_{' + (p.n - 1) + '}^{' + (p.k - 1) + '}') + ' + ' +
+          part('is-parent-c', 'C_{' + (p.n - 1) + '}^{' + p.k + '}') +
+          '<div class="mx-f-num">' + part('is-pick-c', String(c)) + ' = ' +
+            part('is-parent-c', String(a)) + ' + ' + part('is-parent-c', String(b)) + '</div>';
+        byFact =
+          M('C_{' + p.n + '}^{' + p.k + '} = \\frac{' + p.n + '!}{' + p.k + '! \\cdot ' + (p.n - p.k) + '!}') +
+          '<div class="mx-f-num">' + M('= \\frac{' + fact(p.n) + '}{' + fact(p.k) + ' \\cdot ' + fact(p.n - p.k) + '} = ' + c) + '</div>';
+        note = '';
+      } else if (p) {
+        rule = part('is-pick-c', 'C_{' + p.n + '}^{' + p.k + '} = 1');
+        byFact = M('\\frac{' + p.n + '!}{' + p.k + '! \\cdot ' + (p.n - p.k) + '!} = 1');
+        note = 'На краю завжди одиниця: ' + M(p.k ? 'b^{' + p.n + '}' : 'a^{' + p.n + '}') +
+          ' виходить лише одним способом.';
+      } else {
+        rule = part('is-pick-c', 'C_{n}^{k}') + ' = ' +
+          part('is-parent-c', 'C_{n-1}^{k-1}') + ' + ' + part('is-parent-c', 'C_{n-1}^{k}');
+        byFact = M('C_{n}^{k} = \\frac{n!}{k!\\,(n-k)!}');
+        note = 'Натисніть на число в трикутнику — формули розпишуться з ним.';
+      }
+
+      return '<div class="mx-formula__h">Правило трикутника</div>' +
+        '<div class="mx-formula__big">' + rule + '</div>' +
+        '<div class="mx-formula__h">Через факторіали</div>' +
+        '<div class="mx-formula__big mx-formula__big--sm">' + byFact + '</div>' +
+        (note ? '<div class="mx-formula__note">' + note + '</div>' : '');
+    }
+
     function drawTri() {
       var rows = [];
       for (var n = 0; n <= state.n; n++) {
@@ -160,21 +216,13 @@
         }
         rows.push('<div class="mx-row"><span class="mx-rown">' + n + '</span>' + cells.join('') + '</div>');
       }
-      root.querySelector('[data-mx-tri]').innerHTML = rows.join('');
+      var tri = root.querySelector('[data-mx-tri]');
+      tri.innerHTML = rows.join('');
+      tri.classList.toggle('is-big', state.n > 6);
       root.querySelector('[data-mx-n]').textContent = 'рядків: ' + (state.n + 1);
 
-      var sum = root.querySelector('[data-mx-sum]');
       var p = state.pick;
-      if (p && p.n > 0 && p.k > 0 && p.k < p.n) {
-        sum.innerHTML = M('C_{' + p.n + '}^{' + p.k + '} = C_{' + (p.n - 1) + '}^{' + (p.k - 1) + '} + C_{' +
-          (p.n - 1) + '}^{' + p.k + '} = ' + C(p.n - 1, p.k - 1) + ' + ' + C(p.n - 1, p.k) + ' = ' + C(p.n, p.k));
-      } else if (p) {
-        sum.innerHTML = M('C_{' + p.n + '}^{' + p.k + '} = 1') +
-          ' — на краю трикутника завжди одиниця: $a^n$ чи $b^n$ виходить одним способом.'
-            .replace(/\$([^$]+)\$/g, function (_, f) { return M(f); });
-      } else {
-        sum.innerHTML = '';
-      }
+      root.querySelector('[data-mx-formula]').innerHTML = formulaCard(p);
 
       var row = p ? p.n : state.n;
       root.querySelector('[data-mx-exp]').innerHTML = '<div class="mx-sub">Рядок ' + row +

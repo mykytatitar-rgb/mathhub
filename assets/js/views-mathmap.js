@@ -604,11 +604,17 @@
      Виконане позначає сам зміст: що вже зроблено, записано в
      MATH_WISHES_DONE разом із відповіддю, що саме. */
 
+  /** Виконане побажання, якщо текст збігається з одним із виконаних (останнє перемагає). */
   function wishDone(topicId, text) {
     var done = window.MATH_WISHES_DONE && window.MATH_WISHES_DONE[topicId];
     if (!done || !text) return null;
     var hay = String(text).toLowerCase().replace(/\s+/g, ' ');
-    return hay.indexOf(String(done.match).toLowerCase()) >= 0 ? done : null;
+    var list = Array.isArray(done) ? done : [done];
+    var hit = null;
+    list.forEach(function (d) {
+      if (hay.indexOf(String(d.match).toLowerCase()) >= 0) hit = d;
+    });
+    return hit;
   }
 
   function openWishes() {
@@ -1689,7 +1695,8 @@
     function wishHtml(topic) {
       var own = S.mapEntry(topic.id, null) || {};
       var text = own.wish || '';
-      var done = wishDone(topic.id, text) || wishDone(topic.id, own.note);
+      // відповідь — на те побажання, що стоїть у полі; стара нотатка — лише якщо поле порожнє
+      var done = text ? wishDone(topic.id, text) : wishDone(topic.id, own.note);
       return '<div class="mm-dr__h">Побажання для Claude</div>' +
         (done
           ? '<div class="mm-wishdone">' + icon('check', 15) + '<span><b>Зроблено ' + esc(done.at) + '.</b> ' +
@@ -1697,7 +1704,14 @@
           : '') +
         '<textarea class="textarea mm-note mm-wish" id="mm-wish" placeholder="' +
           'Що доробити в цій темі: доведення, малюнок, інтерактив, більше задач… ' +
-          'Я читаю ці побажання й покращую блок.">' + esc(text) + '</textarea>';
+          'Я читаю ці побажання й покращую блок.">' + esc(text) + '</textarea>' +
+        /* Застосунок сам до Claude не достукається — розмова йде в іншому
+           вікні. Тому шлях має бути в одну дію: скопіювати й вставити в чат. */
+        '<div class="mm-wishbar">' +
+          '<button class="btn btn--soft btn--sm" data-mm="wish-copy">' + icon('copy', 15) +
+            'Скопіювати для Claude</button>' +
+          '<span class="muted small">вставте в розмову з Claude — і він візьметься</span>' +
+        '</div>';
     }
 
     function chips(ids, empty) {
@@ -1908,6 +1922,24 @@
     }
 
     if (act === 'caption-close') { hideCaption(); return; }
+
+    /* Одне побажання з картки теми — одразу з назвою й кодом теми, щоб Claude
+       не мусив гадати, про який блок мова. Береться те, що зараз у полі,
+       навіть якщо воно ще не встигло зберегтися. */
+    if (act === 'wish-copy' && selected) {
+      var field = document.getElementById('mm-wish');
+      var wt = field ? field.value.trim() : '';
+      if (!wt) { U.toast('Спершу напишіть побажання в полі вище', 'err'); return; }
+      S.setMapTopic(selected, { wish: wt }, null);
+      var tp = byId[selected];
+      var msg = 'Побажання до теми «' + tp.name + '» (' + tp.id + ') на карті математики:\n' + wt;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(msg)
+          .then(function () { U.toast('Скопійовано — вставте в розмову з Claude', 'ok'); })
+          .catch(function () { U.toast('Браузер не дав скопіювати', 'err'); });
+      }
+      return;
+    }
 
     /* Усі відкриті побажання одним текстом — щоб надіслати їх Claude разом. */
     if (act === 'wishes-copy') {

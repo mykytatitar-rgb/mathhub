@@ -33,6 +33,21 @@
     iint: '∬', iiint: '∭', oint: '∮', oiint: '∯',
     partial: '∂', nabla: '∇', Int: '∫',
     parallel: '∥', perp: '⊥', sim: '∼', propto: '∝',
+    lceil: '⌈', rceil: '⌉', lfloor: '⌊', rfloor: '⌋',
+    langle: '⟨', rangle: '⟩', lvert: '|', rvert: '|', lVert: '‖', rVert: '‖',
+    mid: '∣', nmid: '∤', cong: '≅', simeq: '≃', ll: '≪', gg: '≫',
+    subseteq: '⊆', supseteq: '⊇', supset: '⊃', setminus: '∖', emptyset: '∅',
+    oplus: '⊕', otimes: '⊗', circ: '∘', bullet: '•', ast: '∗', star: '⋆',
+    leq: '≤', geq: '≥', neq: '≠', leqslant: '≤', geqslant: '≥',
+    nleq: '≰', ngeq: '≱', dots: '…', dotsc: '…', dotsb: '⋯',
+    vdots: '⋮', ddots: '⋱', prime: '′', square: '□', blacksquare: '■',
+    leftarrow: '←', rightarrow: '→', longrightarrow: '⟶', longleftarrow: '⟵',
+    implies: '⇒', impliedby: '⇐', iff: '⇔',
+    zeta: 'ζ', eta: 'η', iota: 'ι', kappa: 'κ', nu: 'ν', xi: 'ξ',
+    rho: 'ρ', tau: 'τ', upsilon: 'υ', chi: 'χ', psi: 'ψ',
+    varphi: 'φ', varepsilon: 'ε', vartheta: 'ϑ', varrho: 'ϱ', ell: 'ℓ',
+    Gamma: 'Γ', Theta: 'Θ', Lambda: 'Λ', Xi: 'Ξ', Pi: 'Π',
+    Phi: 'Φ', Psi: 'Ψ',
     ldots: '…', cdots: '⋯', quad: ' ', qquad: '  '
   };
 
@@ -76,6 +91,10 @@
   function readArg(s, i) {
     if (s[i] === '{') return readGroup(s, i);
     if (i >= s.length) return { body: '', end: i };
+    /* Команда як аргумент: у «60^\circ» градус — одне ціле, і читати
+       лише зворотну риску означає лишити слово «circ» у тексті. */
+    var cmd = /^\\[a-zA-Z]+/.exec(s.slice(i));
+    if (cmd) return { body: cmd[0], end: i + cmd[0].length };
     // багатоцифрове число зверху читається як одне ціле: x^10, а не x^1 0
     var m = /^\d+/.exec(s.slice(i));
     if (m) return { body: m[0], end: i + m[0].length };
@@ -98,7 +117,10 @@
            перетворив би одне число на два. */
         if (nxt === ',' || nxt === ':' || nxt === ';') { out += '\u202F'; i += 2; continue; }
         if (nxt === '!') { i += 2; continue; }
-        if (nxt === '{' || nxt === '}' || nxt === '%' || nxt === '&' || nxt === '\\') {
+        /* Подвійна риска в TeX — новий рядок: у системах рівнянь і
+           таблицях саме вона й розділяє рядки. */
+        if (nxt === '\\') { out += '<br>'; i += 2; continue; }
+        if (nxt === '{' || nxt === '}' || nxt === '%' || nxt === '&') {
           out += esc(nxt); i += 2; continue;
         }
 
@@ -122,6 +144,84 @@
            дужки й так звичайні, тож просто пропускаємо самі слова — інакше
            посеред формули стояли б самі ці слова. */
         if (name === 'left' || name === 'right') continue;
+
+        /* Оформлювальні команди, які нічого не додають до змісту: розмір
+           формули, примусові межі, розтягнуті дужки. Пропускаємо мовчки —
+           інакше посеред умови стояли б самі ці слова. */
+        if (/^(displaystyle|textstyle|limits|nolimits|bigl|bigr|Bigl|Bigr|big|Big|biggl|biggr|left\.|right\.)$/.test(name)) continue;
+
+        /* Середовища TeX: системи, вирівняні рівності, таблиці.
+           Повноцінно зверстати їх нема чим, але й показувати слова
+           «begin cases» посеред умови не можна. Беремо суть: рядки
+           лишаються рядками, стовпці — проміжками. */
+        if (name === 'begin' || name === 'end') {
+          var envg = readGroup(s, i);
+          i = envg.end;
+          // у array й tabular далі йде опис стовпців — він тут зайвий
+          if (s.charAt(i) === '{') i = readGroup(s, i).end;
+          if (name === 'begin' && /cases|array|tabular|matrix|aligned|align|gather/.test(envg.body)) {
+            out += '<span class="mf-rows">';
+          } else if (name === 'end' && /cases|array|tabular|matrix|aligned|align|gather/.test(envg.body)) {
+            out += '</span>';
+          }
+          continue;
+        }
+
+        if (name === 'hline' || name === 'vline' || name === 'notag' || name === 'nonumber') continue;
+
+        /* Множина чисел: \\mathbb{R} — дійсні, \\mathbb{Z} — цілі. */
+        if (name === 'mathbb') {
+          var bb = readGroup(s, i);
+          i = bb.end;
+          out += BB[bb.body.trim()] || esc(bb.body);
+          continue;
+        }
+
+        /* Слова всередині формули — прямим шрифтом і без розбору. */
+        if (name === 'text' || name === 'mathrm' || name === 'textrm' ||
+            name === 'mbox' || name === 'operatorname') {
+          var tg = readGroup(s, i);
+          i = tg.end;
+          out += '<span class="mf-fn">' + esc(tg.body) + '</span>';
+          continue;
+        }
+
+        /* Жирне й каліграфічне розбираємо як формулу: там позначення, не слова. */
+        if (name === 'mathbf' || name === 'mathit' || name === 'mathcal' ||
+            name === 'mathsf' || name === 'boldsymbol') {
+          var mg = readGroup(s, i);
+          i = mg.end;
+          out += parse(mg.body);
+          continue;
+        }
+
+        /* Кількість сполучень. У школі це C з індексами — саме так її й
+           читає учень, тому не «дужки стовпчиком», як в англійських книжках. */
+        if (name === 'binom' || name === 'dbinom' || name === 'tbinom') {
+          var bn = readGroup(s, i);
+          var bk = readGroup(s, bn.end);
+          i = bk.end;
+          out += '<span class="mf-fn">C</span><sub>' + parse(bn.body) + '</sub>' +
+                 '<sup>' + parse(bk.body) + '</sup>';
+          continue;
+        }
+
+        /* Риска згори: спряжене число, середнє, позначення відрізка. */
+        if (name === 'overline' || name === 'bar' || name === 'widebar') {
+          var og = readGroup(s, i);
+          i = og.end;
+          out += '<span class="mf-bar">' + parse(og.body) + '</span>';
+          continue;
+        }
+
+        /* Конгруенція за модулем: 7 ≡ 2 (mod 5). */
+        if (name === 'pmod' || name === 'bmod' || name === 'mod') {
+          var pg = s.charAt(i) === '{' ? readGroup(s, i) : null;
+          if (pg) i = pg.end;
+          out += (name === 'pmod' ? ' (<span class="mf-fn">mod</span> ' : ' <span class="mf-fn">mod</span> ') +
+                 (pg ? parse(pg.body) : '') + (name === 'pmod' ? ')' : '');
+          continue;
+        }
 
         if (name === 'sqrt') {
           var idx = '';
@@ -187,7 +287,7 @@
 
         /* Назви функцій ставимо прямим шрифтом: sin x — це функція, а не
            добуток трьох літер, і курсив тут збиває. */
-        if (/^(sin|cos|tg|ctg|tan|cot|log|ln|lg|arcsin|arccos|arctg|arcctg|sh|ch|th)$/.test(name)) {
+        if (/^(sin|cos|tg|ctg|tan|cot|sec|csc|log|ln|lg|arcsin|arccos|arctg|arcctg|arctan|sh|ch|th|max|min|gcd|lcm|det|exp|deg|arg|sup|inf)$/.test(name)) {
           out += '<span class="mf-fn">' + name + '</span>';
           continue;
         }
@@ -220,6 +320,9 @@
     return out;
   }
 
+  /* Множини чисел пишуть подвійною літерою. */
+  var BB = { N: 'ℕ', Z: 'ℤ', Q: 'ℚ', R: 'ℝ', C: 'ℂ', P: 'ℙ', F: 'F' };
+
   /* Латиниця й мала грека — величини. Велика грека (Δ, Σ, Ω) традиційно
      лишається прямою, як і цифри та знаки дій. */
   function isVar(ch) {
@@ -236,6 +339,86 @@
     SHORT.forEach(function (r) { s = s.replace(r[0], r[1]); });
     return '<span class="mf">' + parse(s) + '</span>';
   };
+
+  /**
+   * Текст, усередині якого є формули.
+   *
+   * Умови задач — звичайні речення, а формули в них стоять між доларами
+   * або дужками TeX. Показувати таке як є не можна: учень читав би
+   * «$x^2$» замість x². Тому ріжемо на шматки: слова лишаються словами
+   * (з екрануванням), формули віддаємо набірнику.
+   */
+  var MATHCUT = /\$\$([\s\S]*?)\$\$|\$([^$]+)\$|\\\(([\s\S]*?)\\\)|\\\[([\s\S]*?)\\\]/g;
+
+  M.text = function (src) {
+    var str = String(src == null ? '' : src);
+    if (!str.trim()) return '';
+
+    var out = '';
+    var at = 0;
+    str.replace(MATHCUT, function (whole, d2, d1, par, brk, idx) {
+      out += plain(str.slice(at, idx));
+      var body = d2 != null ? d2 : d1 != null ? d1 : par != null ? par : brk;
+      var block = d2 != null || brk != null;
+      var html = M.render(body);
+      out += block ? '<div class="mf-block">' + html + '</div>' : html;
+      at = idx + whole.length;
+      return whole;
+    });
+    out += plain(str.slice(at));
+    return out;
+  };
+
+  /**
+   * Те саме, але звичайним текстом — для дошки й буфера обміну.
+   *
+   * На дошці немає набірника формул, а в буфері — тегів. Лишати там
+   * «\frac{2}{5}» не можна: учень має побачити дріб, а не команду. Тому
+   * переводимо TeX у те, що читається без нічого: 2/5, √9, x², ≤.
+   */
+  M.plain = function (src) {
+    var t = String(src == null ? '' : src);
+
+    t = t.replace(/\$\$?/g, '');
+    t = t.replace(/\\(left|right|displaystyle|textstyle|limits|!)\b/g, '');
+    t = t.replace(/\\begin\{[^}]*\}(\{[^}]*\})?/g, '\n').replace(/\\end\{[^}]*\}/g, '\n');
+    t = t.replace(/\\\\/g, '\n');
+
+    // дроби й корені — доти, доки є вкладені
+    for (var k = 0; k < 6; k++) {
+      var before = t;
+      t = t.replace(/\\d?frac\{([^{}]*)\}\{([^{}]*)\}/g, '($1)/($2)');
+      t = t.replace(/\\sqrt\[([^\]]*)\]\{([^{}]*)\}/g, '$1√($2)');
+      t = t.replace(/\\sqrt\{([^{}]*)\}/g, '√($1)');
+      t = t.replace(/\\(?:text|mathrm|mathbf|mathit|operatorname)\{([^{}]*)\}/g, '$1');
+      t = t.replace(/\\binom\{([^{}]*)\}\{([^{}]*)\}/g, 'C($1,$2)');
+      if (t === before) break;
+    }
+    t = t.replace(/\\mathbb\{([A-Z])\}/g, function (_, c) { return BB[c] || c; });
+    t = t.replace(/\\pmod\{([^{}]*)\}/g, ' (mod $1)');
+
+    // степені й індекси: одна цифра піднімається, решта лишається з дашком
+    var SUP = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
+                '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹', 'n': 'ⁿ' };
+    t = t.replace(/\^\{?(\\circ|[0-9n])\}?/g, function (_, c) {
+      if (c === '\\circ') return '°';
+      return SUP[c] || ('^' + c);
+    });
+    t = t.replace(/_\{([^{}]*)\}/g, '_$1');
+
+    // назви символів словника — тими самими знаками, що й на екрані
+    t = t.replace(/\\([a-zA-Z]+)/g, function (whole, name) {
+      return SYM[name] !== undefined ? (SYM[name] || '') : name;
+    });
+
+    return t.replace(/[{}]/g, '').replace(/[ \t]{2,}/g, ' ').trim();
+  };
+
+  /** Слова навколо формул: екранування плюс перенесення рядків. */
+  function plain(t) {
+    if (!t) return '';
+    return t.replace(/[&<>"]/g, esc).replace(/\n/g, '<br>');
+  }
 
   /** Те саме, але цілим блоком по центру — для головної формули картки. */
   M.block = function (src) {

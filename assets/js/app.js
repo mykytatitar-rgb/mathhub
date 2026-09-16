@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v78';
+  App.BUILD = 'v79';
   window.APP_BUILD = App.BUILD;
 
   var NAV = [
@@ -31,6 +31,9 @@
         return S.db().materials.filter(function (m) { return m.type === 'theory'; }).length; } },
     /* Власна математика окремо від учнівської: те, у чому розбираєшся сам,
        не має домішуватися в розклад, фінанси й портали. */
+    /* Олімпіадні задачі поруч із картою: вони й прив'язані до її тем,
+       і потрібні в той самий момент — коли шукаєш, що дати учневі далі. */
+    { hash: '#/olymp',     icon: 'trophy',    label: 'Олімпіади' },
     { hash: '#/desk',      icon: 'compass',   label: 'Моє',       count: function () {
         return (S.deskItems() || []).filter(function (d) { return d.status !== 'done'; }).length; } },
     /* Карта всієї математики — теж моя, а не учнівська: де я в ній, що
@@ -232,6 +235,8 @@
           html = V.desk(route.query); break;
         case 'mathmap':
           html = V.mathmap ? V.mathmap(route.query) : ''; break;
+        case 'olymp':
+          html = V.olymp ? V.olymp(route.query) : ''; break;
         case 'settings':
           html = V.settings(); break;
         default:
@@ -772,6 +777,7 @@
 
   // Дії дошки живуть у views-board.js — підмішуємо їх у спільний диспетчер
   Object.keys(V.boardActions).forEach(function (k) { ACTIONS[k] = V.boardActions[k]; });
+  if (V.olympActions) Object.keys(V.olympActions).forEach(function (k) { ACTIONS[k] = V.olympActions[k]; });
 
   /* ============================================================
      Слухачі

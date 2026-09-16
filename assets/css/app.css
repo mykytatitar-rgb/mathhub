@@ -2172,3 +2172,58 @@ a { color: inherit; text-decoration: none; }
 
 /* Перенесення зі старого «Шляху»: помітно, але не тривожно. */
 .mm-legacy { margin-bottom: 18px; border-color: var(--brand-300); background: var(--brand-50); }
+
+/* ============================================================
+   Олімпіадні задачі
+   ============================================================
+
+   Умова тут — головне, тому картка майже порожня: рівень, змагання,
+   текст. Розв'язання розкривається в ній самій, щоб задача лишалась
+   перед очима, а не ховалася за вікном. */
+
+.ol-filters .field__label { font-size: 11.5px; }
+.ol-card { margin-bottom: 12px; border-left: 4px solid var(--c, var(--brand-600)); }
+.ol-card__top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.ol-card__p { font-size: 14.5px; line-height: 1.65; color: var(--ink); overflow-wrap: anywhere; }
+.ol-card__bot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.ol-fig { margin-top: 8px; font-size: 12.5px; color: var(--muted); font-style: italic; }
+
+.ol-lvl {
+  display: inline-block; padding: 3px 10px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 750; letter-spacing: .2px; white-space: nowrap;
+}
+.ol-lvl--1 { background: var(--green-bg); color: #0C7A48; }
+.ol-lvl--2 { background: var(--blue-50, #EAF1FE); color: #1D4ED8; }
+.ol-lvl--3 { background: var(--violet-bg, #EDEBFE); color: #4B3FDB; }
+.ol-lvl--4 { background: var(--amber-bg); color: #8A5409; }
+.ol-lvl--5 { background: var(--red-bg); color: var(--red); }
+
+.ol-extra { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 12px; }
+.ol-extra[hidden] { display: none; }
+.ol-answer { font-size: 14px; line-height: 1.6; }
+.ol-sol { font-size: 13.5px; line-height: 1.7; color: var(--ink-2); overflow-wrap: anywhere; }
+.ol-dialog .ol-card__p { margin-bottom: 14px; }
+.ol-credits { background: #FBFAFE; }
+
+.chip--sm { font-size: 12px; padding: 3px 9px; }
+
+/* Задачі теми в шухляді карти математики */
+.mm-olymp { display: grid; gap: 6px; }
+.mm-olymp__p {
+  display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: #fff; font: inherit; font-size: 13px; cursor: pointer; line-height: 1.4;
+}
+.mm-olymp__p:hover { border-color: var(--brand-300); background: var(--brand-50); }
+/* Умова в списку — два рядки з формулами як формулами: обрізати їх
+   крапками означало б лишити «В … і … на …» замість задачі. */
+.mm-olymp__t {
+  flex: 1; min-width: 0; color: var(--ink-2);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; overflow-wrap: anywhere;
+}
+.mm-olymp__t .mf-block { display: inline; }
+.mm-olymp__t br { display: none; }
+
+/* Рядки системи чи таблиці всередині формули */
+.mf-rows { display: inline-block; vertical-align: middle; }

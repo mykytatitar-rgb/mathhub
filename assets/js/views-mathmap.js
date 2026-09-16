@@ -1620,6 +1620,25 @@
       ensureContent(function () { if (selected === t.id) renderDrawer(); });
     }
 
+    /* Олімпіадні задачі саме цієї теми. Малюємо порожній блок одразу, а
+       задачі вставляємо, коли приїде файл: чекати на нього з відкриттям
+       теми не можна, а перемальовувати всю шухляду — значить згубити
+       напівнабрану нотатку. */
+    function olympBlock(topic) {
+      if (!window.Olymp || !window.V.olympForTopic) return '';
+      window.V.olympForTopic(topic.id, 3, function (html) {
+        var box = document.querySelector('[data-mm-olymp]');
+        var head = document.querySelector('[data-mm-olymp-h]');
+        if (!box || selected !== topic.id) return;
+        if (!html) return;
+        box.innerHTML = html;
+        box.hidden = false;
+        if (head) head.hidden = false;
+      });
+      return '<div class="mm-dr__h" data-mm-olymp-h hidden>Олімпіадні задачі</div>' +
+             '<div data-mm-olymp hidden></div>';
+    }
+
     function chips(ids, empty) {
       if (!ids.length) return '<div class="mm-empty">' + empty + '</div>';
       return '<div class="mm-mini">' + ids.map(function (id) {
@@ -1644,6 +1663,7 @@
         }).join('') + '</div>' +
         hint +
         '<div class="mm-studies" style="--c:' + d.color + '">' + study + '</div>' +
+        olympBlock(t) +
         '<div class="mm-dr__h">Спирається на · ' + t.req.length + '</div>' +
         chips(t.req, 'Ні на що — з цієї теми все починається.') +
         '<div class="mm-dr__h">Відкриває · ' + unlocks[t.id].length + '</div>' +
@@ -1820,6 +1840,8 @@
     }
 
     if (act === 'caption-close') { hideCaption(); return; }
+
+    if (act === 'olymp-open' && window.V.olympDialog) { window.V.olympDialog(arg); return; }
 
     if (act === 'tree' && treeWorld) {
       if (arg === 'none') TREE_OPEN = { root: 1 };

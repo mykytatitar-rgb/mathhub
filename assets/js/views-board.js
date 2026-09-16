@@ -292,6 +292,7 @@
       });
     }
     paintSaved();
+    joinLive();
 
     // поки дошка відкрита — забираємо те, що пише учень за посиланням
     cur.pullTimer = setInterval(function () {
@@ -683,6 +684,7 @@
     if (cur.thumbTimer) clearTimeout(cur.thumbTimer);
     if (cur.pullTimer) clearInterval(cur.pullTimer);
     if (cur.savedOff) { cur.savedOff(); cur.savedOff = null; }
+    if (cur.live) { cur.live.leave(); cur.live = null; }
 
     /* Виходимо з дошки — урок скінчився. Якщо на нього видано посилання,
        оновлюємо його негайно, не чекаючи хвилинної паузи: саме тепер
@@ -840,6 +842,7 @@
      вже лежать на сервері й повторно не їдуть. Тому учень бачить написане
      майже одразу, як на другому пристрої репетитора. */
   var REPUBLISH_MS = 2500;
+  var REPUBLISH_LAZY_MS = 20000;   // коли штрихи й так летять живим каналом
 
   /* Версія сторінки уроку.
      Опублікований урок — це знімок HTML на сервері, а не жива сторінка. Тому
@@ -884,9 +887,22 @@
       setPubState('fail', 'сесія скінчилася — увійдіть у Налаштуваннях');
       return;
     }
-    if (cur.republishTimer) return;                 // одне заплановане перевидання за раз
+    /* Коли живий канал працює, звичайні штрихи учень уже бачить миттєво —
+       перевидавати для них усю сторінку нема чого. Сторінка потрібна лише
+       для того, чого каналом не передати: нового слайда, картинки, — і для
+       того, хто відкриє урок пізніше. Тому перевидаємо одразу лише при
+       таких змінах, а в решті випадків — рідко, коли все вщухне. */
+    var urgent = !(window.Live && Live.connected()) || cur.structural;
+    var pause = urgent ? REPUBLISH_MS : REPUBLISH_LAZY_MS;
 
-    var wait = Math.max(0, REPUBLISH_MS - (Date.now() - (cur.republishedAt || 0)));
+    if (cur.republishTimer) {
+      if (!urgent || cur.republishUrgent) return;   // одне заплановане перевидання за раз
+      clearTimeout(cur.republishTimer);             // термінове випереджає ліниве
+      cur.republishTimer = null;
+    }
+
+    var wait = Math.max(0, pause - (Date.now() - (cur.republishedAt || 0)));
+    cur.republishUrgent = urgent;
     setPubState('sending');
     cur.republishTimer = setTimeout(function () {
       cur.republishTimer = null;
@@ -894,12 +910,18 @@
       var lessonId = cur.lessonId;
       var l = S.get('lessons', lessonId);
       var st = l ? S.get('students', l.studentId) : null;
+      cur.structural = false;
       publishLesson(cur.board, l, st, cur.board.share.token).then(function () {
-        if (cur && cur.lessonId === lessonId) cur.republishedAt = Date.now();
+        if (cur && cur.lessonId === lessonId) {
+          cur.republishedAt = Date.now();
+          // сторінка учня підхопить нове одразу, не чекаючи свого опитування
+          if (cur.live) cur.live.send('republished', {});
+        }
         cur.board.share.v = VIEWER_VERSION;
         publogSet(lessonId, true);
         setPubState('ok');
       }).catch(function (e) {
+        if (cur && cur.lessonId === lessonId) cur.structural = true;   // спробуємо ще раз терміново
         publogSet(lessonId, false, e && e.message ? e.message : 'немає звʼязку');
         /* Раніше помилка йшла лише в консоль — тобто нікуди. Тепер вона
            на видноті: інакше репетитор упевнений, що учень бачить свіже,
@@ -908,6 +930,46 @@
         setPubState('fail', e && e.message ? e.message : 'немає звʼязку');
       });
     }, wait);
+  }
+
+  /* ============================================================
+     Живий канал уроку
+     ============================================================
+
+     Дошка з виданим посиланням тримає постійне зʼєднання з каналом уроку.
+     Туди миттєво летить кожна зміна репетитора, а звідти приходить сигнал,
+     що учень щось написав чи надіслав фото. Сам сигнал нічого не вписує в
+     дошку — за ним ми одразу забираємо внесок із бази, як і раніше, лише
+     без трисекундного очікування. */
+
+  function joinLive() {
+    if (!cur || cur.live || !window.Live) return;
+    var token = cur.board.share && cur.board.share.token;
+    if (!token) return;
+    var lessonId = cur.lessonId;
+
+    cur.live = Live.join(token, function (event) {
+      if (!cur || cur.lessonId !== lessonId) return;
+      if (event === 'ink' || event === 'hw') pullContributions();
+      // сторінці учня бракує нового слайда чи картинки — перевидаємо негайно
+      if (event === 'need') {
+        cur.structural = true;
+        cur.republishedAt = 0;
+        scheduleRepublish();
+      }
+    });
+  }
+
+  if (window.BoardOps) {
+    BoardOps.onDiff = function (boardId, ops) {
+      if (!cur || cur.lessonId !== boardId) return;
+      var structural = ops.some(function (op) {
+        return op.t === 's+' || op.t === 's-' ||
+          ((op.t === 'i+' || op.t === 'i~') && op.it && op.it.t === 'i');
+      });
+      if (structural) cur.structural = true;
+      if (cur.live) cur.live.send('ops', { ops: ops });
+    };
   }
 
   /* Забираємо написане учнем і вливаємо в дошку.
@@ -4451,6 +4513,8 @@
       cur.republishedAt = Date.now();
       publogSet(cur.lessonId, true);
       markDirty(); flushSave();
+      joinLive();
+      if (cur.live) cur.live.send('republished', {});
       // копіюємо одразу: людина щойно натиснула кнопку, отже дозвіл є
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(url).then(function () {

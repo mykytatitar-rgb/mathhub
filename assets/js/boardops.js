@@ -234,6 +234,14 @@
 
     var ops = O.diff(was, board);
     if (!ops.length) return Promise.resolve(0);
+
+    /* Живий канал отримує різницю одразу, ще до запису в журнал: учень
+       бачить штрих у ту ж мить. Дії в каналі безпечно отримати й двічі —
+       кожна називає свій обʼєкт, тож повтор нічого не подвоює. */
+    if (O.onDiff) {
+      try { O.onDiff(boardId, ops); } catch (e) { console.warn('onDiff:', e); }
+    }
+
     if (!ready()) return Promise.resolve(0);      // без зв'язку різниця почекає
 
     var snapshot = JSON.stringify(strip(board));

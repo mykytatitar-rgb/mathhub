@@ -259,6 +259,88 @@
       });
   }
 
+  /* ============================================================
+     Живий канал уроку — як у Miro
+     ============================================================
+
+     Постійне зʼєднання з Supabase Realtime: зміни репетитора приходять у
+     ту ж мить, а написане учнем репетитор отримує без очікування.
+     Опитування нижче лишається запасним шляхом і, поки канал живий, питає
+     сервер рідко.
+
+     Клієнт свій, на кілька десятків рядків: ця сторінка не може тягнути
+     код із теки кабінету — та закрита доступом. */
+
+  var WATCH_SLOW_MS = 12000;   // коли канал живий, опитування — лише страховка
+
+  var live = (function () {
+    var topic = 'realtime:vektor-' + token;
+    var ws = null, open = false, joined = false, ref = 0, beat = null, wait = 1000, queue = [];
+
+    function raw(event, payload, t) {
+      if (!ws || !open) return false;
+      try {
+        ws.send(JSON.stringify({ topic: t || topic, event: event, payload: payload, ref: String(++ref) }));
+        return true;
+      } catch (e) { return false; }
+    }
+
+    function connect() {
+      if (ws || !window.WebSocket) return;
+      try {
+        ws = new WebSocket(API.replace(/^http/, 'ws') + '/realtime/v1/websocket?apikey=' +
+          encodeURIComponent(KEY) + '&vsn=1.0.0');
+      } catch (e) { ws = null; return later(); }
+
+      ws.onopen = function () {
+        open = true;
+        wait = 1000;
+        raw('phx_join', { config: { broadcast: { self: false, ack: false }, presence: { key: '' }, private: false } });
+        beat = setInterval(function () { raw('heartbeat', {}, 'phoenix'); }, 25000);
+      };
+      ws.onmessage = function (m) {
+        var msg;
+        try { msg = JSON.parse(m.data); } catch (e) { return; }
+        if (msg.topic !== topic) return;
+        if (msg.event === 'phx_reply' && msg.payload && msg.payload.status === 'ok' && !joined) {
+          joined = true;
+          var q = queue; queue = [];
+          q.forEach(function (x) { send(x[0], x[1]); });
+          return;
+        }
+        if (msg.event !== 'broadcast' || !msg.payload) return;
+        var ev = msg.payload.event, data = msg.payload.payload || {};
+
+        // зміни репетитора — одразу в сторінку уроку
+        if (ev === 'ops' && data.ops && frame.contentWindow) {
+          frame.contentWindow.postMessage({ mathhub: 'ops', ops: data.ops }, '*');
+        }
+        // репетитор перевидав урок (новий слайд, картинка) — беремо цілком
+        if (ev === 'republished') load().catch(function () {});
+      };
+      ws.onclose = function () {
+        open = false; joined = false; ws = null;
+        if (beat) { clearInterval(beat); beat = null; }
+        later();
+      };
+      ws.onerror = function () { try { ws && ws.close(); } catch (e) {} };
+    }
+
+    function later() {
+      setTimeout(connect, wait);
+      wait = Math.min(wait * 2, 30000);
+    }
+
+    function send(event, payload) {
+      if (!joined) { queue.push([event, payload]); if (queue.length > 20) queue.shift(); return false; }
+      return raw('broadcast', { type: 'broadcast', event: event, payload: payload || {} });
+    }
+
+    window.addEventListener('online', function () { if (!ws) { wait = 1000; connect(); } });
+
+    return { connect: connect, send: send, alive: function () { return joined; } };
+  })();
+
   /* Стежимо за змінами дешево: питаємо лише номер версії, а сам урок
      тягнемо тільки коли він справді оновився. */
   function watch() {
@@ -293,7 +375,7 @@
           // 'stop' — доступ закрито, більше не питаємо; решта — тимчасовий збій мережі
           if (!e || e.message !== 'stop') watch();
         });
-    }, WATCH_MS);
+    }, live.alive() ? WATCH_SLOW_MS : WATCH_MS);
   }
 
   /**
@@ -395,6 +477,8 @@
       pending = pending.slice(batch.length);
       keepInk();
       inkWait = 700;
+      // репетитор забере написане одразу, а не через кілька секунд
+      live.send('ink', {});
       setInk(pending.length ? 'send' : 'ok', pending.length ? 'Надсилаю написане…' : 'Збережено');
     }).catch(function () {
       inkWait = Math.min(inkWait * 2, 15000);
@@ -510,6 +594,7 @@
         p_payload: JSON.stringify({ hw: hwId, photos: done })
       }).then(function (res) {
         if (!res.ok) throw new Error('http ' + res.status);
+        live.send('hw', {});
         return done.map(function (d) { return d.url; });
       });
     });
@@ -523,6 +608,8 @@
        картинка, якої в цієї сторінки фізично немає. Тоді несемо урок
        цілком — там і стрічка перебудується, і файли приїдуть. */
     if (d.mathhub === 'need-full') {
+      // просимо репетитора перевидати урок негайно, а поки беремо те, що вже є
+      live.send('need', {});
       load().catch(function () {});
       return;
     }
@@ -567,7 +654,7 @@
   });
 
   load()
-    .then(function () { watch(); })
+    .then(function () { live.connect(); watch(); })
     .catch(function (e) {
       if (e && e.message === 'revoked') {
         fail('Урок більше не доступний', 'Репетитор закрив доступ за цим посиланням.');

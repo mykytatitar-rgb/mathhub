@@ -1635,7 +1635,7 @@
         box.hidden = false;
         if (head) head.hidden = false;
       });
-      return '<div class="mm-dr__h" data-mm-olymp-h hidden>Олімпіадні задачі</div>' +
+      return '<div class="mm-dr__h" data-mm-olymp-h hidden>Задачі до теми</div>' +
              '<div data-mm-olymp hidden></div>';
     }
 

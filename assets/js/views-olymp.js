@@ -40,21 +40,22 @@
 
   var PAGE = 30;                 // скільки задач показуємо за раз
   var shown = PAGE;
-  var filters = { q: '', topic: '', level: '', src: '' };
+  var filters = { q: '', topic: '', level: '', src: '', bank: '' };
 
   V.olymp = function (query) {
     filters = {
       q: (query && query.q) || '',
       topic: (query && query.topic) || '',
       level: (query && query.level) || '',
-      src: (query && query.src) || ''
+      src: (query && query.src) || '',
+      bank: (query && query.bank) || ''
     };
     shown = PAGE;
 
     return C.hero({
       short: true,
-      title: 'Олімпіадні задачі',
-      sub: 'банк задач зі змагань — за темами карти математики'
+      title: 'Банк задач',
+      sub: 'підручники й олімпіади — за темами карти математики'
     }) + '<div class="page"><div class="ol" data-ol>' + loading() + '</div></div>';
   };
 
@@ -83,7 +84,11 @@
 
   function matches(p) {
     if (filters.topic && p.t.indexOf(filters.topic) < 0) return false;
-    if (filters.level && String(O().level(p.d).id) !== String(filters.level)) return false;
+    if (filters.bank && p.bank !== filters.bank) return false;
+    /* Рівні в підручнику й на олімпіаді — різні шкали, тому фільтр рівня
+       стосується лише олімпіадних задач, а підручникові він не ховає. */
+    if (filters.level && p.bank !== 'book' && String(O().level(p).id) !== String(filters.level)) return false;
+    if (filters.level && p.bank === 'book') return false;
     if (filters.src && p.s !== filters.src) return false;
     if (filters.q) {
       var q = filters.q.toLowerCase();
@@ -116,6 +121,14 @@
             '<input class="input" id="ol-q" placeholder="triangle, prime, ways…" value="' +
               U.esc(filters.q) + '">' +
           '</label>' +
+          '<label class="field" style="min-width:170px">' +
+            '<span class="field__label">Звідки</span>' +
+            '<select class="input" data-ol-f="bank">' +
+              '<option value="">Усе</option>' +
+              '<option value="book"' + (filters.bank === 'book' ? ' selected' : '') + '>Підручники</option>' +
+              '<option value="olymp"' + (filters.bank === 'olymp' ? ' selected' : '') + '>Олімпіади</option>' +
+            '</select>' +
+          '</label>' +
           '<label class="field" style="min-width:230px">' +
             '<span class="field__label">Тема карти</span>' +
             '<select class="input" data-ol-f="topic">' +
@@ -146,7 +159,7 @@
               }).join('') +
             '</select>' +
           '</label>' +
-          (filters.q || filters.topic || filters.level || filters.src
+          (filters.q || filters.topic || filters.level || filters.src || filters.bank
             ? '<button class="btn btn--ghost btn--sm" data-act="ol-clear">Скинути</button>' : '') +
         '</div>' +
         '<div class="muted small mt-2">' +
@@ -173,17 +186,25 @@
   /** Звідки задачі. Відкритий набір — це не «нічиє», а чужа праця з ліцензією. */
   function credits() {
     var sets = O().sets();
+    var books = O().books();
     var idx = O().index();
+
     return '<div class="card ol-credits">' +
       '<div class="card-title" style="font-size:14px">Звідки ці задачі</div>' +
+      Object.keys(books).map(function (k) {
+        var b = books[k];
+        return '<div class="muted small">' + U.esc(b.title) +
+          (b.year ? ', ' + b.year : '') + ' — задачі переписано для власного викладання, ' +
+          'при кожній стоїть параграф і номер.</div>';
+      }).join('') +
       Object.keys(sets).map(function (k) {
         var s = sets[k];
         return '<div class="muted small">' + U.esc(s.title) + ' · ліцензія ' + U.esc(s.license) +
           ' · <a href="' + U.esc(s.url) + '" target="_blank" rel="noopener">джерело</a></div>';
       }).join('') +
-      '<div class="muted small mt-2">Умови подано мовою оригіналу — здебільшого англійською. ' +
-      'Автори задач — організатори змагань, назва змагання стоїть при кожній задачі. ' +
-      'Зібрано ' + U.esc(idx.built) + '.</div>' +
+      '<div class="muted small mt-2">Задачі зі змагань подано мовою оригіналу — здебільшого ' +
+      'англійською; підручникові — українською. Автори задач — організатори змагань і ' +
+      'автори підручників. Зібрано ' + U.esc(idx.built) + '.</div>' +
       '</div>';
   }
 
@@ -192,7 +213,7 @@
      ============================================================ */
 
   function card(p) {
-    var lvl = O().level(p.d);
+    var lvl = O().level(p);
     var doms = {};
     p.t.forEach(function (t) { if (topicDom[t]) doms[topicDom[t]] = 1; });
     var color = domColor[Object.keys(doms)[0]] || 'var(--brand-600)';
@@ -201,7 +222,7 @@
       '<div class="ol-card__top">' +
         '<span class="ol-lvl ol-lvl--' + lvl.id + '" title="' + U.esc(lvl.hint) + '">' +
           U.esc(lvl.name) + '</span>' +
-        '<span class="muted small">' + U.esc(O().contest(p.s)) + '</span>' +
+        '<span class="muted small">' + U.esc(O().where(p)) + '</span>' +
         '<span class="spacer"></span>' +
         '<button class="icon-btn" data-act="ol-copy" data-arg="' + U.esc(p.i) + '" ' +
           'title="Скопіювати умову">' + icon('copy', 16) + '</button>' +
@@ -218,8 +239,10 @@
         '<span class="spacer"></span>' +
         (p.a ? '<button class="btn btn--ghost btn--sm" data-act="ol-answer" data-arg="' + U.esc(p.i) + '">' +
           'Відповідь</button>' : '') +
-        '<button class="btn btn--soft btn--sm" data-act="ol-sol" data-arg="' + U.esc(p.i) + '">' +
-          icon('book', 15) + 'Розвʼязання</button>' +
+        (O().hasSolution(p)
+          ? '<button class="btn btn--soft btn--sm" data-act="ol-sol" data-arg="' + U.esc(p.i) + '">' +
+            icon('book', 15) + 'Розвʼязання</button>'
+          : '') +
       '</div>' +
       '<div class="ol-extra" data-ol-extra hidden></div>' +
       '</div>';
@@ -255,7 +278,7 @@
       var take = list.slice(0, limit || 3);
       cb('<div class="mm-olymp">' +
         take.map(function (p) {
-          var lvl = O().level(p.d);
+          var lvl = O().level(p);
           return '<button class="mm-olymp__p" data-mm="olymp-open" data-arg="' + U.esc(p.i) + '">' +
             '<span class="ol-lvl ol-lvl--' + lvl.id + '">' + U.esc(lvl.name) + '</span>' +
             '<span class="mm-olymp__t">' + fmt(p.p) + '</span>' +
@@ -263,7 +286,8 @@
         }).join('') +
         (list.length > take.length
           ? '<button class="btn btn--ghost btn--sm mt-2" data-act="nav" data-arg="#/olymp?topic=' +
-            encodeURIComponent(topicId) + '">Усі ' + list.length + ' задач цієї теми</button>'
+            encodeURIComponent(topicId) + '">Усі ' +
+            U.pl(list.length, 'задача', 'задачі', 'задач') + ' цієї теми</button>'
           : '') +
         '</div>');
     });
@@ -273,17 +297,19 @@
   V.olympDialog = function (id) {
     var p = O() && O().get(id);
     if (!p) return;
-    var lvl = O().level(p.d);
+    var lvl = O().level(p);
 
     C.modal({
-      title: O().contest(p.s),
+      title: O().where(p),
       sub: lvl.name + ' рівень · ' + lvl.hint,
       body: '<div class="ol-dialog">' +
           '<div class="ol-card__p">' + fmt(p.p) + '</div>' +
           (p.a ? '<div class="ol-answer"><b>Відповідь:</b> ' + fmt(p.a) + '</div>' : '') +
-          '<div class="ol-sol" data-ol-dlg-sol><button class="btn btn--soft btn--sm" ' +
-            'data-act="ol-sol-dlg" data-arg="' + U.esc(p.i) + '">' +
-            icon('book', 15) + 'Показати розвʼязання</button></div>' +
+          (O().hasSolution(p)
+            ? '<div class="ol-sol" data-ol-dlg-sol><button class="btn btn--soft btn--sm" ' +
+              'data-act="ol-sol-dlg" data-arg="' + U.esc(p.i) + '">' +
+              icon('book', 15) + 'Показати розвʼязання</button></div>'
+            : '') +
         '</div>',
       wide: true
     });
@@ -300,7 +326,9 @@
       if (box && box.olAll) draw(box, box.olAll, 0);
     },
 
-    'ol-clear': function () { window.App.setQuery({ q: '', topic: '', level: '', src: '' }); },
+    'ol-clear': function () {
+      window.App.setQuery({ q: '', topic: '', level: '', src: '', bank: '' });
+    },
 
     'ol-topic': function (t) { window.App.setQuery({ topic: t }); },
 

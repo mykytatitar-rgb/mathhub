@@ -284,6 +284,12 @@ def main():
             seen.add(key)
 
             main, guess = topics_for(r.get('domain'), text)
+
+            # Індукцію умова майже ніколи не називає — її видно з розвʼязання.
+            # Тож для цієї теми дивимось і туди.
+            if re.search(r'\binduction\b|\binductive(ly)? (step|hypothesis)', (r.get('solution') or '').lower()):
+                if 'found.induction' not in main and 'found.induction' not in guess:
+                    guess.append('found.induction')
             for t in main + guess:
                 if t not in known:
                     bad_topic.add(t)

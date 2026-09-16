@@ -235,11 +235,147 @@
   }
 
   /* ============================================================
+     Метод математичної індукції
+     ============================================================
+
+     Дві речі, які словами пояснюються гірше, ніж руками. Перша — навіщо
+     потрібні обидві умови: без бази не падає нічого, без кроку — лише
+     перша кісточка. Друга — що саме робить крок: до вже доведеного для n
+     додається рівно один новий стовпчик, і формула лишається правильною. */
+
+  var DOMINOES = 12;
+
+  function induction(root) {
+    var st = { base: true, step: true, n: 4, timers: [] };
+
+    root.innerHTML =
+      '<section class="mx">' +
+        '<div class="mx-h">Як працює індукція</div>' +
+        '<div class="mx-sub">Кісточка з номером n — це твердження P(n). Вона «падає», коли ' +
+          'твердження доведено. Вимкніть базу чи крок і подивіться, що вийде.</div>' +
+        '<div class="mx-dom" data-mx-dom></div>' +
+        '<div class="mx-nav">' +
+          '<label class="mx-check"><input type="checkbox" data-mx-base checked> База: P(1) правильне</label>' +
+          '<label class="mx-check"><input type="checkbox" data-mx-step checked> Крок: P(k) ⇒ P(k+1)</label>' +
+          '<span class="spacer"></span>' +
+          '<button class="btn btn--soft btn--sm" data-mx="push">Запустити</button>' +
+        '</div>' +
+        '<div class="mx-verdict" data-mx-verdict></div>' +
+      '</section>' +
+      '<section class="mx">' +
+        '<div class="mx-h">Приклад: 1 + 2 + … + n = n(n + 1)/2</div>' +
+        '<div class="mx-sub">Сходинки — це сума 1 + 2 + … + n. Дві однакові сходинки складаються ' +
+          'в прямокутник n × (n + 1), тому сходинок рівно половина. Крок додає один новий стовпчик.</div>' +
+        '<div class="mx-stairs" data-mx-stairs></div>' +
+        '<div class="mx-sum" data-mx-proof></div>' +
+        '<div class="mx-nav">' +
+          '<button class="btn btn--ghost btn--sm" data-mx="n-less">−</button>' +
+          '<span class="mx-count" data-mx-nval></span>' +
+          '<button class="btn btn--soft btn--sm" data-mx="n-more">Крок: n → n + 1</button>' +
+        '</div>' +
+      '</section>';
+
+    function clearTimers() {
+      st.timers.forEach(clearTimeout);
+      st.timers = [];
+    }
+
+    function drawDominoes(fallen) {
+      var html = '';
+      for (var i = 1; i <= DOMINOES; i++) {
+        html += '<div class="mx-domino' + (i <= fallen ? ' is-down' : '') + '"><span>' + i + '</span></div>';
+      }
+      html += '<div class="mx-domino mx-domino--more">…</div>';
+      root.querySelector('[data-mx-dom]').innerHTML = html;
+    }
+
+    function push() {
+      clearTimers();
+      drawDominoes(0);
+      var verdict = root.querySelector('[data-mx-verdict]');
+      verdict.className = 'mx-verdict';
+      verdict.textContent = '';
+
+      if (!st.base) {
+        verdict.classList.add('is-bad');
+        verdict.textContent = 'Без бази нічого не падає: крок каже «якщо P(k), то P(k+1)», але жодне P(k) не доведено — ланцюжку нема з чого почати.';
+        return;
+      }
+      var last = st.step ? DOMINOES : 1;
+      for (var i = 1; i <= last; i++) {
+        (function (k) {
+          st.timers.push(setTimeout(function () {
+            if (!root.isConnected) return clearTimers();
+            drawDominoes(k);
+            if (k === last) {
+              verdict.classList.add(st.step ? 'is-good' : 'is-bad');
+              verdict.textContent = st.step
+                ? 'Падають усі: P(1) доведено, і кожна кісточка валить наступну. Отже, P(n) правильне для кожного n.'
+                : 'Без кроку впала лише перша: доведено тільки P(1). Про P(2), P(3), … ми нічого не знаємо.';
+            }
+          }, 250 + (k - 1) * 170));
+        })(i);
+      }
+    }
+
+    /* Сходинки n стовпчиків: у стовпчику i — i клітинок. Поруч, догори
+       дриґом, друга така сама — разом прямокутник n × (n + 1). */
+    function drawStairs() {
+      var n = st.n, cell = 22, gap = 2;
+      var w = n * (cell + gap) + gap, h = (n + 1) * (cell + gap) + gap;
+      var rects = [];
+      for (var col = 0; col < n; col++) {
+        var height = col + 1;
+        for (var row = 0; row < n + 1; row++) {
+          var mine = row >= n + 1 - height;          // нижні height клітинок — наші сходинки
+          var fresh = mine && col === n - 1 && st.fresh;
+          rects.push('<rect x="' + (gap + col * (cell + gap)) + '" y="' + (gap + row * (cell + gap)) +
+            '" width="' + cell + '" height="' + cell + '" rx="4" class="' +
+            (fresh ? 'mx-sq is-new' : mine ? 'mx-sq' : 'mx-sq is-twin') + '"/>');
+        }
+      }
+      root.querySelector('[data-mx-stairs]').innerHTML =
+        '<svg viewBox="0 0 ' + w + ' ' + h + '" width="' + Math.min(w, 260) + '" role="img" ' +
+        'aria-label="Сходинки суми">' + rects.join('') + '</svg>';
+
+      var s = n * (n + 1) / 2;
+      var proof = root.querySelector('[data-mx-proof]');
+      if (n === 1) {
+        proof.innerHTML = '<b>База:</b> ' + M('1 = \\frac{1 \\cdot 2}{2}') + ' — правильно.';
+      } else {
+        var k = n - 1;
+        proof.innerHTML = '<b>Крок від ' + k + ' до ' + n + ':</b> ' +
+          M('S_{' + n + '} = S_{' + k + '} + ' + n + ' = \\frac{' + k + ' \\cdot ' + n + '}{2} + ' + n +
+            ' = \\frac{' + n + ' \\cdot ' + (n + 1) + '}{2} = ' + s);
+      }
+      root.querySelector('[data-mx-nval]').textContent = 'n = ' + n + ', сума ' + s;
+    }
+
+    root.addEventListener('change', function (e) {
+      if (e.target.matches('[data-mx-base]')) st.base = e.target.checked;
+      if (e.target.matches('[data-mx-step]')) st.step = e.target.checked;
+    });
+
+    root.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-mx]');
+      if (!b) return;
+      var act = b.getAttribute('data-mx');
+      if (act === 'push') push();
+      if (act === 'n-more' && st.n < 9) { st.n++; st.fresh = true; drawStairs(); }
+      if (act === 'n-less' && st.n > 1) { st.n--; st.fresh = false; drawStairs(); }
+    });
+
+    drawDominoes(0);
+    drawStairs();
+  }
+
+  /* ============================================================
      Реєстр
      ============================================================ */
 
   var EXTRAS = {
-    'disc.binomial': binomial
+    'disc.binomial': binomial,
+    'found.induction': induction
   };
 
   window.MathExtras = {

@@ -2264,6 +2264,27 @@ a { color: inherit; text-decoration: none; }
 .mx-term { padding: 1px 3px; border-radius: 5px; }
 .mx-term.is-hl { background: color-mix(in srgb, var(--c, #4B3FDB) 20%, #fff); }
 
+/* Індукція: доміно й сходинки */
+.mx-dom { display: flex; align-items: flex-end; gap: 6px; height: 64px; padding: 4px 2px 0; overflow-x: auto; }
+.mx-domino {
+  flex: 0 0 auto; width: 18px; height: 50px; border-radius: 4px;
+  background: #fff; border: 1.5px solid var(--c, var(--brand-600));
+  display: flex; align-items: flex-end; justify-content: center;
+  transform-origin: bottom right; transition: transform .22s ease-in, background .22s;
+}
+.mx-domino span { font-size: 10px; font-weight: 700; color: var(--muted); margin-bottom: 2px; }
+.mx-domino.is-down { transform: rotate(68deg) translate(4px, 2px); background: var(--c, var(--brand-600)); }
+.mx-domino.is-down span { color: #fff; }
+.mx-domino--more { border: 0; color: var(--muted); align-items: center; font-weight: 700; }
+.mx-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.mx-verdict { margin-top: 8px; font-size: 13px; line-height: 1.5; padding: 0; }
+.mx-verdict.is-good { padding: 8px 10px; border-radius: var(--r-sm); background: var(--green-bg); color: #0C7A48; }
+.mx-verdict.is-bad { padding: 8px 10px; border-radius: var(--r-sm); background: var(--amber-bg); color: #8A5409; }
+.mx-stairs { display: flex; justify-content: center; padding: 6px 0; }
+.mx-sq { fill: color-mix(in srgb, var(--c, #4B3FDB) 70%, #fff); }
+.mx-sq.is-twin { fill: color-mix(in srgb, var(--c, #4B3FDB) 12%, #fff); }
+.mx-sq.is-new { fill: #F2A93B; }
+
 /* Задачі теми в шухляді карти математики */
 .mm-olymp { display: grid; gap: 6px; }
 .mm-olymp__p {

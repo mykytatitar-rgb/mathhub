@@ -590,7 +590,52 @@
           '<div class="mm-list">' + learnHtml + '</div></div>' +
       '</div>' +
       '<div class="card" style="margin-top:18px"><h3 class="mm-h3">За доменами</h3><div class="mm-sub">' + tx.ringDark + '</div>' +
-        doms + '</div>';
+        doms + '</div>' +
+      (who ? '' : wishesCard());
+  }
+
+  /* ============================================================
+     Побажання до блоків теми
+     ============================================================
+
+     Карту дописує Claude, а репетитор бачить, чого в ній бракує, —
+     доведення, малюнка, інтерактиву, задач. Побажання пишуться просто в
+     картці теми, а тут збираються разом, щоб передати їх одним рухом.
+     Виконане позначає сам зміст: що вже зроблено, записано в
+     MATH_WISHES_DONE разом із відповіддю, що саме. */
+
+  function wishDone(topicId, text) {
+    var done = window.MATH_WISHES_DONE && window.MATH_WISHES_DONE[topicId];
+    if (!done || !text) return null;
+    var hay = String(text).toLowerCase().replace(/\s+/g, ' ');
+    return hay.indexOf(String(done.match).toLowerCase()) >= 0 ? done : null;
+  }
+
+  function openWishes() {
+    var mine = S.mapEntries(null);
+    return MAP.topics.map(function (t) {
+      var e = mine[t.id];
+      var text = e && (e.wish || '');
+      return text && !wishDone(t.id, text) ? { t: t, text: text, at: e.wishAt || e.at } : null;
+    }).filter(Boolean);
+  }
+
+  function wishesCard() {
+    var list = openWishes();
+    if (!list.length) return '';
+    return '<div class="card mm-wishes" style="margin-top:18px">' +
+      '<div class="row" style="gap:10px;align-items:flex-start">' +
+        '<div style="flex:1"><h3 class="mm-h3">Побажання для Claude</h3>' +
+        '<div class="mm-sub">' + pl(list.length, 'тема чекає', 'теми чекають', 'тем чекають') +
+          ' на доробку. Скопіюйте й надішліть мені одним повідомленням.</div></div>' +
+        '<button class="btn btn--primary btn--sm" data-mm="wishes-copy">' + icon('copy', 15) + 'Скопіювати</button>' +
+      '</div>' +
+      '<div class="mm-list">' + list.map(function (w) {
+        var d = domOf(w.t);
+        return '<button class="mm-row" data-mm="open" data-arg="' + w.t.id + '">' +
+          glyph(st(w.t.id), d.color, 17) +
+          '<span class="mm-row__name">' + esc(w.t.name) + '<small>' + esc(w.text) + '</small></span></button>';
+      }).join('') + '</div></div>';
   }
 
   /* ============================================================
@@ -1532,6 +1577,7 @@
      ============================================================ */
 
   var noteTimer = null;
+  var wishTimer = null;
 
   /* Шухляда живе поза сторінкою: у картці учня панель карти — лише одна
      з вкладок, і вбудована в неї шухляда обрізалася б краями картки. */
@@ -1629,14 +1675,29 @@
       window.V.olympForTopic(topic.id, 3, function (html) {
         var box = document.querySelector('[data-mm-olymp]');
         var head = document.querySelector('[data-mm-olymp-h]');
-        if (!box || selected !== topic.id) return;
-        if (!html) return;
+        if (!box || selected !== topic.id || !html) return;
         box.innerHTML = html;
         box.hidden = false;
         if (head) head.hidden = false;
       });
       return '<div class="mm-dr__h" data-mm-olymp-h hidden>Задачі до теми</div>' +
              '<div data-mm-olymp hidden></div>';
+    }
+
+    /* Побажання — завжди до власної карти репетитора, навіть у картці учня:
+       це про те, яким має бути блок теми, а не про конкретного учня. */
+    function wishHtml(topic) {
+      var own = S.mapEntry(topic.id, null) || {};
+      var text = own.wish || '';
+      var done = wishDone(topic.id, text) || wishDone(topic.id, own.note);
+      return '<div class="mm-dr__h">Побажання для Claude</div>' +
+        (done
+          ? '<div class="mm-wishdone">' + icon('check', 15) + '<span><b>Зроблено ' + esc(done.at) + '.</b> ' +
+            esc(done.reply) + '</span></div>'
+          : '') +
+        '<textarea class="textarea mm-note mm-wish" id="mm-wish" placeholder="' +
+          'Що доробити в цій темі: доведення, малюнок, інтерактив, більше задач… ' +
+          'Я читаю ці побажання й покращую блок.">' + esc(text) + '</textarea>';
     }
 
     function chips(ids, empty) {
@@ -1663,6 +1724,8 @@
         }).join('') + '</div>' +
         hint +
         '<div class="mm-studies" style="--c:' + d.color + '">' + study + '</div>' +
+        (window.MathExtras && MathExtras.has(t.id)
+          ? '<div class="mm-extra" data-mm-extra="' + t.id + '" style="--c:' + d.color + '"></div>' : '') +
         olympBlock(t) +
         '<div class="mm-dr__h">Спирається на · ' + t.req.length + '</div>' +
         chips(t.req, 'Ні на що — з цієї теми все починається.') +
@@ -1672,6 +1735,7 @@
         '<textarea class="textarea mm-note" id="mm-note" placeholder="' + esc(tx.notePh) + '">' +
           esc(e.note || '') + '</textarea>' +
         (when ? '<div class="mm-dr__meta">Змінено ' + esc(when) + '</div>' : '') +
+        wishHtml(t, e) +
         '<div class="mm-dr__foot">' +
           (view !== 'map' ? '<button class="btn btn--soft btn--sm" data-mm="showmap">' + icon('target', 15) + 'На карті</button>' : '') +
           (view !== 'tree' ? '<button class="btn btn--ghost btn--sm" data-mm="showtree">У майнд-мепі</button>' : '') +
@@ -1679,6 +1743,10 @@
         '</div>' +
       '</div>';
     dr.hidden = false;
+
+    // інтерактивні вставки теми (трикутник Паскаля тощо) оживають після вставки розмітки
+    var extra = dr.querySelector('[data-mm-extra]');
+    if (extra && window.MathExtras) MathExtras.mount(extra.getAttribute('data-mm-extra'), extra);
   }
 
   /* ============================================================
@@ -1841,6 +1909,19 @@
 
     if (act === 'caption-close') { hideCaption(); return; }
 
+    /* Усі відкриті побажання одним текстом — щоб надіслати їх Claude разом. */
+    if (act === 'wishes-copy') {
+      var text = openWishes().map(function (w) {
+        return '• ' + w.t.name + ' (' + w.t.id + '): ' + w.text;
+      }).join('\n');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText('Побажання до карти математики:\n' + text)
+          .then(function () { U.toast('Скопійовано — вставте в розмову з Claude', 'ok'); })
+          .catch(function () { U.toast('Браузер не дав скопіювати', 'err'); });
+      }
+      return;
+    }
+
     if (act === 'olymp-open' && window.V.olympDialog) { window.V.olympDialog(arg); return; }
 
     if (act === 'tree' && treeWorld) {
@@ -1908,6 +1989,14 @@
       noteTimer = setTimeout(function () {
         S.setMapTopic(id, { note: text }, owner);
         if (who === owner) invalidate();
+      }, 450);
+    }
+    if (e.target.id === 'mm-wish' && selected) {
+      var wid = selected, wtext = e.target.value;
+      clearTimeout(wishTimer);
+      wishTimer = setTimeout(function () {
+        S.setMapTopic(wid, { wish: wtext }, null);
+        if (!who) invalidate();
       }, 450);
     }
   });

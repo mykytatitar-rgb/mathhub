@@ -35,6 +35,7 @@
   padding: 5px 10px; border: 1px solid transparent; border-radius: 999px;
   background: none; font-family: inherit; cursor: pointer;
 }
+.board-top__saved[hidden] { display: none; }
 .board-top__saved.is-dirty { color: var(--amber); }
 /* Дошка лише в цьому браузері — це не дрібниця, і виглядати має як попередження. */
 .board-top__saved.is-warn { color: #8A5409; background: var(--amber-bg); border-color: var(--amber); }

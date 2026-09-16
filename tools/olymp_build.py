@@ -22,6 +22,9 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, 'assets', 'data', 'olymp')
 
+# Нижня межа складності за шкалою AoPS. Усе, що нижче, — розминка, а не олімпіада.
+MIN_DIFFICULTY = 2
+
 # ------------------------------------------------------------------
 # Звідки задачі. Назва джерела стоїть у кожній задачі — це не формальність,
 # а повага до тих, хто ці задачі склав і опублікував.
@@ -50,10 +53,10 @@ CONTEST = {
     'HMMT_2': 'HMMT — турнір Гарварда й MIT',
     'HMMT_11': 'HMMT — турнір Гарварда й MIT',
     'HMMT': 'HMMT — турнір Гарварда й MIT',
-    'pascal': 'Pascal — Ватерлоо, 9 клас',
-    'cayley': 'Cayley — Ватерлоо, 10 клас',
-    'fermat': 'Fermat — Ватерлоо, 11 клас',
-    'euclid': 'Euclid — Ватерлоо, випускна',
+    'pascal': 'Pascal — конкурс Ватерлоо для 9 кл.',
+    'cayley': 'Cayley — конкурс Ватерлоо для 10 кл.',
+    'fermat': 'Fermat — конкурс Ватерлоо для 11 кл.',
+    'euclid': 'Euclid — конкурс Ватерлоо, випускний',
     'cemc': 'CEMC — Ватерлоо',
     'china_national_olympiad': 'Олімпіада Китаю',
     'china_team_selection_test': 'Відбір збірної Китаю',
@@ -264,6 +267,13 @@ def main():
             r = json.loads(line)
             text, had_fig = clean(r.get('problem'))
             if len(text) < 20:
+                skipped += 1
+                continue
+
+            # Складність нижче 2 — це розминкові питання конкурсів Ватерлоо:
+            # «обчисліть (5−2)/(2+1)». Олімпіадою їх назвати не можна, і в
+            # банку олімпіадних задач вони лише принижують решту.
+            if float(r.get('difficulty') or 0) < MIN_DIFFICULTY:
                 skipped += 1
                 continue
 

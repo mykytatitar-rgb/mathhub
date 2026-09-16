@@ -1328,9 +1328,14 @@
 
       var sv = c.s !== undefined ? (Number(c.s) | 0) : (cur ? (Number(cur.s) | 0) : 0);
       var note = c.note !== undefined ? String(c.note || '') : (cur ? (cur.note || '') : '');
-      if (cur && (Number(cur.s) | 0) === sv && (cur.note || '') === note) return;
+      /* Побажання до самого блоку теми — що в ньому доробити. Буває лише на
+         власній карті репетитора: це розмова про зміст карти, а не про учня. */
+      var wish = studentId ? '' :
+        (c.wish !== undefined ? String(c.wish || '') : (cur ? (cur.wish || '') : ''));
+      if (cur && (Number(cur.s) | 0) === sv && (cur.note || '') === note &&
+          (cur.wish || '') === wish) return;
 
-      if (!sv && !note) {
+      if (!sv && !note && !wish) {
         if (i < 0) return;
         list.splice(i, 1);
         syncDel(name, rid);
@@ -1341,6 +1346,10 @@
       var rec = studentId
         ? { id: rid, studentId: studentId, topic: c.id, s: sv, note: note, at: now }
         : { id: rid, s: sv, note: note, at: now };
+      if (wish) {
+        rec.wish = wish;
+        rec.wishAt = (cur && cur.wish === wish && cur.wishAt) || now;
+      }
       if (i >= 0) list[i] = rec; else list.push(rec);
       sync(name, rid);
       touched++;

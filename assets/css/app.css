@@ -2182,6 +2182,17 @@ a { color: inherit; text-decoration: none; }
    перед очима, а не ховалася за вікном. */
 
 .ol-filters .field__label { font-size: 11.5px; }
+
+.ol-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.ol-tab {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 16px; border-radius: 999px; border: 1px solid var(--line);
+  background: #fff; font: inherit; font-size: 14px; font-weight: 650; color: var(--ink-2); cursor: pointer;
+}
+.ol-tab span { font-size: 12px; font-weight: 700; color: var(--muted); }
+.ol-tab:hover { border-color: var(--brand-300); }
+.ol-tab.is-on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.ol-tab.is-on span { color: rgba(255, 255, 255, .7); }
 .ol-card { margin-bottom: 12px; border-left: 4px solid var(--c, var(--brand-600)); }
 .ol-card__top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .ol-card__p { font-size: 14.5px; line-height: 1.65; color: var(--ink); overflow-wrap: anywhere; }
@@ -2206,6 +2217,52 @@ a { color: inherit; text-decoration: none; }
 .ol-credits { background: #FBFAFE; }
 
 .chip--sm { font-size: 12px; padding: 3px 9px; }
+
+/* ---- Побажання для Claude ---- */
+
+.mm-wish { min-height: 70px; background: #FBFAFE; }
+.mm-wishdone {
+  display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px;
+  padding: 9px 11px; border-radius: var(--r-sm); background: var(--green-bg); color: #0C7A48;
+  font-size: 13px; line-height: 1.5;
+}
+.mm-wishdone svg { flex: 0 0 auto; margin-top: 2px; }
+.mm-wishes .mm-row__name small { white-space: normal; }
+
+/* ---- Інтерактивні вставки теми ---- */
+
+.mm-extra { display: grid; gap: 10px; margin-top: 10px; }
+.mx { border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 14px; background: #fff; }
+.mx-h { font-size: 12px; font-weight: 750; letter-spacing: .5px; text-transform: uppercase; color: var(--c, var(--brand-600)); margin-bottom: 6px; }
+.mx-sub { font-size: 12.5px; color: var(--muted); line-height: 1.5; margin-bottom: 8px; }
+.mx-nav { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.mx-count { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.mx-steps { display: grid; gap: 8px; }
+.mx-step { padding: 8px 10px; border-radius: var(--r-sm); background: #FBFAFE; }
+.mx-step.is-new { background: color-mix(in srgb, var(--c, #4B3FDB) 9%, #fff); animation: mx-in .35s ease; }
+.mx-step__t { font-size: 13.5px; font-weight: 700; margin-bottom: 3px; }
+.mx-step__b { font-size: 13.5px; line-height: 1.55; color: var(--ink-2); }
+.mx-step__f { margin-top: 6px; text-align: center; font-size: 16px; }
+@keyframes mx-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.mx-tri { display: grid; gap: 4px; justify-items: center; overflow-x: auto; padding: 4px 0; }
+.mx-row { display: flex; gap: 4px; align-items: center; position: relative; }
+.mx-rown { position: absolute; left: -26px; font-size: 10.5px; color: var(--muted-2); width: 20px; text-align: right; }
+.mx-cell {
+  min-width: 34px; height: 30px; padding: 0 6px; border-radius: 8px;
+  border: 1px solid var(--line); background: #fff; font: inherit; font-size: 13px; font-weight: 700;
+  color: var(--ink); cursor: pointer; font-variant-numeric: tabular-nums; transition: background .2s, border-color .2s;
+}
+.mx-cell:hover { border-color: var(--brand-300); }
+.mx-cell.is-hidden { background: #F4F3FA; border-style: dashed; color: transparent; }
+.mx-cell.is-parent { background: color-mix(in srgb, var(--c, #4B3FDB) 18%, #fff); border-color: var(--c, var(--brand-600)); }
+.mx-cell.is-pick { background: var(--c, var(--brand-600)); border-color: var(--c, var(--brand-600)); color: #fff; }
+.mx-sum { min-height: 22px; margin-top: 8px; text-align: center; font-size: 15px; }
+.mx-exp { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.mx-exp__f { font-size: 14.5px; line-height: 1.9; overflow-wrap: anywhere; }
+.mx-term { padding: 1px 3px; border-radius: 5px; }
+.mx-term.is-hl { background: color-mix(in srgb, var(--c, #4B3FDB) 20%, #fff); }
 
 /* Задачі теми в шухляді карти математики */
 .mm-olymp { display: grid; gap: 6px; }

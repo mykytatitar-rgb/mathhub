@@ -128,8 +128,7 @@
         '</div>' +
 
         '<div class="spacer row" style="gap:8px;flex-wrap:wrap">' +
-          '<button class="board-top__saved" data-saved data-act="board-saved" ' +
-            'title="Де саме збережено цю дошку">' + icon('check', 15) + 'Збережено</button>' +
+          '<button class="board-top__saved" data-saved data-act="board-saved" hidden></button>' +
           /* Стан копії учня. Досі перевидання відбувалося мовчки, і так само
              мовчки падало: репетитор малював, а учень бачив старе — і жоден
              з них не міг про це здогадатися. */
@@ -802,18 +801,34 @@
     return { key: 'saved', note: 'Записано в цьому браузері й на сервері.' };
   }
 
+  /* Як у Miro: коли все працює, про збереження не видно нічого. Людина
+     малює — і воно просто є. Напис зʼявляється лише тоді, коли справді
+     щось не так і це триває: зник інтернет або сервер довго не приймає.
+     Хвилинна затримка посеред уроку — не привід відволікати. */
+  var QUIET_MS = 45000;
+
   function paintSaved() {
     var el = document.querySelector('[data-saved]');
     if (!el || !cur) return;
     var s2 = savedState();
-    var look = SAVED_LOOK[s2.key];
-    el.className = 'board-top__saved ' + look.cls;
-    el.innerHTML = icon(look.ic, 15) + look.text;
-    el.title = s2.note;
+    var trouble = s2.key === 'fail' || (s2.key === 'queue' && !navigator.onLine);
 
-    /* Повідомленнями про це не сиплемо. Напис і так стоїть на видноті, а
-       спливне вікно посеред уроку затуляє дошку — тим паче коли екран
-       показують учневі. Хто захоче подробиць, натисне на напис. */
+    if (!trouble) {
+      cur.troubleSince = 0;
+      el.hidden = true;
+      return;
+    }
+    if (!cur.troubleSince) {
+      cur.troubleSince = Date.now();
+      // перевіримо ще раз, коли мине терпіння: може, саме минеться
+      setTimeout(function () { if (cur) paintSaved(); }, QUIET_MS + 500);
+    }
+    if (Date.now() - cur.troubleSince < QUIET_MS) { el.hidden = true; return; }
+
+    el.hidden = false;
+    el.className = 'board-top__saved is-warn';
+    el.innerHTML = icon('cloud', 15) + (navigator.onLine ? 'Сервер не відповідає' : 'Немає інтернету');
+    el.title = 'Намальоване ціле й лежить тут. Щойно звʼязок повернеться, усе поїде саме.';
   }
 
   /* Якщо на урок уже видано посилання, воно має показувати те, що є зараз.
@@ -837,37 +852,20 @@
   var VIEWER_VERSION = 9;
 
   /**
-   * Показати, що зараз із копією учня.
-   * Кнопки немає взагалі, поки урок не опубліковано — тоді нема про що
-   * звітувати. Помилка лишається на екрані, поки не вдасться відправити.
+   * Стан копії учня.
+   *
+   * На дошці його більше не видно зовсім: написи «учень бачить це» і
+   * «учень бачить старе» на кожен штрих лише відволікали, а в Miro такого
+   * немає, бо там учень дивиться на ту саму дошку. Оновлення й далі
+   * повторюється само, а те, що справді застрягло, записується в журнал і
+   * видно в «Чи все ціле».
    */
   function setPubState(state, detail) {
     var el = document.querySelector('[data-pub]');
-    if (!el) return;
-    if (!cur || !cur.board.share || !cur.board.share.token) { el.hidden = true; return; }
-
-    el.hidden = false;
-    el.className = 'board-top__pub is-' + state;
-    if (state === 'sending') {
-      el.innerHTML = icon('clock', 14) + 'Оновлюю в учня…';
-      el.title = 'Надсилаю свіжий вигляд уроку на сторінку учня';
-    } else if (state === 'ok') {
-      el.innerHTML = icon('check', 14) + 'Учень бачить це';
-      el.title = 'Сторінка учня показує те саме, що й ця дошка';
-    } else {
-      el.innerHTML = icon('alert', 14) + 'Учень бачить старе';
-      el.title = 'Не вдалося оновити: ' + (detail || '') + '. Натисніть, щоб спробувати ще раз';
-
-      /* Причину показуємо й повідомленням, а не лише в підказці: щоб її
-         побачити, треба було здогадатися навести мишу — а без неї ми обидва
-         лише гадаємо, чому учень бачить старе. Один раз на причину, щоб не
-         сипати те саме при кожному штриху. */
-      if (cur && cur.lastPubFail !== detail) {
-        cur.lastPubFail = detail;
-        U.toast('Учень не отримав оновлення: ' + (detail || 'невідома причина'), 'err');
-      }
-    }
-    if (state === 'ok' && cur) cur.lastPubFail = null;
+    if (el) el.hidden = true;
+    if (!cur) return;
+    if (state === 'ok') cur.lastPubFail = null;
+    else if (state === 'fail') cur.lastPubFail = detail || 'невідома причина';
   }
 
   function scheduleRepublish() {

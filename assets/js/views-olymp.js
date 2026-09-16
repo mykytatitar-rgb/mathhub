@@ -54,8 +54,8 @@
 
     return C.hero({
       short: true,
-      title: 'Банк задач',
-      sub: 'підручники й олімпіади — за темами карти математики'
+      title: 'Олімпіади й задачі',
+      sub: 'олімпіадні задачі й задачі з підручників — за темами карти математики'
     }) + '<div class="page"><div class="ol" data-ol>' + loading() + '</div></div>';
   };
 
@@ -113,21 +113,27 @@
       return idx.sourceCount[b] - idx.sourceCount[a];
     });
 
-    var head =
+    /* Олімпіади й підручники — вкладками на видноті, а не пунктом у списку:
+       коли «Олімпіади» сховались у фільтр, їх просто загубили. */
+    var nBook = all.filter(function (p) { return p.bank === 'book'; }).length;
+    var nOlymp = all.length - nBook;
+    var tabs =
+      '<div class="ol-tabs">' +
+        [['', 'Усі задачі', all.length], ['olymp', 'Олімпіадні', nOlymp], ['book', 'З підручників', nBook]]
+          .map(function (t) {
+            return '<button class="ol-tab' + (filters.bank === t[0] ? ' is-on' : '') + '" ' +
+              'data-act="ol-bank" data-arg="' + t[0] + '">' + U.esc(t[1]) +
+              '<span>' + t[2] + '</span></button>';
+          }).join('') +
+      '</div>';
+
+    var head = tabs +
       '<div class="card ol-filters">' +
         '<div class="row row--wrap" style="gap:10px;align-items:flex-end">' +
           '<label class="field" style="flex:1;min-width:220px">' +
             '<span class="field__label">Пошук в умовах</span>' +
             '<input class="input" id="ol-q" placeholder="triangle, prime, ways…" value="' +
               U.esc(filters.q) + '">' +
-          '</label>' +
-          '<label class="field" style="min-width:170px">' +
-            '<span class="field__label">Звідки</span>' +
-            '<select class="input" data-ol-f="bank">' +
-              '<option value="">Усе</option>' +
-              '<option value="book"' + (filters.bank === 'book' ? ' selected' : '') + '>Підручники</option>' +
-              '<option value="olymp"' + (filters.bank === 'olymp' ? ' selected' : '') + '>Олімпіади</option>' +
-            '</select>' +
           '</label>' +
           '<label class="field" style="min-width:230px">' +
             '<span class="field__label">Тема карти</span>' +
@@ -331,6 +337,11 @@
     },
 
     'ol-topic': function (t) { window.App.setQuery({ topic: t }); },
+
+    'ol-bank': function (b) {
+      // рівні олімпіад і підручника — різні шкали, тож фільтр рівня скидаємо разом із вкладкою
+      window.App.setQuery({ bank: b || '', level: '' });
+    },
 
     'ol-copy': function (id) {
       var p = O().get(id);

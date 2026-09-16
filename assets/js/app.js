@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v81';
+  App.BUILD = 'v82';
   window.APP_BUILD = App.BUILD;
 
   var NAV = [
@@ -33,7 +33,7 @@
        не має домішуватися в розклад, фінанси й портали. */
     /* Олімпіадні задачі поруч із картою: вони й прив'язані до її тем,
        і потрібні в той самий момент — коли шукаєш, що дати учневі далі. */
-    { hash: '#/olymp',     icon: 'trophy',    label: 'Задачі' },
+    { hash: '#/olymp',     icon: 'trophy',    label: 'Олімпіади' },
     { hash: '#/desk',      icon: 'compass',   label: 'Моє',       count: function () {
         return (S.deskItems() || []).filter(function (d) { return d.status !== 'done'; }).length; } },
     /* Карта всієї математики — теж моя, а не учнівська: де я в ній, що
@@ -954,6 +954,52 @@
       if (e.data === 'assets-updated') updateBar();
     });
   }
+
+  /* Вхід — одним вікном на початку, а не написами по всіх кутах.
+
+     Без входу дошки живуть лише в цьому браузері, і досі про це нагадували
+     жовті написи на кожній дошці. Miro робить простіше: спершу вхід, далі
+     про нього ніхто не думає. Тут так само — вікно зʼявляється, коли
+     відкривають кабінет без входу, і більше не заважає. «Пізніше» ховає
+     його до закриття вкладки. */
+  var ASK_KEY = 'vektor.askedSignIn';
+
+  function askSignIn() {
+    if (!window.Cloud || !Cloud.available() || Cloud.signedIn()) return;
+    try { if (sessionStorage.getItem(ASK_KEY)) return; } catch (e) {}
+    try { sessionStorage.setItem(ASK_KEY, '1'); } catch (e) {}
+
+    C.modal({
+      title: 'Увійдіть у кабінет',
+      sub: 'щоб дошки, учні й розклад були на всіх пристроях і в учнів',
+      body:
+        '<form id="ask-signin" class="stack" onsubmit="return false">' +
+          '<label class="field"><span class="field__label">Пошта</span>' +
+            '<input class="input" name="email" type="email" autocomplete="username"></label>' +
+          '<label class="field"><span class="field__label">Пароль</span>' +
+            '<input class="input" name="password" type="password" autocomplete="current-password"></label>' +
+        '</form>',
+      buttons: [
+        { label: 'Пізніше', kind: 'btn--ghost' },
+        {
+          label: 'Увійти', kind: 'btn--primary', act: 'signin',
+          onClick: function (wrap, close) {
+            var v = C.readForm(wrap.querySelector('#ask-signin'));
+            if (!v.email || !v.password) { U.toast('Вкажіть пошту й пароль', 'err'); return false; }
+            Cloud.signIn(v.email, v.password).then(function () {
+              close();
+              App.render();
+            }).catch(function (e) {
+              U.toast(e && e.message ? e.message : 'Не вдалося увійти', 'err');
+            });
+            return false;
+          }
+        }
+      ]
+    });
+  }
+
+  window.addEventListener('load', function () { setTimeout(askSignIn, 400); });
 
   window.App = App;
 })();

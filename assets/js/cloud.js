@@ -33,7 +33,49 @@
      Стан
      ============================================================ */
 
-  var meta = { rev: 0, dirty: false, lastSync: null, session: null, hash: 0, changedAt: null };
+  var meta = { rev: 0, dirty: false, lastSync: null, hash: 0, changedAt: null };
+
+  /* ============================================================
+     Сесія входу — одна на всі вкладки
+     ============================================================
+
+     Сесія довго лежала всередині службового запису синхронізації, а той
+     кожна вкладка переписує зі своєї пам'яті при кожному обміні з сервером.
+     Звідси вхід, що злітав «сам»: у вкладці з дошкою, відкритій ще до
+     входу, в пам'яті було «сесії немає» — і щойно людина входила в
+     налаштуваннях сусідньої вкладки, дошка при наступній синхронізації
+     записувала цю порожнечу поверх. Друга половина тієї ж біди: Supabase
+     при кожному поновленні видає новий ключ поновлення й гасить старий,
+     а повторне використання старого вважає крадіжкою й закриває сесію
+     цілком. Вкладка зі старою копією ключа вбивала вхід для всіх.
+
+     Тому сесія тепер окремим записом, і правда про неї — лише в сховищі:
+     її читають звідти щоразу, а пишуть тільки вхід, вихід і поновлення. */
+
+  var AUTH = 'mathhub.auth';
+  var sessionCache;              // undefined — ще не читали
+
+  function sess() {
+    if (sessionCache === undefined) {
+      try { sessionCache = JSON.parse(localStorage.getItem(AUTH) || 'null'); }
+      catch (e) { sessionCache = null; }
+    }
+    return sessionCache;
+  }
+
+  function setSess(s) {
+    sessionCache = s || null;
+    try {
+      if (s) localStorage.setItem(AUTH, JSON.stringify(s));
+      else localStorage.removeItem(AUTH);
+    } catch (e) { /* сховище недоступне — сесія житиме до закриття вкладки */ }
+  }
+
+  /** Перечитати зі сховища: інша вкладка могла щойно поновити чи закрити сесію. */
+  function freshSess() {
+    sessionCache = undefined;
+    return sess();
+  }
   var state = 'off';          // off | signedout | idle | syncing | offline | error
   var detail = '';
   var timer = null;
@@ -61,11 +103,15 @@
       if (raw) {
         var m = JSON.parse(raw);
         Object.keys(meta).forEach(function (k) { if (m[k] !== undefined) meta[k] = m[k]; });
+        /* Перенесення зі старого місця: сесія, що лежала всередині цього
+           запису, переїжджає в окремий — один раз, і лише якщо там порожньо. */
+        if (m.session && m.session.refresh_token && !sess()) setSess(m.session);
       }
     } catch (e) { /* пошкоджений запис — почнемо з нуля */ }
   }
 
   function saveMeta() {
+    // сесії тут немає навмисно — див. «Сесія входу — одна на всі вкладки»
     try { localStorage.setItem(META, JSON.stringify(meta)); } catch (e) { /* не критично */ }
   }
 
@@ -163,13 +209,13 @@
       rev: meta.rev,
       dirty: Cloud.available() ? (meta.dirty || locallyChanged()) : meta.dirty,
       lastSync: meta.lastSync,
-      email: meta.session ? meta.session.email : null,
+      email: sess() ? sess().email : null,
       backups: Cloud.backups().length
     };
   };
 
   Cloud.available = function () { return !!(cfg.url && cfg.anonKey); };
-  Cloud.signedIn = function () { return !!(meta.session && meta.session.refresh_token); };
+  Cloud.signedIn = function () { var s = sess(); return !!(s && s.refresh_token); };
 
   /** Адреса проєкту без кінцевої косої — потрібна сусідньому модулю картинок. */
   Cloud.base = function () { return cfg.url.replace(/\/+$/, ''); };
@@ -179,9 +225,10 @@
    * Ним підписуються теки картинок, щоб правила доступу пускали лише до своїх.
    */
   Cloud.userId = function () {
-    if (!meta.session || !meta.session.access_token) return null;
+    var s = sess();
+    if (!s || !s.access_token) return null;
     try {
-      var part = meta.session.access_token.split('.')[1];
+      var part = s.access_token.split('.')[1];
       if (!part) return null;
       var b64 = part.replace(/-/g, '+').replace(/_/g, '/');
       while (b64.length % 4) b64 += '=';
@@ -418,8 +465,9 @@
     if (!headers['Content-Type'] && !(opts.body instanceof Blob)) {
       headers['Content-Type'] = 'application/json';
     }
-    if (meta.session && meta.session.access_token) {
-      headers['Authorization'] = 'Bearer ' + meta.session.access_token;
+    var s = sess();
+    if (s && s.access_token) {
+      headers['Authorization'] = 'Bearer ' + s.access_token;
     }
     return fetch(cfg.url.replace(/\/+$/, '') + path, {
       method: opts.method || 'GET',
@@ -781,39 +829,67 @@
      той самий результат. */
   var refreshing = null;
 
+  /* Та сама черга, але між вкладками. Браузер дає замок, який бачать усі
+     вкладки сайту: поки одна поновлює сесію, інші чекають, а потім беруть
+     уже свіжий ключ зі сховища замість того, щоб пред'явити старий. */
+  function withAuthLock(fn) {
+    if (navigator.locks && navigator.locks.request) {
+      return navigator.locks.request('vektor-auth-refresh', fn);
+    }
+    return fn();
+  }
+
   function refresh() {
     if (refreshing) return refreshing;
 
-    if (!meta.session || !meta.session.refresh_token) {
+    var used = sess();
+    if (!used || !used.refresh_token) {
       return Promise.reject(new Error('Немає активного входу'));
     }
 
-    refreshing = fetch(cfg.url.replace(/\/+$/, '') + '/auth/v1/token?grant_type=refresh_token', {
-      method: 'POST',
-      headers: { apikey: cfg.anonKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: meta.session.refresh_token })
-    }).then(function (res) {
-      if (!res.ok) {
-        /* Сервер прямо відмовив — токен більше не чинний. Прибираємо сесію,
-           щоб програма не вдавала, що вхід є: інакше кожна наступна дія
-           мовчки падала б, а в Налаштуваннях стояло б «увійдено». */
-        var e = new Error('Сесія втратила чинність — увійдіть знову');
-        e.expired = true;
-        throw e;
+    refreshing = withAuthLock(function () {
+      /* Поки ми чекали на замок, інша вкладка могла вже поновити сесію.
+         Тоді в сховищі лежить новий ключ — беремо його й нікуди не йдемо. */
+      var now = freshSess();
+      if (!now || !now.refresh_token) {
+        var gone = new Error('Сесія закрита в іншій вкладці — увійдіть знову');
+        gone.expired = true;
+        throw gone;
       }
-      return res.json();
-    }).then(function (j) {
-      meta.session = {
-        access_token: j.access_token,
-        refresh_token: j.refresh_token,
-        email: (j.user && j.user.email) || (meta.session && meta.session.email)
-      };
-      saveMeta();
+      if (now.refresh_token !== used.refresh_token) return now;
+
+      return fetch(cfg.url.replace(/\/+$/, '') + '/auth/v1/token?grant_type=refresh_token', {
+        method: 'POST',
+        headers: { apikey: cfg.anonKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: now.refresh_token })
+      }).then(function (res) {
+        if (!res.ok) {
+          /* Відмова може бути й хибною тривогою: інша вкладка без замка
+             (старий код) встигла поновити раніше. Перевіряємо сховище ще раз
+             і лише тоді визнаємо, що сесії справді немає. */
+          var after = freshSess();
+          if (after && after.refresh_token && after.refresh_token !== now.refresh_token) return after;
+          var e = new Error('Сесія втратила чинність — увійдіть знову');
+          e.expired = true;
+          throw e;
+        }
+        return res.json().then(function (j) {
+          var next = {
+            access_token: j.access_token,
+            refresh_token: j.refresh_token,
+            email: (j.user && j.user.email) || now.email
+          };
+          setSess(next);
+          return next;
+        });
+      });
+    }).then(function (s) {
       refreshing = null;
+      return s;
     }, function (e) {
       refreshing = null;
       // на збої мережі сесію не чіпаємо: вона, найпевніше, ще жива
-      if (e && e.expired) { meta.session = null; saveMeta(); setState('signedout'); }
+      if (e && e.expired) { setSess(null); setState('signedout'); }
       throw e;
     });
 
@@ -836,11 +912,11 @@
         return j;
       });
     }).then(function (j) {
-      meta.session = {
+      setSess({
         access_token: j.access_token,
         refresh_token: j.refresh_token,
         email: (j.user && j.user.email) || email
-      };
+      });
       /* Семантика входу однозначна: "взяти дані цього акаунта".
          Скидаємо і номер версії, і позначку про незбережені зміни — інакше
          демо-дані свіжого браузера вступили б у конфлікт із серверними
@@ -856,9 +932,16 @@
       meta.changedAt = null;
       saveMeta();
       setState('syncing');
-      return Cloud.syncNow();
+      return Cloud.syncNow().then(function (r) { startParts(); return r; });
     });
   };
+
+  /** Обмін дошками й записами — щойно зʼявився вхід, без перезавантаження сторінки. */
+  function startParts() {
+    if (Cloud.writesBlocked()) return;
+    if (window.BoardSync) BoardSync.start();
+    if (window.RecSync) RecSync.start();
+  }
 
   /**
    * Створення акаунта просто з програми — щоб не заходити в панель Supabase.
@@ -879,21 +962,21 @@
       });
     }).then(function (j) {
       if (!j.access_token) return false;        // чекаємо на підтвердження пошти
-      meta.session = {
+      setSess({
         access_token: j.access_token,
         refresh_token: j.refresh_token,
         email: (j.user && j.user.email) || email
-      };
+      });
       meta.rev = 0;
       meta.dirty = true;                       // перший акаунт — наші дані мають поїхати на сервер
       meta.hash = 0;
       saveMeta();
-      return Cloud.syncNow().then(function () { return true; });
+      return Cloud.syncNow().then(function () { startParts(); return true; });
     });
   };
 
   Cloud.signOut = function () {
-    meta.session = null;
+    setSess(null);
     meta.rev = 0;
     meta.dirty = false;
     saveMeta();
@@ -1351,6 +1434,24 @@
      а з синхронізацією ще й відправляла на сервер. Тепер вона перечитує базу
      одразу, як тільки інша вкладка щось зберегла. */
   function watchOtherTabs() {
+    /* Вхід чи вихід в одній вкладці — одразу для всіх. Без цього вкладка з
+       дошкою ще годину вважала б, що входу немає, і казала б «лише на цьому
+       пристрої», хоча людина щойно ввійшла в сусідній. */
+    window.addEventListener('storage', function (e) {
+      if (e.key !== AUTH) return;
+      var was = !!(sessionCache && sessionCache.refresh_token);
+      freshSess();
+      var now = Cloud.signedIn();
+      if (was === now) return;
+      if (now) {
+        setState('syncing');
+        Cloud.syncNow();
+        startParts();
+      } else {
+        setState('signedout');
+      }
+    });
+
     window.addEventListener('storage', function (e) {
       if (e.key !== DB_KEY || !e.newValue) return;
       if (suppress > 0) return;

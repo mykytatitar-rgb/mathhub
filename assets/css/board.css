@@ -29,8 +29,16 @@
 
 .board-top__title { font-weight: 750; font-size: 15px; letter-spacing: -.2px; line-height: 1.2; }
 .board-top__sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.board-top__saved { font-size: 12px; color: var(--muted); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.board-top__saved {
+  font-size: 12px; color: var(--muted); font-weight: 600;
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 10px; border: 1px solid transparent; border-radius: 999px;
+  background: none; font-family: inherit; cursor: pointer;
+}
 .board-top__saved.is-dirty { color: var(--amber); }
+/* Дошка лише в цьому браузері — це не дрібниця, і виглядати має як попередження. */
+.board-top__saved.is-warn { color: #8A5409; background: var(--amber-bg); border-color: var(--amber); }
+.board-top__saved.is-fail { color: var(--red); background: var(--red-bg); border-color: var(--red); }
 
 /* Стан копії учня. Мовчазна невдача тут найгірша: репетитор упевнений,
    що учень бачить свіже, а той дивиться на старий знімок. */

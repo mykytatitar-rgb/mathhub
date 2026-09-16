@@ -74,6 +74,16 @@
   .pin button:disabled{opacity:.5;cursor:default}
   .pin .err{margin-top:10px;font-size:13px;color:#C0323C;min-height:18px}
   .foot{text-align:center;font-size:11.5px;color:#AAA8C2;margin-top:22px}
+
+  /* Чи дійшло написане учнем. Досі про це не знав ніхто: штрихи лежали в
+     пам'яті вкладки, і закрита вкладка забирала їх із собою мовчки. */
+  .ink{position:fixed;right:14px;top:14px;z-index:11;display:none;
+    padding:7px 13px;border-radius:999px;font-size:12px;font-weight:700;
+    background:rgba(255,255,255,.95);color:#3D3B63;box-shadow:0 3px 14px rgba(23,22,58,.18)}
+  .ink.is-on{display:block}
+  .ink.is-ok{color:#0C7F51}
+  .ink.is-wait{color:#8A5409;background:#FDF3E3}
+  @media (max-width:700px){.ink{right:auto;left:14px;top:auto;bottom:14px}}
 </style>
 </head>
 <body>
@@ -93,6 +103,9 @@
 <!-- Портал учня: розклад і матеріали. Та сама сторінка, бо саме її
      й лише її пускає повз захист сайту. -->
 <div id="portal"></div>
+
+<!-- Стан написаного учнем: «надсилаю», «збережено», «немає зв'язку» -->
+<div class="ink" id="ink"></div>
 
 <script>
 /* Навіщо ця сторінка взагалі потрібна.
@@ -315,25 +328,106 @@
 
      Внески лежать в окремій таблиці й не заважають репетиторові зберігати
      свою базу: інакше його наступне збереження просто затерло б їх. */
-  var pending = [];
+  /* Черга написаного учнем.
+
+     Досі вона жила в пам'яті вкладки. Тому кожен звичайний для уроку
+     випадок — метро без мережі, закрита вкладка, перезавантажена сторінка —
+     тихо забирав із собою розв'язання, і ні учень, ні репетитор про це не
+     дізнавалися. Тепер черга лежить у пам'яті браузера й переживає все це,
+     а стан видно написом угорі.
+
+     Зі списку штрих зникає лише тоді, коли сервер підтвердив, що взяв його. */
+
+  var INK_KEY = 'vektor.ink.' + token;
+  var INK_MAX = 600;              // довша черга означає, що зв'язку немає давно
+  var pending = readInk();
   var sending = false;
+  var inkWait = 700;              // пауза до наступної спроби, росте при невдачах
+  var inkTimer = null;
+  var inkBox = document.getElementById('ink');
+
+  function readInk() {
+    try { return JSON.parse(localStorage.getItem(INK_KEY) || '[]') || []; }
+    catch (e) { return []; }
+  }
+
+  function keepInk() {
+    try {
+      if (pending.length) localStorage.setItem(INK_KEY, JSON.stringify(pending.slice(-INK_MAX)));
+      else localStorage.removeItem(INK_KEY);
+    } catch (e) { /* сховище повне — черга принаймні лишається в пам'яті */ }
+  }
+
+  function setInk(state, text) {
+    if (!inkBox) return;
+    inkBox.className = 'ink is-on is-' + state;
+    inkBox.textContent = text;
+    if (state === 'ok') setTimeout(function () {
+      if (!pending.length && inkBox.className.indexOf('is-ok') > 0) inkBox.className = 'ink';
+    }, 2500);
+  }
+
+  function scheduleInk(ms) {
+    if (inkTimer) clearTimeout(inkTimer);
+    inkTimer = setTimeout(function () { inkTimer = null; flushInk(); }, ms);
+  }
 
   function flushInk() {
     if (sending || !pending.length) return;
+    if (!navigator.onLine) {
+      setInk('wait', 'Немає звʼязку — збережено тут');
+      scheduleInk(5000);
+      return;
+    }
+
     sending = true;
-    var batch = pending.splice(0, pending.length);
+    setInk('send', 'Надсилаю написане…');
+    var batch = pending.slice(0, 200);
+
     rpc('share_contribute', {
       p_token: token,
       p_kind: 'ink',
       p_payload: JSON.stringify(batch)
+    }).then(function (res) {
+      if (!res.ok) throw new Error('http ' + res.status);
+      /* Викидаємо з черги лише після підтвердження сервера: доти штрихи
+         лежать і в пам'яті браузера. */
+      pending = pending.slice(batch.length);
+      keepInk();
+      inkWait = 700;
+      setInk(pending.length ? 'send' : 'ok', pending.length ? 'Надсилаю написане…' : 'Збережено');
     }).catch(function () {
-      // не дійшло — повертаємо в чергу, спробуємо разом із наступним штрихом
-      pending = batch.concat(pending);
+      inkWait = Math.min(inkWait * 2, 15000);
+      setInk('wait', 'Поки не надіслалось — спробую ще раз');
+      scheduleInk(inkWait);
     }).then(function () {
       sending = false;
-      if (pending.length) setTimeout(flushInk, 600);
+      if (pending.length && !inkTimer) scheduleInk(600);
     });
   }
+
+  /* Написане, що не встигло поїхати минулого разу, віддаємо одразу. */
+  if (pending.length) {
+    setInk('wait', 'Надсилаю збережене з минулого разу…');
+    scheduleInk(300);
+  }
+
+  window.addEventListener('online', function () { inkWait = 700; flushInk(); });
+
+  /* Учень закриває вкладку з ненадісланим — остання спроба навздогін.
+     keepalive дозволяє запиту пережити саму сторінку. */
+  window.addEventListener('pagehide', function () {
+    if (!pending.length || sending) return;
+    try {
+      fetch(API + '/rest/v1/rpc/share_contribute', {
+        method: 'POST',
+        keepalive: true,
+        headers: { apikey: KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_token: token, p_kind: 'ink',
+          p_payload: JSON.stringify(pending.slice(0, 200)) })
+      });
+    } catch (e) { /* не вийшло — черга лишилась у сховищі до наступного разу */ }
+  });
 
   /* ---------- Фото розв'язань ----------
 
@@ -441,8 +535,9 @@
 
     if (d.mathhub === 'ink' || d.mathhub === 'ink-undo') {
       pending.push(d);
+      keepInk();
       // трохи чекаємо: за урок штрихів багато, і слати кожен окремо — марно
-      setTimeout(flushInk, 400);
+      scheduleInk(400);
       return;
     }
 

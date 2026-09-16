@@ -128,7 +128,8 @@
         '</div>' +
 
         '<div class="spacer row" style="gap:8px;flex-wrap:wrap">' +
-          '<span class="board-top__saved" data-saved>' + icon('check', 15) + 'Збережено</span>' +
+          '<button class="board-top__saved" data-saved data-act="board-saved" ' +
+            'title="Де саме збережено цю дошку">' + icon('check', 15) + 'Збережено</button>' +
           /* Стан копії учня. Досі перевидання відбувалося мовчки, і так само
              мовчки падало: репетитор малював, а учень бачив старе — і жоден
              з них не міг про це здогадатися. */
@@ -283,6 +284,15 @@
     updateHwCount();
 
     healStudentImages();
+
+    /* Стан відправки змінюється й без нас — зникла мережа, спрацював
+       повтор, сервер нарешті прийняв. Напис має це показувати одразу. */
+    if (window.BoardSync && BoardSync.onChange) {
+      cur.savedOff = BoardSync.onChange(function (id) {
+        if (cur && (!id || id === cur.lessonId)) paintSaved();
+      });
+    }
+    paintSaved();
 
     // поки дошка відкрита — забираємо те, що пише учень за посиланням
     cur.pullTimer = setInterval(function () {
@@ -673,6 +683,7 @@
     if (cur.saveTimer) clearTimeout(cur.saveTimer);
     if (cur.thumbTimer) clearTimeout(cur.thumbTimer);
     if (cur.pullTimer) clearInterval(cur.pullTimer);
+    if (cur.savedOff) { cur.savedOff(); cur.savedOff = null; }
 
     /* Виходимо з дошки — урок скінчився. Якщо на нього видано посилання,
        оновлюємо його негайно, не чекаючи хвилинної паузи: саме тепер
@@ -742,10 +753,72 @@
   function markDirty() {
     if (!cur) return;
     cur.dirty = true;
-    var el = document.querySelector('[data-saved]');
-    if (el) { el.classList.add('is-dirty'); el.innerHTML = icon('clock', 15) + 'Зберігається…'; }
+    paintSaved();
     if (cur.saveTimer) clearTimeout(cur.saveTimer);
     cur.saveTimer = setTimeout(flushSave, 700);
+  }
+
+  /* ============================================================
+     Де саме збережена дошка
+     ============================================================
+
+     Напис «Збережено» довго означав лише «записано в цей браузер». Якщо
+     дошка не доїжджала на сервер — не було входу, зник інтернет, сервер
+     відмовив — про це знала тільки консоль. Людина малювала далі й
+     дізнавалася про втрату з іншого пристрою, коли вже пізно.
+
+     Тепер напис говорить правду про обидва місця, а причину показує
+     повідомленням — один раз на причину, щоб не сипати те саме на кожен
+     штрих. */
+
+  var SAVED_LOOK = {
+    saved:  { cls: '',          ic: 'check', text: 'Збережено' },
+    sending:{ cls: 'is-dirty',  ic: 'clock', text: 'Зберігається…' },
+    queue:  { cls: 'is-dirty',  ic: 'clock', text: 'Надсилаю на сервер…' },
+    local:  { cls: 'is-warn',   ic: 'alert', text: 'Лише на цьому пристрої' },
+    fail:   { cls: 'is-fail',   ic: 'alert', text: 'Не доїхало на сервер' }
+  };
+
+  function savedState() {
+    if (!cur) return { key: 'saved', note: '' };
+    if (cur.dirty) return { key: 'sending', note: 'Записую зміни' };
+
+    var st = (window.BoardSync && BoardSync.state)
+      ? BoardSync.state(cur.lessonId) : { mode: 'idle' };
+
+    if (st.mode === 'local') {
+      return { key: 'local', note: st.why + '. Дошка є лише в цьому браузері: ' +
+        'на іншому пристрої й в учня її не буде.' };
+    }
+    if (st.mode === 'fail') {
+      return { key: 'fail', note: 'Сервер не прийняв дошку: ' + st.why +
+        '. Намальоване тут ціле, спроба повториться сама.' };
+    }
+    if (st.mode === 'queue') return { key: 'queue', note: st.why || 'Чекає на відправку' };
+    if (st.mode === 'sent') {
+      return { key: 'saved', note: 'Записано тут і на сервері' +
+        (st.at ? ' — ' + U.fmtDateTime(new Date(st.at).toISOString()) : '') + '.' };
+    }
+    return { key: 'saved', note: 'Записано в цьому браузері й на сервері.' };
+  }
+
+  function paintSaved() {
+    var el = document.querySelector('[data-saved]');
+    if (!el || !cur) return;
+    var s2 = savedState();
+    var look = SAVED_LOOK[s2.key];
+    el.className = 'board-top__saved ' + look.cls;
+    el.innerHTML = icon(look.ic, 15) + look.text;
+    el.title = s2.note;
+
+    /* Про мовчазну втрату кажемо вголос, але один раз: людина має дізнатися
+       про неї під час уроку, а не через тиждень. */
+    var loud = s2.key === 'local' || s2.key === 'fail';
+    if (loud && cur.lastSaveWarn !== s2.note) {
+      cur.lastSaveWarn = s2.note;
+      U.toast(look.text + '. ' + s2.note, 'err');
+    }
+    if (!loud) cur.lastSaveWarn = null;
   }
 
   /* Якщо на урок уже видано посилання, воно має показувати те, що є зараз.
@@ -1724,11 +1797,14 @@
          рух лежить у журналі, який уміє тільки дописувати. */
       if (window.BoardOps) BoardOps.record(cur.lessonId, cur.board);
       scheduleRepublish();
-      var el = document.querySelector('[data-saved]');
-      if (el) { el.classList.remove('is-dirty'); el.innerHTML = icon('check', 15) + 'Збережено'; }
+      paintSaved();
     } catch (e) {
       var el2 = document.querySelector('[data-saved]');
-      if (el2) { el2.classList.add('is-dirty'); el2.innerHTML = icon('alert', 15) + 'Не збережено'; }
+      if (el2) {
+        el2.className = 'board-top__saved is-fail';
+        el2.innerHTML = icon('alert', 15) + 'Не збережено';
+        el2.title = 'Місце в сховищі браузера закінчилось';
+      }
       U.toast('Місце в сховищі браузера закінчилось. Зробіть експорт і почистіть старі дошки.', 'err');
     }
   }
@@ -3479,6 +3555,14 @@
     'board-numline': function () {
       var it = cur && cur.engine.selection[0];
       if (it && it.t === 'n') numlineDialog(it);
+    },
+    'board-saved': function () {
+      var s2 = savedState();
+      U.toast(SAVED_LOOK[s2.key].text + '. ' + (s2.note || ''), s2.key === 'saved' ? 'ok' : 'err');
+      // «не доїхало» — найчастіше просто зник зв'язок; пробуємо ще раз одразу
+      if ((s2.key === 'fail' || s2.key === 'queue') && window.BoardSync && cur) {
+        BoardSync.push(cur.lessonId).then(paintSaved);
+      }
     },
     'board-history': function () { historyDialog(); },
     'board-measures': function () { toggleMeasures(); },

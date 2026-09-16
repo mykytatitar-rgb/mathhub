@@ -31,7 +31,72 @@
   var allow = {};
   var timers = {};
   var busy = {};
+  var errs = {};          // {boardId: чому не поїхала}
+  var sentAt = {};        // {boardId: коли востаннє прийняв сервер}
+  var watchers = [];
+  var retryTimer = null;
+  var RETRY_MS = 20000;
   var started = false;
+
+  /* Хто хоче знати, що зі станом відправки. Дошка показує це написом угорі:
+     мовчазна невдача — найгірше, що тут може бути, бо людина малює далі й
+     упевнена, що все збережено. */
+  B.onChange = function (fn) {
+    watchers.push(fn);
+    return function () {
+      var i = watchers.indexOf(fn);
+      if (i >= 0) watchers.splice(i, 1);
+    };
+  };
+
+  function changed(boardId) {
+    watchers.forEach(function (fn) {
+      try { fn(boardId); } catch (e) { console.warn('BoardSync.onChange:', e); }
+    });
+  }
+
+  /** Чому саме дошка нікуди не їде — людськими словами. */
+  function why() {
+    if (!window.Cloud || !Cloud.available()) return 'Синхронізація не налаштована';
+    if (!Cloud.signedIn()) return 'Немає входу в синхронізацію';
+    if (Cloud.writesBlocked && Cloud.writesBlocked()) return 'Запис на сервер тимчасово зупинено';
+    if (!navigator.onLine) return 'Немає інтернету';
+    return '';
+  }
+
+  /**
+   * Стан однієї дошки для напису на ній.
+   *
+   *   local  — на сервер не їде взагалі (немає входу чи налаштування);
+   *   queue  — чекає на відправку, зокрема без мережі;
+   *   fail   — сервер відмовив або не відповів;
+   *   sent   — прийнято сервером;
+   *   idle   — змін після останньої відправки немає, але й номера версії ще
+   *            немає: дошку просто не міняли з моменту входу.
+   */
+  B.state = function (boardId) {
+    var stop = why();
+    if (stop) return { mode: 'local', why: stop, pending: !!pending[boardId] };
+    if (busy[boardId]) return { mode: 'queue', why: 'Відправляю…' };
+    if (pending[boardId]) {
+      return errs[boardId]
+        ? { mode: 'fail', why: errs[boardId] }
+        : { mode: 'queue', why: 'Чекає на відправку' };
+    }
+    if (revs[boardId]) return { mode: 'sent', at: sentAt[boardId] || 0 };
+    return { mode: 'idle' };
+  };
+
+  /* Повтор без участі людини. Мережа зникає й повертається посеред уроку,
+     і чекати перезавантаження сторінки, щоб дошка нарешті поїхала, не можна. */
+  function scheduleRetry() {
+    if (retryTimer || !Object.keys(pending).length) return;
+    retryTimer = setTimeout(function () {
+      retryTimer = null;
+      if (ready()) B.flush();
+      scheduleRetry();
+    }, RETRY_MS);
+  }
 
   /* ============================================================
      Дрібний облік
@@ -140,7 +205,8 @@
     if (!boardId) return;
     pending[boardId] = 1;
     saveState();
-    if (!ready()) return;
+    changed(boardId);
+    if (!ready()) { scheduleRetry(); return; }
     if (timers[boardId]) clearTimeout(timers[boardId]);
     timers[boardId] = setTimeout(function () {
       timers[boardId] = null;
@@ -190,14 +256,20 @@
       }
 
       revs[boardId] = rev;
+      sentAt[boardId] = Date.now();
       delete pending[boardId];
       delete allow[boardId];      // дозвіл разовий: він стосувався саме цієї правки
+      delete errs[boardId];
       saveState();
+      changed(boardId);
       return true;
     }).catch(function (e) {
       busy[boardId] = null;
       // лишаємо в черзі: поїде при наступній нагоді
-      console.warn('Дошка не відправилась:', boardId, e && e.message);
+      errs[boardId] = (e && e.message) || 'сервер не відповів';
+      console.warn('Дошка не відправилась:', boardId, errs[boardId]);
+      changed(boardId);
+      scheduleRetry();
       return false;
     });
 
@@ -355,10 +427,64 @@
      ============================================================ */
 
   B.stats = function () {
-    return { pending: Object.keys(pending).length, known: Object.keys(revs).length };
+    return {
+      pending: Object.keys(pending).length,
+      known: Object.keys(revs).length,
+      failed: Object.keys(errs).length,
+      ids: Object.keys(pending),
+      why: why()
+    };
+  };
+
+  /**
+   * Що про дошки знає сервер — для панелі «Чи все ціле».
+   *
+   * Питаємо не заради цифри: поки відповідь не побачено очима, «дошки
+   * зберігаються» лишається вірою. Тут видно кожну дошку, якої там немає.
+   */
+  B.serverBoards = function () {
+    /* «Немає входу» — не поломка сервера, і панель уже сказала про це вище.
+       Тому тут це окреме поле: рядок про дошки просто не малюється. */
+    if (!window.Cloud || !Cloud.available()) return Promise.resolve({ off: 'Синхронізація не налаштована' });
+    if (!Cloud.signedIn()) return Promise.resolve({ off: 'Немає входу в синхронізацію' });
+    return Cloud.request('/rest/v1/boards?select=board_id,rev,updated_at', { method: 'GET' })
+      .then(function (res) {
+        if (res.status === 404) throw new Error('на сервері немає таблиці дошок');
+        if (!res.ok) throw new Error('сервер відповів ' + res.status);
+        return res.json();
+      })
+      .then(function (rows) { return { rows: rows || [] }; })
+      .catch(function (e) { return { err: (e && e.message) || 'сервер не відповів' }; });
   };
 
   B.available = function () { return ready(); };
+
+  /**
+   * Дошки, які є тут, але яких сервер не знає, — поставити в чергу.
+   *
+   * Так виглядає найчастіша втрата: дошку малювали до входу в синхронізацію
+   * (або поки вона була вимкнена), і відтоді дошка не мінялась — отже,
+   * нікуди й не просилась. У браузері вона є, на сервері її немає, і з
+   * іншого пристрою уроку просто не існує. Тут це лікується саме собою.
+   */
+  B.syncMissing = function () {
+    if (!ready()) return Promise.resolve(0);
+    return B.serverBoards().then(function (srv) {
+      if (!srv || srv.err) return 0;
+      var known = {};
+      (srv.rows || []).forEach(function (r) { known[r.board_id] = 1; });
+
+      var n = 0;
+      (S.db().boards || []).forEach(function (b) {
+        if (!b.lessonId || known[b.lessonId]) return;
+        if (!items(b)) return;                  // порожню дошку нікуди везти
+        pending[b.lessonId] = 1;
+        n++;
+      });
+      if (n) { saveState(); changed(null); }
+      return n ? B.flush() : 0;
+    });
+  };
 
   /* ============================================================
      Старт
@@ -371,11 +497,20 @@
 
     if (!ready()) return;
     // спершу віддаємо своє, потім забираємо чуже: так свіже не перекривається
-    B.flush().then(function () { return B.pullAll(); }).then(function (n) {
-      if (n && window.V && V.boardReload) { try { V.boardReload(); } catch (e) {} }
-    });
+    B.flush()
+      .then(function () { return B.pullAll(); })
+      .then(function (n) {
+        if (n && window.V && V.boardReload) { try { V.boardReload(); } catch (e) {} }
+        return B.syncMissing();
+      })
+      .then(function (n) {
+        if (n) U.toast(U.pl(n, 'дошка поїхала на сервер', 'дошки поїхали на сервер',
+          'дошок поїхало на сервер') + ' — раніше вони були лише тут', 'ok');
+        scheduleRetry();
+      });
 
-    window.addEventListener('online', function () { B.flush(); });
+    window.addEventListener('online', function () { B.flush(); changed(null); });
+    window.addEventListener('offline', function () { changed(null); });
   };
 
   window.BoardSync = B;

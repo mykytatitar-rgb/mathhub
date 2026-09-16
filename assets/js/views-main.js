@@ -1417,11 +1417,13 @@
         ? BoardHistory.stats() : Promise.resolve(null),
       window.ImgStore && ImgStore.available()
         ? ImgStore.keys() : Promise.resolve(null),
-      serverBuild()
+      serverBuild(),
+      window.BoardSync && BoardSync.serverBoards
+        ? BoardSync.serverBoards() : Promise.resolve(null)
     ];
 
     Promise.all(jobs).then(function (res) {
-      var hist = res[0], localKeys = res[1], onServer = res[2];
+      var hist = res[0], localKeys = res[1], onServer = res[2], srv = res[3];
       var out = '';
 
       /* Найважливіше — вгору. Якщо сховище не прочиталося, все інше на цій
@@ -1491,6 +1493,60 @@
         U.pl(db.lessons.length, 'урок', 'уроки', 'уроків') + ', ' +
         U.pl(db.payments.length, 'оплата', 'оплати', 'оплат') + ', ' +
         U.pl(db.boards.length, 'дошка', 'дошки', 'дошок') + '.');
+
+      /* 1в. Чи справді дошки лежать на сервері.
+
+         Найтихіша з усіх поломок: людина малює цілий урок, бачить напис
+         «Збережено» — і він не бреше, бо в браузері дошка справді є. А на
+         сервері її немає, і з іншого пристрою чи в учня уроку просто не
+         існує. Тому тут не віра, а відповідь сервера: скільки дошок він
+         знає й яких саме у нього немає. */
+      var mineFilled = db.boards.filter(function (b) {
+        return (b.slides || []).some(function (sl) { return (sl.items || []).length; });
+      });
+      var bstats = (window.BoardSync && BoardSync.stats) ? BoardSync.stats() : null;
+
+      function boardName(b) {
+        var l = S.get('lessons', b.lessonId);
+        var stu = l ? S.get('students', l.studentId) : null;
+        if (l) return (stu ? stu.name + ' — ' : '') + (l.topic || 'урок');
+        var item = S.get('desk', b.lessonId);
+        return (item && item.title) || 'моя справа';
+      }
+
+      if (!srv || srv.off) {
+        // немає входу — про це вже сказано вище, другий раз не повторюємо
+      } else if (srv.err) {
+        out += healthRow('off', 'Дошки на сервері перевірити не вдалося',
+          U.esc(srv.err) + '. Поки це так, дошки залишаються лише в цьому браузері.');
+      } else {
+        var known = {};
+        (srv.rows || []).forEach(function (r) { known[r.board_id] = r; });
+        var absent = mineFilled.filter(function (b) { return !known[b.lessonId]; });
+
+        if (absent.length) {
+          out += healthRow('off', U.pl(absent.length, 'дошка не дійшла до сервера',
+              'дошки не дійшли до сервера', 'дошок не дійшли до сервера'),
+            'Вони є тут і нікуди не зникли, але на сервері їх немає — отже, ' +
+            'на іншому пристрої й в учня цих уроків не існує.<br>' +
+            absent.slice(0, 6).map(function (b) { return '· ' + U.esc(boardName(b)); }).join('<br>') +
+            (absent.length > 6 ? '<br>· і ще ' + (absent.length - 6) : '') +
+            '<div class="mt-2"><button class="btn btn--primary btn--sm" data-act="push-boards">' +
+            'Відправити дошки на сервер</button></div>');
+        } else if (bstats && bstats.pending) {
+          out += healthRow('warn', U.pl(bstats.pending, 'дошка чекає на відправку',
+              'дошки чекають на відправку', 'дошок чекають на відправку'),
+            (bstats.why ? U.esc(bstats.why) + '. ' : '') +
+            'Намальоване ціле, поїде саме, щойно буде звʼязок.' +
+            '<div class="mt-2"><button class="btn btn--ghost btn--sm" data-act="push-boards">' +
+            'Спробувати зараз</button></div>');
+        } else {
+          out += healthRow('on', 'Дошки лежать на сервері',
+            U.pl((srv.rows || []).length, 'дошка', 'дошки', 'дошок') +
+            ' на сервері, непорожніх тут — ' + mineFilled.length +
+            '. Вони переживуть цей браузер.');
+        }
+      }
 
       /* 2. Історія дошок — та сама, з якої можна повернути втрачене. */
       var filled = db.boards.filter(function (b) {

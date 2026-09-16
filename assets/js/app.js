@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v76';
+  App.BUILD = 'v77';
   window.APP_BUILD = App.BUILD;
 
   var NAV = [
@@ -556,6 +556,34 @@
         if (ok && !fail) U.toast('Учні бачать свіже: ' + U.pl(ok, 'урок', 'уроки', 'уроків'), 'ok');
         else if (ok) U.toast('Відправлено ' + ok + ', не вийшло ' + fail + ': ' + lastErr, 'err');
         else U.toast('Не вдалося відправити: ' + lastErr, 'err');
+        if (V.fillHealthAsync) V.fillHealthAsync();
+      });
+    },
+
+    /* Відправити на сервер усі дошки, яких там немає.
+
+       Черга й так повторює спроби сама, але коли людина вже побачила, що
+       дошки немає на сервері, чекати наступного повтору вона не повинна. */
+    'push-boards': function (_a, el) {
+      if (!window.BoardSync) return;
+      if (el) { el.disabled = true; el.textContent = 'Відправляю…'; }
+
+      var boards = S.db().boards.filter(function (b) {
+        return (b.slides || []).some(function (sl) { return (sl.items || []).length; });
+      });
+      var ok = 0, fail = 0;
+
+      boards.reduce(function (chain, b) {
+        return chain.then(function () {
+          return BoardSync.push(b.lessonId).then(function (done) {
+            if (done) ok++; else fail++;
+          });
+        });
+      }, Promise.resolve()).then(function () {
+        if (el) { el.disabled = false; el.textContent = 'Відправити дошки на сервер'; }
+        if (ok && !fail) U.toast('На сервері тепер ' + U.pl(ok, 'дошка', 'дошки', 'дошок'), 'ok');
+        else if (ok) U.toast('Відправлено ' + ok + ', не вийшло ' + fail, 'err');
+        else U.toast('Не вдалося відправити жодної дошки', 'err');
         if (V.fillHealthAsync) V.fillHealthAsync();
       });
     },

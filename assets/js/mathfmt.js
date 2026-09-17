@@ -159,11 +159,22 @@
           i = envg.end;
           // у array й tabular далі йде опис стовпців — він тут зайвий
           if (s.charAt(i) === '{') i = readGroup(s, i).end;
+          /* Система рівнянь — з фігурною дужкою ліворуч: без неї два рядки
+             читаються як дві окремі рівності, а не як «одночасно». */
+          var cases = envg.body === 'cases';
           if (name === 'begin' && /cases|array|tabular|matrix|aligned|align|gather/.test(envg.body)) {
-            out += '<span class="mf-rows">';
+            out += cases ? '<span class="mf-cases"><span class="mf-rows">' : '<span class="mf-rows">';
           } else if (name === 'end' && /cases|array|tabular|matrix|aligned|align|gather/.test(envg.body)) {
-            out += '</span>';
+            out += cases ? '</span></span>' : '</span>';
           }
+          continue;
+        }
+
+        /* Вектор: стрілка над позначенням, як у підручнику. */
+        if (name === 'vec' || name === 'overrightarrow') {
+          var vg = readArg(s, i);
+          i = vg.end;
+          out += '<span class="mf-vec">' + parse(vg.body) + '</span>';
           continue;
         }
 
@@ -385,6 +396,9 @@
     var t = String(src == null ? '' : src);
 
     t = t.replace(/\$\$?/g, '');
+    // літеральні фігурні дужки ховаємо, щоб їх не з'їло прибирання груп TeX
+    t = t.replace(/\\\{/g, '').replace(/\\\}/g, '');
+    t = t.replace(/\\(?:vec|overrightarrow)\{([^{}]*)\}/g, '$1⃗');
     t = t.replace(/\\(left|right|displaystyle|textstyle|limits|!)\b/g, '');
     t = t.replace(/\\begin\{[^}]*\}(\{[^}]*\})?/g, '\n').replace(/\\end\{[^}]*\}/g, '\n');
     t = t.replace(/\\\\/g, '\n');
@@ -416,7 +430,8 @@
       return SYM[name] !== undefined ? (SYM[name] || '') : name;
     });
 
-    return t.replace(/[{}]/g, '').replace(/[ \t]{2,}/g, ' ').trim();
+    return t.replace(/[{}]/g, '').replace(//g, '{').replace(//g, '}')
+      .replace(/[ \t]{2,}/g, ' ').trim();
   };
 
   /** Слова навколо формул: екранування плюс перенесення рядків. */

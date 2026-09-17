@@ -2039,6 +2039,7 @@
     // карта буває і в «Карті математики», і в картці учня; без неї — прибирає за собою шухляду
     if (V.mountMathmap) V.mountMathmap(route);
     if (V.mountOlymp && route && route.parts && route.parts[0] === 'olymp') V.mountOlymp();
+    if (V.mountBank && route && route.parts && route.parts[0] === 'bank') V.mountBank();
     if (V.scrollScheduleToWork) V.scrollScheduleToWork();
 
     // курс НБУ потрібен розкладу й фінансам — тягнемо один раз на день

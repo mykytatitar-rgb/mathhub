@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v86';
+  App.BUILD = 'v87';
   window.APP_BUILD = App.BUILD;
 
   var NAV = [
@@ -33,6 +33,9 @@
        не має домішуватися в розклад, фінанси й портали. */
     /* Олімпіадні задачі поруч із картою: вони й прив'язані до її тем,
        і потрібні в той самий момент — коли шукаєш, що дати учневі далі. */
+    /* Банк — усі задачі з усіх джерел, з фільтрами як у каталозі; олімпіади —
+       окремо, бо це підготовка до змагань, а не пошук задачі на тему. */
+    { hash: '#/bank',      icon: 'layers',    label: 'Банк задач' },
     { hash: '#/olymp',     icon: 'trophy',    label: 'Олімпіади' },
     { hash: '#/desk',      icon: 'compass',   label: 'Моє',       count: function () {
         return (S.deskItems() || []).filter(function (d) { return d.status !== 'done'; }).length; } },
@@ -237,6 +240,8 @@
           html = V.mathmap ? V.mathmap(route.query) : ''; break;
         case 'olymp':
           html = V.olymp ? V.olymp(route.query) : ''; break;
+        case 'bank':
+          html = V.bank ? V.bank(route.query) : ''; break;
         case 'settings':
           html = V.settings(); break;
         default:
@@ -778,6 +783,7 @@
   // Дії дошки живуть у views-board.js — підмішуємо їх у спільний диспетчер
   Object.keys(V.boardActions).forEach(function (k) { ACTIONS[k] = V.boardActions[k]; });
   if (V.olympActions) Object.keys(V.olympActions).forEach(function (k) { ACTIONS[k] = V.olympActions[k]; });
+  if (V.bankActions) Object.keys(V.bankActions).forEach(function (k) { ACTIONS[k] = V.bankActions[k]; });
 
   /* ============================================================
      Слухачі

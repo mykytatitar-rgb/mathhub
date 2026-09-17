@@ -195,15 +195,19 @@
 
   function bankRank(p) { return p.bank === 'book' ? 0 : 1; }
 
-  /** Усі задачі — для пошуку по банку. cb(список|null, скільки файлів не дійшло). */
-  O.all = function (cb) {
+  /**
+   * Усі задачі — для пошуку по банку. cb(список|null, скільки файлів не дійшло).
+   * only — лише один банк: вкладка підручників не мусить чекати на олімпіадні
+   * розвʼязання й навпаки.
+   */
+  O.all = function (cb, only) {
     O.ready(function (idx) {
       if (!idx) { cb(null, 0); return; }
 
       var keys = [];
       BANKS.forEach(function (bank) {
         var bi = raw[bank];
-        if (!bi) return;
+        if (!bi || (only && only !== bank)) return;
         Object.keys(bi.domains || {}).forEach(function (d) { keys.push(bank + ':' + d); });
       });
       if (!keys.length) { cb([], 0); return; }
@@ -293,6 +297,55 @@
     return O.LEVELS[O.LEVELS.length - 1];
   }
 
+  /* ============================================================
+     Ранг — одна шкала для всіх задач
+     ============================================================
+
+     Підручник міряє складність кружечком і зірочкою в межах свого класу,
+     олімпіада — етапом. Щоб шукати задачі разом, потрібна одна шкала — і
+     найзрозуміліша з готових у Codewars: 8 кю — найлегше, 1 кю — найважче,
+     кольори ті самі (сірий, жовтий, синій, фіолетовий).
+
+     Підручник: 5–8 клас починається з 8 кю, 9–11 — із 7 кю; середній рівень
+     на ступінь важчий, високий — на два. Олімпіада: шкільний етап — 5 кю,
+     районний — 4, обласний — 3, всеукраїнський — 2, міжнародний — 1. */
+
+  O.RANKS = [
+    { kyu: 8, color: 'white', hint: 'базові шкільні: 5–8 клас' },
+    { kyu: 7, color: 'white', hint: 'шкільні середні або базові 9–11 класу' },
+    { kyu: 6, color: 'yellow', hint: 'складніші шкільні' },
+    { kyu: 5, color: 'yellow', hint: 'високий рівень підручника, шкільний етап олімпіади' },
+    { kyu: 4, color: 'blue', hint: 'районний і міський етапи олімпіади' },
+    { kyu: 3, color: 'blue', hint: 'обласний етап олімпіади' },
+    { kyu: 2, color: 'purple', hint: 'всеукраїнський рівень' },
+    { kyu: 1, color: 'purple', hint: 'міжнародні олімпіади й відбори збірних' }
+  ];
+
+  O.rank = function (p) {
+    if (!p) return 8;
+    if (p._rank) return p._rank;
+    var r;
+    if (p.bank === 'book') {
+      var base = (Number(p.g) || 8) <= 8 ? 8 : 7;
+      r = base - (Math.min(3, Math.max(1, Number(p.d) || 1)) - 1);
+    } else {
+      r = 6 - byNumber(p.d).id;          // шкільний етап (1) → 5 кю, міжнародний (5) → 1 кю
+    }
+    p._rank = Math.max(1, Math.min(8, r));
+    return p._rank;
+  };
+
+  O.rankInfo = function (kyu) {
+    for (var i = 0; i < O.RANKS.length; i++) if (O.RANKS[i].kyu === kyu) return O.RANKS[i];
+    return O.RANKS[0];
+  };
+
+  /** Для кого задача: клас підручника або «олімпіада». */
+  O.gradeKey = function (p) {
+    if (p.bank === 'book') return String(p.g || '');
+    return 'olymp';
+  };
+
   /** Людська назва джерела: змагання або підручник. */
   O.contest = function (key) {
     return (index && index.contests && index.contests[key]) ||
@@ -303,7 +356,29 @@
   O.where = function (p) {
     if (!p) return '';
     var name = O.contest(p.s);
-    return p.bank === 'book' && p.sec ? name + ' · ' + p.sec + ', № ' + p.num : name;
+    if (p.bank !== 'book') return name;
+    return name + (p.sec ? ' · ' + p.sec : '') + ', № ' + p.num;
+  };
+
+  /* Пошук, якому байдуже, як набрано: «х» кирилицею й «x» латиницею —
+     на око та сама змінна, і в самих підручниках трапляються обидві. */
+  var FOLD = { 'а': 'a', 'с': 'c', 'е': 'e', 'о': 'o', 'р': 'p', 'х': 'x', 'у': 'y', 'і': 'i', 'к': 'k', 'ё': 'е' };
+
+  O.fold = function (s) {
+    return String(s || '').toLowerCase()
+      .replace(/\\(frac|sqrt|vec|left|right|begin|end|cases|cdot)\b/g, ' ')
+      .replace(/[{}$^_\\]/g, '')
+      .replace(/[’ʼ']/g, '’')
+      .replace(/[асеорхуікё]/g, function (c) { return FOLD[c]; })
+      .replace(/\s+/g, ' ');
+  };
+
+  /** Рядок, у якому шукаємо: умова, розділ, номер і назва підручника. */
+  O.haystack = function (p) {
+    if (p._hay == null) {
+      p._hay = O.fold(p.p + ' ' + (p.sec || '') + ' ' + (p.ch || '') + ' ' + (p.num || '') + ' ' + O.contest(p.s));
+    }
+    return p._hay;
   };
 
   /** Мова задачі: підручники українською, набори — як указано в покажчику. */

@@ -326,7 +326,7 @@
     if (p._rank) return p._rank;
     var r;
     if (p.bank === 'book') {
-      var base = (Number(p.g) || 8) <= 8 ? 8 : 7;
+      var base = p.g === 'uni' ? 5 : !p.g ? 6 : (Number(p.g) <= 8 ? 8 : 7);
       r = base - (Math.min(3, Math.max(1, Number(p.d) || 1)) - 1);
     } else {
       r = 6 - byNumber(p.d).id;          // шкільний етап (1) → 5 кю, міжнародний (5) → 1 кю
@@ -342,8 +342,8 @@
 
   /** Для кого задача: клас підручника або «олімпіада». */
   O.gradeKey = function (p) {
-    if (p.bank === 'book') return String(p.g || '');
-    return 'olymp';
+    if (p.bank !== 'book') return 'olymp';
+    return String(p.g || 'mix');          // збірник без класу — «Збірники»
   };
 
   /** Людська назва джерела: змагання або підручник. */

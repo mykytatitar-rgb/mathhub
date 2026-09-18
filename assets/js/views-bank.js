@@ -39,7 +39,8 @@
 
   var GRADES = [
     ['5', '5 клас'], ['6', '6 клас'], ['7', '7 клас'], ['8', '8 клас'], ['9', '9 клас'],
-    ['10', '10 клас'], ['11', '11 клас'], ['uni', 'Університет'], ['olymp', 'Олімпіадні']
+    ['10', '10 клас'], ['11', '11 клас'], ['uni', 'Університет'], ['mix', 'Збірники'],
+    ['olymp', 'Олімпіадні']
   ];
   var LANGS = { uk: 'Українська', en: 'English', ru: 'Російська' };
 
@@ -306,8 +307,10 @@
       ? O().contest(p.s) + ' · № ' + p.num
       : O().contest(p.s);
     var meta = [];
+    var book = isBook ? (O().books()[p.s] || {}) : null;
     if (isBook && p.sec) meta.push(U.esc(p.sec));
-    meta.push(isBook ? (p.g ? p.g + ' клас' : '') : 'олімпіада');
+    meta.push(isBook ? (p.g === 'uni' ? 'університет' : p.g ? p.g + ' клас' : 'збірник') : 'олімпіада');
+    if (book && book.ocr) meta.push('розпізнано зі скану — можливі помилки');
     if (p._lang !== 'uk') meta.push(LANGS[p._lang] || p._lang);
 
     return '<div class="card bk-card ol-card" data-ol-id="' + U.esc(p.i) + '" style="--c:' + color + '">' +

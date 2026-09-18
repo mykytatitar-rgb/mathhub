@@ -135,6 +135,84 @@ RULES = [
 ]
 
 
+# Англійські й російські назви розділів — Rosen, Levin, Cambridge, Ширяєв, збірник Гордіна.
+RULES += [
+    # логіка, множини, доведення
+    ('found.statements', r'propositional logic|propositional equivalen|predicates and quantifiers|rules of inference|logic and proofs|логика высказываний', None),
+    ('found.proofs', r'introduction to proofs|proof methods|methods of proof|direct proof', None, 1.3),
+    ('alg.sequences', r'^sequences$|sequences and summations|arithmetic and geometric', None),
+    ('found.induction', r'mathematical induction|strong induction|well.ordering', None, 1.3),
+    ('found.setsschool', r'^sets$|set operations|множеств', None),
+    ('found.relations', r'relations|equivalence relations|partial order|injective|bijection|(?<!со)отношени', None, 1.1),
+    ('found.cardinality', r'cardinality|countable|счетн\w* множеств', None, 1.2),
+    # дискретна
+    ('disc.algorithms', r'algorithms|growth of functions|complexity of algorithms|алгоритм', None),
+    ('disc.counting', r'basics of counting|counting\b|pigeonhole', None),
+    ('disc.combadv', r'pigeonhole|inclusion.exclusion|advanced counting|distributions of objects|принцип дирихле|включени\w* и исключени', None, 1.2),
+    ('disc.combschool', r'permutations and combinations|combinations|перестановк|сочетани|размещени', None),
+    ('disc.binomial', r'binomial coefficients|binomial theorem|binomial expansion', None, 1.2),
+    ('disc.recurrence', r'recurrence relations|recursive|generating functions|рекуррент|производящ\w* функци', None, 1.2),
+    ('disc.graphs', r'graphs?\b|trees?\b|graph models|euler and hamilton|connectivity|graph coloring|planar graphs|граф\w*|дерев\w*', None),
+    ('disc.boolean', r'boolean|logic gates|булев', None, 1.2),
+    ('disc.automata', r'finite.state|automata|turing machines|languages and grammars|grammars', None, 1.2),
+    ('disc.crypto', r'cryptograph|шифр', None, 1.2),
+    # теорія чисел
+    ('nt.modular', r'modular arithmetic|congruences|divisibility and modular', None, 1.1),
+    ('nt.primes', r'primes|greatest common divisors|простые числа', None),
+    ('arith.gcd', r'greatest common divisor|наибольший общий делитель', None),
+    # ймовірність (Ширяєв і Rosen)
+    ('prob.classical', r'discrete probability|probability theory|вероятностн\w* модел|классическ\w* модел|вероятност', None, 0.8),
+    ('prob.conditional', r'bayes|conditional probabilit|условн\w* вероятност|независимост|схема бернулли|бернулли', None, 1.1),
+    ('prob.moments', r'expected value|variance|математическ\w* ожидани|дисперси', None, 1.1),
+    ('prob.rv', r'random variables?|случайн\w* величин|распределени', None),
+    ('prob.limits', r'закон больших чисел|предельн\w* теорем|law of large numbers|central limit|сходимост\w* вероятностн', None, 1.2),
+    ('prob.measureprob', r'интеграл лебега|мер[аы]|сигма.алгебр|σ.алгебр|борелев', None, 1.1),
+    ('prob.markov', r'марковск|markov', None, 1.3),
+    ('prob.processes', r'мартингал|случайн\w* процесс|стационарн|ветвящ', None, 1.2),
+    ('prob.estimation', r'оценивани|оценк\w* вероятност|estimation', None, 1.1),
+    # аналіз і алгебра Cambridge
+    ('alg.quadratic', r'^quadratics$|completing the square', None),
+    ('an.fnconcept', r'^functions$|domain and range|composite functions', None),
+    ('geo.lineeq', r'coordinate geometry|straight lines?|equation of a circle', None),
+    ('an.radian', r'circular measure|radians', None, 1.1),
+    ('an.trigfn', r'^trigonometry$', None),
+    ('alg.sequences', r'^series$|arithmetic progressions?|geometric progressions?', None),
+    ('an.derivative', r'^differentiation$|further differentiation', None),
+    ('an.antiderivative', r'^integration$|further integration', None),
+    ('an.definite', r'further calculus', None),
+    ('an.expfn', r'logarithmic and exponential', None),
+    ('alg.polynomials', r'^algebra$|polynomials?', None),
+    ('alg.ratexpr', r'further algebra|partial fractions', None),
+    ('app.numerical', r'numerical solutions?|iteration', None, 1.2),
+    ('geo.analytic', r'^vectors$', None),
+    ('an.ode1', r'differential equations', None, 1.2),
+    ('alg.matrices', r'matrices|matrix', None),
+    # геометрія російською (збірник Гордіна)
+    ('geo.olympiad', r'геометрическ\w* неравенств|максимум и минимум|олимпиадн', None, 1.2),
+    ('geo.solvetri', r'метрическ\w* соотношени\w* в треугольник', None, 1.4),
+    ('geo.polyhedra', r'элементы правильных|правильн\w* многогранник', None, 1.2),
+    ('geo.transforms', r'геометрическ\w* преобразовани|преобразовани', None, 1.1),
+    ('geo.perp', r'перпендикуляр', None, 1.1),
+    ('geo.axioms', r'прямых и плоскостей|параллельност\w* в пространств', None, 1.2),
+    ('geo.rotation', r'круглые тела', None, 1.2),
+    ('geo.figures', r'вводные задачи', None),
+    ('geo.quads', r'трапеци|прямоугольник|ромб', None),
+    ('geo.similarity', r'средн\w* лини|фалес|подобн|пропорциональн\w* отрезк', None),
+    ('geo.circle', r'касательн|окружност|геометрическ\w* мест|построени', None, 0.9),
+    ('geo.inscribed', r'вписанн\w* угл|центральн\w* угл|вписанн\w* четырехугольник|хорд', None),
+    ('geo.areas', r'площад', None),
+    ('geo.triangles', r'треугольник|признак\w* равенства', None, 0.75),
+    ('geo.angles', r'смежн|вертикальн\w* угл|параллельн\w* прям(?!\w* и плоскост)', None),
+    ('geo.polygons', r'многоугольник|длина окружности|площадь круга', None),
+    ('geo.polyhedra', r'параллелепипед|призм|пирамид|тетраэдр|многогранник|куб\b', None, 0.9),
+    ('geo.rotation', r'цилиндр|конус|\bшар|сфер', None, 0.9),
+    ('geo.volumes', r'объем|площадь поверхност', None, 1.2),
+    ('geo.axioms', r'стереометри|параллельност\w* прям\w* и плоскост|скрещивающ', None),
+    ('geo.perp', r'перпендикулярност\w* прям\w* и плоскост|три перпендикуляр', None, 1.2),
+    ('geo.spaceangles', r'двугранн|угол между прям\w* и плоскост|угол между плоскост', None, 1.3),
+]
+
+
 def _compile(p):
     return re.compile(p.replace(' ', r'\s*'), re.I) if p else None
 
@@ -175,7 +253,7 @@ def scores(point, para, text):
 def classify(point, para, text, subject=None, grade=None):
     """До двох тем карти, найімовірніша перша."""
     s = scores(point, para, text)
-    if grade and grade <= 7:
+    if isinstance(grade, int) and grade <= 7:
         # у 7 класі системи лише лінійні, а комбінаторика — перебір і правила підрахунку
         if 'alg.nonlinsys' in s:
             s['alg.systems'] = max(s.get('alg.systems', 0), s.pop('alg.nonlinsys'))

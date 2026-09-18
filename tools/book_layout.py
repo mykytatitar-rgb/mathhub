@@ -390,8 +390,12 @@ def page_chars(page, cache):
     return chars
 
 
-def page_lines(page, cache=None):
-    """Рядки сторінки: [(y, розмір, текст із формулами)] зверху вниз."""
+def page_lines(page, cache=None, split=None):
+    """Рядки сторінки: [(y, розмір, текст із формулами)] зверху вниз.
+
+    split — межа між колонками, знайдена по всій книжці: на окремій
+    сторінці малюнок може перекрити смугу між стовпцями, і тоді рядки
+    двох колонок склеїлися б в один."""
     cache = {} if cache is None else cache
     chars = page_chars(page, cache)
     if not chars:
@@ -414,6 +418,61 @@ def page_lines(page, cache=None):
         return False
     chars = [c for c in chars + abs_bars(drawings, body, skip) if not in_fig(c)]
 
+    # --- дві колонки: у збірниках задачі набрано двома стовпцями ---
+    cols = [(-1e9, split), (split, 1e9)] if split else detect_columns(chars, page.rect, body)
+    if len(cols) > 1:
+        # колонтитул іде через усю сторінку — його не можна різати навпіл
+        top, bottom = page.rect.height * 0.08, page.rect.height * 0.93
+        head = [c for c in chars if c.y < top or c.y > bottom]
+        chars = [c for c in chars if top <= c.y <= bottom]
+        out = assemble(head, [], [], body) if head else []
+        for lo, hi in cols:
+            part = [c for c in chars if lo <= (c.x0 + c.x1) / 2 < hi]
+            sub = [r for r in roots if lo <= (r[1] + r[3]) / 2 < hi]
+            bars = [b for b in fraction_bars(drawings, body, skip) if lo <= (b[0] + b[1]) / 2 < hi]
+            out += assemble(part, bars, sub, body)
+        return out
+    return assemble(chars, fraction_bars(drawings, body, skip), roots, body)
+
+
+def detect_columns(chars, rect, body):
+    """Чи сторінка в дві колонки — і де між ними порожня смуга.
+
+    У збірниках задачі набрано двома колонками, і прочитані рядком вони
+    злипаються: «Найдите периметр отсеченного тре­ лельна общей хорде».
+    Колонки шукаємо за порожньою вертикальною смугою посередині."""
+    if len(chars) < 80:
+        return [(-1e9, 1e9)]
+    lo, hi = rect.width * 0.32, rect.width * 0.68
+    top, bottom = rect.height * 0.08, rect.height * 0.93
+    step = 2.0
+    n = int((hi - lo) / step) + 1
+    cover = [0] * n
+    body_chars = [c for c in chars if top <= c.y <= bottom]
+    if len(body_chars) < 60:
+        return [(-1e9, 1e9)]
+    for c in body_chars:
+        i0 = int((c.x0 - lo) / step)
+        i1 = int((c.x1 - lo) / step)
+        for i in range(max(0, i0), min(n - 1, i1) + 1):
+            cover[i] += 1
+    best = run = 0
+    best_end = -1
+    for i in range(n):
+        run = run + 1 if cover[i] == 0 else 0
+        if run > best:
+            best, best_end = run, i
+    if best * step < max(9.0, body * 1.1):
+        return [(-1e9, 1e9)]
+    mid = lo + (best_end - best / 2 + 0.5) * step
+    left = sum(1 for c in body_chars if (c.x0 + c.x1) / 2 < mid)
+    if left < len(body_chars) * 0.3 or left > len(body_chars) * 0.7:
+        return [(-1e9, 1e9)]
+    return [(-1e9, mid), (mid, 1e9)]
+
+
+def assemble(chars, bars, roots, body):
+    """Символи однієї колонки — у рядки з формулами."""
     # --- стрілки векторів: мітимо букви під ними ---
     arrows = sorted([c for c in chars if c.text == 'VEC'], key=lambda c: (c.y, c.x0))
     chars = [c for c in chars if c.text != 'VEC']
@@ -463,7 +522,7 @@ def page_lines(page, cache=None):
     # --- дроби й корені: від найвужчих до найширших, щоб вкладені склалися першими ---
     used = set()
     tokens = []
-    structs = [('frac', b[1] - b[0], b) for b in fraction_bars(drawings, body, skip)]
+    structs = [('frac', b[1] - b[0], b) for b in bars]
     structs += [('root', r[3] - r[1], r) for r in roots]
     for kind, _, st in sorted(structs, key=lambda s: s[1]):
         pool = [c for c in chars + tokens if id(c) not in used]

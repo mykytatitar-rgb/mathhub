@@ -99,6 +99,27 @@ class Words:
         return ' '.join(parts) if len(parts) > 1 and known else token
 
 
+# Латинські літери, якими розпізнавання сканів підміняє кирилицю:
+# «nостроить» — це «построить», курсивна «п» схожа на латинську «n».
+OCR_LAT = {'a': 'а', 'c': 'с', 'e': 'е', 'o': 'о', 'p': 'р', 'x': 'х', 'y': 'у', 'i': 'і',
+           'n': 'п', 'u': 'и', 'k': 'к', 'm': 'м', 'g': 'д', 'A': 'А', 'B': 'В', 'C': 'С',
+           'E': 'Е', 'H': 'Н', 'K': 'К', 'M': 'М', 'O': 'О', 'P': 'Р', 'T': 'Т', 'X': 'Х', 'Y': 'У'}
+OCR_WORD = re.compile(r'[A-Za-z]*[А-Яа-яІіЇїЄєҐґЁё][A-Za-zА-Яа-яІіЇїЄєҐґЁё]*')
+
+
+def ocr_fix(text):
+    """Прибрати найчастіші помилки розпізнавання зі сканованої книжки."""
+    def word(m):
+        w = m.group(0)
+        if not re.search(r'[A-Za-z]', w):
+            return w
+        return ''.join(OCR_LAT.get(ch, ch) if ch in OCR_LAT else ch for ch in w)
+    text = OCR_WORD.sub(word, text)
+    text = re.sub(r'(?<=[а-яіїєґ])(?=[А-ЯІЇЄҐ][а-яіїєґ])', ' ', text)   # «точкахАм» → «точках Ам»
+    text = re.sub(r'L\s*(?=[A-ZА-Я]{2,4})', '∠', text)             # «L АОВ» → «∠АОВ»
+    return re.sub(r'[ 	]{2,}', ' ', text)
+
+
 LAT2CYR = {'a': 'а', 'c': 'с', 'e': 'е', 'o': 'о', 'p': 'р', 'x': 'х', 'y': 'у', 'i': 'і',
            'A': 'А', 'C': 'С', 'E': 'Е', 'O': 'О', 'P': 'Р', 'X': 'Х', 'B': 'В', 'H': 'Н', 'K': 'К', 'M': 'М', 'T': 'Т'}
 
@@ -114,7 +135,7 @@ def clean_section(t, words):
                lambda m: LAT2CYR[m.group(0)], t)
     t = re.sub(r'\s+', ' ', t).strip(' .,;')
     t = re.sub(r'^§\s*(\d+)\s*\.?\s*', r'§ \1. ', t)
-    t = re.sub(r'^(\d+)\.\s*', r'\1. ', t)
+    t = re.sub(r'^(\d+)\.\s*(?=\D)', r'\1. ', t)       # «1.8 Proof» лишається «1.8 Proof»
     t = re.sub(r'(?<=[А-Яа-яІіЇїЄєҐґ])(?=\d)|(?<=\d)(?=[А-Яа-яІіЇїЄєҐґ])', ' ', t)
     t = re.sub(r'[А-Яа-яІіЇїЄєҐґ’\']+', lambda m: words.split(m.group(0)), t)
     # перша літера назви — велика
@@ -144,6 +165,24 @@ def usable(p):
     if frac_mess >= 2:
         return False
     return True
+
+
+def answer_of(t, book):
+    """Відповідь, якщо їй можна вірити.
+
+    У сканованих збірниках відповіді набрано стовпчиком дробів, і
+    розпізнавання ріже їх на шматки: «9 2 .» замість «9/2». Такі краще не
+    показувати зовсім."""
+    a = tidy(t.get('a') or '')
+    if not a:
+        return ''
+    if book.get('ocr'):
+        a = ocr_fix(a)
+        if len(a) > 120 or len(re.findall(r'[A-Za-zʒɤ£§]', a)) > 2:
+            return ''
+        if re.fullmatch(r'[\d\s.,]{1,12}', a) and len(a.split()) > 1:
+            return ''                 # «9 2 .» — це був дріб
+    return a
 
 
 def tidy(p):
@@ -196,13 +235,36 @@ def main():
         bid = b['id']
         seen = set()
         count = 0
+        # у кожному розділі нумерація знову з 1 — тоді ключ задачі ще й сторінка
+        nums = [t['n'] for t in raws[bid]['tasks']]
+        restarts = len(set(nums)) < len(nums) * 0.95
         answered = 0
         sections = []
+        chap_no = None
         for t in raws[bid]['tasks']:
-            if t['n'] in seen:
+            if b.get('chapters'):
+                # «EXERCISE 5C» — вправа розділу 5; огляд у кінці розділу — того самого
+                mc = re.search(r'EXERCISE\s+(\d{1,2})[A-Z]', t.get('para', '') + ' ' + t.get('point', ''))
+                if mc:
+                    chap_no = mc.group(1)
+                if chap_no and chap_no in b['chapters']:
+                    ex = (t.get('para') or '').strip().title()
+                    t = dict(t, point=chap_no + '. ' + b['chapters'][chap_no], para=ex)
+            key = (t.get('page'), t['n']) if restarts else t['n']
+            if key in seen:
                 continue
-            seen.add(t['n'])
+            seen.add(key)
             p = tidy(t['p'])
+            if re.search(r'contents|notice to teachers|preface|передмова|зміст|содержание|сведени', 
+                         (t.get('para') or '') + ' ' + (t.get('point') or ''), re.I):
+                dropped[bid] += 1
+                continue
+            if b.get('ocr'):
+                p = ocr_fix(p)
+                # слово на 19+ літер у задачі з геометрії — це склеєні дві колонки
+                if re.search(r'[А-Яа-яЁё]{19,}', p):
+                    dropped[bid] += 1
+                    continue
             if not usable(p):
                 dropped[bid] += 1
                 continue
@@ -213,23 +275,26 @@ def main():
                     r'повторенн|головне в|дружимо з|проєктна|проектна|відомості з курсу|предметний покажчик', para, re.I):
                 point = ''          # розділ повторення: пункт, що лишився з попередніх сторінок, уже не про те
             tops = [x for x in book_classify.classify(point, para, p, b['subject'], b['grade']) if x in known]
+            if not tops and b.get('fallback') in known:
+                tops = [b['fallback']]
             if not tops:
                 unclassified[bid] += 1
             dom = known[tops[0]]['dom'] if tops else SUBJECT_DOMAIN.get(b['subject'], 'alg')
+            grade = b.get('grade')
             sec = point or para
             if sec and sec not in sections:
                 sections.append(sec)
             item = {
-                'i': bid + '-' + t['n'],
+                'i': bid + '-' + (('p%s-' % t.get('page')) if restarts else '') + t['n'],
                 'p': p,
-                'a': tidy(t.get('a') or ''),
+                'a': answer_of(t, b),
                 'd': t.get('lvl', 1),
                 's': bid,
                 'sec': sec,
                 'num': t['n'],
                 't': tops,
                 'n': len(tops),
-                'g': b['grade'],
+                'g': grade,
                 'pg': t.get('page')
             }
             if para and point:
@@ -243,7 +308,8 @@ def main():
         canonical_sections(bid, by_domain)
         books[bid] = {
             'title': b['title'], 'year': b.get('year'), 'lang': b.get('lang', 'uk'),
-            'grade': b['grade'], 'subject': b['subject'], 'count': count, 'answered': answered,
+            'grade': b.get('grade'), 'subject': b['subject'], 'count': count, 'answered': answered,
+            'ocr': bool(b.get('ocr')),
             'note': 'Задачі витягнуто з електронного видання для власного викладання.'
         }
         print('%-6s задач %4d, з відповіддю %4d, без теми %3d, відкинуто %3d' % (
@@ -287,7 +353,7 @@ def main():
         if f.endswith('.json'):
             os.remove(os.path.join(OUT, f))
     for dom, items in by_domain.items():
-        items.sort(key=lambda x: (x['g'], x['s'], x['pg'] or 0))
+        items.sort(key=lambda x: (grade_num(x['g']), x['s'], x['pg'] or 0))
         write(os.path.join(OUT, dom + '.json'), items)
 
     write(os.path.join(OUT, 'index.json'), {
@@ -303,6 +369,13 @@ def main():
           '| відкинуто:', sum(dropped.values()))
 
 
+def grade_num(g):
+    """Порядок класів: 7, 8, …, 11, університет, збірники без класу."""
+    if isinstance(g, int):
+        return g
+    return 12 if g == 'uni' else 13
+
+
 def canonical_sections(bid, by_domain):
     """Один розділ — одна назва.
 
@@ -312,20 +385,30 @@ def canonical_sections(bid, by_domain):
     варіант: з пробілами між словами й без зайвих чисел."""
     items = [x for lst in by_domain.values() for x in lst if x['s'] == bid]
     variants = {}
+
+    def key_of(sec):
+        # номер розділу + початок першого слова: «2. Признаки…» і «2. Перпендикуляр…»
+        # у збірнику — різні розділи (планіметрія й стереометрія нумеруються окремо)
+        m = re.match(r'^(§\s*\d+|\d+\.\d+|\d+)(?=[.\s])', sec or '')
+        if not m:
+            return None
+        w = re.sub(r'[^a-zа-яіїєґё]', '', (sec[m.end():] or '').lower())
+        return m.group(1) + ':' + w[:3]
+
     for x in items:
-        m = re.match(r'^(§\s*\d+|\d+)\.', x['sec'] or '')
-        if m:
-            variants.setdefault(m.group(1), Counter())[x['sec']] += 1
+        k = key_of(x['sec'])
+        if k:
+            variants.setdefault(k, Counter())[x['sec']] += 1
 
     def score(title):
-        rest = re.sub(r'^(§\s*\d+|\d+)\.', '', title)
+        rest = re.sub(r'^(§\s*\d+|\d+\.\d+|\d+)\.?', '', title)
         return rest.count(' ') - 4 * len(re.findall(r'\d', rest)) - (3 if re.search(r'\w{18,}', rest) else 0)
 
     best = {k: max(v, key=lambda t: (score(t), v[t])) for k, v in variants.items()}
     for x in items:
-        m = re.match(r'^(§\s*\d+|\d+)\.', x['sec'] or '')
-        if m:
-            x['sec'] = best[m.group(1)]
+        k = key_of(x['sec'])
+        if k:
+            x['sec'] = best[k]
 
 
 def write(path, data):

@@ -167,6 +167,43 @@ def usable(p):
     return True
 
 
+SHORT_OK = set('і й в у з а о та як до на за по зі із що не чи то це є ми ви він a an of to in is on at by or if be as it the and for x y z n m k p q'.split())
+
+
+def ocr_junk(p):
+    """Частка «сміттєвих» слів у розпізнаному тексті.
+
+    Tesseract не знає формул: «x² − 4» стає «х" - 4», дріб — трьома рядками
+    цифр. Такі задачі показувати не можна. Рахуємо слова, що не схожі ні на
+    слово, ні на число, ні на позначення точки чи відрізка."""
+    words = re.findall(r'\S+', p)
+    if not words:
+        return 1.0
+    bad = 0
+    for w in words:
+        core = w.strip('.,;:!?()«»"“”\'')
+        if not core:
+            continue
+        if re.fullmatch(r"[А-ЯІЇЄҐЁа-яіїєґё’'-]{3,}", core):      # звичайне слово
+            continue
+        if re.fullmatch(r'[A-Za-z]{3,}', core):                   # англійське слово
+            continue
+        if core.lower() in SHORT_OK:
+            continue
+        if re.fullmatch(r'\d+([.,]\d+)?(°|%|см|м|кг|грн)?', core):  # число
+            continue
+        if re.fullmatch(r'[A-ZА-ЯІ]{1,4}\d?', core):               # точка, відрізок, кут: A, AB, ABCD, A1
+            continue
+        if re.fullmatch(r'\d{1,2}\)', core):                       # пункт «1)»
+            continue
+        if re.fullmatch(r'[=+−–<>≤≥∠°:/]|\|\||[|⊥∥]', core):
+            continue
+        if re.fullmatch(r'[A-ZА-ЯІ]{1,4}\s*[=<>]\s*\d+([.,]\d+)?', core):   # «BD=8»
+            continue
+        bad += 1
+    return bad / len(words)
+
+
 def answer_of(t, book):
     """Відповідь, якщо їй можна вірити.
 
@@ -261,6 +298,12 @@ def main():
                 continue
             if b.get('ocr'):
                 p = ocr_fix(p)
+                if b.get('scan'):
+                    p = re.sub(r'^\d\s+(?=[А-ЯІЇЄҐA-Z])', '', p)       # «7 Побудуйте» — це була позначка рівня
+                    p = re.sub(r'(?<![A-Za-zА-Яа-я])Z(?=[A-ZА-Я]{3})', '∠', p)  # «ZCAD» → «∠CAD»
+                    if ocr_junk(p) > 0.25:
+                        dropped[bid] += 1
+                        continue
                 # слово на 19+ літер у задачі з геометрії — це склеєні дві колонки
                 if re.search(r'[А-Яа-яЁё]{19,}', p):
                     dropped[bid] += 1
@@ -324,29 +367,38 @@ def main():
             continue
         bid = book['id']
         n0 = total
+        answered = 0
         for sec in book['sections']:
-            tops = [t for t in sec['topics'] if t in known]
-            if not tops:
-                continue
-            dom = known[tops[0]]['dom']
             for task in sec['tasks']:
-                add({
+                # тема може стояти й при самій задачі: у варіанті НМТ кожна — про своє
+                tops = [t for t in (task.get('topics') or sec['topics']) if t in known]
+                if not tops:
+                    continue
+                lvl = task.get('lvl')
+                d = lvl if isinstance(lvl, int) else book.get('levels', {}).get(lvl, 1)
+                item = {
                     'i': bid + '-' + str(task['n']),
                     'p': task['p'].strip(),
                     'a': (task.get('a') or '').strip(),
-                    'd': book.get('levels', {}).get(task.get('lvl'), 1),
+                    'd': d,
                     's': bid,
-                    'sec': '§ ' + str(sec['num']) + '. ' + sec['title'],
+                    'sec': ('§ ' if book.get('paragraphs', True) and 'title' in sec and not book.get('plain') else '') +
+                           str(sec['num']) + '. ' + sec['title'],
                     'num': str(task['n']),
                     't': tops,
                     'n': len(tops),
                     'g': book.get('grade', 8),
-                    'pg': sec.get('page')
-                }, dom)
+                    'pg': task.get('page') or sec.get('page')
+                }
+                if task.get('img'):
+                    item['img'] = task['img']       # рисунок — assets/data/book/img/
+                if item['a']:
+                    answered += 1
+                add(item, known[tops[0]]['dom'])
         books[bid] = {
             'title': book['title'], 'year': book.get('year'), 'lang': book.get('lang', 'uk'),
             'grade': book.get('grade', 8), 'subject': book.get('subject', 'alg'),
-            'count': total - n0, 'answered': 0, 'note': book.get('note', '')
+            'count': total - n0, 'answered': answered, 'note': book.get('note', '')
         }
 
     for f in os.listdir(OUT):

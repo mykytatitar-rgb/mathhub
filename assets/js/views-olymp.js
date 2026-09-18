@@ -294,7 +294,8 @@
           'title="Покласти на дошку уроку">' + icon('present', 16) + '</button>' +
       '</div>' +
       '<div class="ol-card__p">' + fmt(p.p) + '</div>' +
-      (p.f ? '<div class="ol-fig">' + (p.bank === 'book'
+      (p.img ? '<img class="bk-img" src="assets/data/book/img/' + U.esc(p.img) + '" alt="Рисунок до задачі" loading="lazy">' : '') +
+      (p.f && !p.img ? '<div class="ol-fig">' + (p.bank === 'book'
         ? 'До задачі є рисунок — він у підручнику' + (p.pg ? ' на с. ' + p.pg + ' файлу' : '') + '.'
         : 'В умові був рисунок — його в наборі немає.') + '</div>' : '') +
       '<div class="ol-card__bot">' +
@@ -370,6 +371,7 @@
       sub: lvl.name + ' рівень · ' + lvl.hint,
       body: '<div class="ol-dialog">' +
           '<div class="ol-card__p">' + fmt(p.p) + '</div>' +
+          (p.img ? '<img class="bk-img" src="assets/data/book/img/' + U.esc(p.img) + '" alt="Рисунок до задачі" loading="lazy">' : '') +
           (p.a ? '<div class="ol-answer"><b>Відповідь:</b> ' + fmt(p.a) + '</div>' : '') +
           (O().hasSolution(p)
             ? '<div class="ol-sol" data-ol-dlg-sol><button class="btn btn--soft btn--sm" ' +

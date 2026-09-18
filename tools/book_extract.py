@@ -25,13 +25,14 @@ import pymupdf
 sys.path.insert(0, __file__.rsplit('\\', 1)[0] if '\\' in __file__ else __file__.rsplit('/', 1)[0])
 from book_layout import page_lines  # noqa: E402
 
-MARK = r'(?:\$\s*)?(?:\^\{)?\s*([°•∙*∗]{1,2})\s*\}?(?:\s*\$)?'
+MARK = r'(?:\$\s*)?(?:\^\{)?\s*([°•∙*∗"”“]{1,2})\s*\}?(?:\s*\$)?'
 # позначка рівня стоїть і після номера, і перед крапкою: «5.12.°» та «413°.»
 START2 = re.compile(r'^\s*(\d{1,2})\.(\d{1,3})\s*(?:' + MARK + r')?\s*\.\s*(?:' + MARK + r')?\s*(?=\S)')
 START1 = re.compile(r'^\s*(\d{1,4})\s*(?:' + MARK + r')?\s*\.\s*(?:' + MARK + r')?\s*(?=\S)')
 # В англійських книжках номер вправи без крапки: «1 Solve the equation».
 START3 = re.compile(r'^\s*(\d{1,3})\s+(?=[A-Za-zА-ЯІЇЄҐ(\$])')
-LEVEL = {'°': 1, '•': 2, '∙': 2, '••': 3, '∙∙': 3, '*': 3, '∗': 3, '**': 3}
+LEVEL = {'°': 1, '•': 2, '∙': 2, '••': 3, '∙∙': 3, '*': 3, '∗': 3, '**': 3,
+         '"': 2, '”': 2, '“': 2, '""': 3, '””': 3}
 PARA = re.compile(r'§\s*(\d+)\.?\s*(.+)')
 POINT = re.compile(r'^(\d{1,2})\.\s+(\S.+)')
 ANSWERS = re.compile(r'^\s*(ВІДПОВІДІ|Відповіді|ОТВЕТЫ|Ответы)(\s+(?i:та|до|і|и)\s+[а-яіїєґА-ЯІЇЄҐ ]+)?\s*$'
@@ -97,7 +98,7 @@ def join_rows(a, b):
     return a + ' ' + b
 
 
-def book_split(doc, first, last, cache):
+def book_split(doc, first, last, cache, raws=None):
     """Межа між колонками, спільна для всієї книжки.
 
     Дивимося на два десятки сторінок: якщо більшість каже, що сторінка у
@@ -108,7 +109,7 @@ def book_split(doc, first, last, cache):
     step = max(1, (last - first) // 20)
     for pno in range(first - 1, last, step):
         page = doc[pno]
-        chars = L.page_chars(page, cache)
+        chars = L.page_chars(page, cache, raws(pno) if raws else None)
         if len(chars) < 80:
             continue
         body = [c for c in chars if c.text.strip() and not c.math]
@@ -131,12 +132,13 @@ def book_split(doc, first, last, cache):
     return mid
 
 
-def read_rows(doc, first, last):
+def read_rows(doc, first, last, raws=None):
+    """raws(номер) — розпізнаний текст сторінки для скану (див. book_ocr.py)."""
     cache = {}
-    split = book_split(doc, first, last, cache)
+    split = book_split(doc, first, last, cache, raws)
     for pno in range(first - 1, last):
         page = doc[pno]
-        rows = [(y, s, _clean_start(t)) for y, s, t in page_lines(page, cache, split)]
+        rows = [(y, s, _clean_start(t)) for y, s, t in page_lines(page, cache, split, raws(pno) if raws else None)]
         if not rows:
             continue
         sizes = [r[1] for r in rows]
@@ -220,11 +222,17 @@ def choose_numbering(pages, start_re, mode):
     return chosen
 
 
-def extract(path, first=1, last=None, force_mode=None):
+def extract(path, first=1, last=None, force_mode=None, scan=None):
     doc = pymupdf.open(path)
     last = min(last or doc.page_count, doc.page_count)
 
-    pages = list(read_rows(doc, first, last))
+    raws = None
+    if scan:
+        # скан: текст сторінок — із розпізнавання (кеш book_ocr.py)
+        import book_ocr
+        book_id, lang = scan
+        raws = lambda pno: book_ocr.load(book_id, path, pno, lang)
+    pages = list(read_rows(doc, first, last, raws))
 
     # Яка нумерація в книжці: «14.1.», «245.» чи «1 Solve…»
     two = one = three = 0

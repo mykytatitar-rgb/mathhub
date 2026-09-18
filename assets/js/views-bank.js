@@ -326,7 +326,8 @@
           icon('present', 16) + '</button>' +
       '</div>' +
       '<div class="ol-card__p">' + fmt(p.p) + '</div>' +
-      (p.f ? '<div class="ol-fig">' + (isBook
+      (p.img ? '<img class="bk-img" src="assets/data/book/img/' + U.esc(p.img) + '" alt="Рисунок до задачі" loading="lazy">' : '') +
+      (p.f && !p.img ? '<div class="ol-fig">' + (isBook
         ? 'До задачі є рисунок — він у підручнику' + (p.pg ? ' (с. ' + p.pg + ' файлу)' : '') + '.'
         : 'В умові був рисунок — його в наборі немає.') + '</div>' : '') +
       '<div class="ol-card__bot">' +

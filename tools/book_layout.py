@@ -346,11 +346,11 @@ def _gids(page):
     return out
 
 
-def page_chars(page, cache):
+def page_chars(page, cache, raw=None):
     """Символи сторінки з розшифрованими знаками формул."""
     chars = []
     gids = None
-    for b in page.get_text('rawdict')['blocks']:
+    for b in (raw or page.get_text('rawdict'))['blocks']:
         if b.get('type') != 0:
             continue
         for l in b['lines']:
@@ -390,14 +390,14 @@ def page_chars(page, cache):
     return chars
 
 
-def page_lines(page, cache=None, split=None):
+def page_lines(page, cache=None, split=None, raw=None):
     """Рядки сторінки: [(y, розмір, текст із формулами)] зверху вниз.
 
     split — межа між колонками, знайдена по всій книжці: на окремій
     сторінці малюнок може перекрити смугу між стовпцями, і тоді рядки
     двох колонок склеїлися б в один."""
     cache = {} if cache is None else cache
-    chars = page_chars(page, cache)
+    chars = page_chars(page, cache, raw)
     if not chars:
         return []
 

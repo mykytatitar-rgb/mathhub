@@ -18,3 +18,4 @@ mathhub-site.zip
 # Сирі витяги з підручників: повні тексти книжок, лише для збірки банку
 tools/books/raw/
 tools/__pycache__/
+tools/books/ocr/

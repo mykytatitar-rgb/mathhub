@@ -293,6 +293,9 @@
   function syncedJSON() { return withoutRecords(localJSON()); }
 
   function localJSON() {
+    /* Браузер не прийняв останній запис — у сховищі давнє, а свіже лише в
+       пам'яті. Тоді на сервер веземо пам'ять: інакше зміни зникли б. */
+    if (window.S && S.lastSaveFailed && S.lastSaveFailed() && S.db()) return S.docJSON();
     try {
       var raw = localStorage.getItem(DB_KEY);
       if (raw) return raw;
@@ -1102,7 +1105,7 @@
         return pull().then(function (row) {
           if (!row) { setState('error', 'Не вдалося зберегти'); return; }
           return adopt(row).then(function () {
-            U.toast('На цьому пристрої були давніші дані — підтягнуто повні з сервера', 'ok');
+            console.info('На цьому пристрої були давніші дані — підтягнуто повні з сервера');
           });
         });
       }
@@ -1188,7 +1191,7 @@
           meta.rev = row.rev;
           saveMeta();
           return push().then(function () {
-            U.toast('На сервері було менше (' + loss + ') — залишено дані з цього пристрою', 'ok');
+            console.info('На сервері було менше (' + loss + ') — залишено дані з цього пристрою');
           });
         }
 
@@ -1196,7 +1199,7 @@
           meta.rev = row.rev;         // підганяємось під серверну нумерацію
           saveMeta();
           return push().then(function () {
-            U.toast('Залишено новішу версію — з цього пристрою', 'ok');
+            console.info('Залишено новішу версію — з цього пристрою');
           });
         }
         var wasTruncated = mineChanged && localIsNewer(row) &&
@@ -1206,14 +1209,14 @@
             /* Найнебезпечніший випадок: на пристрої лежали давні дані, і за
                часом він виглядав новішим. Кажемо прямо, бо людина щойно
                бачила менше учнів, ніж має бути. */
-            U.toast('На цьому пристрої були давніші дані — підтягнуто повні з сервера', 'ok');
+            console.info('На цьому пристрої були давніші дані — підтягнуто повні з сервера');
             return;
           }
           if (!mineChanged) return;
           // не називаємо пристрій, якщо це той самий, за яким людина сидить —
           // «взято версію з Windows / Chrome» на Windows / Chrome тільки збиває
           var from = (row.device && row.device !== deviceName()) ? row.device : 'іншого пристрою';
-          U.toast('Взято новішу версію з ' + from, 'ok');
+          console.info('Взято новішу версію з ' + from);
         });
       }
 
@@ -1344,7 +1347,7 @@
       if (keep === 'remote') {
         if (!row) { setState('idle'); return; }
         return adopt(row).then(function () {
-          U.toast('Взято версію з сервера', 'ok');
+          console.info('Взято версію з сервера');
         });
       }
       // залишаємо локальне: підганяємо номер версії під серверний і перезаписуємо
@@ -1352,7 +1355,7 @@
       meta.hash = 0;
       saveMeta();
       return push().then(function () {
-        U.toast('Залишено версію з цього пристрою', 'ok');
+        console.info('Залишено версію з цього пристрою');
       });
     }).catch(function (e) {
       setState('error', e.message);
@@ -1545,6 +1548,7 @@
        чи має вона куди писати, і людина має дізнатися про це одразу, а не
        після того, як попрацює годину. */
     var version = checkVersion();
+    if (!Cloud._versionTimer) Cloud._versionTimer = setInterval(checkVersion, 30 * 60 * 1000);
 
     if (!Cloud.available()) { setState('off'); return; }
     if (!Cloud.signedIn()) { setState('signedout'); return; }

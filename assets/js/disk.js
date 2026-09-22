@@ -183,7 +183,7 @@
          дошки вважаємо непрочитаними: краще їх не показати, ніж затерти. */
       broken = true;
       finish();
-      if (window.U && U.toast) U.toast('Сховище браузера не відповідає — дошки не прочиталися. Перезавантажте сторінку.', 'err');
+      console.warn('Disk: IndexedDB не відповідає — дошки не прочиталися, запис дошок зупинено');
     }, 8000);
 
     open().then(function (db) {
@@ -224,9 +224,7 @@
       if (!moved) { startFallback(e && e.message); return; }
       broken = true;
       finish();
-      if (window.U && U.toast) {
-        U.toast('Сховище браузера недоступне, дошки не прочиталися. Перезавантажте сторінку.', 'err');
-      }
+      console.warn('Disk: IndexedDB недоступний — дошки не прочиталися, запис дошок зупинено');
     });
   }
 

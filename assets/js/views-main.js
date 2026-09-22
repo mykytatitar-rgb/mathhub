@@ -1166,6 +1166,22 @@
       '<span class="small">' + U.esc(pair[1] + extra) + '</span>';
   };
 
+  /* Акаунт — одна картка на видноті. Як у Miro: людина бачить, що вона
+     увійшла й що все зберігається саме, і більше про це не думає. */
+  V.accountCard = function () {
+    var Cl = window.Cloud;
+    if (!Cl || !Cl.available() || !Cl.signedIn()) return V.syncCard();   // форма входу
+    var st = Cl.status();
+    return '<div class="card">' +
+      '<div class="card-head"><div><h3 class="card-title">Акаунт</h3>' +
+      '<div class="card-sub">усе зберігається на сервері саме</div></div></div>' +
+      '<div class="guard guard--on"><span class="guard__dot"></span><span>Ви увійшли як <b>' +
+        U.esc(st.email || '') + '</b>. Учні, розклад, дошки й задачі лежать на сервері й однакові ' +
+        'на всіх пристроях — нічого зберігати чи синхронізувати не треба.</span></div>' +
+      '<div class="row mt-2"><button class="btn btn--ghost btn--sm" data-act="sync-signout">Вийти</button></div>' +
+      '</div>';
+  };
+
   V.syncCard = function () {
     var Cl = window.Cloud;
     var head = '<div class="card-head"><div><h3 class="card-title">Синхронізація</h3>' +
@@ -1184,7 +1200,9 @@
 
     /* Налаштована, але вхід не зроблено */
     if (!Cl.signedIn()) {
-      return '<div class="card">' + head +
+      return '<div class="card">' +
+        '<div class="card-head"><div><h3 class="card-title">Вхід у кабінет</h3>' +
+        '<div class="card-sub">один раз — і все зберігається на сервері саме, на всіх пристроях</div></div></div>' +
         '<div class="row" style="gap:8px;margin-bottom:12px">' + V.syncStatusHtml() + '</div>' +
         '<div id="sync-form">' +
           C.field('Пошта', C.input('email', '', 'type="email" autocomplete="username" placeholder="ваша@пошта"')) +
@@ -1905,60 +1923,67 @@
               'або файл відкрито напряму з диска — використовується курс, введений тут вручну.</div>' +
             '</div>';
           })() +
-          V.syncCard() +
+          V.accountCard() +
+          V.telegramCard() +
+          V.calendarCard() +
 
-          '<div class="card">' +
-            '<div class="card-head"><div><h3 class="card-title">Дані</h3>' +
-            '<div class="card-sub">' + (syncOn()
+          /* Технічне — згорнуто. Кабінет має працювати як Miro: відкрив і
+             працюєш, про збереження й синхронізацію не думаєш. Усе нижче
+             потрібне лише тоді, коли щось пішло не так. */
+          '<details class="tech-zone">' +
+            '<summary>Технічне — знадобиться, лише якщо щось піде не так</summary>' +
+            (window.Cloud && Cloud.available() && Cloud.signedIn() ? V.syncCard() : '') +
+            '<div class="card">' +
+              '<div class="card-head"><div><h3 class="card-title">Дані</h3>' +
+              '<div class="card-sub">' + (syncOn()
               ? 'копії робляться самі, ця кнопка — про запас'
               : 'усе зберігається лише у вашому браузері') + '</div></div></div>' +
-            '<div class="row row--wrap" style="gap:10px">' +
-              '<button class="btn btn--soft" data-act="export">' + icon('download', 16) + 'Експорт у файл</button>' +
-              '<button class="btn btn--ghost" data-act="import">' + icon('upload', 16) + 'Імпорт з файлу</button>' +
-            '</div>' +
-            '<div class="field__hint mt-2">' + (syncOn()
+              '<div class="row row--wrap" style="gap:10px">' +
+                '<button class="btn btn--soft" data-act="export">' + icon('download', 16) + 'Експорт у файл</button>' +
+                '<button class="btn btn--ghost" data-act="import">' + icon('upload', 16) + 'Імпорт з файлу</button>' +
+              '</div>' +
+              '<div class="field__hint mt-2">' + (syncOn()
               ? 'Синхронізація вже тримає історію версій на сервері, тому щотижневий експорт більше не обов\'язковий. Файл усе одно корисний: він єдиний працює, коли сервер недоступний, і забирає картинки дошок, яких у синхронізації поки немає.'
               : 'Резервну копію варто робити раз на тиждень. Файл JSON можна перенести на інший комп\'ютер або в інший браузер.') + '</div>' +
             /* Копії в браузері й стан закріплення сховища. Тут, а не всередині
                синхронізації: вони працюють і без входу, і саме сюди людина
                йде, коли щось зникло. */
-            '<div class="mt-2" data-vault></div>' +
-          '</div>' +
+              '<div class="mt-2" data-vault></div>' +
+            '</div>' +
 
-          V.healthCard() +
-          V.telegramCard() +
-          V.calendarCard() +
+            V.healthCard() +
 
-          '<div class="card">' +
-            '<div class="card-head"><div><h3 class="card-title">Що зараз у базі</h3></div></div>' +
-            '<div class="grid grid--2" style="gap:12px">' +
+            '<div class="card">' +
+              '<div class="card-head"><div><h3 class="card-title">Що зараз у базі</h3></div></div>' +
+              '<div class="grid grid--2" style="gap:12px">' +
               ['students:Учнів:users', 'lessons:Уроків:book', 'homeworks:ДЗ:checklist',
-               'payments:Оплат:wallet', 'notes:Нотаток:note', 'materials:Матеріалів:folder',
-               'boards:Дошок:board']
+                 'payments:Оплат:wallet', 'notes:Нотаток:note', 'materials:Матеріалів:folder',
+                 'boards:Дошок:board']
                 .map(function (x) {
                   var p = x.split(':');
                   return '<div class="row" style="gap:10px">' +
-                    '<span style="color:var(--blue-600)">' + icon(p[2], 17) + '</span>' +
-                    '<span class="small muted">' + p[1] + '</span>' +
-                    '<span class="spacer bold">' + db[p[0]].length + '</span></div>';
+                      '<span style="color:var(--blue-600)">' + icon(p[2], 17) + '</span>' +
+                      '<span class="small muted">' + p[1] + '</span>' +
+                      '<span class="spacer bold">' + db[p[0]].length + '</span></div>';
                 }).join('') +
-              '<div class="row" style="gap:10px">' +
-                '<span style="color:var(--blue-600)">' + icon('image', 17) + '</span>' +
-                '<span class="small muted">Картинок</span>' +
-                '<span class="spacer bold" data-img-usage>…</span></div>' +
+                '<div class="row" style="gap:10px">' +
+                  '<span style="color:var(--blue-600)">' + icon('image', 17) + '</span>' +
+                  '<span class="small muted">Картинок</span>' +
+                  '<span class="spacer bold" data-img-usage>…</span></div>' +
+              '</div>' +
+              '<div class="field__hint mt-2">Усе це лежить на сервері; у браузері — копія для швидкості ' +
+              '(дошки й картинки в IndexedDB, де місця вдосталь). Резервна копія забирає все разом.</div>' +
             '</div>' +
-            '<div class="field__hint mt-2">Записи дошок лежать у localStorage разом з рештою даних, ' +
-            'а картинки — окремо в IndexedDB, де місця значно більше. Резервна копія забирає і те, й інше.</div>' +
-          '</div>' +
 
-          '<div class="card">' +
-            '<div class="card-head"><div><h3 class="card-title">Небезпечна зона</h3></div></div>' +
-            '<div class="row row--wrap" style="gap:10px">' +
-              '<button class="btn btn--ghost" data-act="reset-demo">' + icon('sparkles', 16) + 'Повернути демо-дані</button>' +
-              '<button class="btn btn--danger" data-act="wipe">' + icon('trash', 16) + 'Очистити все</button>' +
+            '<div class="card">' +
+              '<div class="card-head"><div><h3 class="card-title">Небезпечна зона</h3></div></div>' +
+              '<div class="row row--wrap" style="gap:10px">' +
+                '<button class="btn btn--ghost" data-act="reset-demo">' + icon('sparkles', 16) + 'Повернути демо-дані</button>' +
+                '<button class="btn btn--danger" data-act="wipe">' + icon('trash', 16) + 'Очистити все</button>' +
+              '</div>' +
+              '<div class="field__hint mt-2">«Очистити все» видаляє учнів, уроки, оплати й нотатки без можливості відновлення. Спершу зробіть експорт.</div>' +
             '</div>' +
-            '<div class="field__hint mt-2">«Очистити все» видаляє учнів, уроки, оплати й нотатки без можливості відновлення. Спершу зробіть експорт.</div>' +
-          '</div>' +
+          '</details>' +
         '</div>' +
       '</div>' +
     '</div>';

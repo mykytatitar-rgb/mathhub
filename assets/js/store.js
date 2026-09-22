@@ -158,10 +158,7 @@
   function warnBlocked() {
     if (warned) return;
     warned = true;
-    if (U && U.toast) {
-      U.toast('Збережені дані не прочиталися. Запис зупинено, щоб не затерти їх. ' +
-        'Не закривайте вкладку — відкрийте «Чи все ціле» в Налаштуваннях.', 'err');
-    }
+    console.warn('Збережені дані не прочиталися — запис на цьому пристрої зупинено, щоб їх не затерти');
   }
 
   S.load = function () {
@@ -252,7 +249,17 @@
   var saveHooks = [];
   S.onSave = function (fn) { if (typeof fn === 'function') saveHooks.push(fn); };
 
-  var lastSaveWarn = 0;
+  var lastSaveFailed = false;
+
+  /** Чи останній запис у браузер не вдався — тоді свіжі дані лише в пам'яті. */
+  S.lastSaveFailed = function () { return lastSaveFailed; };
+
+  /** База без дошок — як вона лягає в браузер і їде на сервер. */
+  S.docJSON = function () {
+    var doc = {};
+    Object.keys(db).forEach(function (k) { if (k !== 'boards') doc[k] = db[k]; });
+    return JSON.stringify(doc);
+  };
 
   S.save = function () {
     try {
@@ -261,9 +268,8 @@
          би оригінал остаточно. */
       if (readFailed.doc) { warnBlocked(); return; }
 
-      var doc = {};
-      Object.keys(db).forEach(function (k) { if (k !== 'boards') doc[k] = db[k]; });
-      localStorage.setItem(KEY, JSON.stringify(doc));
+      localStorage.setItem(KEY, S.docJSON());
+      lastSaveFailed = false;
 
       if (boardsDirty && !readFailed.boards) {
         if (window.Disk) Disk.set(BOARDS_KEY, JSON.stringify(db.boards));
@@ -276,14 +282,8 @@
       /* Не щоразу: при переповненому сховищі кожна дія давала нове червоне
          вікно, і посеред уроку ними засипало весь екран. Раз на 10 хвилин
          досить, щоб знати; дані тим часом ідуть на сервер із пам'яті. */
-      var now = Date.now();
-      if (now - lastSaveWarn > 600000) {
-        lastSaveWarn = now;
-        U.toast(/quota/i.test(e && e.message || '')
-          ? 'Сховище браузера переповнене: зміни йдуть на сервер, але локально не записуються. Відкрийте «Чи все ціле» в Налаштуваннях.'
-          : 'Не вдалося зберегти дані: ' + e.message, 'err');
-      }
-      console.warn('S.save:', e);
+      lastSaveFailed = true;
+      console.warn('S.save (локально не записалось, на сервер іде з памʼяті):', e);
     }
     // збій в одному слухачі не має валити збереження
     saveHooks.forEach(function (fn) {

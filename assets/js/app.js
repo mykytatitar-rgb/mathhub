@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v90';
+  App.BUILD = 'v91';
   window.APP_BUILD = App.BUILD;
 
   var NAV = [
@@ -917,26 +917,37 @@
     });
   }
 
-  /* Оновлення застосунку. Файли з кешу віддаються миттєво, а свіжі
-     підтягуються у фоні — тож без цієї смужки зміни з'являлися б аж
-     наступного разу, і здавалося б, що їх немає. */
-  /**
-   * Смуга «ця вкладка стара». На відміну від звичайного повідомлення про
-   * оновлення, її не можна закрити: поки вона висить, зміни не їдуть на
-   * сервер, і людина має про це знати, а не гадати, чому інший пристрій
-   * нічого не бачить.
-   */
-  App.staleCodeBar = function (here, there) {
-    if (document.querySelector('.update-bar--stale')) return;
-    var bar = document.createElement('div');
-    bar.className = 'update-bar update-bar--stale';
-    bar.innerHTML =
-      '<span><b>Ця вкладка працює на старому коді</b> (v' + here + ', на сервері v' + there + '). ' +
-      'Усе набране зберігається тут, але на сервер не їде, поки не оновите.</span>' +
-      '<button class="btn btn--primary btn--sm" data-reload>Оновити зараз</button>';
-    document.body.appendChild(bar);
-    bar.querySelector('[data-reload]').onclick = function () {
-      var jobs = [];
+  /* Оновлення — як у Miro: саме й непомітно.
+
+     Раніше висіли смуги «Вийшла нова версія» й «Ця вкладка працює на
+     старому коді — Оновити зараз», і кожне оновлення сайту перетворювалось
+     на дію для людини. Тепер сторінка перезавантажується сама, але лише
+     в тиху мить: коли вкладка у фоні або хвилину ніхто нічого не робить,
+     не набирає текст і не тримає відкрите вікно. Перед цим усе незбережене
+     відправляється. */
+  var reloadWanted = false;
+  var reloadHard = false;
+  var lastInput = Date.now();
+
+  ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart'].forEach(function (ev) {
+    document.addEventListener(ev, function () { lastInput = Date.now(); }, { passive: true, capture: true });
+  });
+
+  function quietMoment() {
+    if (document.hidden) return true;
+    var ae = document.activeElement;
+    if (ae && (/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) || ae.isContentEditable)) return false;
+    if (document.querySelector('.modal-backdrop, .modal')) return false;
+    return Date.now() - lastInput > 60000;
+  }
+
+  function reloadNow() {
+    var jobs = [];
+    try { if (window.Cloud && Cloud.flush) jobs.push(Cloud.flush()); } catch (e) {}
+    try { if (window.RecSync && RecSync.flush) jobs.push(RecSync.flush()); } catch (e) {}
+    try { if (window.BoardSync && BoardSync.flush) jobs.push(BoardSync.flush()); } catch (e) {}
+    if (reloadHard) {
+      // код на сервері новіший за кеш — кеш прибираємо, інакше знову відкрився б старий
       if (window.caches && caches.keys) {
         jobs.push(caches.keys().then(function (ks) {
           return Promise.all(ks.map(function (k) { return caches.delete(k); }));
@@ -947,25 +958,33 @@
           return Promise.all(rs.map(function (r) { return r.unregister(); }));
         }).catch(function () {}));
       }
-      Promise.all(jobs).then(function () { location.reload(); });
-    };
+    }
+    var done = false;
+    function go() { if (!done) { done = true; location.reload(); } }
+    Promise.all(jobs.map(function (j) { return Promise.resolve(j).catch(function () {}); })).then(go);
+    setTimeout(go, 4000);           // мережа зависла — не чекаємо вічно
+  }
+
+  function maybeReload() {
+    if (reloadWanted && quietMoment()) { reloadWanted = false; reloadNow(); }
+  }
+
+  /** Перезавантажити на свіжий код у першу тиху мить. hard — повз кеш. */
+  App.autoReload = function (hard) {
+    reloadWanted = true;
+    reloadHard = reloadHard || !!hard;
+    maybeReload();
   };
 
-  function updateBar() {
-    if (document.querySelector('.update-bar')) return;
-    var bar = document.createElement('div');
-    bar.className = 'update-bar';
-    bar.innerHTML = '<span>Вийшла нова версія кабінету.</span>' +
-      '<button class="btn btn--primary btn--sm" data-reload>Оновити</button>' +
-      '<button class="update-bar__x" data-later title="Пізніше">' + icon('x', 15) + '</button>';
-    document.body.appendChild(bar);
-    bar.querySelector('[data-reload]').onclick = function () { location.reload(); };
-    bar.querySelector('[data-later]').onclick = function () { bar.remove(); };
-  }
+  // старі виклики лишаються сумісними: замість смуги — тихе оновлення
+  App.staleCodeBar = function () { App.autoReload(true); };
+
+  setInterval(maybeReload, 5000);
+  document.addEventListener('visibilitychange', maybeReload);
 
   if (navigator.serviceWorker) {
     navigator.serviceWorker.addEventListener('message', function (e) {
-      if (e.data === 'assets-updated') updateBar();
+      if (e.data === 'assets-updated') App.autoReload(false);
     });
   }
 

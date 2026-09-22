@@ -2345,6 +2345,14 @@
   /* ---------- Слайд ---------- */
 
   Board.prototype.setSlide = function (slide, keepView) {
+    // ідемо з цього слайда — закріплюємо, яким він був після останньої власної дії
+    if (this.slide && this.slide !== slide && this.history) {
+      var top = this.history[this.history.length - 1];
+      if (top && typeof top === 'object' && top.open) {
+        top.after = JSON.stringify(this.slide.items);
+        top.open = false;
+      }
+    }
     this.slide = slide;
     this.clearSelection(true);
     this.draft = null;
@@ -2451,28 +2459,86 @@
 
   /* ---------- Історія ---------- */
 
+  /* Як у Miro: «крок назад» скасовує лише власну дію, а не повертає весь
+     слайд до знімка. Раніше повертав — і разом зі своєю дією стирав усе,
+     що тим часом прийшло з іншого пристрою чи від учня.
+
+     Кожен крок памʼятає, яким був слайд до дії (before) і одразу після неї
+     (after). Скасування переносить на теперішній слайд лише різницю між
+     ними; чуже, що з'явилось пізніше, лишається на місці. */
+
   Board.prototype.snapshot = function () {
     if (this.readOnly || !this.slide) return;
-    this.history.push(JSON.stringify(this.slide.items));
+    this.history.push({ before: JSON.stringify(this.slide.items), after: null, ext: this._ext || 0 });
     if (this.history.length > 40) this.history.shift();
     this.future.length = 0;
   };
 
+  /* Перенести на items зміну, якою стан from став станом to. Обʼєкти, яких
+     ця зміна не стосується, не чіпаємо. */
+  function carry(items, from, to) {
+    var f = {}, t = {}, i;
+    for (i = 0; i < from.length; i++) if (from[i] && from[i].id) f[from[i].id] = from[i];
+    for (i = 0; i < to.length; i++) if (to[i] && to[i].id) t[to[i].id] = to[i];
+    var out = items.filter(function (it) {
+      return !(it && it.id && f[it.id] && !t[it.id]);          // дія додала — прибираємо
+    });
+    var at = {};
+    out.forEach(function (it, n) { if (it && it.id) at[it.id] = n; });
+    to.forEach(function (it, n) {
+      if (!it || !it.id) return;
+      var was = f[it.id];
+      if (!was) {                                               // дія стерла — повертаємо
+        if (at[it.id] == null) out.splice(Math.min(n, out.length), 0, JSON.parse(JSON.stringify(it)));
+        return;
+      }
+      if (JSON.stringify(was) === JSON.stringify(it)) return;   // дія не чіпала
+      if (at[it.id] != null) out[at[it.id]] = JSON.parse(JSON.stringify(it));
+    });
+    return out;
+  }
+
+  function stepOf(e, now) {
+    if (typeof e === 'string') return { before: e, after: now };   // запис старого вигляду
+    return { before: e.before, after: e.open ? now : (e.after || now) };
+  }
+
+  /**
+   * Зараз на слайд ляже чуже (з іншого пристрою чи від учня). Спершу
+   * запамʼятовуємо, яким слайд був одразу після власної дії, — інакше
+   * «крок назад» вважав би чуже своїм.
+   */
+  Board.prototype.sealHistory = function () {
+    var top = this.history[this.history.length - 1];
+    if (top && typeof top === 'object' && top.open && this.slide) {
+      top.after = JSON.stringify(this.slide.items);
+      top.open = false;
+    }
+    this._ext = (this._ext || 0) + 1;
+  };
+
   Board.prototype.undo = function () {
     if (!this.history.length || !this.slide) return false;
-    this.future.push(JSON.stringify(this.slide.items));
-    this.slide.items = JSON.parse(this.history.pop());
+    var now = JSON.stringify(this.slide.items);
+    var e = stepOf(this.history.pop(), now);
+    this._replay = true;
+    this.slide.items = carry(this.slide.items, JSON.parse(e.after), JSON.parse(e.before));
+    this.future.push({ before: e.before, after: e.after });
     this.clearSelection(true);
     this.changed();
+    this._replay = false;
     return true;
   };
 
   Board.prototype.redo = function () {
     if (!this.future.length || !this.slide) return false;
-    this.history.push(JSON.stringify(this.slide.items));
-    this.slide.items = JSON.parse(this.future.pop());
+    var e = this.future.pop();
+    this._replay = true;
+    this.slide.items = carry(this.slide.items, JSON.parse(e.before), JSON.parse(e.after));
+    this.history.push({ before: e.before, after: e.after, ext: this._ext || 0 });
     this.clearSelection(true);
     this.changed();
+    this._replay = false;
     return true;
   };
 
@@ -2481,6 +2547,13 @@
 
   Board.prototype.changed = function () {
     this.syncConstructions();
+    /* Стан одразу після власної дії — для «кроку назад». Лише поки між
+       дією й цим моментом не приходило чуже: інакше скасування вважало б
+       чуже своїм і прибрало б його. */
+    if (!this._replay && this.slide) {
+      var top = this.history[this.history.length - 1];
+      if (top && typeof top === 'object' && top.ext === (this._ext || 0)) top.open = true;
+    }
     this.render();
     if (this.opts.onChange) this.opts.onChange();
   };

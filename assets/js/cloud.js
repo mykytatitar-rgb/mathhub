@@ -212,7 +212,8 @@
       state: s,
       detail: detail,
       rev: meta.rev,
-      dirty: Cloud.available() ? (meta.dirty || locallyChanged()) : meta.dirty,
+      dirty: ((window.RecSync ? RecSync.pending() : 0) +
+              (window.BoardOps && BoardOps.pendingIds ? BoardOps.pendingIds().length : 0)) > 0,
       lastSync: meta.lastSync,
       email: sess() ? sess().email : null,
       backups: Cloud.backups().length
@@ -414,13 +415,10 @@
     try { list = JSON.parse(diskGet(BACKUP) || '[]'); } catch (e) { list = []; }
     var b = list[i];
     if (!b) return Promise.reject(new Error('Копію не знайдено'));
-    suppress++;
-    try { S.importJSON(b.data); } finally { suppress--; }
-    meta.hash = 0;                 // вміст точно розійшовся з серверним
-    meta.dirty = true;
-    saveMeta();
+    S.importJSON(b.data);
     if (window.App && window.App.render) window.App.render();
-    return push();
+    // повернене — звичайні зміни записів: поїдуть на сервер самі
+    return Cloud.syncNow();
   };
 
   /** Те саме, але з копії в IndexedDB — там їх тридцять, а не три. */
@@ -431,18 +429,14 @@
       /* Перед заміною відкладаємо теперішнє: людина може обрати не ту копію,
          і тоді дороги назад не було б. */
       keepBackup('перед поверненням копії від ' + rec.at);
-      suppress++;
-      try { S.importJSON(rec.data); } finally { suppress--; }
-      meta.hash = 0;
-      meta.dirty = true;
-      saveMeta();
+      S.importJSON(rec.data);
       if (window.App && window.App.render) window.App.render();
 
       /* Дані вже повернуто на місце — відправка на сервер лише наздоганяє.
          Якщо вона не вдалася (немає мережі, не виконано вхід), казати
          «не вдалося повернути» не можна: людина побачила б помилку там,
-         де насправді все спрацювало. Синхронізація дожене пізніше сама. */
-      return push().catch(function (e) {
+         де насправді все спрацювало. Обмін дожене пізніше сам. */
+      return Cloud.syncNow().catch(function (e) {
         console.warn('копію повернуто, але відправити не вийшло:', e);
       });
     });
@@ -925,22 +919,12 @@
         refresh_token: j.refresh_token,
         email: (j.user && j.user.email) || email
       });
-      /* Семантика входу однозначна: "взяти дані цього акаунта".
-         Скидаємо і номер версії, і позначку про незбережені зміни — інакше
-         демо-дані свіжого браузера вступили б у конфлікт із серверними
-         при кожному вході на новому пристрої.
-         Якщо ж сервер порожній (перший пристрій) — syncNow відправить локальне. */
-      meta.rev = 0;
-      meta.dirty = false;
-      meta.hash = 0;
-      /* Ключове: скидаємо і час локальної зміни. Інакше свіжий браузер, який
-         щойно щось записав (хоч би й порожню базу), вважався б «новішим»
-         за сервер — і при вході затер би справжні дані демонстраційними.
-         Вхід означає рівно одне: взяти дані цього акаунта. */
-      meta.changedAt = null;
-      saveMeta();
+      /* Далі все саме: записи й дошки цього акаунта приїжджають, а те, що
+         вже є в цьому браузері й чого сервер не знає, — їде туди. Нічого
+         не замінюється цілком, тож і вибирати, «чиє взяти», не треба. */
       setState('syncing');
-      return Cloud.syncNow().then(function (r) { startParts(); return r; });
+      startParts();
+      return Cloud.syncNow();
     });
   };
 
@@ -975,11 +959,8 @@
         refresh_token: j.refresh_token,
         email: (j.user && j.user.email) || email
       });
-      meta.rev = 0;
-      meta.dirty = true;                       // перший акаунт — наші дані мають поїхати на сервер
-      meta.hash = 0;
-      saveMeta();
-      return Cloud.syncNow().then(function () { startParts(); return true; });
+      startParts();                             // перший акаунт — наші дані їдуть на сервер
+      return Cloud.syncNow().then(function () { return true; });
     });
   };
 
@@ -992,377 +973,44 @@
   };
 
   /* ============================================================
-     Читання з сервера
-     ============================================================ */
+     Обмін — як у Miro
+     ============================================================
 
-  /* Легка перевірка «чи там щось нове»: тягнемо лише номер версії, без даних.
-     Це кількасот байтів проти кількох сотень кілобайтів, тому можна питати часто. */
-  function pullRev() {
-    return api('/rest/v1/state?id=eq.main&select=rev')
-      .then(function (res) { return res.ok ? res.json() : null; })
-      .then(function (rows) { return rows && rows[0] ? rows[0].rev : null; })
-      .catch(function () { return null; });
-  }
+     Колись уся база їхала на сервер одним документом, і при розбіжності
+     пристроїв програма мусила вибирати, чию версію взяти цілком. Саме так
+     і губилися дані: вибрати можна лише одну, а правди було по шматку в
+     кожній.
 
-  function pull() {
-    return api('/rest/v1/state?id=eq.main&select=rev,data,device,updated_at')
-      .then(function (res) {
-        if (!res.ok) throw new Error('Сервер відповів ' + res.status);
-        return res.json();
-      })
-      .then(function (rows) { return rows && rows[0] ? rows[0] : null; });
-  }
+     Тепер такого документа немає. Кожен запис — учень, урок, оплата,
+     налаштування — їде окремо (recsync.js), кожна зміна дошки — окремою
+     дією в журнал (boardops.js). Вибирати нема з чого: зміни зливаються
+     самі, кожна у своєму обʼєкті. Тут лише спільний ритм і стан. */
 
-  /* Прийняти серверну версію замість локальної.
-     importJSON усередині викликає S.save(), а він у нас перехоплений — тому
-     на час запису глушимо перехоплення, інакше щойно отримані дані одразу
-     поїхали б назад на сервер як "зміна". */
-  function adopt(row) {
-    return Promise.resolve()
-      .then(function () {
-        var parsed = JSON.parse(row.data);
-        if (!parsed || !Array.isArray(parsed.students)) {
-          throw new Error('Дані на сервері виглядають пошкодженими');
-        }
-        // страховка: якщо локальне відрізняється, спершу відкладаємо його копію
-        if (hash(syncedJSON()) !== hash(row.data)) {
-          keepBackup('перед прийняттям версії з ' + (row.device || 'іншого пристрою'));
-        }
-        suppress++;
-        try { S.importJSON(row.data); } finally { suppress--; }
-        meta.rev = row.rev;
-        meta.dirty = false;
-        meta.hash = hash(row.data);
-        meta.lastSync = new Date().toISOString();
-        meta.changedAt = null;         // локальних змін після прийняття немає
-        saveMeta();
-        setState('idle');              // інакше в картці назавжди залишалось «зберігаю…»
-
-        /* Якщо відкрита дошка — оновлюємо саме її, зберігаючи масштаб і слайд.
-           Повне перемальовування скинуло б і те, й інше, а учень дивиться урок
-           саме з відкритої дошки. */
-        var handled = false;
-        try {
-          handled = !!(window.V && window.V.boardReload && window.V.boardReload());
-        } catch (e) { handled = false; }
-        if (!handled && window.App && window.App.render) window.App.render();
-
-        /* Документ дошок більше не містить — вони мають власну таблицю.
-           Поки на інших пристроях лишається стара версія програми, їхній
-           документ ще може принести давні дошки; правду беремо з таблиці. */
-        if (window.BoardSync) {
-          BoardSync.pullAll().then(function (n) {
-            if (!n) return;
-            try {
-              if (!(window.V && V.boardReload && V.boardReload()) && window.App) App.render();
-            } catch (e) { /* нічого страшного: дані вже на місці */ }
-          });
-        }
-      });
-  }
-
-  /* ============================================================
-     Відправка на сервер
-     ============================================================ */
-
-  function push() {
-    // стара вкладка на сервер не пише; так само й вкладка, що не прочитала своє
-    if (Cloud.writesBlocked()) return Promise.resolve();
-    var data = syncedJSON();         // зі сховища, не з пам'яті вкладки
-    var h = hash(data);
-
-    // нічого не змінилося з останнього разу — не турбуємо мережу
-    if (h === meta.hash && meta.rev > 0) {
-      meta.dirty = false; saveMeta();
-      setState('idle');
-      return Promise.resolve();
-    }
-
-    setState('syncing');
-    var force = forceNext;
-    return api('/rest/v1/rpc/save_state', {
-      method: 'POST',
-      body: JSON.stringify({
-        p_data: data, p_base_rev: meta.rev, p_device: deviceName(), p_force: force
-      })
-    }).then(function (res) {
-      if (!res.ok) throw new Error('Сервер відповів ' + res.status);
-      return res.json();
-    }).then(function (newRev) {
-      if (newRev === -1) {
-        /* Хтось зберіг між нашим читанням і записом — рідкісний збіг у часі.
-           Не турбуємо людину: просто починаємо коло заново, і звичайне
-           правило «новіша версія перемагає» вирішить усе саме. */
-        if (retry) { setState('error', 'Не вдалося зберегти — спробуйте ще раз'); return; }
-        retry = true;
-        return Cloud.syncNow().then(function () { retry = false; });
-      }
-
-      /* -2 — база не пустила запис, бо він знищив би наявні записи. Таке
-         буває, коли на пристрої лежали давні дані. Беремо серверну версію;
-         локальна не зникає, вона лягає в mathhub.before-sync. */
-      if (newRev === -2) {
-        return pull().then(function (row) {
-          if (!row) { setState('error', 'Не вдалося зберегти'); return; }
-          return adopt(row).then(function () {
-            console.info('На цьому пристрої були давніші дані — підтягнуто повні з сервера');
-          });
-        });
-      }
-      meta.rev = newRev;
-      meta.hash = h;
-      meta.dirty = false;
-      meta.lastSync = new Date().toISOString();
-      saveMeta();
-      if (force) forceNext = false;     // дозвіл одноразовий
-      setState('idle');
-    });
-  }
-
-  /**
-   * Чи стоїть у базі захист від затирання даних.
-   *
-   * Перевіряємо без запису: просимо зберегти з завідомо старим номером
-   * версії. База відповість -1 («на сервері новіше») і нічого не змінить.
-   * Важливо інше — чи вона взагалі знає про аргумент p_force: він є лише
-   * в новій, захищеній версії функції. Немає — відповідь 404.
-   *
-   * Потрібно, щоб не змушувати людину читати SQL, аби дізнатися,
-   * чи все налаштовано.
-   */
-  Cloud.guardInstalled = function () {
-    if (!Cloud.available() || !Cloud.signedIn()) return Promise.resolve('unknown');
-    /* Тільки коли на сервері вже є наш стан. Інакше save_state піде гілкою
-       «першого запуску» і створила б рядок із тим, що ми надіслали, —
-       тобто з порожнім документом. Перевірка не має нічого записувати. */
-    if (!(meta.rev > 0)) return Promise.resolve('unknown');
-    return api('/rest/v1/rpc/save_state', {
-      method: 'POST',
-      body: JSON.stringify({
-        p_data: '{}', p_base_rev: -1, p_device: deviceName(), p_force: false
-      })
-    }).then(function (res) {
-      if (res.status === 404) return 'off';     // база про p_force не чула
-      return res.ok ? 'on' : 'unknown';
-    }).catch(function () { return 'unknown'; });
-  };
-
-  /* ============================================================
-     Публічні дії
-     ============================================================ */
-
+  /** Відправити своє й забрати чуже — усе одразу. */
   Cloud.syncNow = function () {
     if (!Cloud.available() || !Cloud.signedIn()) return Promise.resolve();
+    if (Cloud.writesBlocked()) return Promise.resolve();
     if (!navigator.onLine) { setState('offline'); return Promise.resolve(); }
 
     setState('syncing');
-    return pull().then(function (row) {
-      // сервер порожній — це перший запуск, віддаємо локальні дані
-      if (!row) return push();
-
-      if (row.rev > meta.rev) {
-        /* Обидві сторони змінилися. Питати людину, яку версію залишити, —
-           погана ідея: для одного репетитора з ноутбуком і телефоном це
-           щоразу однакова відповідь «ту, що новіша». Тому вирішуємо самі.
-
-           Це безпечно, бо жодна з версій не зникає:
-           - беремо серверну → локальна лягає в mathhub.before-sync (див. adopt);
-           - беремо локальну → серверну архівує тригер на сервері в snapshots.
-           Тобто «не та» версія завжди лишається доступною в Налаштуваннях.
-
-           Рішення за ВМІСТОМ, а не за прапорцем dirty: прапорець лежить у
-           спільному сховищі, і друга вкладка могла його скинути. */
-        var mineChanged = locallyChanged();
-
-        /* Безумовний запобіжник, поставлений після втрати 8 серпня 2026.
-           Якщо серверна версія бідніша за нашу — приймати її не можна навіть
-           тоді, коли за часом вона новіша. Час зміни підіймає будь-яке
-           збереження, зокрема те, що програма робить сама на старті; а от
-           намальоване на дошці з нізвідки не береться.
-
-           Серверна версія при цьому не гине: її тримає тригер у snapshots,
-           і вона доступна в Налаштуваннях. Тобто ціна помилки тут —
-           зайвий рядок в історії, а не втрачений урок.
-
-           forceNext — людина щойно щось видалила свідомо, це не втрата. */
-        var loss = forceNext ? null : serverWouldLose(row);
-        if (loss) {
-          keepBackup('серверна версія була бідніша: ' + loss);
-          meta.rev = row.rev;
-          saveMeta();
-          return push().then(function () {
-            console.info('На сервері було менше (' + loss + ') — залишено дані з цього пристрою');
-          });
-        }
-
-        if (mineChanged && localIsNewer(row) && (forceNext || !localLooksTruncated(row))) {
-          meta.rev = row.rev;         // підганяємось під серверну нумерацію
-          saveMeta();
-          return push().then(function () {
-            console.info('Залишено новішу версію — з цього пристрою');
-          });
-        }
-        var wasTruncated = mineChanged && localIsNewer(row) &&
-          !forceNext && localLooksTruncated(row);
-        return adopt(row).then(function () {
-          if (wasTruncated) {
-            /* Найнебезпечніший випадок: на пристрої лежали давні дані, і за
-               часом він виглядав новішим. Кажемо прямо, бо людина щойно
-               бачила менше учнів, ніж має бути. */
-            console.info('На цьому пристрої були давніші дані — підтягнуто повні з сервера');
-            return;
-          }
-          if (!mineChanged) return;
-          // не називаємо пристрій, якщо це той самий, за яким людина сидить —
-          // «взято версію з Windows / Chrome» на Windows / Chrome тільки збиває
-          var from = (row.device && row.device !== deviceName()) ? row.device : 'іншого пристрою';
-          console.info('Взято новішу версію з ' + from);
-        });
-      }
-
-      return push();
-    }).catch(function (e) {
-      setState(navigator.onLine ? 'error' : 'offline', e.message);
-    });
-  };
-
-  /** Чи локальна зміна свіжіша за те, що записано на сервері. */
-  function localIsNewer(row) {
-    if (!meta.changedAt) return false;          // не знаємо коли — довіряємо серверу
-    if (!row.updated_at) return true;
-    var mine = new Date(meta.changedAt).getTime();
-    var theirs = new Date(row.updated_at).getTime();
-    if (!mine || !theirs) return false;
-    return mine > theirs;
-  }
-
-  /**
-   * Чи не є локальна версія обрізаною відносно серверної.
-   *
-   * Навіщо. «Новіша перемагає» вирішується за часом зміни, а час зміни
-   * підіймає будь-яке збереження — навіть те, що програма робить сама на
-   * старті. Через це пристрій, який лежав тиждень із давніми даними, після
-   * простого відкриття ставав «новішим» і затирав усе, що з'явилося потім.
-   *
-   * Тому дивимось не лише на час, а й на вміст: якщо на сервері є учні або
-   * уроки, яких у нас немає взагалі, це не «свіжіша правка», а втрата.
-   * Такі випадки вирішуємо на користь сервера, а локальне лишається в
-   * mathhub.before-sync — див. adopt().
-   */
-  function localLooksTruncated(row) {
-    var mine, theirs;
-    try {
-      mine = JSON.parse(localJSON());
-      theirs = JSON.parse(row.data);
-    } catch (e) { return true; }               // не прочитали — не ризикуємо
-    if (!mine || !theirs) return true;
-
-    function ids(db, name) {
-      return (db[name] || []).map(function (x) { return x.id; }).filter(Boolean);
-    }
-    // учень, якого в нас немає, — найважливіший сигнал: усе решта висить на ньому
-    var mineStu = ids(mine, 'students');
-    var lost = ids(theirs, 'students').filter(function (id) {
-      return mineStu.indexOf(id) < 0;
-    });
-    if (lost.length) return true;
-
-    // те саме для уроків і оплат: їх втрата так само незворотна
-    var names = ['lessons', 'payments', 'homeworks'];
-    for (var i = 0; i < names.length; i++) {
-      var have = ids(mine, names[i]);
-      var gone = ids(theirs, names[i]).filter(function (id) { return have.indexOf(id) < 0; });
-      if (gone.length) return true;
-    }
-    return false;
-  }
-
-  /** Скільки намальованого на дошках, по кожній окремо. */
-  function boardWeight(db) {
-    var out = {};
-    (db.boards || []).forEach(function (b) {
-      var n = 0;
-      (b.slides || []).forEach(function (s) { n += (s.items || []).length; });
-      out[b.id] = { slides: (b.slides || []).length, items: n };
-    });
-    return out;
-  }
-
-  /**
-   * Що зникне, якщо прийняти серверну версію.
-   *
-   * Ця перевірка зʼявилася після втрати 8 серпня 2026: на дошці лежало 1741
-   * намальованих обʼєктів, на сервері — 908, і програма мовчки взяла серверне.
-   * Стара перевірка це пропустила з двох причин, і обидві виправлено тут.
-   *
-   * Перша: вона рахувала учнів, уроки, оплати й домашки, але не дошки. Втрата
-   * годин малювання на уроці не вважалася втратою взагалі.
-   *
-   * Друга, гірша: її питали лише тоді, коли локальна версія «новіша за часом».
-   * Якщо час зміни був невідомий, серверне приймалося без жодної перевірки.
-   * Тепер перевірка безумовна: спершу дивимось, що зникне, і лише потім
-   * вирішуємо.
-   */
-  function serverWouldLose(row) {
-    var mine, theirs;
-    try {
-      mine = JSON.parse(localJSON());
-      theirs = JSON.parse(row.data);
-    } catch (e) { return null; }
-    if (!mine || !theirs) return null;
-
-    var lost = [];
-
-    /* Назви українською: цей рядок іде людині в повідомлення, а не в консоль. */
-    var WHAT = {
-      students: 'учнів', lessons: 'уроків', payments: 'оплат',
-      homeworks: 'домашок', materials: 'матеріалів', notes: 'нотаток'
-    };
-    Object.keys(WHAT).forEach(function (name) {
-      var thereIds = (theirs[name] || []).map(function (x) { return x.id; });
-      var goneN = (mine[name] || []).filter(function (x) {
-        return x.id && thereIds.indexOf(x.id) < 0;
-      }).length;
-      if (goneN) lost.push(goneN + ' ' + WHAT[name]);
-    });
-
-    var mineB = boardWeight(mine), theirsB = boardWeight(theirs);
-    var items = 0, slides = 0;
-    Object.keys(mineB).forEach(function (id) {
-      var t = theirsB[id] || { slides: 0, items: 0 };
-      if (mineB[id].items > t.items) items += mineB[id].items - t.items;
-      if (mineB[id].slides > t.slides) slides += mineB[id].slides - t.slides;
-    });
-    if (slides) lost.push(slides + ' слайдів');
-    if (items) lost.push(items + ' намальованого на дошках');
-
-    return lost.length ? lost.join(', ') : null;
-  }
-
-  /** Розв'язання конфлікту: залишити локальне або взяти серверне. */
-  Cloud.resolve = function (keep) {
-    if (!Cloud.signedIn()) return Promise.resolve();
-    setState('syncing');
-    return pull().then(function (row) {
-      if (keep === 'remote') {
-        if (!row) { setState('idle'); return; }
-        return adopt(row).then(function () {
-          console.info('Взято версію з сервера');
-        });
-      }
-      // залишаємо локальне: підганяємо номер версії під серверний і перезаписуємо
-      meta.rev = row ? row.rev : 0;
-      meta.hash = 0;
+    var jobs = [];
+    if (window.RecSync) jobs.push(RecSync.pull());       // спершу віддає своє, потім читає
+    if (window.BoardSync) jobs.push(BoardSync.flush());
+    return Promise.all(jobs).then(function () {
+      meta.lastSync = new Date().toISOString();
+      meta.dirty = false;
       saveMeta();
-      return push().then(function () {
-        console.info('Залишено версію з цього пристрою');
-      });
+      setState(navigator.onLine ? 'idle' : 'offline');
     }).catch(function (e) {
-      setState('error', e.message);
+      setState(navigator.onLine ? 'error' : 'offline', e && e.message);
     });
   };
 
-  /** Список автоматичних копій. */
+  /* Захист старого документа від затирання більше не потрібен: документа,
+     який можна затерти цілком, немає. */
+  Cloud.guardInstalled = function () { return Promise.resolve('unknown'); };
+
+  /** Список автоматичних копій, які сервер колись зробив зі старого документа. */
   Cloud.snapshots = function () {
     if (!Cloud.signedIn()) return Promise.resolve([]);
     return api('/rest/v1/snapshots?select=id,rev,device,created_at&order=created_at.desc&limit=50')
@@ -1372,7 +1020,7 @@
       });
   };
 
-  /** Відновити конкретну копію. Поточний стан перед цим піде в історію сам. */
+  /** Відновити таку копію. Повернене — звичайна зміна: поїде всюди саме. */
   Cloud.restoreSnapshot = function (id) {
     return api('/rest/v1/snapshots?id=eq.' + encodeURIComponent(id) + '&select=data,rev')
       .then(function (res) {
@@ -1381,70 +1029,19 @@
       })
       .then(function (rows) {
         if (!rows || !rows[0]) throw new Error('Копію не знайдено');
-        suppress++;
-        try { S.importJSON(rows[0].data); } finally { suppress--; }
-        meta.dirty = true;
-        meta.hash = 0;
-        saveMeta();
+        keepBackup('перед поверненням копії з сервера');
+        S.importJSON(rows[0].data);
         if (window.App && window.App.render) window.App.render();
-        return push();
+        return Cloud.syncNow();
       });
   };
 
-  /* ============================================================
-     Перехоплення збереження
-     ============================================================ */
-
-  function schedulePush() {
-    if (suppress > 0) return;
-    meta.dirty = true;
-    /* changedAt — це час ПРАВКИ ЛЮДИНИ, і саме за ним вирішується, чия
-       версія новіша. Тому службові записи його не підіймають: інакше
-       пристрій, який лежав тиждень, після простого відкриття програми
-       ставав «новішим» — програма сама заповнює розклад із шаблону на
-       старті, і цього збереження досить, щоб затерти чужі зміни. */
-    if (!housekeeping) meta.changedAt = new Date().toISOString();
-    saveMeta();
-    if (!Cloud.available() || !Cloud.signedIn()) return;
-    if (state !== 'conflict') setState('syncing', 'зміни ще не відправлені');
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(function () {
-      timer = null;
-      if (state === 'conflict') return;   // не заважаємо, поки людина не вирішила
-      Cloud.syncNow();
-    }, boardOpen() ? PUSH_DELAY_BOARD : PUSH_DELAY);
-  }
-
-  function wrapSave() {
-    var orig = S.save;
-    S.save = function () {
-      orig.apply(S, arguments);
-      schedulePush();
-    };
-
-    /* База не пропускає запис, який видаляє наявні записи — це захист від
-       пристрою з давніми даними. Але коли видаляє людина, це саме те, чого
-       вона хоче. Тому позначаємо такі дії, і найближче відправлення йде
-       з дозволом. */
-    ['remove', 'removeStudent', 'removeLesson', 'removeBoard'].forEach(function (name) {
-      var fn = S[name];
-      if (typeof fn !== 'function') return;
-      S[name] = function () {
-        forceNext = true;
-        return fn.apply(S, arguments);
-      };
-    });
-  }
-
   /* Кілька вкладок одного сайту ділять сховище, але кожна тримає власну копію
      бази в пам'яті. Без цього обробника вкладка, відкрита раніше, лишалася зі
-     старим станом і при першій же дії записувала його поверх свіжого —
-     а з синхронізацією ще й відправляла на сервер. Тепер вона перечитує базу
-     одразу, як тільки інша вкладка щось зберегла. */
+     старим станом і при першій же дії записувала його поверх свіжого.
+     Тепер вона перечитує базу одразу, як тільки інша вкладка щось зберегла. */
   function watchOtherTabs() {
-    /* Вхід чи вихід в одній вкладці — одразу для всіх. Без цього вкладка з
-       дошкою ще годину вважала б, що входу немає, і казала б «лише на цьому
-       пристрої», хоча людина щойно ввійшла в сусідній. */
+    /* Вхід чи вихід в одній вкладці — одразу для всіх. */
     window.addEventListener('storage', function (e) {
       if (e.key !== AUTH) return;
       var was = !!(sessionCache && sessionCache.refresh_token);
@@ -1453,8 +1050,8 @@
       if (was === now) return;
       if (now) {
         setState('syncing');
-        Cloud.syncNow();
         startParts();
+        Cloud.syncNow();
       } else {
         setState('signedout');
       }
@@ -1466,73 +1063,36 @@
       suppress++;
       try {
         S.load();
-        if (window.App && window.App.render) window.App.render();
+        if (window.App && window.App.render) {
+          // відкриту дошку не чіпаємо: її вміст живе окремо
+          if (!(window.V && V.boardMountedFor && V.boardMountedFor())) window.App.render();
+        }
       } finally { suppress--; }
-      // вміст змінився не нами — перевіримо, чи треба щось відправити
-      if (Cloud.available() && Cloud.signedIn() && state !== 'conflict') Cloud.syncNow();
     });
   }
 
   /** Відправити негайно, не чекаючи паузи (перед закриттям, при згортанні). */
   Cloud.flush = function () {
-    if (timer) { clearTimeout(timer); timer = null; }
-    // за вмістом, а не за прапорцем — див. locallyChanged()
-    if (state !== 'conflict' && (meta.dirty || locallyChanged())) return Cloud.syncNow();
-    return Promise.resolve();
+    var jobs = [];
+    try {
+      if (window.RecSync) { RecSync.scan(); jobs.push(RecSync.flush()); }
+      if (window.BoardSync) jobs.push(BoardSync.flush());
+    } catch (e) { console.warn('flush:', e); }
+    return Promise.all(jobs);
   };
 
   /* ============================================================
      Старт
      ============================================================ */
 
-  /* Стеження за змінами з інших пристроїв.
-
-     Без цього зміни з телефона з'являлися на комп'ютері лише після
-     перезавантаження сторінки — саме на це й скаржилися.
-
-     Питаємо лише номер версії, тому запит крихітний. Повні дані тягнемо
-     тільки коли номер справді змінився. У прихованій вкладці не питаємо
-     взагалі: там нікому дивитися, а батарею економимо. */
-  var WATCH_MS = 12000;        // звичайний ритм
-  var WATCH_MS_BOARD = 2200;   // коли відкрита дошка — урок іде просто зараз
-  var watchTimer = null;
-
-  /** Чи відкрита зараз дошка. Від цього залежить, наскільки квапитись. */
-  function boardOpen() {
-    try { return !!(window.V && window.V.boardMountedFor && window.V.boardMountedFor()); }
-    catch (e) { return false; }
-  }
-
-  /* Не setInterval, а ланцюжок setTimeout: так ритм можна міняти на льоту —
-     коли відкривають дошку, опитування само пришвидшується. */
-  function startWatching() {
-    if (watchTimer) return;
-    var tick = function () {
-      watchTimer = setTimeout(function () {
-        watchTimer = null;
-        var go = document.visibilityState !== 'hidden' &&
-                 Cloud.available() && Cloud.signedIn() && navigator.onLine &&
-                 state !== 'syncing';
-        if (!go) { tick(); return; }
-        pullRev().then(function (rev) {
-          if (rev != null && rev > meta.rev) Cloud.syncNow();
-        }).then(tick, tick);
-      }, boardOpen() ? WATCH_MS_BOARD : WATCH_MS);
-    };
-    tick();
-  }
-
   Cloud.start = function () {
     if (started) return;
     started = true;
 
-    /* Стеження й обробники вмикаємо ЗАВЖДИ, ще до перевірок.
-       Раніше вони стояли після виходів нижче — тому якщо на момент
-       завантаження вхід ще не був зроблений, зміни з інших пристроїв
-       не з'являлися до перезавантаження сторінки.
-       Самі обробники щоразу перевіряють умови, тож у вимкненому стані
-       вони нічого не роблять. */
-    startWatching();
+    /* Обробники вмикаємо ЗАВЖДИ, ще до перевірок: самі вони щоразу
+       дивляться на умови, тож без входу нічого не роблять, а після входу
+       працюють без перезавантаження сторінки. Стежать за змінами з інших
+       пристроїв самі модулі записів і дошок. */
     window.addEventListener('online', function () { Cloud.syncNow(); });
     window.addEventListener('offline', function () {
       if (Cloud.available() && Cloud.signedIn()) setState('offline');
@@ -1557,19 +1117,14 @@
        встигла б записати до того, як дізналася, що вона стара. */
     version.then(function () {
       if (Cloud.writesBlocked()) return;
-      Cloud.syncNow();
-      if (window.BoardSync) BoardSync.start();
-      if (window.RecSync) RecSync.start();
+      startParts();
+      setState('idle');
     });
   };
 
   window.Cloud = Cloud;
 
-  /* Перехоплення ставимо негайно, ще до старту програми: інакше збереження
-     на завантаженні (заповнення розкладу з шаблону) пройшли б непоміченими
-     й не потрапили б на сервер. */
   loadMeta();
-  wrapSave();
   watchOtherTabs();   // потрібно навіть без синхронізації: вкладки псували дані й раніше
 
   /* А от мережу чіпаємо лише після того, як app.js відмалював інтерфейс —

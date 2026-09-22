@@ -1,22 +1,20 @@
-/* Синхронізація записів — кожного окремо.
+/* Обмін записами — кожним окремо. Як у Miro: людина нічого не зберігає й не
+   синхронізує, воно просто є всюди.
 
-   Раніше вся база їхала на сервер одним документом: «хай стане ось так».
-   Такий запис завжди вміє стирати. Досить було програмі чогось не побачити
-   — застарілий пристрій, непрочитане сховище, стара версія коду — і
-   невидиме зникало разом із записом.
+   Кожен запис (учень, урок, оплата, домашка, налаштування) — окремий рядок
+   на сервері. «Онови цього учня» фізично не може зачепити сусіднього, тож
+   два пристрої, що правлять різне, не конфліктують узагалі. Правлять те
+   саме — лишається пізніший запис, і лише в межах цього одного запису.
 
-   Тут кожен запис їде окремо: «онови цього учня». Зачепити сусіда такий
-   запис фізично не може. Два пристрої, що правлять різних учнів, більше не
-   конфліктують узагалі, а не «конфліктують, але ми це владнаємо».
+   Що змінилося, програма бачить сама: після кожного збереження порівнює
+   відбитки записів із тими, що вже поїхали. Раніше зміну треба було
+   назвати вручну, і все, що змінювали повз це (а таких місць назбиралось),
+   лишалося тільки на одному пристрої.
 
-   Правило інтерфейсу лишається незмінним: він ніколи не чекає на мережу.
-   Запис спершу лягає в localStorage, як і був, а сюди потрапляє лише
-   позначка «це поїхало на сервер». Немає інтернету — позначка чекає й
-   переживає перезавантаження сторінки.
-
-   Локальний документ при цьому нікуди не дівається: він лишається повною
-   копією всього. Немає жодного стану, у якому дані є тільки в одному
-   новому місці. */
+   Інтерфейс ніколи не чекає на мережу. Запис спершу лягає в браузер, а
+   сюди потрапляє позначка «це треба відправити». Немає інтернету —
+   позначка чекає й переживає перезавантаження сторінки. Видалення на
+   сервері — позначка, а не стирання: помилково видалене можна повернути. */
 
 (function () {
   'use strict';
@@ -24,37 +22,55 @@
   var U = window.U, S = window.S;
   var R = {};
 
-  /* Види записів, які живуть на сервері рядками. Дошки тут не згадані:
-     у них своя таблиця, бо вони важкі й змінюються поштучно щосекунди. */
+  /* Види записів. meta — усе поза списками: профіль репетитора, курс,
+     інші налаштування; id рядка — назва поля в базі. Дошки тут не згадані:
+     у них власний журнал дій (boardops.js). */
   R.KINDS = ['students', 'lessons', 'payments', 'homeworks', 'progress',
-             'roadmap', 'desk', 'materials', 'notes', 'mathmap', 'stumap'];
+             'roadmap', 'desk', 'materials', 'notes', 'mathmap', 'stumap', 'meta'];
 
-  /* Який набір видів бачив цей пристрій минулого разу.
+  var NOT_META = { boards: 1, version: 1 };
 
-     Читання йде «усе новіше за мітку». Стара версія програми не знала
-     про новий вид і пропускала його рядки — але мітку зсувала далі. Після
-     оновлення коду ці рядки лишилися б позаду назавжди. Тому щойно набір
-     видів змінився, один раз читаємо все з початку. */
+  /* Який набір видів бачив цей пристрій минулого разу. Щойно набір
+     змінився, один раз читаємо все з початку: інакше рядки нового виду,
+     записані до оновлення коду, лишилися б позаду назавжди. */
   var KINDS_KEY = 'mathhub.rec.kinds';
+
+  var OUT = 'mathhub.rec.outbox';    // що не встигло поїхати: {"kind/id": 1|"del"}
+  var SINCE = 'mathhub.rec.since';   // мітка часу останнього вдалого читання (час сервера)
+  var DONE = 'mathhub.rec.migrated'; // чи перенесено початкові дані
+  var HASH = 'mathhub.rec.hash';     // відбитки записів, що вже на сервері або в черзі
+  var PUSH_DELAY = 1200;
+  var PULL_MS = 15000;               // як часто дивитися, чи не змінилось щось деінде
+  var OVERLAP_MS = 90000;            // дочитуємо трохи назад — на випадок розбіжності годинників
+
+  var outbox = {};
+  var since = null;
+  var hashes = null;
+  var timer = null;
+  var sending = false;
+  var started = false;
+  var pullTimer = null;
 
   function kindsChanged() {
     try { return localStorage.getItem(KINDS_KEY) !== R.KINDS.join(','); } catch (e) { return false; }
   }
 
-  var OUT = 'mathhub.rec.outbox';    // що не встигло поїхати: {"kind/id": 1|"del"}
-  var SINCE = 'mathhub.rec.since';   // мітка часу останнього вдалого читання
-  var DONE = 'mathhub.rec.migrated'; // чи перенесено початкові дані
-  var PUSH_DELAY = 1200;
+  function diskGet(k) { return window.Disk ? Disk.get(k) : localStorage.getItem(k); }
+  function diskSet(k, v) { try { if (window.Disk) Disk.set(k, v); else localStorage.setItem(k, v); } catch (e) {} }
 
-  var outbox = {};
-  var since = null;
-  var timer = null;
-  var sending = false;
-  var started = false;
+  function diskReady() { return !window.Disk || Disk.isReady(); }
 
   function loadState() {
     try { outbox = JSON.parse(localStorage.getItem(OUT) || '{}') || {}; } catch (e) { outbox = {}; }
     try { since = localStorage.getItem(SINCE) || null; } catch (e) { since = null; }
+    loadHashes();
+  }
+
+  var hashesRead = false;
+  function loadHashes() {
+    if (hashesRead || !diskReady()) return;
+    hashesRead = true;
+    try { hashes = JSON.parse(diskGet(HASH) || 'null'); } catch (e) { hashes = null; }
   }
 
   function saveState() {
@@ -64,6 +80,15 @@
     } catch (e) { /* сховище повне — дані все одно в базі, черга відновиться */ }
   }
 
+  var hashTimer = null;
+  function saveHashes() {
+    if (hashTimer) return;
+    hashTimer = setTimeout(function () {
+      hashTimer = null;
+      if (hashes) diskSet(HASH, JSON.stringify(hashes));
+    }, 1000);
+  }
+
   function ready() {
     return !!(window.Cloud && Cloud.available() && Cloud.signedIn() &&
       !(Cloud.writesBlocked && Cloud.writesBlocked()));
@@ -71,6 +96,21 @@
 
   function device() {
     try { return navigator.platform || ''; } catch (e) { return ''; }
+  }
+
+  function fp(str) {
+    var h = 2166136261;
+    for (var i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = (h * 16777619) >>> 0;
+    }
+    return h.toString(36) + ':' + str.length.toString(36);
+  }
+
+  function metaKeys(db) {
+    return Object.keys(db).filter(function (k) {
+      return !NOT_META[k] && R.KINDS.indexOf(k) < 0 && db[k] !== undefined;
+    });
   }
 
   R.pending = function () { return Object.keys(outbox).length; };
@@ -92,6 +132,7 @@
   R.markDeleted = function (kind, id) {
     if (!kind || !id || R.KINDS.indexOf(kind) < 0) return;
     outbox[kind + '/' + id] = 'del';
+    if (hashes) { delete hashes[kind + '/' + id]; saveHashes(); }
     saveState();
     schedule();
   };
@@ -101,6 +142,58 @@
     if (timer) clearTimeout(timer);
     timer = setTimeout(function () { timer = null; R.flush(); }, PUSH_DELAY);
   }
+
+  /* ---------- що змінилося — бачимо самі ---------- */
+
+  var lastScanned = null;
+  var scanTimer = null;
+
+  function scanSoon() {
+    if (scanTimer) return;
+    scanTimer = setTimeout(function () { scanTimer = null; R.scan(); }, 300);
+  }
+
+  /**
+   * Порівняти кожен запис із тим, що вже поїхало, і поставити в чергу
+   * змінене. Перший запуск лише запамʼятовує відбитки: усе, що є тут,
+   * або вже на сервері, або й так у черзі.
+   */
+  R.scan = function () {
+    var db = S.db();
+    if (!db) return 0;
+    // відбитки з минулого разу ще не прочитані — порівнювати нема з чим
+    if (!diskReady()) { Disk.ready(scanSoon); return 0; }
+    loadHashes();
+    var doc = S.lastDoc ? S.lastDoc() : null;
+    if (doc && doc === lastScanned) return 0;      // змінились лише дошки
+    lastScanned = doc;
+
+    var first = !hashes;
+    if (first) hashes = {};
+    var n = 0;
+
+    function check(kind, id, data) {
+      var key = kind + '/' + id;
+      var h = fp(JSON.stringify(data));
+      if (hashes[key] === h) return;
+      hashes[key] = h;
+      if (first) return;
+      if (outbox[key] !== 'del') outbox[key] = 1;
+      n++;
+    }
+
+    R.KINDS.forEach(function (kind) {
+      if (kind === 'meta') {
+        metaKeys(db).forEach(function (k) { check('meta', k, { v: db[k] }); });
+        return;
+      }
+      (db[kind] || []).forEach(function (rec) { if (rec && rec.id) check(kind, rec.id, rec); });
+    });
+
+    saveHashes();
+    if (n) { saveState(); schedule(); }
+    return n;
+  };
 
   /** Відправити все, що чекає. По одному: так зрозуміло, що саме не пройшло. */
   R.flush = function () {
@@ -119,14 +212,20 @@
 
         if (op === 'del') {
           return call('delete_record', { p_kind: kind, p_id: id, p_device: device() })
-            .then(function () { delete outbox[key]; ok++; });
+            .then(function () { if (outbox[key] === 'del') delete outbox[key]; ok++; });
         }
 
         var rec = findLocal(kind, id);
         if (!rec) { delete outbox[key]; return; }   // зник локально — нема чого слати
+        var sent = JSON.stringify(rec);
 
         return call('save_record', { p_kind: kind, p_id: id, p_data: rec, p_device: device() })
-          .then(function () { delete outbox[key]; ok++; });
+          .then(function () {
+            // поки летіло, запис могли змінити ще раз — тоді він лишається в черзі
+            var now = findLocal(kind, id);
+            if (now && JSON.stringify(now) === sent) delete outbox[key];
+            ok++;
+          });
       }).catch(function (e) {
         // лишаємо в черзі: поїде при наступній нагоді
         console.warn('Запис не поїхав (' + key + '):', e && e.message);
@@ -134,6 +233,7 @@
     }, Promise.resolve()).then(function () {
       sending = false;
       saveState();
+      if (Object.keys(outbox).length) setTimeout(function () { if (ready()) R.flush(); }, 15000);
       return ok;
     }, function () {
       sending = false;
@@ -152,7 +252,12 @@
   }
 
   function findLocal(kind, id) {
-    var list = S.db()[kind];
+    var db = S.db();
+    if (kind === 'meta') {
+      if (NOT_META[id] || R.KINDS.indexOf(id) >= 0 || db[id] === undefined) return null;
+      return { v: db[id] };
+    }
+    var list = db[kind];
     if (!Array.isArray(list)) return null;
     for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
     return null;
@@ -162,6 +267,8 @@
      Читання
      ============================================================ */
 
+  var pulling = null;
+
   /**
    * Забрати з сервера все, що змінилося після минулого разу.
    *
@@ -170,60 +277,181 @@
    */
   R.pull = function (full) {
     if (!ready()) return Promise.resolve(0);
+    if (pulling) return pulling;
 
-    var path = '/rest/v1/records?select=kind,id,data,rev,deleted,updated_at';
-    if (!full && since) path += '&updated_at=gt.' + encodeURIComponent(since);
+    var path = '/rest/v1/records?select=kind,id,data,rev,deleted,updated_at&order=updated_at.asc,kind.asc,id.asc';
+    if (!full && since) {
+      var from = new Date(new Date(since).getTime() - OVERLAP_MS).toISOString();
+      path += '&updated_at=gt.' + encodeURIComponent(from);
+    }
 
-    return Cloud.request(path, { method: 'GET' })
-      .then(function (res) {
-        if (!res.ok) throw new Error('Сервер відповів ' + res.status);
-        return res.json();
-      })
-      .then(function (rows) {
-        if (!rows || !rows.length) {
-          if (full) { try { localStorage.setItem(KINDS_KEY, R.KINDS.join(',')); } catch (e) {} }
-          return 0;
-        }
-
-        var changed = 0;
-        var newest = since;
-
-        rows.forEach(function (row) {
-          if (R.KINDS.indexOf(row.kind) < 0) return;
-          // те, що зараз чекає в черзі, чіпати не можна: наше новіше
-          if (outbox[row.kind + '/' + row.id]) return;
-          if (apply(row)) changed++;
-          if (!newest || row.updated_at > newest) newest = row.updated_at;
+    /* Сервер віддає не більше тисячі рядків за раз — тому сторінками.
+       Інакше новий пристрій отримав би лише частину учнів і уроків. */
+    var PAGE = 1000;
+    function page(offset, acc) {
+      return Cloud.request(path + '&limit=' + PAGE + '&offset=' + offset, { method: 'GET' })
+        .then(function (res) {
+          if (!res.ok) throw new Error('Сервер відповів ' + res.status);
+          return res.json();
+        })
+        .then(function (rows) {
+          rows = rows || [];
+          acc = acc.concat(rows);
+          return rows.length < PAGE ? acc : page(offset + PAGE, acc);
         });
+    }
 
-        since = newest;
-        saveState();
-        if (full) { try { localStorage.setItem(KINDS_KEY, R.KINDS.join(',')); } catch (e) {} }
-        if (changed) S.save();
-        return changed;
-      })
-      .catch(function (e) {
-        console.warn('Записи не вдалося прочитати:', e && e.message);
-        return 0;
+    R.scan();                                   // спершу помітити своє, щоб його не перекрило
+    pulling = R.flush().then(function () {
+      return page(0, []);
+    }).then(function (rows) {
+
+      var changed = 0;
+      var newest = since;
+      var sawMeta = false;
+
+      rows.forEach(function (row) {
+        if (row.kind === 'meta') sawMeta = true;
+        if (!newest || row.updated_at > newest) newest = row.updated_at;
+        if (R.KINDS.indexOf(row.kind) < 0) return;
+        // те, що зараз чекає в черзі, чіпати не можна: наше новіше
+        if (outbox[row.kind + '/' + row.id]) return;
+        if (apply(row)) changed++;
       });
+
+      /* Налаштування вперше їдуть окремими записами. Якщо сервер їх ще не
+         має — наші стають першими. */
+      if (full && !sawMeta) {
+        metaKeys(S.db()).forEach(function (k) { outbox['meta/' + k] = 1; });
+        schedule();
+      }
+
+      since = newest;
+      if (full && transition()) { try { localStorage.setItem(V2, new Date().toISOString()); } catch (e) {} }
+      saveState();
+      saveHashes();
+      if (Object.keys(outbox).length) schedule();
+      if (full) { try { localStorage.setItem(KINDS_KEY, R.KINDS.join(',')); } catch (e) {} }
+      if (changed) {
+        /* Відбитки прийнятого вже збігаються, тож наступний перегляд не
+           повезе його назад, а свої зміни, зроблені поки йшов запит, знайде. */
+        S.save();
+        if (window.App && App.render) {
+          // відкриту дошку не перемальовуємо: записи її не стосуються
+          try { if (!(window.V && V.boardMountedFor && V.boardMountedFor())) App.render(); } catch (e) {}
+        }
+      }
+      return changed;
+    }).catch(function (e) {
+      console.warn('Записи не вдалося прочитати:', e && e.message);
+      return 0;
+    }).then(function (n) {
+      pulling = null;
+      return n;
+    });
+    return pulling;
   };
 
+  function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+
+  /* ---------- перехід зі старого обміну ----------
+     Стара версія відправляла лише ті зміни, які їй назвали вручну. Дещо
+     (фото розвʼязань від учня, частина позначок) лишалось тільки в цьому
+     браузері. Тому при першому читанні тут запис не замінюється серверним,
+     а зливається з ним: з обох беремо все, чого немає в іншому, а де
+     значення різні — новіше. Потім злите їде на сервер. */
+  var V2 = 'mathhub.rec.v2';
+  function transition() { try { return !localStorage.getItem(V2); } catch (e) { return false; } }
+
+  function union(a, b) {
+    var out = a.slice();
+    var keyOf = function (x) {
+      if (x && typeof x === 'object') return x.id || x.key || JSON.stringify(x);
+      return JSON.stringify(x);
+    };
+    var have = {};
+    out.forEach(function (x) { have[keyOf(x)] = 1; });
+    b.forEach(function (x) { if (!have[keyOf(x)]) { out.push(x); have[keyOf(x)] = 1; } });
+    return out;
+  }
+
+  function mergeBoth(local, server, serverAt) {
+    var localNewer = !!(local && local.updatedAt && serverAt && local.updatedAt > serverAt);
+    var base = JSON.parse(JSON.stringify(localNewer ? local : server));
+    var other = localNewer ? server : local;
+    Object.keys(other || {}).forEach(function (k) {
+      if (!(k in base)) base[k] = other[k];
+      else if (Array.isArray(base[k]) && Array.isArray(other[k])) base[k] = union(base[k], other[k]);
+    });
+    return base;
+  }
+
+  /* Запис змінили тут, а перегляд змін ще не встиг його помітити (між
+     збереженням і переглядом — частки секунди). Серверна версія старша за
+     нашу — брати її не можна, а нашу треба відправити. */
+  function dirtyHere(key, data) {
+    if (!hashes || !(key in hashes) || data === undefined) return false;
+    if (hashes[key] === fp(JSON.stringify(data))) return false;
+    outbox[key] = 1;
+    return true;
+  }
+
   function apply(row) {
-    var list = S.db()[row.kind];
+    var db = S.db();
+    var key = row.kind + '/' + row.id;
+
+    if (row.kind === 'meta') {
+      if (NOT_META[row.id] || R.KINDS.indexOf(row.id) >= 0) return false;
+      if (db[row.id] !== undefined && dirtyHere(key, { v: db[row.id] })) return false;
+      var v = row.deleted || !row.data ? undefined : row.data.v;
+      // перехід: налаштування теж зливаються, а не замінюються
+      if (transition() && v && db[row.id] && typeof v === 'object' && typeof db[row.id] === 'object' &&
+          !Array.isArray(v) && !same(db[row.id], v)) {
+        v = mergeBoth(db[row.id], v, row.updated_at);
+        if (!same(v, row.data.v)) outbox[key] = 1;
+      }
+      if (same(db[row.id], v)) {
+        if (hashes) hashes[key] = fp(JSON.stringify({ v: db[row.id] }));
+        return false;
+      }
+      if (v === undefined) delete db[row.id]; else db[row.id] = v;
+      if (hashes) {
+        if (v === undefined) delete hashes[key];
+        else hashes[key] = fp(JSON.stringify({ v: db[row.id] }));
+      }
+      return true;
+    }
+
+    var list = db[row.kind];
     if (!Array.isArray(list)) return false;
 
     var i = -1;
     for (var k = 0; k < list.length; k++) if (list[k].id === row.id) { i = k; break; }
 
+    if (i >= 0 && dirtyHere(key, list[i])) return false;
+
     if (row.deleted) {
+      if (hashes) delete hashes[key];
       if (i < 0) return false;
       list.splice(i, 1);
       return true;
     }
 
     var rec = row.data;
+    if (!rec || typeof rec !== 'object') return false;
     rec.id = row.id;
+    if (i >= 0 && same(list[i], rec)) {
+      if (hashes) hashes[key] = fp(JSON.stringify(list[i]));
+      return false;
+    }
+    if (i >= 0 && transition()) {
+      var merged = mergeBoth(list[i], rec, row.updated_at);
+      merged.id = row.id;
+      if (!same(merged, rec)) outbox[key] = 1;       // злите — новіше за серверне
+      rec = merged;
+    }
     if (i >= 0) list[i] = rec; else list.push(rec);
+    if (hashes) hashes[key] = fp(JSON.stringify(rec));
     return true;
   }
 
@@ -232,26 +460,23 @@
      ============================================================ */
 
   /**
-   * Одноразово перекласти те, що вже є локально, у таблицю записів.
-   *
-   * Зі старого місця нічого не стираємо: локальний документ і далі тримає
-   * повну копію всього. Якщо з новим щось піде не так, є куди повернутися.
+   * Одноразово перекласти те, що вже є локально, у таблицю записів — на
+   * пристрої, який ще ніколи цього не робив.
    */
   R.migrate = function () {
     if (!ready()) return Promise.resolve(0);
     try { if (localStorage.getItem(DONE)) return Promise.resolve(0); } catch (e) {}
 
     var db = S.db();
-    var n = 0;
     R.KINDS.forEach(function (kind) {
+      if (kind === 'meta') return;                // налаштування — див. R.pull(full)
       (db[kind] || []).forEach(function (rec) {
-        if (rec && rec.id) { outbox[kind + '/' + rec.id] = 1; n++; }
+        if (rec && rec.id) outbox[kind + '/' + rec.id] = 1;
       });
     });
     saveState();
 
     return R.flush().then(function (sent) {
-      // позначку ставимо лише коли справді все поїхало
       if (!R.pending()) {
         try { localStorage.setItem(DONE, new Date().toISOString()); } catch (e) {}
       }
@@ -267,27 +492,53 @@
      Старт
      ============================================================ */
 
+  function watch() {
+    if (pullTimer) return;
+    var tick = function () {
+      pullTimer = setTimeout(function () {
+        pullTimer = null;
+        if (document.visibilityState !== 'hidden' && navigator.onLine && ready()) {
+          R.pull().then(tick, tick);
+        } else {
+          tick();
+        }
+      }, PULL_MS);
+    };
+    tick();
+  }
+
   R.start = function () {
-    if (started) return;
     loadState();
+    if (started) return;
     // запускаємось лише з входом, інакше вхід без перезавантаження нічого б не ввімкнув
     if (!ready()) return;
     started = true;
+
+    if (hashes === null) R.scan();
+
+    /* Перед першим читанням новим способом — копія всього, що є тут. Вона
+       лежить у «Копіях у браузері» й дозволяє повернути будь-що самому. */
+    var first = transition();
+    if (first && window.Vault && Vault.available && Vault.available()) {
+      try { Vault.put('перед переходом на новий обмін', S.exportJSON()); } catch (e) {}
+    }
 
     /* Порядок важливий: спершу віддати своє, потім перенести те, чого на
        сервері ще немає, і лише тоді забирати чуже. */
     R.flush()
       .then(function () { return R.migrate(); })
-      .then(function () { return R.pull(!since || kindsChanged()); })
-      .then(function (n) {
-        if (n && window.App && App.render) App.render();
-      });
+      .then(function () { return R.pull(!since || kindsChanged() || first); })
+      .then(watch, watch);
 
     window.addEventListener('online', function () { R.flush(); });
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'visible') R.pull();
+      else R.flush();
     });
   };
+
+  loadState();
+  if (S.onSave) S.onSave(scanSoon);
 
   window.RecSync = R;
 })();

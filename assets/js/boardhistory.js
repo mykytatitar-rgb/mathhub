@@ -79,7 +79,12 @@
        змінити (наприклад, під час самого відкату), і опис у списку описував
        би вже не той знімок, що збережений поруч. */
     var json, d;
-    try { json = JSON.stringify(board); d = describe(board); } catch (e) { return Promise.resolve(false); }
+    /* Службове поле обміну (_sync) у версію не кладемо: воно вдвічі
+       збільшило б кожен знімок і змінювалось би без жодної зміни дошки. */
+    try {
+      json = JSON.stringify(board, function (k, v) { return k === '_sync' ? undefined : v; });
+      d = describe(board);
+    } catch (e) { return Promise.resolve(false); }
 
     return H.list(boardKey).then(function (rows) {
       if (rows.length && rows[0].size === json.length && rows[0].hash === hash(json)) {

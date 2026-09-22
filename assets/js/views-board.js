@@ -272,13 +272,19 @@
        зникло; тоді ця точка й буде тим, до чого повертатись. */
     snapshot(true);
 
-    /* Свіжа версія саме цієї дошки — на випадок, якщо її вели з іншого
-       пристрою. Читаємо одну, а не всю базу: це швидко й не чіпає решти. */
-    if (window.BoardSync) {
-      BoardSync.pull(lessonId).then(function (changed) {
-        if (changed && V.boardReload()) snapshot(true);
-      });
+    /* Як у Miro: дошка відкривається миттєво з того, що є тут, а все, що
+       тим часом намалювали деінде, дочитується з журналу й лягає поверх.
+       Відраховувати свої зміни починаємо саме від цієї миті. */
+    if (window.BoardOps) {
+      if (BoardOps.prepare(board)) S.touchBoards();
+      BoardOps.view = {
+        id: lessonId,
+        busy: function () { return engineBusy(); },
+        before: function () { if (cur && cur.engine.sealHistory) cur.engine.sealHistory(); },
+        refresh: function () { refreshFromSync(); }
+      };
     }
+    pullOps();
 
     updateHwCount();
 
@@ -686,6 +692,13 @@
     if (cur.savedOff) { cur.savedOff(); cur.savedOff = null; }
     if (cur.live) { cur.live.leave(); cur.live = null; }
 
+    /* Усе своє — в журнал, свіжий знімок — на сервер: з нього почнуть інший
+       пристрій і сторінка учня. */
+    if (window.BoardOps) {
+      if (BoardOps.view && BoardOps.view.id === cur.lessonId) BoardOps.view = null;
+      BoardOps.leave(cur.lessonId);
+    }
+
     /* Виходимо з дошки — урок скінчився. Якщо на нього видано посилання,
        оновлюємо його негайно, не чекаючи хвилинної паузи: саме тепер
        учень і піде дивитися. */
@@ -951,8 +964,8 @@
     cur.live = Live.join(token, function (event, data) {
       if (!cur || cur.lessonId !== lessonId) return;
       if (event === 'ink' || event === 'hw') pullContributions();
-      // учень на живій дошці записав свої дії в журнал — забираємо одразу
-      if (event === 'ops' && data && data.from === 'student') pullOps();
+      // хтось (учень чи інший пристрій) записав дії в журнал — забираємо одразу
+      if (event === 'ops') pullOps();
       // сторінці учня бракує нового слайда чи картинки — перевидаємо негайно
       if (event === 'need') {
         cur.structural = true;
@@ -996,6 +1009,8 @@
     // повертаємо ту саму форму, що й у звичайному разі: інакше виклик
     // res.ids нижче падав, і внески ніколи не позначалися опрацьованими
     if (!cur || !rows || !rows.length) return { changed: false, ids: [] };
+    // написане учнем — не своя дія: «крок назад» його не прибиратиме
+    if (cur.engine.sealHistory) cur.engine.sealHistory();
     var changed = false;
     var ids = [];
     var pics = [];   // картинки від учня — їх треба забрати до себе
@@ -1163,21 +1178,40 @@
    */
   function pullOps() {
     if (!cur || !window.BoardOps) return;
-    if (cur.engine.draft || cur.engine.band) return;
+    BoardOps.pull(cur.lessonId, cur.board);     // перемалює сам, через refreshFromSync
+  }
 
-    var lessonId = cur.lessonId;
-    BoardOps.pull(lessonId, cur.board).then(function (n) {
-      if (!n || !cur || cur.lessonId !== lessonId) return;
+  /** Рука зараз на дошці: штрих, рамка, перетягування чи набір тексту. */
+  function engineBusy() {
+    if (!cur) return false;
+    var e = cur.engine;
+    if (e.draft || e.band) return true;
+    if (e._pointers && Object.keys(e._pointers).length) return true;
+    return !!document.querySelector('.board-text-input');
+  }
 
-      S.saveBoard(cur.board);
-      if (cur.index >= cur.board.slides.length) cur.index = cur.board.slides.length - 1;
-      cur.engine.setSlide(cur.board.slides[cur.index], true);   // true — лишити масштаб
-      renderRail();
-      refreshEmpty();
-      updateSlideName();
-      // учень міг покласти на живу дошку фото — забираємо файл собі
-      healStudentImages();
-    });
+  /**
+   * Дошка отримала зміни з журналу — показати їх, не збиваючи роботи.
+   * Той самий слайд лишається перед очима, навіть якщо деінде додали
+   * слайди перед ним.
+   */
+  function refreshFromSync() {
+    if (!cur) return;
+    if (engineBusy()) { setTimeout(refreshFromSync, 300); return; }
+    var shown = cur.engine.slide;
+    var at = shown ? cur.board.slides.indexOf(shown) : -1;
+    if (at < 0 && shown) {
+      cur.board.slides.forEach(function (s, i) { if (s.id === shown.id) at = i; });
+    }
+    cur.index = at >= 0 ? at : Math.min(cur.index, cur.board.slides.length - 1);
+    if (cur.index < 0) cur.index = 0;
+    cur.engine.setSlide(cur.board.slides[cur.index], true);   // true — лишити масштаб
+    renderRail();
+    refreshEmpty();
+    updateSlideName();
+    updateHwCount();
+    // учень міг покласти на живу дошку фото — забираємо файл собі
+    healStudentImages();
   }
 
   /**

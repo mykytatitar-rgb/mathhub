@@ -27,7 +27,7 @@
 
   /* Що переїжджає. База учнів лишається в localStorage: вона невелика,
      і на її подію storage тримається синхронізація вкладок у cloud.js. */
-  var BIG = ['mathhub.boards.v1', 'mathhub.before-sync', 'mathhub.ops.base'];
+  var BIG = ['mathhub.boards.v1', 'mathhub.before-sync', 'mathhub.ops.base', 'mathhub.rec.hash'];
   var MOVED_FLAG = 'mathhub.disk.moved';      // перенесення вже було — localStorage більше не джерело
 
   var mem = {};           // ключ → рядок (null — запису немає)

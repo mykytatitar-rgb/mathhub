@@ -254,6 +254,11 @@
   /** Чи останній запис у браузер не вдався — тоді свіжі дані лише в пам'яті. */
   S.lastSaveFailed = function () { return lastSaveFailed; };
 
+  /* Останній записаний документ бази (без дошок). За ним обмін записами
+     одразу бачить, що змінилися лише дошки, і не перебирає всіх учнів. */
+  var lastDoc = '';
+  S.lastDoc = function () { return lastDoc; };
+
   /** База без дошок — як вона лягає в браузер і їде на сервер. */
   S.docJSON = function () {
     var doc = {};
@@ -268,7 +273,8 @@
          би оригінал остаточно. */
       if (readFailed.doc) { warnBlocked(); return; }
 
-      localStorage.setItem(KEY, S.docJSON());
+      lastDoc = S.docJSON();
+      localStorage.setItem(KEY, lastDoc);
       lastSaveFailed = false;
 
       if (boardsDirty && !readFailed.boards) {
@@ -303,7 +309,10 @@
     if (window.ImgStore && window.ImgStore.available()) window.ImgStore.gc([]);
   };
 
-  S.exportJSON = function () { return JSON.stringify(db, null, 2); };
+  /* Службове поле обміну дошок (_sync) у файл не йде: воно подвоює розмір і
+     має сенс лише для цього браузера. */
+  function noSync(k, v) { return k === '_sync' ? undefined : v; }
+  S.exportJSON = function () { return JSON.stringify(db, noSync, 2); };
 
   /**
    * Замінити базу вмістом документа.
@@ -341,6 +350,19 @@
     OWN_STORE.forEach(function (k) {
       parsed[k] = (keep || !incoming[k]) ? ((db && db[k]) || []) : incoming[k];
     });
+
+    /* Дошки з файлу лягають поверх теперішніх, але пам'ять обміну лишається
+       теперішня. Тоді повернене з копії — це звичайна зміна дошки: вона
+       поїде в журнал і дійде до всіх пристроїв, а не загубиться. */
+    if (!keep && incoming.boards && db && db.boards) {
+      var mine = {};
+      db.boards.forEach(function (b) { if (b && b._sync) mine[b.lessonId] = b._sync; });
+      parsed.boards.forEach(function (b) {
+        if (!b) return;
+        delete b._sync;
+        if (mine[b.lessonId]) b._sync = mine[b.lessonId];
+      });
+    }
 
     db = parsed;
     boardsDirty = !keep && !!incoming.boards;
@@ -975,14 +997,20 @@
       if (S.ensureItemIds(b)) { boardsDirty = true; S.save(); }
       return b;
     }
+    /* Перший слайд має однаковий номер на всіх пристроях. Якщо дошку того
+       самого уроку відкрили на двох пристроях раніше, ніж вони побачили
+       одне одного, їхні перші слайди зливаються в один, а не стають двома. */
+    var first = S.newSlide();
+    first.id = 'sl0-' + lessonId;
     b = {
       id: U.uid('brd'),
       lessonId: lessonId,
-      slides: [S.newSlide()],
+      slides: [first],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
     db.boards.push(b);
+    if (window.BoardOps && BoardOps.prepare) BoardOps.prepare(b);
     boardsDirty = true;
     S.save();
     return b;
@@ -1508,6 +1536,8 @@
   S.removeLesson = function (lessonId) {
     markSlotGone(S.get('lessons', lessonId));
     S.removeBoard(lessonId);
+    // оплата уроку зникає всюди, а не лише тут — інакше повернулась би з іншого пристрою
+    syncDelMany('payments', db.payments.filter(function (p) { return p.lessonId === lessonId; }));
     db.payments = db.payments.filter(function (p) { return p.lessonId !== lessonId; });
     return S.remove('lessons', lessonId);
   };

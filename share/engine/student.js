@@ -572,7 +572,7 @@
         var a = core().apply(board, op);
         core().apply(base, op);
         if (a) {
-          if (op.t === 's+' || op.t === 's-' || op.t === 's~') structure = true;
+          if (op.t === 's+' || op.t === 's-' || op.t === 's~' || op.t === 'so') structure = true;
           if (op.s === curId) touchedCur = true;
         }
       });

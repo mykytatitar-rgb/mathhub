@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v91';
+  App.BUILD = 'v92';
   window.APP_BUILD = App.BUILD;
 
   var NAV = [
@@ -898,7 +898,7 @@
       var DAILY = 'mathhub.vault.daily';
       var today = new Date().toISOString().slice(0, 10);
       if (localStorage.getItem(DAILY) !== today) {
-        Vault.put('щоденна копія', JSON.stringify(S.db())).then(function () {
+        Vault.put('щоденна копія', S.exportJSON()).then(function () {
           try { localStorage.setItem(DAILY, today); } catch (e) {}
         });
       }
@@ -1033,6 +1033,21 @@
   }
 
   window.addEventListener('load', function () { setTimeout(askSignIn, 400); });
+
+  /* Сесія закінчилась посеред роботи (пароль змінили деінде, вийшли з іншого
+     пристрою). Мовчки працювати далі не можна: усе нове лишалося б лише
+     тут. Тому те саме одне вікно входу — одразу, як у Miro. */
+  if (window.Cloud && Cloud.onChange) {
+    var wasIn = Cloud.available() && Cloud.signedIn();
+    Cloud.onChange(function (st) {
+      var nowIn = st.state !== 'signedout' && st.state !== 'off';
+      if (wasIn && !nowIn) {
+        try { sessionStorage.removeItem(ASK_KEY); } catch (e) {}
+        setTimeout(askSignIn, 200);
+      }
+      wasIn = nowIn;
+    });
+  }
 
   window.App = App;
 })();

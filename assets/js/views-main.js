@@ -1859,7 +1859,7 @@
     return C.hero({
       short: true,
       title: 'Налаштування',
-      sub: 'профіль, дані, резервні копії'
+      sub: 'профіль, акаунт, нагадування'
     }) +
 
     '<div class="page">' +
@@ -1923,66 +1923,69 @@
           V.accountCard() +
           V.telegramCard() +
           V.calendarCard() +
-
-          /* Технічне — згорнуто. Кабінет має працювати як Miro: відкрив і
-             працюєш, про збереження й синхронізацію не думаєш. Усе нижче
-             потрібне лише тоді, коли щось пішло не так. */
-          '<details class="tech-zone">' +
-            '<summary>Технічне — знадобиться, лише якщо щось піде не так</summary>' +
-            '<div class="card">' +
-              '<div class="card-head"><div><h3 class="card-title">Дані</h3>' +
-              '<div class="card-sub">' + (syncOn()
-              ? 'копії робляться самі, ця кнопка — про запас'
-              : 'усе зберігається лише у вашому браузері') + '</div></div></div>' +
-              '<div class="row row--wrap" style="gap:10px">' +
-                '<button class="btn btn--soft" data-act="export">' + icon('download', 16) + 'Експорт у файл</button>' +
-                '<button class="btn btn--ghost" data-act="import">' + icon('upload', 16) + 'Імпорт з файлу</button>' +
-              '</div>' +
-              '<div class="field__hint mt-2">' + (syncOn()
-              ? 'Усе й так лежить на сервері, а кожна зміна дошки — у журналі, тож робити копії не обовʼязково. Файл — про запас: він працює й тоді, коли сервер недоступний.'
-              : 'Резервну копію варто робити раз на тиждень. Файл JSON можна перенести на інший комп\'ютер або в інший браузер.') + '</div>' +
-            /* Копії в браузері й стан закріплення сховища. Тут, а не всередині
-               синхронізації: вони працюють і без входу, і саме сюди людина
-               йде, коли щось зникло. */
-              '<div class="mt-2" data-vault></div>' +
-            '</div>' +
-
-            V.healthCard() +
-
-            '<div class="card">' +
-              '<div class="card-head"><div><h3 class="card-title">Що зараз у базі</h3></div></div>' +
-              '<div class="grid grid--2" style="gap:12px">' +
-              ['students:Учнів:users', 'lessons:Уроків:book', 'homeworks:ДЗ:checklist',
-                 'payments:Оплат:wallet', 'notes:Нотаток:note', 'materials:Матеріалів:folder',
-                 'boards:Дошок:board']
-                .map(function (x) {
-                  var p = x.split(':');
-                  return '<div class="row" style="gap:10px">' +
-                      '<span style="color:var(--blue-600)">' + icon(p[2], 17) + '</span>' +
-                      '<span class="small muted">' + p[1] + '</span>' +
-                      '<span class="spacer bold">' + db[p[0]].length + '</span></div>';
-                }).join('') +
-                '<div class="row" style="gap:10px">' +
-                  '<span style="color:var(--blue-600)">' + icon('image', 17) + '</span>' +
-                  '<span class="small muted">Картинок</span>' +
-                  '<span class="spacer bold" data-img-usage>…</span></div>' +
-              '</div>' +
-              '<div class="field__hint mt-2">Усе це лежить на сервері; у браузері — копія для швидкості ' +
-              '(дошки й картинки в IndexedDB, де місця вдосталь). Резервна копія забирає все разом.</div>' +
-            '</div>' +
-
-            '<div class="card">' +
-              '<div class="card-head"><div><h3 class="card-title">Небезпечна зона</h3></div></div>' +
-              '<div class="row row--wrap" style="gap:10px">' +
-                '<button class="btn btn--ghost" data-act="reset-demo">' + icon('sparkles', 16) + 'Повернути демо-дані</button>' +
-                '<button class="btn btn--danger" data-act="wipe">' + icon('trash', 16) + 'Очистити все</button>' +
-              '</div>' +
-              '<div class="field__hint mt-2">«Очистити все» видаляє учнів, уроки, оплати й нотатки без можливості відновлення. Спершу зробіть експорт.</div>' +
-            '</div>' +
-          '</details>' +
         '</div>' +
       '</div>' +
     '</div>';
+  };
+
+
+  /* Службова сторінка — лише за адресою #/settings/tech, ніде не показується.
+     Як у Miro: людина не бачить ні копій, ні експорту, ні перевірок. Сюди
+     йдуть тільки якщо колись доведеться щось повернути вручну. */
+  V.settingsTech = function () {
+    var db = S.db();
+    return C.hero({ short: true, title: 'Службове', sub: 'копії, перевірки, експорт' }) +
+      '<div class="page"><div class="stack" style="max-width:760px">' +
+          '<div class="card">' +
+            '<div class="card-head"><div><h3 class="card-title">Дані</h3>' +
+            '<div class="card-sub">' + (syncOn()
+            ? 'копії робляться самі, ця кнопка — про запас'
+            : 'усе зберігається лише у вашому браузері') + '</div></div></div>' +
+            '<div class="row row--wrap" style="gap:10px">' +
+              '<button class="btn btn--soft" data-act="export">' + icon('download', 16) + 'Експорт у файл</button>' +
+              '<button class="btn btn--ghost" data-act="import">' + icon('upload', 16) + 'Імпорт з файлу</button>' +
+            '</div>' +
+            '<div class="field__hint mt-2">' + (syncOn()
+            ? 'Усе й так лежить на сервері, а кожна зміна дошки — у журналі, тож робити копії не обовʼязково. Файл — про запас: він працює й тоді, коли сервер недоступний.'
+            : 'Резервну копію варто робити раз на тиждень. Файл JSON можна перенести на інший комп\'ютер або в інший браузер.') + '</div>' +
+          /* Копії в браузері й стан закріплення сховища. Тут, а не всередині
+             синхронізації: вони працюють і без входу, і саме сюди людина
+             йде, коли щось зникло. */
+            '<div class="mt-2" data-vault></div>' +
+          '</div>' +
+
+          V.healthCard() +
+
+          '<div class="card">' +
+            '<div class="card-head"><div><h3 class="card-title">Що зараз у базі</h3></div></div>' +
+            '<div class="grid grid--2" style="gap:12px">' +
+            ['students:Учнів:users', 'lessons:Уроків:book', 'homeworks:ДЗ:checklist',
+               'payments:Оплат:wallet', 'notes:Нотаток:note', 'materials:Матеріалів:folder',
+               'boards:Дошок:board']
+              .map(function (x) {
+                var p = x.split(':');
+                return '<div class="row" style="gap:10px">' +
+                    '<span style="color:var(--blue-600)">' + icon(p[2], 17) + '</span>' +
+                    '<span class="small muted">' + p[1] + '</span>' +
+                    '<span class="spacer bold">' + db[p[0]].length + '</span></div>';
+              }).join('') +
+              '<div class="row" style="gap:10px">' +
+                '<span style="color:var(--blue-600)">' + icon('image', 17) + '</span>' +
+                '<span class="small muted">Картинок</span>' +
+                '<span class="spacer bold" data-img-usage>…</span></div>' +
+            '</div>' +
+            '<div class="field__hint mt-2">Усе це лежить на сервері; у браузері — копія для швидкості ' +
+            '(дошки й картинки в IndexedDB, де місця вдосталь). Резервна копія забирає все разом.</div>' +
+          '</div>' +
+
+          '<div class="card">' +
+            '<div class="card-head"><div><h3 class="card-title">Небезпечна зона</h3></div></div>' +
+            '<div class="row row--wrap" style="gap:10px">' +
+              '<button class="btn btn--ghost" data-act="reset-demo">' + icon('sparkles', 16) + 'Повернути демо-дані</button>' +
+              '<button class="btn btn--danger" data-act="wipe">' + icon('trash', 16) + 'Очистити все</button>' +
+            '</div>' +
+            '<div class="field__hint mt-2">«Очистити все» видаляє учнів, уроки, оплати й нотатки без можливості відновлення. Спершу зробіть експорт.</div>' +
+          '</div>' +      '</div></div>';
   };
 
   /** Обсяг картинок дізнаємось асинхронно — дописуємо після рендеру. */

@@ -159,9 +159,9 @@
               S.update('students', id, v);
               // Валюту міняємо окремо: старі уроки й оплати перемічуються, але НЕ конвертуються
               var changed = S.setStudentCurrency(id, v.currency);
-              U.toast(changed
-                ? 'Валюту змінено на ' + v.currency + '. Суми не перераховувались — перевірте їх.'
-                : 'Збережено', 'ok');
+              if (changed) {
+                U.toast('Валюту змінено на ' + v.currency + '. Суми не перераховувались — перевірте їх.', 'ok');
+              }
               if (newSchedule !== oldSchedule) {
                 /* Спершу прибираємо майбутні уроки за старим розкладом, і лише
                    потім створюємо нові. Без прибирання зміна розкладу лише
@@ -275,7 +275,7 @@
             if (preset.lockStudent) v.studentId = data.studentId;
             v.currency = S.curOf(v.studentId);
             if (isNew) { S.add('lessons', v); U.toast('Урок додано', 'ok'); }
-            else { S.update('lessons', id, v); U.toast('Збережено', 'ok'); }
+            else { S.update('lessons', id, v); }
             refresh();
           } }
       ].filter(Boolean),
@@ -568,7 +568,7 @@
               v.studentId = preset.lockStudent ? data.studentId : (v.studentId || data.studentId);
               v.lessonId = data.lessonId;
               S.add('homeworks', v); U.toast('ДЗ задано', 'ok');
-            } else { S.update('homeworks', id, v); U.toast('Збережено', 'ok'); }
+            } else { S.update('homeworks', id, v); }
             S.gcImages();
             refresh();
             done();
@@ -702,7 +702,7 @@
               }
               S.add('payments', v); U.toast('Оплату записано', 'ok');
             }
-            else { S.update('payments', id, v); U.toast('Збережено', 'ok'); }
+            else { S.update('payments', id, v); }
             refresh();
           } }
       ].filter(Boolean),
@@ -763,7 +763,7 @@
             if (!v.text) { U.toast('Нотатка порожня', 'err'); return false; }
             if (isNew) { v.studentId = data.studentId; S.add('notes', v); }
             else S.update('notes', id, v);
-            U.toast('Збережено', 'ok'); refresh();
+            refresh();
           } }
       ].filter(Boolean)
     });
@@ -856,10 +856,8 @@
 
       var heavy = picked.filter(function (f) { return f.size > HEAVY; });
       if (heavy.length) {
-        U.toast('Великий файл (' + fileSize(heavy[0].size) + '). Якщо сервер його не прийме, ' +
-          'він лишиться на цьому пристрої — перевірте в «Чи все ціле»', 'ok');
+        console.info('Великий файл (' + fileSize(heavy[0].size) + ') — сервер може його не прийняти');
       }
-      U.toast('Зберігаю ' + U.pl(picked.length, 'файл', 'файли', 'файлів') + '…');
       Promise.all(picked.map(function (f) {
         var key = 'file_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
         return window.ImgStore.put(key, f)
@@ -1226,7 +1224,7 @@
             });
             if (isNew) S.add('materials', v); else S.update('materials', id, v);
             S.gcImages();
-            U.toast('Збережено', 'ok'); refresh();
+            refresh();
           } }
       ].filter(Boolean),
       onMount: function (root) {
@@ -1322,7 +1320,6 @@
               return;
             }
             S.update('desk', id, v);
-            U.toast('Збережено', 'ok');
             refresh();
           } }
       ].filter(Boolean)

@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v92';
+  App.BUILD = 'v93';
   window.APP_BUILD = App.BUILD;
 
   var NAV = [
@@ -245,7 +245,7 @@
         case 'bank':
           html = V.bank ? V.bank(route.query) : ''; break;
         case 'settings':
-          html = V.settings(); break;
+          html = route.parts[1] === 'tech' && V.settingsTech ? V.settingsTech() : V.settings(); break;
         default:
           html = '<div class="page"><div class="card">' +
             C.empty('alert', 'Сторінку не знайдено', 'Такого розділу немає.',
@@ -436,7 +436,7 @@
       if (!v.email || !v.password) { U.toast('Вкажіть пошту й пароль', 'err'); return; }
       U.toast('Входжу…');
       window.Cloud.signIn(v.email, v.password).then(function () {
-        U.toast('Синхронізація увімкнена', 'ok');
+        U.toast('Ви увійшли', 'ok');
         App.render();
       }).catch(function (e) {
         U.toast(e && e.message ? e.message : 'Не вдалося увійти', 'err');
@@ -474,7 +474,7 @@
       if (String(v.password).length < 6) { U.toast('Пароль — щонайменше 6 символів', 'err'); return; }
       U.toast('Створюю акаунт…');
       window.Cloud.signUp(v.email, v.password).then(function (entered) {
-        if (entered) U.toast('Акаунт створено, синхронізація увімкнена', 'ok');
+        if (entered) U.toast('Акаунт створено', 'ok');
         else U.toast('Перевірте пошту й перейдіть за посиланням, потім натисніть «Увійти»', 'ok');
         App.render();
       }).catch(function (e) {

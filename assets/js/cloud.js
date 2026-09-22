@@ -22,6 +22,11 @@
   var DB_KEY = 'mathhub.db.v1';        // те саме сховище, що й у store.js
   var BACKUP = 'mathhub.before-sync';  // страховка перед прийняттям серверної версії
   var BACKUP_KEEP = 3;
+
+  /* Страхові копії — повні знімки бази, тож їм місце у великому сховищі
+     (disk.js), а не в localStorage, де вони тіснили саму базу. */
+  function diskGet(key) { return window.Disk ? Disk.get(key) : localStorage.getItem(key); }
+  function diskSet(key, value) { if (window.Disk) Disk.set(key, value); else localStorage.setItem(key, value); }
   /* Затримки навмисно різні. Під час уроку дошку дивляться з іншого пристрою,
      і кожна зайва секунда помітна — тому там усе прискорюється. Поза дошкою
      поспішати нема куди, а рідші запити бережуть батарею й трафік. */
@@ -317,14 +322,14 @@
     } catch (e) { /* сховище копій не має ламати синхронізацію */ }
 
     try {
-      var list = JSON.parse(localStorage.getItem(BACKUP) || '[]');
+      var list = JSON.parse(diskGet(BACKUP) || '[]');
       list.unshift({ at: new Date().toISOString(), reason: reason || '', data: localJSON() });
       list = list.slice(0, BACKUP_KEEP);
-      localStorage.setItem(BACKUP, JSON.stringify(list));
+      diskSet(BACKUP, JSON.stringify(list));
     } catch (e) {
       // якщо місця не хватило — приберемо найстаріші й спробуємо ще раз
       try {
-        localStorage.setItem(BACKUP, JSON.stringify([{ at: new Date().toISOString(), reason: reason || '', data: localJSON() }]));
+        diskSet(BACKUP, JSON.stringify([{ at: new Date().toISOString(), reason: reason || '', data: localJSON() }]));
       } catch (e2) { console.warn('Не вдалося зберегти страхову копію:', e2); }
     }
   }
@@ -339,7 +344,7 @@
 
   Cloud.backups = function () {
     try {
-      return JSON.parse(localStorage.getItem(BACKUP) || '[]').map(function (b, i) {
+      return JSON.parse(diskGet(BACKUP) || '[]').map(function (b, i) {
         var students = 0, archived = 0, total = 0;
         try {
           var parsed = JSON.parse(b.data);
@@ -382,7 +387,7 @@
     try { now = JSON.parse(localJSON()); } catch (e) { return []; }
 
     var raw;
-    try { raw = JSON.parse(localStorage.getItem(BACKUP) || '[]'); } catch (e) { raw = []; }
+    try { raw = JSON.parse(diskGet(BACKUP) || '[]'); } catch (e) { raw = []; }
 
     return Cloud.backups().filter(function (b, i) {
       if (!b.total) return false;                       // порожня копія нічого не врятує
@@ -403,7 +408,7 @@
 
   Cloud.restoreBackup = function (i) {
     var list;
-    try { list = JSON.parse(localStorage.getItem(BACKUP) || '[]'); } catch (e) { list = []; }
+    try { list = JSON.parse(diskGet(BACKUP) || '[]'); } catch (e) { list = []; }
     var b = list[i];
     if (!b) return Promise.reject(new Error('Копію не знайдено'));
     suppress++;
@@ -1565,6 +1570,9 @@
 
   /* А от мережу чіпаємо лише після того, як app.js відмалював інтерфейс —
      перше відкриття не має чекати на сервер. */
-  if (document.readyState === 'complete') Cloud.start();
-  else window.addEventListener('load', function () { Cloud.start(); });
+  function startWhenReady() {
+    if (window.Disk) Disk.ready(function () { Cloud.start(); }); else Cloud.start();
+  }
+  if (document.readyState === 'complete') startWhenReady();
+  else window.addEventListener('load', startWhenReady);
 })();

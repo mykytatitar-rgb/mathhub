@@ -7,7 +7,7 @@
 
    Версію треба піднімати щоразу, коли змінюється склад файлів. */
 
-var VERSION = 'vektor-v89';
+var VERSION = 'vektor-v90';
 
 var SHELL = [
   './',
@@ -18,6 +18,7 @@ var SHELL = [
   './assets/css/board.css',
   './assets/js/icons.js',
   './assets/js/utils.js',
+  './assets/js/disk.js',
   './assets/js/store.js',
   './assets/js/vault.js',
   './assets/js/cloudconfig.js',

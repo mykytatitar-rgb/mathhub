@@ -36,14 +36,17 @@
   function load() {
     if (loaded) return;
     loaded = true;
-    try { base = JSON.parse(localStorage.getItem(BASE) || '{}') || {}; } catch (e) { base = {}; }
+    try { base = JSON.parse((window.Disk ? Disk.get(BASE) : localStorage.getItem(BASE)) || '{}') || {}; } catch (e) { base = {}; }
     try { seen = JSON.parse(localStorage.getItem(SEEN) || '{}') || {}; } catch (e) { seen = {}; }
     try { kept = JSON.parse(localStorage.getItem(KEPT) || '{}') || {}; } catch (e) { kept = {}; }
   }
 
   function persist() {
+    // знімки дошок важкі — у велике сховище; решта — дрібниці
     try {
-      localStorage.setItem(BASE, JSON.stringify(base));
+      if (window.Disk) Disk.set(BASE, JSON.stringify(base)); else localStorage.setItem(BASE, JSON.stringify(base));
+    } catch (e) { /* журнал переживе, дошка збережена окремо */ }
+    try {
       localStorage.setItem(SEEN, JSON.stringify(seen));
       localStorage.setItem(KEPT, JSON.stringify(kept));
     } catch (e) { /* сховище повне — журнал переживе, дошка збережена окремо */ }

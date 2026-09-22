@@ -207,8 +207,15 @@
    * доведеться відкрити цю базу старою версією програми.
    */
   function adoptBoardsStore(doc) {
+    if (window.Disk && Disk.broken()) {
+      // дошки лежать в IndexedDB, який зараз не читається, — «порожньо» тут не правда
+      readFailed.boards = true;
+      doc.boards = [];
+      warnBlocked();
+      return;
+    }
     var raw = null;
-    try { raw = localStorage.getItem(BOARDS_KEY); } catch (e) { raw = null; }
+    try { raw = window.Disk ? Disk.get(BOARDS_KEY) : localStorage.getItem(BOARDS_KEY); } catch (e) { raw = null; }
 
     if (raw) {
       /* Запис про дошки є. Далі можливі лише два кінці: або ми його
@@ -245,6 +252,8 @@
   var saveHooks = [];
   S.onSave = function (fn) { if (typeof fn === 'function') saveHooks.push(fn); };
 
+  var lastSaveWarn = 0;
+
   S.save = function () {
     try {
       /* Нечитане не перезаписуємо. У памʼяті зараз порожньо не тому, що
@@ -257,13 +266,24 @@
       localStorage.setItem(KEY, JSON.stringify(doc));
 
       if (boardsDirty && !readFailed.boards) {
-        localStorage.setItem(BOARDS_KEY, JSON.stringify(db.boards));
+        if (window.Disk) Disk.set(BOARDS_KEY, JSON.stringify(db.boards));
+        else localStorage.setItem(BOARDS_KEY, JSON.stringify(db.boards));
         boardsDirty = false;
       } else if (boardsDirty) {
         warnBlocked();
       }
     } catch (e) {
-      U.toast('Не вдалося зберегти дані: ' + e.message, 'err');
+      /* Не щоразу: при переповненому сховищі кожна дія давала нове червоне
+         вікно, і посеред уроку ними засипало весь екран. Раз на 10 хвилин
+         досить, щоб знати; дані тим часом ідуть на сервер із пам'яті. */
+      var now = Date.now();
+      if (now - lastSaveWarn > 600000) {
+        lastSaveWarn = now;
+        U.toast(/quota/i.test(e && e.message || '')
+          ? 'Сховище браузера переповнене: зміни йдуть на сервер, але локально не записуються. Відкрийте «Чи все ціле» в Налаштуваннях.'
+          : 'Не вдалося зберегти дані: ' + e.message, 'err');
+      }
+      console.warn('S.save:', e);
     }
     // збій в одному слухачі не має валити збереження
     saveHooks.forEach(function (fn) {
@@ -1407,7 +1427,7 @@
     if (!window.ImgStore || !window.ImgStore.available()) return Promise.resolve(0);
 
     var stored = [];
-    try { stored = JSON.parse(localStorage.getItem(BOARDS_KEY) || '[]') || []; } catch (e) { stored = []; }
+    try { stored = JSON.parse((window.Disk ? Disk.get(BOARDS_KEY) : localStorage.getItem(BOARDS_KEY)) || '[]') || []; } catch (e) { stored = []; }
     if (stored.length && !(db.boards || []).length) {
       return Promise.reject(new Error('Дошки прочитані не повністю — прибирання скасовано'));
     }

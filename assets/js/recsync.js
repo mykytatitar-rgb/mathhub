@@ -489,6 +489,82 @@
   };
 
   /* ============================================================
+     Зайві оплати
+     ============================================================
+
+     Стара версія, видаляючи урок, прибирала його оплату лише в браузері —
+     на сервері вона лишалася. Перше повне читання новим способом
+     повернуло такі оплати, і дохід за місяць виріс на гроші за уроки,
+     яких уже немає. Так само бувають двійники: урок позначили оплаченим
+     на двох пристроях раніше, ніж вони побачили одне одного.
+
+     Прибираємо лише те, що за правилами програми існувати не мало:
+       • оплату «за урок», чий урок видалено (на сервері він позначений
+         видаленим, тут його немає);
+       • другу й далі однакову оплату за той самий урок.
+     На сервері це позначка «видалено», а не стирання: повернути можна. */
+
+  function pagedIds(path) {
+    var out = [];
+    function page(offset) {
+      return Cloud.request(path + '&limit=1000&offset=' + offset, { method: 'GET' })
+        .then(function (res) {
+          if (!res.ok) throw new Error('Сервер відповів ' + res.status);
+          return res.json();
+        })
+        .then(function (rows) {
+          rows = rows || [];
+          out = out.concat(rows);
+          return rows.length < 1000 ? out : page(offset + 1000);
+        });
+    }
+    return page(0);
+  }
+
+  R.heal = function () {
+    if (!ready()) return Promise.resolve(0);
+    return pagedIds('/rest/v1/records?select=id&kind=eq.lessons&deleted=eq.true&order=id.asc')
+      .then(function (rows) {
+        var db = S.db();
+        var gone = {};
+        (rows || []).forEach(function (r) { gone[r.id] = 1; });
+        var here = {};
+        db.lessons.forEach(function (l) { here[l.id] = 1; });
+
+        var kill = {};
+        // оплати видалених уроків
+        db.payments.forEach(function (p) {
+          if (p && p.lessonId && gone[p.lessonId] && !here[p.lessonId]) kill[p.id] = 'урок видалено';
+        });
+        // двійники: та сама сума в тій самій валюті за той самий урок
+        var seen = {};
+        db.payments.slice().sort(function (a, b) {
+          return String(a.createdAt || '') < String(b.createdAt || '') ? -1 : 1;
+        }).forEach(function (p) {
+          if (!p || !p.lessonId || kill[p.id]) return;
+          var key = p.lessonId + '|' + Number(p.amount) + '|' + S.paymentCur(p);
+          if (seen[key]) kill[p.id] = 'двійник';
+          else seen[key] = 1;
+        });
+
+        var ids = Object.keys(kill);
+        if (!ids.length) return 0;
+        console.info('Прибрано зайвих оплат:', ids.length, ids.map(function (id) { return id + ' (' + kill[id] + ')'; }));
+        db.payments = db.payments.filter(function (p) { return !kill[p.id]; });
+        ids.forEach(function (id) { R.markDeleted('payments', id); });
+        S.save();
+        if (window.App && App.render) {
+          try { if (!(window.V && V.boardMountedFor && V.boardMountedFor())) App.render(); } catch (e) {}
+        }
+        return ids.length;
+      })
+      .catch(function (e) {
+        console.warn('Перевірка оплат не вдалася:', e && e.message);
+        return 0;
+      });
+  };
+
+  /* ============================================================
      Старт
      ============================================================ */
 
@@ -528,6 +604,7 @@
     R.flush()
       .then(function () { return R.migrate(); })
       .then(function () { return R.pull(!since || kindsChanged() || first); })
+      .then(function () { return R.heal(); })
       .then(watch, watch);
 
     window.addEventListener('online', function () { R.flush(); });

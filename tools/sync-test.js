@@ -156,7 +156,11 @@ Server.prototype.handle = function (who, url, opts) {
   }
   if (p === '/rest/v1/records' && method === 'GET') {
     var recs = Object.keys(self.records).map(function (k) { return self.records[k]; });
-    F.forEach(function (f) { if (f[0] === 'updated_at') recs = recs.filter(function (r) { return cmp(r.updated_at, f[1]); }); });
+    F.forEach(function (f) {
+      if (f[0] === 'updated_at') recs = recs.filter(function (r) { return cmp(r.updated_at, f[1]); });
+      if (f[0] === 'kind') recs = recs.filter(function (r) { return cmp(r.kind, f[1]); });
+      if (f[0] === 'deleted') recs = recs.filter(function (r) { return cmp(String(!!r.deleted), f[1]); });
+    });
     recs.sort(function (a, b) { return a.updated_at < b.updated_at ? -1 : a.updated_at > b.updated_at ? 1 : 0; });
     var off = Number(get('offset')[0] || 0), l2 = Number(get('limit')[0] || 1000);
     return JSON.parse(JSON.stringify(recs.slice(off, off + l2)));
@@ -623,6 +627,27 @@ scenario('Перехід зі старої версії: те, що лишало
     same(A.db.lessons[0].topic, 'Нова тема з телефона', 'новіша тема з сервера прийнята');
     var sh = srv.records['homeworks/h1'].data;
     same((sh.solutions || []).length, 1, 'і фото доїхало на сервер');
+  });
+});
+
+scenario('Оплати видалених уроків і двійники не рахуються в дохід', function () {
+  var srv = new Server(), A = new Device('A', srv);
+  function rec(kind, id, data, deleted) {
+    srv.records[kind + '/' + id] = { kind: kind, id: id, rev: 1, deleted: !!deleted, updated_at: srv.now(), data: data };
+  }
+  rec('lessons', 'L-del', { id: 'L-del', price: 500 }, true);          // урок видалено
+  rec('lessons', 'L-ok', { id: 'L-ok', price: 500 });
+  rec('payments', 'p-orphan', { id: 'p-orphan', lessonId: 'L-del', amount: 500, currency: 'UAH', date: '2026-09-10' });
+  rec('payments', 'p-ok', { id: 'p-ok', lessonId: 'L-ok', amount: 500, currency: 'UAH', date: '2026-09-11', createdAt: '2026-09-11T10:00:00Z' });
+  rec('payments', 'p-twin', { id: 'p-twin', lessonId: 'L-ok', amount: 500, currency: 'UAH', date: '2026-09-11', createdAt: '2026-09-11T10:05:00Z' });
+  rec('payments', 'p-manual', { id: 'p-manual', amount: 3000, currency: 'UAH', date: '2026-09-12' });
+  A.ctx.S.paymentCur = function (p) { return p.currency || 'UAH'; };
+  A.ctx.RecSync.start();
+  return wait(1800).then(function () {
+    same(A.db.payments.map(function (p) { return p.id; }).sort().join(), 'p-manual,p-ok', 'лишились справжні оплати');
+    ok(srv.records['payments/p-orphan'].deleted, 'оплата видаленого уроку позначена видаленою на сервері');
+    ok(srv.records['payments/p-twin'].deleted, 'двійник позначений видаленим');
+    ok(!srv.records['payments/p-manual'].deleted, 'ручна оплата без уроку не зачеплена');
   });
 });
 

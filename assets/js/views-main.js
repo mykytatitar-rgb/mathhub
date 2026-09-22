@@ -331,8 +331,20 @@
        рядком. Вийшло гірше: заголовок питає «скільки за місяць», а великим
        стояла частина відповіді. Повне число має бути великим, а поділ —
        поясненням під ним. */
-    var parts = U.mapSize(map) > 1
-      ? '<div class="tot__parts">' + U.moneyMap(map) + '</div>' : '';
+    /* Словами, чим саме прийшли гроші. Два великі числа «у гривнях» і «у
+       доларах» читалися як «стільки отримав гривнями і стільки доларами» —
+       і $911 виглядало як долари, яких насправді не було. Тепер велике число
+       одне, долари поруч — лише перерахунок, а тут — що справді надійшло. */
+    var HOW = { UAH: 'гривнями', USD: 'доларами', EUR: 'в євро', PLN: 'злотими',
+                GBP: 'фунтами', CZK: 'кронами', CAD: 'канадськими доларами',
+                AUD: 'австралійськими доларами' };
+    var got = Object.keys(map).filter(function (k) { return Math.abs(map[k]) > 0.005; })
+      .sort(function (a, b) { return a === 'UAH' ? -1 : b === 'UAH' ? 1 : 0; });
+    var parts = got.length > 1
+      ? '<div class="tot__parts">Отримано ' + got.map(function (k) {
+          return (HOW[k] || k) + ' <b>' + U.esc(U.money(map[k], k)) + '</b>';
+        }).join(' · ') + '</div>'
+      : '';
 
     var note;
     if (now.partial) {
@@ -345,7 +357,7 @@
     } else {
       var src = R.sourceOf('USD') === 'manual' ? 'курс вписано вручну' : 'курс НБУ';
       note = '<div class="tot__src">' + U.esc(src) + ' · $1 = ' +
-        U.esc(String(Math.round(usdRate * 100) / 100)) + ' ₴</div>';
+        U.esc(String(Math.round(usdRate * 100) / 100).replace('.', ',')) + ' ₴</div>';
     }
 
     return '<div class="card tot mb-3">' +
@@ -356,18 +368,17 @@
           (diff >= 0 ? '↑ ' : '↓ ') + Math.abs(diff) + '% до минулого</span>'
         : '') +
       '</div>' +
-      /* Два рівноправні розділи, а не головне число й приписка збоку:
-         дохід той самий, просто виміряний двома мірками. */
+      /* Одне велике число — уся сума. Долари поруч дрібніше й зі знаком ≈:
+         це та сама сума, перерахована за курсом, а не окремі гроші. */
       '<div class="tot__row">' +
         '<div class="tot__cell">' +
-          '<div class="tot__k">У гривнях</div>' +
+          '<div class="tot__k">Разом</div>' +
           '<div class="tot__v">' + U.esc(U.money(Math.round(now.uah), 'UAH')) + '</div>' +
         '</div>' +
         (inUsd != null
-          ? '<div class="tot__sep"></div>' +
-            '<div class="tot__cell">' +
-              '<div class="tot__k">У доларах</div>' +
-              '<div class="tot__v">' + U.esc(U.money(Math.round(inUsd), 'USD')) + '</div>' +
+          ? '<div class="tot__cell tot__cell--eq">' +
+              '<div class="tot__k">Те саме в доларах</div>' +
+              '<div class="tot__v tot__v--eq">≈ ' + U.esc(U.money(Math.round(inUsd), 'USD')) + '</div>' +
             '</div>'
           : '') +
       '</div>' +

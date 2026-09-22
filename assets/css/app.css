@@ -864,8 +864,7 @@ a { color: inherit; text-decoration: none; }
 .mark.is-on .mark__sum { color: #0A6B44; }
 @media (max-width: 480px) { .marks { grid-template-columns: 1fr; } }
 
-/* Загальний дохід за місяць: дві мірки поруч */
-/* Дві рівноправні мірки одного доходу — жодна не другорядна */
+/* Загальний дохід за місяць: одна сума, поруч — вона ж у доларах */
 .tot__row {
   display: flex; align-items: stretch; gap: 22px; flex-wrap: wrap;
   margin-top: 6px;
@@ -882,10 +881,14 @@ a { color: inherit; text-decoration: none; }
   line-height: 1.1;
 }
 .tot__sep { width: 1px; background: var(--line); }
+/* Перерахунок у долари — дрібніше й приглушено: це не окремі гроші */
+.tot__cell--eq { align-self: flex-end; padding-bottom: 3px; }
+.tot__v--eq { font-size: 19px; font-weight: 700; letter-spacing: -.3px; color: var(--muted); }
 .tot__parts {
   margin-top: 10px;
-  font-size: 12.5px; font-weight: 600; color: var(--ink-2);
+  font-size: 12.5px; font-weight: 500; color: var(--muted);
 }
+.tot__parts b { font-weight: 700; color: var(--ink-2); }
 .tot__src { margin-top: 8px; font-size: 12px; color: var(--muted); }
 .tot__warn {
   display: flex; align-items: flex-start; gap: 7px;

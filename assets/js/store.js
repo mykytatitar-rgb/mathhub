@@ -510,6 +510,14 @@
       function (l) { return l.date; }, true);
   };
 
+  /** Заплановані уроки цього учня попереду — ті, що зникнуть із розкладу в архіві. */
+  S.upcomingOf = function (studentId) {
+    var now = new Date();
+    return db.lessons.filter(function (l) {
+      return l.studentId === studentId && l.status === 'planned' && U.toDate(l.date) >= now;
+    });
+  };
+
   S.homeworksOf = function (studentId) {
     return U.sortBy(db.homeworks.filter(function (h) { return h.studentId === studentId; }),
       function (h) { return h.dueDate; }, true);

@@ -16,7 +16,6 @@
     var greet = h < 6 ? 'Доброї ночі' : h < 12 ? 'Доброго ранку' : h < 18 ? 'Доброго дня' : 'Доброго вечора';
 
     var todayLessons = S.lessonsOnDay(today);
-    var attention = S.attention();
     var monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
     var monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
     /* Валюти не складаємо — показуємо кожну окремо */
@@ -59,24 +58,6 @@
             '</button>';
         }).join('')
       : C.empty('calendar', 'Сьогодні уроків немає', 'Гарний день, щоб підготувати матеріали або підбити фінанси.');
-
-    /* --- Потребує уваги --- */
-    var attIcon = { debt: 'wallet', check: 'checklist', overdue: 'alert', quiet: 'clock' };
-    var attTone = { debt: 'var(--red)', check: 'var(--violet)', overdue: 'var(--amber)', quiet: 'var(--muted)' };
-    var attBg = { debt: 'var(--red-bg)', check: 'var(--violet-bg)', overdue: 'var(--amber-bg)', quiet: '#EEF2F8' };
-
-    var attHtml = attention.length
-      ? attention.slice(0, 7).map(function (a) {
-          return '<button class="list__item list__item--btn" data-act="student-open" data-arg="' + a.studentId + '">' +
-            '<div style="width:34px;height:34px;border-radius:11px;display:grid;place-items:center;flex:0 0 auto;' +
-            'background:' + attBg[a.kind] + ';color:' + attTone[a.kind] + '">' + icon(attIcon[a.kind], 17) + '</div>' +
-            '<div style="flex:1;min-width:0">' +
-            '<div style="font-weight:700;font-size:14px">' + U.esc(a.title) + '</div>' +
-            '<div class="small muted truncate" style="margin-top:1px">' + U.esc(a.text) + '</div></div>' +
-            icon('chevronR', 16, 'style="color:var(--muted-2)"') +
-            '</button>';
-        }).join('')
-      : C.empty('check', 'Усе під контролем', 'Немає боргів, прострочених ДЗ і зниклих учнів.');
 
     /* --- Найближчі уроки --- */
     var upcoming = S.upcoming(5).filter(function (l) { return !U.isSameDay(l.date, today); });
@@ -152,13 +133,9 @@
         '</div>' +
 
         '<div class="stack">' +
-          '<div class="card card--pad0">' +
-            '<div class="card-head" style="padding:22px 24px 14px;margin:0">' +
-              '<div><h3 class="card-title">Потребує уваги</h3>' +
-              '<div class="card-sub">' + (attention.length ? U.pl(attention.length, 'пункт', 'пункти', 'пунктів') : 'чисто') + '</div></div>' +
-            '</div>' +
-            '<div class="list">' + attHtml + '</div>' +
-          '</div>' +
+          /* «Потребує уваги» з огляду прибрано на прохання власника: борги
+             видно у фінансах, прострочені ДЗ — в учнів, а картка з написом
+             «усе під контролем» щодня займала пів екрана ні за що. */
 
           '<div class="card">' +
             '<div class="card-head"><div><h3 class="card-title">Навантаження на тиждень</h3>' +

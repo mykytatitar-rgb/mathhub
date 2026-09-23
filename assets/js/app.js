@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v104';
+  App.BUILD = 'v105';
   window.APP_BUILD = App.BUILD;
 
   var NAV = [
@@ -173,11 +173,14 @@
      Своє, а не HTML5 drag: той не працює пальцем на планшеті, а кабінет
      відкривають і з нього.
 
-     Головне тут — плавність. Список під час тягання не перебудовується:
-     пункт їде за пальцем трансформацією, сусіди відсуваються на його
-     висоту з коротким переходом, і лише коли палець відпустили, порядок
-     один раз записується в розмітку. Раніше кожен рух переставляв вузли в
-     DOM — звідси ривки й стрибки під рукою. */
+     Дві речі, на яких це ламалося:
+     • рух і відпускання слухаємо на всій сторінці, а не лише на панелі.
+       Інакше варто було відпустити кнопку над робочою частиною — і
+       перетягування не завершувалось: панель лишалась «у руці» й далі
+       не оновлювалась, тобто на вигляд кабінет зависав;
+     • список під час тягання не перебудовується. Пункт їде за пальцем
+       трансформацією, сусіди відсуваються на його висоту коротким
+       переходом, і лише на відпускання порядок один раз лягає в розмітку. */
   var dragEndedAt = 0;
 
   function bindNavDrag(box) {
@@ -187,20 +190,18 @@
       var items = Array.prototype.slice.call(box.querySelectorAll('.nav-item'));
       var rects = items.map(function (el) { return el.getBoundingClientRect(); });
       var from = items.indexOf(st.el);
-      var step = items.length > 1
-        ? Math.abs(rects[1].top - rects[0].top)
-        : rects[from].height;
+      if (from < 0) { st = null; return false; }
 
       st.items = items;
       st.rects = rects;
       st.from = from;
-      st.step = step;
+      st.step = items.length > 1 ? Math.abs(rects[1].top - rects[0].top) : rects[from].height;
       st.target = from;
       st.moved = true;
 
       st.el.classList.add('is-dragging');
       document.body.classList.add('is-navdrag');
-      if (st.el.setPointerCapture) { try { st.el.setPointerCapture(e.pointerId); } catch (err) {} }
+      return true;
     }
 
     /* Куди пункт сяде, якщо відпустити просто зараз. Рахуємо за
@@ -227,26 +228,27 @@
       }
     }
 
-    box.addEventListener('pointerdown', function (e) {
-      var el = e.target.closest && e.target.closest('.nav-item');
-      if (!el || e.button) return;
-      st = { el: el, y0: e.clientY, moved: false };
-    });
-
-    box.addEventListener('pointermove', function (e) {
+    function onMove(e) {
       if (!st) return;
       var dy = e.clientY - st.y0;
       if (!st.moved) {
         if (Math.abs(dy) < 5) return;
-        begin(e);
+        if (!begin(e)) { unlisten(); return; }
       }
       e.preventDefault();
       st.el.style.transform = 'translateY(' + dy + 'px)';
       var t = placeFor(dy);
       if (t !== st.target) { st.target = t; shift(); }
-    }, { passive: false });
+    }
 
-    function stop() {
+    function unlisten() {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
+    }
+
+    function onUp() {
+      unlisten();
       if (!st) return;
       var cur = st;
       st = null;
@@ -265,9 +267,20 @@
       saveNavOrder(box);
     }
 
-    box.addEventListener('pointerup', stop);
-    box.addEventListener('pointercancel', stop);
-    box.addEventListener('lostpointercapture', stop);
+    box.addEventListener('pointerdown', function (e) {
+      var el = e.target.closest && e.target.closest('.nav-item');
+      if (!el || e.button) return;
+      // якщо минулий раз чомусь не завершився — прибираємо за ним
+      document.body.classList.remove('is-navdrag');
+      unlisten();
+      st = { el: el, y0: e.clientY, moved: false };
+      document.addEventListener('pointermove', onMove, { passive: false });
+      document.addEventListener('pointerup', onUp);
+      document.addEventListener('pointercancel', onUp);
+    });
+
+    // власний браузерний drag тут тільки заважає
+    box.addEventListener('dragstart', function (e) { e.preventDefault(); });
   }
 
   function renderSidebar(route) {

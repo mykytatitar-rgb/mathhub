@@ -1,24 +1,314 @@
 [
-  {"id": "m7a24", "title": "Мерзляк, Якір. Алгебра, 7 клас", "grade": 7, "subject": "alg", "year": 2024, "src": "7-klas-algebra-merzliak-2024.pdf", "path": "C:/Users/Микита/Downloads/7-klas-algebra-merzliak-2024.pdf", "lang": "uk"},
-  {"id": "m7g", "title": "Мерзляк, Якір. Геометрія, 7 клас", "grade": 7, "subject": "geo", "year": 2024, "src": "Мерзляк_Якір_Геометрія_7кл..pdf", "path": "C:/Users/Микита/Downloads/Telegram Desktop/Мерзляк_Якір_Геометрія_7кл..pdf", "lang": "uk"},
-  {"id": "b7a", "title": "Бевз, Бевз, Васильєва. Алгебра, 7 клас", "grade": 7, "subject": "alg", "year": 2024, "src": "7-klas-algebra-bevz-2024.pdf", "path": "C:/Users/Микита/Downloads/7-klas-algebra-bevz-2024 (1) (1).pdf", "lang": "uk"},
-  {"id": "b7g", "title": "Бевз, Бевз, Васильєва, Владімірова. Геометрія, 7 клас", "grade": 7, "subject": "geo", "year": 2024, "src": "7-klas-geometria-bevz-2024.pdf", "path": "C:/Users/Микита/Downloads/Telegram Desktop/7-klas-geometria-bevz-2024.pdf", "lang": "uk"},
-  {"id": "i8a", "title": "Істер. Алгебра, 8 клас", "grade": 8, "subject": "alg", "year": 2025, "src": "8-klas-algebra-ister-2025.pdf", "path": "C:/Users/Микита/Downloads/8-klas-algebra-ister-2025 (1).pdf", "lang": "uk"},
-  {"id": "m9a", "title": "Мерзляк, Полонський, Якір. Алгебра, 9 клас (поглиблене вивчення)", "grade": 9, "subject": "alg", "year": 2017, "src": "Алгебра_поглиблене_вивчення_2017.pdf", "path": "C:/Users/Микита/Downloads/Telegram Desktop/Алгебра_поглиблене_вивчення_2017Мерзляк_А_Г_,_Полонський_В_Б_542.pdf", "lang": "uk"},
-  {"id": "m9g", "title": "Мерзляк, Полонський, Якір. Геометрія, 9 клас (поглиблене вивчення)", "grade": 9, "subject": "geo", "year": 2017, "src": "Геометрія_поглиблене_вивчення_2017.pdf", "path": "C:/Users/Микита/Downloads/Telegram Desktop/Геометрія_поглиблене_вивчення_2017Мерзляк_А_Г_,_Полонський_В_Б_546.pdf", "lang": "uk"},
-  {"id": "m8ap", "title": "Мерзляк, Номіровський, Полонський, Якір. Алгебра і початки аналізу, 10 клас (профільний рівень)", "grade": 10, "subject": "alg", "year": 2018, "src": "Алгебра_поглибленний_рівень_2018.pdf", "path": "C:/Users/Микита/Downloads/Telegram Desktop/Алгебра_поглибленний_рівень_2018Мерзляк,_А_Г_;_Номіровський,_Д_А (2).pdf", "lang": "uk"},
-  {"id": "m8gp", "title": "Мерзляк, Номіровський, Полонський, Якір. Геометрія, 10 клас (профільний рівень)", "grade": 10, "subject": "geo", "year": 2018, "src": "Геометрія_поглибленний_рівень_2018.pdf", "path": "C:/Users/Микита/Downloads/Telegram Desktop/Геометрія_поглибленний_рівень_2018Мерзляк,_А_Г_;_Номіровський,_Д.pdf", "lang": "uk"},
-  {"id": "m10a", "title": "Мерзляк, Номіровський, Полонський, Якір. Алгебра і початки аналізу, 11 клас (профільний рівень)", "grade": 11, "subject": "alg", "year": 2019, "src": "Алгебра_і_початки_аналізу_профільний_рівень_2019.pdf", "path": "C:/Users/Микита/Downloads/Telegram Desktop/Алгебра_і_початки_аналізу_профільний_рівень_2019Мерзляк,_А_Г_;_Номіровський.pdf", "lang": "uk"},
-  {"id": "m10g", "title": "Мерзляк, Номіровський, Полонський, Якір. Геометрія, 11 клас (профільний рівень)", "grade": 11, "subject": "geo", "year": 2019, "src": "Геометрія_профільний_рівень_2019.pdf", "path": "C:/Users/Микита/Downloads/Telegram Desktop/Геометрія_профільний_рівень_2019Мерзляк,_А_Г_;_Номіровський,_Д_А.pdf", "lang": "uk"},
-  {"id": "geo5000", "title": "Гордін. Збірник задач з геометрії. 5000 задач з відповідями", "grade": null, "subject": "geo", "year": 2010, "lang": "ru", "ocr": true, "path": "C:/Users/Микита/Downloads/Telegram Desktop/Сборник_задач_по_геометрии_5000_задач_с_ответами.pdf"},
-  {"id": "rosen", "title": "Rosen. Discrete Mathematics and Its Applications, 8th ed.", "grade": "uni", "subject": "disc", "year": 2019, "lang": "en", "path": "C:/Users/Микита/Downloads/Rosen - Discrete Mathematics and Its Application [8th Edition].pdf", "fallback": "disc.combadv"},
-  {"id": "levin", "title": "Levin. Discrete Mathematics: An Open Introduction, 4th ed.", "grade": "uni", "subject": "disc", "year": 2021, "lang": "en", "path": "C:/Users/Микита/Downloads/001+Discrete+Mathematics+Oscar+Levin+4th+edition+free+book.pdf", "mode": 1, "fallback": "disc.combadv"},
-  {"id": "camb1", "title": "Cambridge International AS & A Level Mathematics: Pure Mathematics 1", "grade": 11, "subject": "alg", "year": 2018, "lang": "en", "path": "C:/Users/Микита/Downloads/cambridge-international-as-amp-a-level-mathematics-pure-mathematics-1-coursebook-9781108407144_compress.pdf", "chapters": {"1": "Quadratics", "2": "Functions", "3": "Coordinate geometry", "4": "Circular measure", "5": "Trigonometry", "6": "Series", "7": "Differentiation", "8": "Further differentiation", "9": "Integration"}},
-  {"id": "camb23", "title": "Cambridge International AS & A Level Mathematics: Pure Mathematics 2 & 3", "grade": 11, "subject": "alg", "year": 2018, "lang": "en", "path": "C:/Users/Микита/Downloads/cambridge-international-as-and-a-level-mathematics-pure-mathematics-2-amp-3-coursebook-9781108407199-1108407196_compress.pdf", "chapters": {"1": "Algebra", "2": "Logarithmic and exponential functions", "3": "Trigonometry", "4": "Differentiation", "5": "Integration", "6": "Numerical solutions of equations", "7": "Further algebra", "8": "Further calculus", "9": "Vectors", "10": "Differential equations", "11": "Complex numbers"}},
-  {"id": "shiryaev", "title": "Ширяєв. Задачі з теорії ймовірностей", "grade": "uni", "subject": "prob", "year": 2006, "lang": "ru", "path": "C:/Users/Микита/Downloads/Задачи по теории вероятностей_Ширяев_2006 -416с.pdf", "fallback": "prob.rv"},
-  {"id": "m8g16", "title": "Мерзляк, Полонський, Якір. Геометрія, 8 клас (поглиблене вивчення)", "grade": 8, "subject": "geo", "year": 2016, "lang": "uk", "ocr": true, "scan": {"lang": "ukr+eng"}, "path": "C:/Users/Микита/Downloads/Геометрія_поглиблене_вивчення_2016А_Г_Мерзляк,_В_Б_Полонський_467.pdf"},
-  {"id": "m8a16", "title": "Мерзляк, Полонський, Якір. Алгебра, 8 клас (поглиблене вивчення)", "grade": 8, "subject": "alg", "year": 2016, "lang": "uk", "ocr": true, "scan": {"lang": "ukr+eng"}, "path": "C:/Users/Микита/Downloads/Алгебра_поглиблене_вивчення_2016А_Г_Мерзляк,_В_Б_Полонський,_М_С.pdf"},
-  {"id": "ister6", "title": "Істер. Математика, 6 клас, частина 2", "grade": 6, "subject": "arith", "year": null, "lang": "uk", "ocr": true, "scan": {"lang": "ukr+eng"}, "path": "C:/Users/Микита/Downloads/Істер_Математика_П_6_ч.2.pdf"},
-  {"id": "igcse", "title": "Complete Mathematics for Cambridge IGCSE, 5th ed. (Extended)", "grade": 10, "subject": "alg", "year": 2018, "lang": "en", "ocr": true, "scan": {"lang": "eng"}, "path": "C:/Users/Микита/Downloads/620504970-452514461-Complete-Mathematics-for-Cambridge-IGCSE-Fifth-Edition-Extended-PDF.pdf"},
-  {"id": "cambps1", "title": "Cambridge International AS & A Level Mathematics: Probability & Statistics 1", "grade": 11, "subject": "prob", "year": 2018, "lang": "en", "ocr": true, "scan": {"lang": "eng"}, "path": "C:/Users/Микита/Downloads/cambridge-international-as-amp-a-level-mathematics-probability-amp-statistics-1-1510421750-9781510421752_compress.pdf"}
+ {
+  "id": "m7a24",
+  "title": "Мерзляк, Якір. Алгебра, 7 клас",
+  "grade": 7,
+  "subject": "alg",
+  "year": 2024,
+  "src": "7-klas-algebra-merzliak-2024.pdf",
+  "path": "C:/Users/Микита/Downloads/7-klas-algebra-merzliak-2024.pdf",
+  "lang": "uk"
+ },
+ {
+  "id": "m7g",
+  "title": "Мерзляк, Якір. Геометрія, 7 клас",
+  "grade": 7,
+  "subject": "geo",
+  "year": 2024,
+  "src": "Мерзляк_Якір_Геометрія_7кл..pdf",
+  "path": "C:/Users/Микита/Downloads/Telegram Desktop/Мерзляк_Якір_Геометрія_7кл..pdf",
+  "lang": "uk"
+ },
+ {
+  "id": "b7a",
+  "title": "Бевз, Бевз, Васильєва. Алгебра, 7 клас",
+  "grade": 7,
+  "subject": "alg",
+  "year": 2024,
+  "src": "7-klas-algebra-bevz-2024.pdf",
+  "path": "C:/Users/Микита/Downloads/7-klas-algebra-bevz-2024 (1) (1).pdf",
+  "lang": "uk"
+ },
+ {
+  "id": "b7g",
+  "title": "Бевз, Бевз, Васильєва, Владімірова. Геометрія, 7 клас",
+  "grade": 7,
+  "subject": "geo",
+  "year": 2024,
+  "src": "7-klas-geometria-bevz-2024.pdf",
+  "path": "C:/Users/Микита/Downloads/Telegram Desktop/7-klas-geometria-bevz-2024.pdf",
+  "lang": "uk"
+ },
+ {
+  "id": "i8a",
+  "title": "Істер. Алгебра, 8 клас",
+  "grade": 8,
+  "subject": "alg",
+  "year": 2025,
+  "src": "8-klas-algebra-ister-2025.pdf",
+  "path": "C:/Users/Микита/Downloads/8-klas-algebra-ister-2025 (1).pdf",
+  "lang": "uk"
+ },
+ {
+  "id": "m9a",
+  "title": "Мерзляк, Полонський, Якір. Алгебра, 9 клас (поглиблене вивчення)",
+  "grade": 9,
+  "subject": "alg",
+  "year": 2017,
+  "src": "Алгебра_поглиблене_вивчення_2017.pdf",
+  "path": "C:/Users/Микита/Downloads/Telegram Desktop/Алгебра_поглиблене_вивчення_2017Мерзляк_А_Г_,_Полонський_В_Б_542.pdf",
+  "lang": "uk"
+ },
+ {
+  "id": "m9g",
+  "title": "Мерзляк, Полонський, Якір. Геометрія, 9 клас (поглиблене вивчення)",
+  "grade": 9,
+  "subject": "geo",
+  "year": 2017,
+  "src": "Геометрія_поглиблене_вивчення_2017.pdf",
+  "path": "C:/Users/Микита/Downloads/Telegram Desktop/Геометрія_поглиблене_вивчення_2017Мерзляк_А_Г_,_Полонський_В_Б_546.pdf",
+  "lang": "uk"
+ },
+ {
+  "id": "m8ap",
+  "title": "Мерзляк, Номіровський, Полонський, Якір. Алгебра і початки аналізу, 10 клас (профільний рівень)",
+  "grade": 10,
+  "subject": "alg",
+  "year": 2018,
+  "src": "Алгебра_поглибленний_рівень_2018.pdf",
+  "path": "C:/Users/Микита/Downloads/Telegram Desktop/Алгебра_поглибленний_рівень_2018Мерзляк,_А_Г_;_Номіровський,_Д_А (2).pdf",
+  "lang": "uk"
+ },
+ {
+  "id": "m8gp",
+  "title": "Мерзляк, Номіровський, Полонський, Якір. Геометрія, 10 клас (профільний рівень)",
+  "grade": 10,
+  "subject": "geo",
+  "year": 2018,
+  "src": "Геометрія_поглибленний_рівень_2018.pdf",
+  "path": "C:/Users/Микита/Downloads/Telegram Desktop/Геометрія_поглибленний_рівень_2018Мерзляк,_А_Г_;_Номіровський,_Д.pdf",
+  "lang": "uk"
+ },
+ {
+  "id": "m10a",
+  "title": "Мерзляк, Номіровський, Полонський, Якір. Алгебра і початки аналізу, 11 клас (профільний рівень)",
+  "grade": 11,
+  "subject": "alg",
+  "year": 2019,
+  "src": "Алгебра_і_початки_аналізу_профільний_рівень_2019.pdf",
+  "path": "C:/Users/Микита/Downloads/Telegram Desktop/Алгебра_і_початки_аналізу_профільний_рівень_2019Мерзляк,_А_Г_;_Номіровський.pdf",
+  "lang": "uk"
+ },
+ {
+  "id": "m10g",
+  "title": "Мерзляк, Номіровський, Полонський, Якір. Геометрія, 11 клас (профільний рівень)",
+  "grade": 11,
+  "subject": "geo",
+  "year": 2019,
+  "src": "Геометрія_профільний_рівень_2019.pdf",
+  "path": "C:/Users/Микита/Downloads/Telegram Desktop/Геометрія_профільний_рівень_2019Мерзляк,_А_Г_;_Номіровський,_Д_А.pdf",
+  "lang": "uk"
+ },
+ {
+  "id": "geo5000",
+  "title": "Гордін. Збірник задач з геометрії. 5000 задач з відповідями",
+  "grade": null,
+  "subject": "geo",
+  "year": 2010,
+  "lang": "ru",
+  "ocr": true,
+  "path": "C:/Users/Микита/Downloads/Telegram Desktop/Сборник_задач_по_геометрии_5000_задач_с_ответами.pdf"
+ },
+ {
+  "id": "rosen",
+  "title": "Rosen. Discrete Mathematics and Its Applications, 8th ed.",
+  "grade": "uni",
+  "subject": "disc",
+  "year": 2019,
+  "lang": "en",
+  "path": "C:/Users/Микита/Downloads/Rosen - Discrete Mathematics and Its Application [8th Edition].pdf",
+  "fallback": "disc.combadv"
+ },
+ {
+  "id": "levin",
+  "title": "Levin. Discrete Mathematics: An Open Introduction, 4th ed.",
+  "grade": "uni",
+  "subject": "disc",
+  "year": 2021,
+  "lang": "en",
+  "path": "C:/Users/Микита/Downloads/001+Discrete+Mathematics+Oscar+Levin+4th+edition+free+book.pdf",
+  "mode": 1,
+  "fallback": "disc.combadv"
+ },
+ {
+  "id": "camb1",
+  "title": "Cambridge International AS & A Level Mathematics: Pure Mathematics 1",
+  "grade": 11,
+  "subject": "alg",
+  "year": 2018,
+  "lang": "en",
+  "path": "C:/Users/Микита/Downloads/cambridge-international-as-amp-a-level-mathematics-pure-mathematics-1-coursebook-9781108407144_compress.pdf",
+  "chapters": {
+   "1": "Quadratics",
+   "2": "Functions",
+   "3": "Coordinate geometry",
+   "4": "Circular measure",
+   "5": "Trigonometry",
+   "6": "Series",
+   "7": "Differentiation",
+   "8": "Further differentiation",
+   "9": "Integration"
+  }
+ },
+ {
+  "id": "camb23",
+  "title": "Cambridge International AS & A Level Mathematics: Pure Mathematics 2 & 3",
+  "grade": 11,
+  "subject": "alg",
+  "year": 2018,
+  "lang": "en",
+  "path": "C:/Users/Микита/Downloads/cambridge-international-as-and-a-level-mathematics-pure-mathematics-2-amp-3-coursebook-9781108407199-1108407196_compress.pdf",
+  "chapters": {
+   "1": "Algebra",
+   "2": "Logarithmic and exponential functions",
+   "3": "Trigonometry",
+   "4": "Differentiation",
+   "5": "Integration",
+   "6": "Numerical solutions of equations",
+   "7": "Further algebra",
+   "8": "Further calculus",
+   "9": "Vectors",
+   "10": "Differential equations",
+   "11": "Complex numbers"
+  }
+ },
+ {
+  "id": "shiryaev",
+  "title": "Ширяєв. Задачі з теорії ймовірностей",
+  "grade": "uni",
+  "subject": "prob",
+  "year": 2006,
+  "lang": "ru",
+  "path": "C:/Users/Микита/Downloads/Задачи по теории вероятностей_Ширяев_2006 -416с.pdf",
+  "fallback": "prob.rv"
+ },
+ {
+  "id": "m8g16",
+  "title": "Мерзляк, Полонський, Якір. Геометрія, 8 клас (поглиблене вивчення)",
+  "grade": 8,
+  "subject": "geo",
+  "year": 2016,
+  "lang": "uk",
+  "ocr": true,
+  "scan": {
+   "lang": "ukr+eng"
+  },
+  "path": "C:/Users/Микита/Downloads/Геометрія_поглиблене_вивчення_2016А_Г_Мерзляк,_В_Б_Полонський_467.pdf"
+ },
+ {
+  "id": "m8a16",
+  "title": "Мерзляк, Полонський, Якір. Алгебра, 8 клас (поглиблене вивчення)",
+  "grade": 8,
+  "subject": "alg",
+  "year": 2016,
+  "lang": "uk",
+  "ocr": true,
+  "scan": {
+   "lang": "ukr+eng"
+  },
+  "path": "C:/Users/Микита/Downloads/Алгебра_поглиблене_вивчення_2016А_Г_Мерзляк,_В_Б_Полонський,_М_С.pdf"
+ },
+ {
+  "id": "ister6",
+  "title": "Істер. Математика, 6 клас, частина 2",
+  "grade": 6,
+  "subject": "arith",
+  "year": null,
+  "lang": "uk",
+  "ocr": true,
+  "scan": {
+   "lang": "ukr+eng"
+  },
+  "path": "C:/Users/Микита/Downloads/Істер_Математика_П_6_ч.2.pdf"
+ },
+ {
+  "id": "igcse",
+  "title": "Complete Mathematics for Cambridge IGCSE, 5th ed. (Extended)",
+  "grade": 10,
+  "subject": "alg",
+  "year": 2018,
+  "lang": "en",
+  "ocr": true,
+  "scan": {
+   "lang": "eng"
+  },
+  "path": "C:/Users/Микита/Downloads/620504970-452514461-Complete-Mathematics-for-Cambridge-IGCSE-Fifth-Edition-Extended-PDF.pdf",
+  "first": 10,
+  "last": 443,
+  "fallback": null,
+  "chapter_pages": [
+   [
+    11,
+    "1. Number"
+   ],
+   [
+    65,
+    "2. Algebra 1"
+   ],
+   [
+    113,
+    "3. Mensuration"
+   ],
+   [
+    146,
+    "4. Geometry"
+   ],
+   [
+    183,
+    "5. Algebra 2"
+   ],
+   [
+    218,
+    "6. Trigonometry"
+   ],
+   [
+    248,
+    "7. Graphs"
+   ],
+   [
+    290,
+    "8. Sets, vectors, functions, transformations"
+   ],
+   [
+    341,
+    "9. Statistics"
+   ],
+   [
+    376,
+    "10. Probability"
+   ],
+   [
+    400,
+    "11. Investigations"
+   ],
+   [
+    437,
+    "12. Examination papers"
+   ]
+  ]
+ },
+ {
+  "id": "cambps1",
+  "title": "Cambridge International AS & A Level Mathematics: Probability & Statistics 1",
+  "grade": 11,
+  "subject": "prob",
+  "year": 2018,
+  "lang": "en",
+  "ocr": true,
+  "scan": {
+   "lang": "eng"
+  },
+  "path": "C:/Users/Микита/Downloads/cambridge-international-as-amp-a-level-mathematics-probability-amp-statistics-1-1510421750-9781510421752_compress.pdf",
+  "skip": true
+ }
 ]

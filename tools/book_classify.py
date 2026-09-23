@@ -210,6 +210,54 @@ RULES += [
     ('geo.axioms', r'стереометри|параллельност\w* прям\w* и плоскост|скрещивающ', None),
     ('geo.perp', r'перпендикулярност\w* прям\w* и плоскост|три перпендикуляр', None, 1.2),
     ('geo.spaceangles', r'двугранн|угол между прям\w* и плоскост|угол между плоскост', None, 1.3),
+
+    # ---------------------------------------------------------------
+    # Англомовна школа (IGCSE й подібні)
+    #
+    # Тема впізнається за самим текстом задачі: у сканованих
+    # англійських книжках колонтитул — назва серії чи реклама, а не
+    # розділ. Тому той самий вираз стоїть і як назва, і як текст —
+    # інакше збіг у тексті важить замало, щоб тему взяли.
+    # ---------------------------------------------------------------
+    ('arith.fractions', r'numerator|denominator|mixed number|vulgar fraction|improper fraction', r'numerator|denominator|mixed number|vulgar fraction|improper fraction'),
+    ('arith.decimals', r'recurring decimal|decimal fraction|to \d decimal places?', r'recurring decimal|decimal fraction|to \d decimal places?'),
+    ('arith.percent', r'per ?cent|percentage|profit|selling price|cost price|discount|simple interest|compound interest|depreciat', r'per ?cent|percentage|profit|selling price|cost price|discount|simple interest|compound interest|depreciat', 1.1),
+    ('arith.ratio', r'\bratio\b|in the ratio|proportion|scale of 1|exchange rate|per hour|density', r'\bratio\b|in the ratio|proportion|scale of 1|exchange rate|per hour|density'),
+    ('arith.divisibility', r'prime factor|prime number|lowest common multiple|highest common factor|\bLCM\b|\bHCF\b', r'prime factor|prime number|lowest common multiple|highest common factor|\bLCM\b|\bHCF\b', 1.1),
+    ('arith.roots', r'square root|cube root|surds?\b|irrational number', r'square root|cube root|surds?\b|irrational number'),
+    ('arith.approx', r'significant figures|upper bound|lower bound|round(ed|ing)? (your answer )?to|estimate the value', r'significant figures|upper bound|lower bound|round(ed|ing)? (your answer )?to|estimate the value'),
+    ('alg.intpowers', r'standard form|rules of indices|negative ind(ex|ices)|fractional ind(ex|ices)', r'standard form|rules of indices|negative ind(ex|ices)|fractional ind(ex|ices)', 1.1),
+    ('alg.expressions', r'simplify|expand (and simplify|the brackets)|substitute|rearrange the formula|make \w+ the subject', r'simplify|expand (and simplify|the brackets)|substitute|rearrange the formula|make \w+ the subject', 0.9),
+    ('alg.factoring', r'factoris|factoriz', r'factoris|factoriz', 1.1),
+    ('alg.lineq', r'solve the equations?|linear equations?', r'solve the equations?|linear equations?', 0.8),
+    ('alg.systems', r'simultaneous equations', r'simultaneous equations', 1.3),
+    ('alg.linineq', r'inequalit|number line', r'inequalit|number line'),
+    ('alg.quadratic', r'quadratic equations?|completing the square|quadratic formula', r'quadratic equations?|completing the square|quadratic formula', 1.2),
+    ('alg.ratexpr', r'algebraic fractions?', r'algebraic fractions?', 1.1),
+    ('alg.sequences', r'nth term|sequences?\b|arithmetic progression|geometric progression', r'nth term|sequences?\b|arithmetic progression|geometric progression'),
+    ('an.fnconcept', r'inverse function|composite function|function notation|domain and range', r'inverse function|composite function|function notation|domain and range', 1.1),
+    ('an.linearfn', r'gradient|straight.line graph|y = mx \+ c', r'gradient|straight.line graph|y = mx \+ c'),
+    ('an.quadraticfn', r'parabola|quadratic graph|graph of y = x', r'parabola|quadratic graph|graph of y = x'),
+    ('geo.coords', r'coordinates?\b|coordinate grid|plot the points', r'coordinates?\b|coordinate grid|plot the points', 0.9),
+    ('geo.lineeq', r'equation of the line|equation of a circle', r'equation of the line|equation of a circle', 1.1),
+    ('geo.vectors', r'column vector|vectors?\b|magnitude of the vector', r'column vector|vectors?\b|magnitude of the vector'),
+    ('geo.transforms', r'reflection|rotation|enlargement|translation|transformation|image of the (triangle|shape|square)', r'reflection|rotation|enlargement|translation|transformation|image of the (triangle|shape|square)', 1.1),
+    ('geo.pythagoras', r'pythagoras', r'pythagoras', 1.3),
+    ('geo.righttrig', r'trigonometr|bearing of|angle of elevation|angle of depression|\btan\b|\bsin\b|\bcos\b', r'trigonometr|bearing of|angle of elevation|angle of depression|\btan\b|\bsin\b|\bcos\b'),
+    ('geo.solvetri', r'sine rule|cosine rule', r'sine rule|cosine rule', 1.3),
+    ('geo.circle', r'tangent to the circle|chord\b|circle theorem|cyclic quadrilateral|arc length|sector', r'tangent to the circle|chord\b|circle theorem|cyclic quadrilateral|arc length|sector'),
+    ('geo.inscribed', r'angle at the centre|angle in the same segment|inscribed angle', r'angle at the centre|angle in the same segment|inscribed angle', 1.2),
+    ('geo.areas', r'area of the (triangle|trapezium|parallelogram|shape)|surface area', r'area of the (triangle|trapezium|parallelogram|shape)|surface area'),
+    ('geo.basicarea', r'perimeter|volume of|capacity of|cross.section', r'perimeter|volume of|capacity of|cross.section'),
+    ('geo.polygons', r'polygon|interior angles?|exterior angles?|regular hexagon|pentagon', r'polygon|interior angles?|exterior angles?|regular hexagon|pentagon'),
+    ('geo.quads', r'parallelogram|trapezium|rhombus|quadrilateral', r'parallelogram|trapezium|rhombus|quadrilateral', 0.9),
+    ('geo.triangles', r'congruent|isosceles|equilateral', r'congruent|isosceles|equilateral', 0.9),
+    ('geo.similarity', r'similar triangles|scale factor', r'similar triangles|scale factor', 1.1),
+    ('geo.figures', r'construct the|locus|loci|ruler and compasses', r'construct the|locus|loci|ruler and compasses'),
+    ('prob.classical', r'probabilit|\bdice\b|\bdie is|coin is tossed|chosen at random|selected at random', r'probabilit|\bdice\b|\bdie is|coin is tossed|chosen at random|selected at random', 1.1),
+    ('prob.data', r'\bmean\b|median|\bmode\b|histogram|cumulative frequency|box.and.whisker|frequency table|pie chart|scatter diagram|standard deviation', r'\bmean\b|median|\bmode\b|histogram|cumulative frequency|box.and.whisker|frequency table|pie chart|scatter diagram|standard deviation', 1.1),
+    ('disc.counting', r'how many ways|different arrangements|how many different', r'how many ways|different arrangements|how many different'),
+    ('found.setsschool', r'venn diagram|universal set|\bsubset\b|intersection of the sets|union of the sets', r'venn diagram|universal set|\bsubset\b|intersection of the sets|union of the sets', 1.6),
 ]
 
 

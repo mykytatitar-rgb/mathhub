@@ -239,6 +239,10 @@ def main():
     known = known_topics()
     catalog = json.load(io.open(os.path.join(SRC, 'catalog.json'), encoding='utf-8'))
 
+    # книжка з поганим розпізнаванням лежить у каталозі з позначкою skip:
+    # хай буде видно, що її дивились, але в банк вона не йде
+    catalog = [b for b in catalog if not b.get('skip')]
+
     raws = {}
     words = Words()
     for b in catalog:
@@ -278,7 +282,23 @@ def main():
         answered = 0
         sections = []
         chap_no = None
+        chap_pages = sorted(b.get('chapter_pages') or [])
         for t in raws[bid]['tasks']:
+            if chap_pages:
+                # у книжці колонтитул — назва серії, а не розділ: беремо розділ
+                # за сторінкою, як він стоїть у змісті
+                try:
+                    pg = int(t.get('page') or 0)
+                except (TypeError, ValueError):
+                    pg = 0
+                title = ''
+                for start, name in chap_pages:
+                    if pg >= start:
+                        title = name
+                # розділ тут — слабка підказка, а не назва теми: «Sets, vectors,
+                # functions, transformations» — це чотири теми в одному рядку,
+                # і сильніше за текст задачі він важити не має
+                t = dict(t, point='', para=title)
             if b.get('chapters'):
                 # «EXERCISE 5C» — вправа розділу 5; огляд у кінці розділу — того самого
                 mc = re.search(r'EXERCISE\s+(\d{1,2})[A-Z]', t.get('para', '') + ' ' + t.get('point', ''))
@@ -313,6 +333,10 @@ def main():
                 continue
             point = clean_section(t.get('point', ''), words)
             para = clean_section(t.get('para', ''), words)
+            if b.get('nosec'):
+                # у книжці колонтитул — реклама чи назва серії, а не розділ:
+                # краще без розділу, ніж «SAVINGS ACCOUNT» у фільтрі
+                point = para = ''
             para = re.sub(r'^\d{1,3}\s+(?=[А-ЯІЇЄҐ])', '', para)       # номер сторінки з колонтитула
             if para and not para.startswith('§') and re.search(
                     r'повторенн|головне в|дружимо з|проєктна|проектна|відомості з курсу|предметний покажчик', para, re.I):

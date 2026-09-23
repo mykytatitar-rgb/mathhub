@@ -340,7 +340,9 @@
                 AUD: 'австралійськими доларами' };
     var got = Object.keys(map).filter(function (k) { return Math.abs(map[k]) > 0.005; })
       .sort(function (a, b) { return a === 'UAH' ? -1 : b === 'UAH' ? 1 : 0; });
-    var parts = got.length > 1
+    /* Показуємо поділ і тоді, коли валюта одна, але не гривня: інакше
+       «4 016 ₴ ≈ $90» виглядає як гривні, яких людина в себе не бачила. */
+    var parts = (got.length > 1 || (got.length === 1 && got[0] !== 'UAH'))
       ? '<div class="tot__parts">Отримано ' + got.map(function (k) {
           return (HOW[k] || k) + ' <b>' + U.esc(U.money(map[k], k)) + '</b>';
         }).join(' · ') + '</div>'
@@ -516,7 +518,9 @@
           var n = S.students().filter(function (s) { return S.curOf(s.id) === c; }).length;
           return '<button class="chip' + (c === code ? ' is-active' : '') + '" data-act="filter-cur" data-arg="' + c + '">' +
             U.symbol(c) + ' ' + c + ' <span style="opacity:.6">' + n + '</span></button>';
-        }).join('') + '</div>'
+        }).join('') +
+        '<span class="small muted" style="margin-left:6px">картки й учні нижче — у цій валюті; ' +
+        'дохід угорі й список оплат — усі валюти</span></div>'
       : '';
 
     /* Дохід за 6 місяців — усі валюти разом.
@@ -567,7 +571,14 @@
         '<div class="chart__cap"' + (empty ? ' style="color:var(--muted-2)"' : '') + '>' + m.label + '</div></div>';
     }).join('');
 
-    var recent = U.sortBy(S.db().payments.filter(function (p) { return S.paymentCur(p) === code; }),
+    /* Усі оплати, незалежно від валюти.
+
+       Раніше цей список теж слухався перемикача валют — і виходила пастка:
+       людина «прибрала всі оплати за місяць», а дохід угорі лишався, бо
+       доларових оплат у списку просто не було видно. Картки поруч рахують
+       одну валюту (їх не скласти), а список — це те, чим перевіряють, що
+       саме надійшло. Сума в кожному рядку зі своїм знаком. */
+    var recent = U.sortBy(S.db().payments.slice(),
       function (p) { return p.date; }, true).slice(0, 12);
 
     var rows = studs.map(function (s) {
@@ -669,7 +680,8 @@
 
       '<div class="card card--pad0">' +
         '<div class="card-head" style="padding:22px 24px 8px;margin:0">' +
-          '<div><h3 class="card-title">Останні оплати</h3></div>' +
+          '<div><h3 class="card-title">Останні оплати</h3>' +
+          '<div class="card-sub">усі валюти разом — тут видно кожну оплату</div></div>' +
         '</div>' +
         '<div style="overflow-x:auto"><table class="tbl">' +
           '<thead><tr><th>Дата</th><th>Учень</th><th>Спосіб</th><th>Коментар</th><th class="num">Сума</th><th></th></tr></thead>' +

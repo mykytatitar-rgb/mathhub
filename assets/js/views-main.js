@@ -9,6 +9,114 @@
      Дашборд
      ============================================================ */
 
+  /* ---------- Гроші на огляді ----------
+
+     Огляд — про те, як ідуть справи, а справи в репетитора — це передусім
+     гроші. Усе тут зведене в гривні за курсом дня самої оплати (минулі
+     гроші не мають мінятися разом із сьогоднішнім курсом), а поруч —
+     та сама сума в доларах, бо половина учнів платить у них. */
+
+  function usdOf(uah) {
+    var R = window.Rates;
+    var rate = R && R.get('USD');
+    return rate ? '≈' + U.money(Math.round(uah / rate), 'USD') : '';
+  }
+
+  /** Гривнева сума великим і долари поруч — однаково в усіх плитках. */
+  function bothCur(uah) {
+    var usd = usdOf(uah);
+    return U.esc(U.money(Math.round(uah), 'UAH')) +
+      (usd ? ' <span class="stat__alt">' + U.esc(usd) + '</span>' : '');
+  }
+
+  /** Скільки ще має надійти до кінця місяця за запланованими уроками. */
+  function expectedRest(today, monthEnd) {
+    var uah = 0, n = 0, partial = false;
+    S.lessonsBetween(today, monthEnd).forEach(function (l) {
+      if (l.status !== 'planned') return;
+      var v = S.uahOf(l, l.price || 0, S.lessonCur(l));
+      if (v == null) { partial = true; return; }
+      uah += v;
+      n++;
+    });
+    return { uah: uah, n: n, partial: partial };
+  }
+
+  /** Дохід за півроку стовпчиками — той самий погляд, що й у фінансах. */
+  function incomeBars(today) {
+    var months = [];
+    for (var i = 5; i >= 0; i--) {
+      var ms = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      var me = new Date(today.getFullYear(), today.getMonth() - i + 1, 0);
+      var sum = S.incomeUAHBetween(ms, me);
+      months.push({ label: U.MONTHS_NOM[ms.getMonth()].slice(0, 3), value: sum.uah, cur: i === 0 });
+    }
+    var max = Math.max(1, Math.max.apply(null, months.map(function (m) { return m.value; })));
+    return months.map(function (m) {
+      var cap = m.value ? U.esc(Math.round(m.value).toLocaleString('uk-UA').replace(/[  ]/g, ' ')) : '';
+      return '<div class="chart__col">' +
+        '<div class="chart__top">' + cap + '</div>' +
+        '<div class="chart__bar" style="height:' + Math.max(4, (m.value / max) * 100) + '%' +
+        (m.cur ? '' : ';background:linear-gradient(180deg,#9CC0FF,#6E9DFF)') + '"></div>' +
+        '<div class="chart__cap"' + (m.cur ? ' style="color:var(--blue-600);font-weight:800"' : '') + '>' +
+        m.label + '</div></div>';
+    }).join('');
+  }
+
+  /** Хто приносить дохід цього місяця — кільце й імена. */
+  function whoPaysCard(mStart, mEnd) {
+    var by = {};
+    S.paymentsBetween(mStart, mEnd).forEach(function (p) {
+      var v = S.uahOf(p, p.amount, S.paymentCur(p));
+      if (v == null) return;
+      by[p.studentId] = (by[p.studentId] || 0) + v;
+    });
+    var slices = Object.keys(by).map(function (id) {
+      var st = S.get('students', id);
+      return { label: st ? st.name : 'Видалений учень', value: by[id] };
+    });
+    var total = slices.reduce(function (a, x) { return a + x.value; }, 0);
+    var pie = C.donut(slices, { size: 168, fmt: function (v) { return U.money(Math.round(v), 'UAH'); },
+      centerTop: U.money(Math.round(total), 'UAH'), center: 'за місяць' });
+    if (!pie) return '';
+    return '<div class="card">' +
+      '<div class="card-head"><div><h3 class="card-title">Хто приносить дохід</h3>' +
+      '<div class="card-sub">оплати цього місяця, у гривнях за курсом</div></div></div>' + pie + '</div>';
+  }
+
+  /** Кому нагадати про оплату — з сумами, найбільші згори. */
+  function debtorsCard() {
+    var list = U.sortBy(S.debtors().map(function (d) {
+      var uah = toUah(d.debt, d.cur);
+      return { s: d.s, debt: d.debt, cur: d.cur, uah: uah == null ? 0 : uah };
+    }), function (x) { return x.uah; }, true);
+
+    if (!list.length) {
+      return '<div class="card">' +
+        '<div class="card-head"><div><h3 class="card-title">Борги</h3>' +
+        '<div class="card-sub">усі розрахувалися</div></div></div>' +
+        '<div class="field__hint">Ніхто нічого не винен — можна не нагадувати.</div></div>';
+    }
+
+    var rows = list.slice(0, 5).map(function (x) {
+      return '<button class="list__item list__item--btn" data-act="student-open" data-arg="' + x.s.id + '">' +
+        C.avatar(x.s, 32) +
+        '<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:14px">' +
+        U.esc(x.s.name) + (x.s.archived ? ' <span class="badge badge--grey">архів</span>' : '') + '</div></div>' +
+        '<span class="bold" style="color:var(--red)">' + U.esc(U.money(x.debt, x.cur)) + '</span>' +
+        '</button>';
+    }).join('');
+
+    var total = list.reduce(function (a, x) { return a + x.uah; }, 0);
+    return '<div class="card card--pad0">' +
+      '<div class="card-head" style="padding:22px 24px 10px;margin:0">' +
+        '<div><h3 class="card-title">Кому нагадати про оплату</h3>' +
+        '<div class="card-sub">' + U.pl(list.length, 'боржник', 'боржники', 'боржників') +
+        ' · разом ' + U.esc(U.money(Math.round(total), 'UAH')) + '</div></div>' +
+      '</div><div class="list">' + rows + '</div></div>';
+  }
+
+
   V.dashboard = function () {
     var db = S.db();
     var today = U.today();
@@ -20,9 +128,24 @@
     var monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
     /* Валюти не складаємо — показуємо кожну окремо */
     var incomeMap = S.incomeMap(monthStart, monthEnd);
-    var earnedMap = S.earnedMap(monthStart, monthEnd);
     var debtMap = S.debtMap();
     var hasDebt = U.mapSize(debtMap) > 0;
+
+    /* --- Гроші місяця --- */
+    var prevStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    var prevEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+    var incomeUah = S.incomeUAHBetween(monthStart, monthEnd);
+    var earnedUah = 0;
+    S.doneLessonsBetween(monthStart, monthEnd).forEach(function (l) {
+      var v = S.uahOf(l, l.price || 0, S.lessonCur(l));
+      if (v != null) earnedUah += v;
+    });
+    var doneCount = S.doneLessonsBetween(monthStart, monthEnd).length;
+    var rest = expectedRest(today, monthEnd);
+    var debtUah = S.debtors().reduce(function (a, d) {
+      var v = toUah(d.debt, d.cur);
+      return a + (v == null ? 0 : v);
+    }, 0);
 
     /* --- Тижневий графік навантаження --- */
     var weekStart = U.startOfWeek(today);
@@ -111,8 +234,34 @@
           '<span class="quick__arrow">' + icon('chevronR', 18) + '</span></button>' +
       '</div>' +
 
+      /* Гроші — перше, на що дивляться. Велика сума місяця, під нею чотири
+         показники, і лише потім уроки. */
+      totalIncomeCard(monthStart, monthEnd, prevStart, prevEnd) +
+
+      '<div class="grid grid--4 mb-3">' +
+        C.stat('Проведено уроків', String(doneCount),
+          doneCount ? 'на ' + bothCur(earnedUah) : 'цього місяця ще не було', 'book') +
+        C.stat('Ще надійде до кінця місяця', rest.n ? bothCur(rest.uah) : '—',
+          rest.n ? U.pl(rest.n, 'запланований урок', 'заплановані уроки', 'запланованих уроків') +
+            (rest.partial ? ' · частину не порахували' : '') : 'усе, що заплановано, вже проведено',
+          'calendar', 'violet') +
+        C.stat('Заборгованість', debtUah ? bothCur(debtUah) : '0 ₴',
+          hasDebt ? U.pl(S.debtors().length, 'учень винен', 'учні винні', 'учнів винні') : 'усі розрахувалися',
+          'alert', hasDebt ? 'red' : 'green') +
+        C.stat('Середній урок', doneCount ? bothCur(earnedUah / doneCount) : '—',
+          doneCount ? 'за проведеними цього місяця' : 'порахуємо після першого уроку', 'target') +
+      '</div>' +
+
       '<div class="grid grid--main">' +
         '<div class="stack">' +
+          '<div class="card">' +
+            '<div class="card-head"><div><h3 class="card-title">Дохід за півроку</h3>' +
+            '<div class="card-sub">усі валюти разом, за курсом дня оплати' +
+            (incomeUah.partial ? ' · для частини валют курсу немає' : '') + '</div></div>' +
+            '<button class="btn btn--ghost btn--sm spacer" data-act="nav" data-arg="#/finance">Фінанси</button></div>' +
+            '<div class="chart">' + incomeBars(today) + '</div>' +
+          '</div>' +
+
           '<div class="card card--pad0">' +
             '<div class="card-head" style="padding:22px 24px 14px;margin:0">' +
               '<div><h3 class="card-title">Сьогодні</h3>' +
@@ -137,21 +286,46 @@
              видно у фінансах, прострочені ДЗ — в учнів, а картка з написом
              «усе під контролем» щодня займала пів екрана ні за що. */
 
+          debtorsCard() +
+          whoPaysCard(monthStart, monthEnd) +
+
           '<div class="card">' +
             '<div class="card-head"><div><h3 class="card-title">Навантаження на тиждень</h3>' +
             '<div class="card-sub">' + U.pl(U.sum(days, function (x) { return x.count; }), 'урок', 'уроки', 'уроків') + '</div></div></div>' +
             '<div class="chart">' + chart + '</div>' +
           '</div>' +
 
+          /* Скільки з нарахованого вже дійшло. Раніше тут повторювалися ті
+             самі суми, що й у плитках зверху; питання «а скільки з цього
+             вже в кишені» відповіді не мало ніде. */
+          (function () {
+            var pc = earnedUah > 0 ? Math.round(Math.min(incomeUah.uah, earnedUah) / earnedUah * 100) : 0;
+            return '<div class="card">' +
+              '<div class="card-head"><div><h3 class="card-title">Скільки вже зібрано</h3>' +
+              '<div class="card-sub">' + U.MONTHS_NOM[today.getMonth()].toLowerCase() + '</div></div></div>' +
+              (earnedUah > 0
+                ? '<div class="row" style="justify-content:space-between;margin-bottom:8px">' +
+                    '<span class="bold" style="font-size:24px;letter-spacing:-.8px">' + pc + '%</span>' +
+                    '<span class="small muted">' + U.esc(U.money(Math.round(incomeUah.uah), 'UAH')) + ' з ' +
+                    U.esc(U.money(Math.round(earnedUah), 'UAH')) + '</span></div>' +
+                  C.bar(pc, pc >= 90 ? 'bar--green' : pc >= 60 ? '' : 'bar--amber') +
+                  '<div class="field__hint mt-2">Нараховано за проведені уроки проти отриманих оплат. ' +
+                  'Більше за 100 % — значить платять наперед.</div>'
+                : '<div class="field__hint">Цього місяця ще не було проведених уроків.</div>') +
+              '</div>';
+          })() +
+
           '<div class="card">' +
-            '<div class="card-head"><div><h3 class="card-title">' + U.MONTHS_NOM[today.getMonth()] + '</h3>' +
-            '<div class="card-sub">поточний місяць</div></div></div>' +
+            '<div class="card-head"><div><h3 class="card-title">Учні</h3>' +
+            '<div class="card-sub">активні зараз</div></div>' +
+            '<button class="btn btn--ghost btn--sm spacer" data-act="nav" data-arg="#/students">Усі</button></div>' +
             '<div class="row" style="justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)">' +
-              '<span class="small muted">Надійшло оплат</span><span class="bold right">' + U.moneyMap(incomeMap) + '</span></div>' +
+              '<span class="small muted">Активних</span><span class="bold">' + S.students().length + '</span></div>' +
             '<div class="row" style="justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)">' +
-              '<span class="small muted">Проведено уроків на</span><span class="bold right">' + U.moneyMap(earnedMap) + '</span></div>' +
+              '<span class="small muted">Уроків цього тижня</span><span class="bold">' +
+              U.sum(days, function (x) { return x.count; }) + '</span></div>' +
             '<div class="row" style="justify-content:space-between;padding:10px 0">' +
-              '<span class="small muted">Активних учнів</span><span class="bold">' + S.students().length + '</span></div>' +
+              '<span class="small muted">В архіві</span><span class="bold">' + S.archivedStudents().length + '</span></div>' +
           '</div>' +
         '</div>' +
       '</div>' +

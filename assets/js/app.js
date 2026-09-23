@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v103';
+  App.BUILD = 'v104';
   window.APP_BUILD = App.BUILD;
 
   var NAV = [
@@ -168,61 +168,99 @@
     S.save();
   }
 
-  /* Перетягування розділів. Не HTML5 drag: він не працює пальцем на
-     планшеті, а кабінет відкривають і з нього. */
+  /* Перетягування розділів.
+
+     Своє, а не HTML5 drag: той не працює пальцем на планшеті, а кабінет
+     відкривають і з нього.
+
+     Головне тут — плавність. Список під час тягання не перебудовується:
+     пункт їде за пальцем трансформацією, сусіди відсуваються на його
+     висоту з коротким переходом, і лише коли палець відпустили, порядок
+     один раз записується в розмітку. Раніше кожен рух переставляв вузли в
+     DOM — звідси ривки й стрибки під рукою. */
   var dragEndedAt = 0;
 
   function bindNavDrag(box) {
-    var moving = null, startY = 0, moved = false;
+    var st = null;
+
+    function begin(e) {
+      var items = Array.prototype.slice.call(box.querySelectorAll('.nav-item'));
+      var rects = items.map(function (el) { return el.getBoundingClientRect(); });
+      var from = items.indexOf(st.el);
+      var step = items.length > 1
+        ? Math.abs(rects[1].top - rects[0].top)
+        : rects[from].height;
+
+      st.items = items;
+      st.rects = rects;
+      st.from = from;
+      st.step = step;
+      st.target = from;
+      st.moved = true;
+
+      st.el.classList.add('is-dragging');
+      document.body.classList.add('is-navdrag');
+      if (st.el.setPointerCapture) { try { st.el.setPointerCapture(e.pointerId); } catch (err) {} }
+    }
+
+    /* Куди пункт сяде, якщо відпустити просто зараз. Рахуємо за
+       початковими місцями сусідів: вони лише зсунуті трансформацією, а
+       насправді стоять там, де стояли. */
+    function placeFor(dy) {
+      var mid = st.rects[st.from].top + st.rects[st.from].height / 2 + dy;
+      var n = 0;
+      for (var i = 0; i < st.items.length; i++) {
+        if (i === st.from) continue;
+        if (st.rects[i].top + st.rects[i].height / 2 < mid) n++;
+      }
+      return n;
+    }
+
+    function shift() {
+      for (var i = 0; i < st.items.length; i++) {
+        if (i === st.from) continue;
+        var j = i < st.from ? i : i - 1;          // місце серед решти
+        var t = 0;
+        if (j < st.target && i > st.from) t = -st.step;
+        else if (j >= st.target && i < st.from) t = st.step;
+        st.items[i].style.transform = t ? 'translateY(' + t + 'px)' : '';
+      }
+    }
 
     box.addEventListener('pointerdown', function (e) {
       var el = e.target.closest && e.target.closest('.nav-item');
       if (!el || e.button) return;
-      moving = el;
-      startY = e.clientY;
-      moved = false;
+      st = { el: el, y0: e.clientY, moved: false };
     });
 
     box.addEventListener('pointermove', function (e) {
-      if (!moving) return;
-      if (!moved) {
-        if (Math.abs(e.clientY - startY) < 6) return;
-        moved = true;
-        moving.classList.add('is-dragging');
-        document.body.classList.add('is-navdrag');
-        if (moving.setPointerCapture) { try { moving.setPointerCapture(e.pointerId); } catch (err) {} }
+      if (!st) return;
+      var dy = e.clientY - st.y0;
+      if (!st.moved) {
+        if (Math.abs(dy) < 5) return;
+        begin(e);
       }
       e.preventDefault();
-
-      /* Сусіда шукаємо за його місцем на екрані, а не «що під курсором»:
-         так само працює і пальцем, і коли пункт уже тягнеться під рукою. */
-      var sibs = Array.prototype.slice.call(moving.parentNode.querySelectorAll('.nav-item'));
-      var over = null, before = false;
-      for (var i = 0; i < sibs.length; i++) {
-        var r = sibs[i].getBoundingClientRect();
-        if (e.clientY >= r.top && e.clientY <= r.bottom) {
-          over = sibs[i];
-          before = e.clientY < r.top + r.height / 2;
-          break;
-        }
-      }
-      if (!over) {                       // вище першого або нижче останнього
-        var firstR = sibs[0].getBoundingClientRect();
-        var lastR = sibs[sibs.length - 1].getBoundingClientRect();
-        if (e.clientY < firstR.top) { over = sibs[0]; before = true; }
-        else if (e.clientY > lastR.bottom) { over = sibs[sibs.length - 1]; before = false; }
-      }
-      if (!over || over === moving) return;
-      over.parentNode.insertBefore(moving, before ? over : over.nextSibling);
+      st.el.style.transform = 'translateY(' + dy + 'px)';
+      var t = placeFor(dy);
+      if (t !== st.target) { st.target = t; shift(); }
     }, { passive: false });
 
     function stop() {
-      if (!moving) return;
-      var was = moved;
-      moving.classList.remove('is-dragging');
+      if (!st) return;
+      var cur = st;
+      st = null;
+      cur.el.classList.remove('is-dragging');
       document.body.classList.remove('is-navdrag');
-      moving = null;
-      if (!was) return;
+      if (!cur.moved) return;
+
+      // тепер — один раз у розмітку, у тому порядку, який уже видно
+      var others = cur.items.filter(function (_, i) { return i !== cur.from; });
+      var ref = others[cur.target] || null;
+      if (ref) box.insertBefore(cur.el, ref);
+      else if (others.length) box.insertBefore(cur.el, others[others.length - 1].nextSibling);
+      cur.items.forEach(function (el) { el.style.transform = ''; });
+
       dragEndedAt = Date.now();       // це було перетягування, а не перехід у розділ
       saveNavOrder(box);
     }
@@ -318,9 +356,13 @@
     var restore = act && act.id === 'stu-search'
       ? { id: act.id, pos: act.selectionStart } : null;
 
-    side.innerHTML = renderSidebar(route);
-    var navBox = side.querySelector('.side-scroll');
-    if (navBox) bindNavDrag(navBox);
+    /* Поки розділ тягнуть під рукою, панель не перемальовуємо: інакше
+       перемальовування посеред руху викинуло б той самий пункт з-під пальця. */
+    if (!document.body.classList.contains('is-navdrag')) {
+      side.innerHTML = renderSidebar(route);
+      var navBox = side.querySelector('.side-scroll');
+      if (navBox) bindNavDrag(navBox);
+    }
 
     var html;
     try {

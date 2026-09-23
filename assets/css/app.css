@@ -250,7 +250,8 @@ a { color: inherit; text-decoration: none; }
   background: none;
   width: 100%;
   text-align: left;
-  transition: background .14s, color .14s;
+  /* transform — для перетягування розділів: сусіди відсуваються плавно */
+  transition: background .14s, color .14s, transform .16s ease;
 }
 .nav-item svg { flex: 0 0 auto; color: var(--muted); transition: color .14s; }
 .nav-item:hover { background: var(--blue-50); }
@@ -1343,12 +1344,16 @@ a { color: inherit; text-decoration: none; }
 .cal-layout--full { grid-template-columns: minmax(0, 1fr); }
 @media (max-width: 1180px) { .cal-layout { grid-template-columns: minmax(0, 1fr); } }
 
-/* Розділи можна переставляти: беремо й тягнемо */
+/* Розділи можна переставляти: беремо й тягнемо.
+   Сусіди відсуваються переходом, а сам пункт їде за пальцем без нього —
+   інакше він тягнувся б із запізненням. */
 .nav-item.is-dragging {
-  opacity: .92;
-  box-shadow: var(--shadow-md);
+  transition: none;
+  position: relative;
+  z-index: 5;
   background: #fff;
-  transform: scale(1.02);
+  box-shadow: var(--shadow-md);
+  cursor: grabbing;
 }
 body.is-navdrag { user-select: none; cursor: grabbing; }
 body.is-navdrag .nav-item { touch-action: none; }

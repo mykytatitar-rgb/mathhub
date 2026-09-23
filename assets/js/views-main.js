@@ -362,9 +362,10 @@
         U.esc(String(Math.round(usdRate * 100) / 100).replace('.', ',')) + ' ₴</div>';
     }
 
-    return '<div class="card tot mb-3">' +
+    return '<div class="card tot mb-3" data-act="income-what" style="cursor:pointer" ' +
+      'title="Показати, з чого склалася сума">' +
       '<div class="card-head"><div><h3 class="card-title">Загальний дохід за місяць</h3>' +
-      '<div class="card-sub">усі валюти разом, за курсом</div></div>' +
+      '<div class="card-sub">усі валюти разом, за курсом · натисніть, щоб побачити кожну оплату</div></div>' +
       (diff != null
         ? '<span class="spacer badge ' + (diff >= 0 ? 'badge--green' : 'badge--red') + '">' +
           (diff >= 0 ? '↑ ' : '↓ ') + Math.abs(diff) + '% до минулого</span>'
@@ -387,6 +388,43 @@
       parts + note +
       '</div>';
   }
+
+  /**
+   * З чого склався дохід місяця — кожна оплата поіменно.
+   *
+   * Питання «звідки ця сума, я ж усе прибрав» мусить мати відповідь на
+   * місці. Тут усі валюти й усі учні, включно з архівними: саме їхні
+   * оплати й зникали з очей, бо сторінка показує одну валюту за раз.
+   */
+  V.incomeWhat = function () {
+    var today = U.today();
+    var mStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    var mEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    var list = U.sortBy(S.paymentsBetween(mStart, mEnd), function (p) { return p.date; }, true);
+    var map = S.incomeMap(mStart, mEnd);
+
+    if (!list.length) {
+      return '<div class="muted" style="padding:14px 0">За цей місяць оплат немає — дохід нульовий.</div>';
+    }
+
+    var rows = list.map(function (p) {
+      var s = S.get('students', p.studentId);
+      var who = s ? U.esc(s.name) + (s.archived ? ' <span class="badge badge--grey">архів</span>' : '')
+                  : '<span class="muted">учня вже немає</span>';
+      return '<tr><td class="nowrap">' + U.fmtDate(p.date) + '</td>' +
+        '<td>' + who + '</td>' +
+        '<td class="muted small">' + U.esc(p.note || p.method || '') + '</td>' +
+        '<td class="num bold">' + U.esc(U.money(p.amount, S.paymentCur(p))) + '</td>' +
+        '<td class="right"><button class="icon-btn" data-act="pay-drop" data-arg="' + p.id + '" ' +
+        'title="Видалити цю оплату">' + icon('trash', 16) + '</button></td></tr>';
+    }).join('');
+
+    return '<div style="overflow-x:auto"><table class="tbl">' +
+      '<thead><tr><th>Дата</th><th>Учень</th><th>Коментар</th><th class="num">Сума</th><th></th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table></div>' +
+      '<div class="tot__parts mt-2">Разом: ' + U.esc(U.moneyMap(map)) + ' — ' +
+      U.pl(list.length, 'оплата', 'оплати', 'оплат') + '</div>';
+  };
 
   /* ============================================================
      Дашборди: з чого складається місяць

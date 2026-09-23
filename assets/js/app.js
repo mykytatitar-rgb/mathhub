@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v96';
+  App.BUILD = 'v97';
   window.APP_BUILD = App.BUILD;
 
   var NAV = [
@@ -319,6 +319,32 @@
 
     'pay-add': function (arg) { F.payment(null, arg ? { studentId: arg, lockStudent: true } : {}); },
     'pay-edit': function (arg) { F.payment(arg); },
+
+    /* З чого склався дохід місяця. Відповідь має бути на відстані одного
+       натискання на саму суму, а не в голові. */
+    'income-what': function () {
+      C.modal({
+        title: 'З чого склався дохід',
+        sub: 'кожна оплата цього місяця — усі валюти й усі учні',
+        wide: true,
+        body: V.incomeWhat(),
+        buttons: [{ label: 'Закрити', kind: 'btn--ghost', act: 'cancel' }]
+      });
+    },
+
+    'pay-drop': function (arg) {
+      var p = S.get('payments', arg);
+      if (!p) return;
+      C.confirm('Видалити оплату?',
+        U.money(p.amount, S.paymentCur(p)) + ' від ' + U.fmtDate(p.date) +
+        '. Запис зникне на всіх пристроях, баланс учня перерахується.',
+        function () {
+          S.remove('payments', arg);
+          var box = document.querySelector('.modal__body');
+          if (box) box.innerHTML = V.incomeWhat();
+          App.render();
+        }, 'Видалити');
+    },
     'pay-export': function () { F.exportPayments(); },
 
     'note-add': function (arg) { F.note(null, { studentId: arg }); },

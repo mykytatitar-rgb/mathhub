@@ -687,13 +687,18 @@
   S.lessonCur = function (lesson) { return lesson.currency || S.curOf(lesson.studentId); };
   S.paymentCur = function (payment) { return payment.currency || S.curOf(payment.studentId); };
 
-  /** Перелік валют, які реально задіяні в активних учнів. */
+  /**
+   * Валюти, які реально є в кабінеті.
+   *
+   * Раніше рахувались лише активні учні. Через це гроші учня, якого
+   * заархівували, зникали з очей: його валюти не було серед перемикачів,
+   * а отже й оплат — у списках. Тепер сюди йдуть і валюти самих оплат.
+   */
   S.currenciesInUse = function () {
     var out = [];
-    S.students().forEach(function (s) {
-      var c = s.currency || 'UAH';
-      if (out.indexOf(c) < 0) out.push(c);
-    });
+    function add(c) { if (c && out.indexOf(c) < 0) out.push(c); }
+    S.students().forEach(function (s) { add(s.currency || 'UAH'); });
+    (db.payments || []).forEach(function (p) { add(S.paymentCur(p)); });
     return out.length ? out : [(db.tutor && db.tutor.currency) || 'UAH'];
   };
 

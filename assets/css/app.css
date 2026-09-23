@@ -1233,16 +1233,16 @@ a { color: inherit; text-decoration: none; }
 .cal-head__days { flex: 1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .cal--day .cal-head__days { grid-template-columns: minmax(0, 1fr); }
 
-.cal-dayhead { padding: 6px 6px 7px; text-align: center; border-left: 1px solid var(--line); }
+.cal-dayhead { padding: 4px 6px 5px; text-align: center; border-left: 1px solid var(--line); }
 .cal-dayhead:first-child { border-left: 0; }
 .cal-dayhead__wd {
-  font-size: 9.5px; font-weight: 700; letter-spacing: .5px;
+  font-size: 9px; font-weight: 700; letter-spacing: .4px;
   text-transform: uppercase; color: var(--muted);
 }
-.cal-dayhead__num { font-size: 16px; font-weight: 800; letter-spacing: -.4px; margin-top: 1px; }
+.cal-dayhead__num { font-size: 14.5px; font-weight: 800; letter-spacing: -.3px; margin-top: 0; line-height: 1.2; }
 .cal-dayhead__n {
-  display: inline-block; margin-top: 2px;
-  font-size: 9.5px; font-weight: 700;
+  display: inline-block; margin-top: 1px;
+  font-size: 9px; font-weight: 700;
   background: var(--blue-50); color: var(--blue-700);
   border-radius: 20px; padding: 0 6px;
 }
@@ -1251,7 +1251,7 @@ a { color: inherit; text-decoration: none; }
 
 /* Сітка займає весь екран, що лишився під шапкою: інакше день видно
    вузькою смужкою, а решта тижня — за краєм вікна */
-.cal-body { display: flex; max-height: calc(100vh - 195px); min-height: 420px; overflow-y: auto; }
+.cal-body { display: flex; max-height: calc(100vh - 178px); min-height: 420px; overflow-y: auto; }
 .cal-gutter { width: 58px; flex: 0 0 58px; border-right: 1px solid var(--line); }
 .cal-hour { position: relative; }
 .cal-hour span {
@@ -1371,8 +1371,8 @@ body.is-navdrag .nav-item { touch-action: none; }
 
 /* Заробіток за день у шапці */
 .cal-dayhead__money {
-  margin-top: 3px;
-  font-size: 10.5px; font-weight: 750;
+  margin-top: 2px;
+  font-size: 10px; font-weight: 750;
   color: #0C8A50;
   white-space: nowrap;
 }

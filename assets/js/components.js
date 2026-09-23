@@ -32,12 +32,31 @@
     return C.badge(cfg.label, cfg.badge);
   };
 
-  /** Бейдж балансу: борг червоним, запас зеленим. */
-  C.balanceBadge = function (balance, price, cur) {
+  /**
+   * Бейдж балансу: борг червоним, запас зеленим.
+   *
+   * «Оплачено» тут — це гроші наперед, а не позначка на якомусь уроці.
+   * Раніше писало просто «3 уроки оплачено», і це збивало: попереду урок,
+   * за який не платили, а картка каже, що оплачено. Тепер сказано, що це
+   * аванс; а якщо запас лише через уроки, які відбулись і не відмічені
+   * проведеними, — так і написано, бо це не гроші наперед, а незакритий
+   * облік.
+   *
+   * stat — те, що дає S.studentStats: беремо з нього credit і unmarked.
+   */
+  C.balanceBadge = function (balance, price, cur, stat) {
     if (balance < -0.005) return C.badge('Борг ' + U.money(-balance, cur), 'badge--red', 'alert');
-    if (balance >= price) {
-      var left = Math.floor(balance / price);
-      return C.badge(U.pl(left, 'урок', 'уроки', 'уроків') + ' оплачено', 'badge--green', 'check');
+
+    var credit = stat && stat.credit != null ? stat.credit : balance;
+    var unmarked = (stat && stat.unmarked) || 0;
+
+    if (price > 0 && credit >= price) {
+      var left = Math.floor(credit / price);
+      return C.badge('Наперед: ' + U.pl(left, 'урок', 'уроки', 'уроків'), 'badge--green', 'check');
+    }
+    if (unmarked) {
+      return C.badge(U.pl(unmarked, 'урок не відмічено', 'уроки не відмічено', 'уроків не відмічено'),
+        'badge--amber', 'alert');
     }
     return C.badge('Оплата вчасно', 'badge--grey');
   };

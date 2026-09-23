@@ -223,7 +223,7 @@
           C.ring(V.studentMapProgress ? V.studentMapProgress(s.id).pct : 0, 44, 5) +
         '</div>' +
 
-        '<div style="margin-top:14px">' + C.balanceBadge(stat.balance, s.price, S.curOf(s.id)) +
+        '<div style="margin-top:14px">' + C.balanceBadge(stat.balance, s.price, S.curOf(s.id), stat) +
         (stat.hwPending ? ' ' + C.badge(U.pl(stat.hwPending, 'ДЗ', 'ДЗ', 'ДЗ') + ' в роботі', 'badge--amber') : '') +
         '</div>' +
 

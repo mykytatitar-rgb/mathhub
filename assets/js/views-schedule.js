@@ -94,16 +94,15 @@
       var title = raw + ' · за курсом того дня' +
         (box.missing.length ? ' · немає курсу: ' + box.missing.join(', ') : '');
 
-      /* Та сама сума ще й у доларах. Половина учнів платить у доларах, і
-         тримати перерахунок у голові щодня — зайва робота; місце під
-         числом є, тож нехай стоять обидві мірки. */
+      /* Та сама сума ще й у доларах — тим самим рядком: половина учнів
+         платить у доларах, а зайвий рядок у шапці дня з'їдає висоту сітки. */
       var usdRate = R.get('USD');
-      var usd = usdRate ? '<div class="cal-dayhead__usd' + (isPlan ? ' is-plan' : '') + '">' +
-        (isPlan ? '~' : '≈') + U.money(Math.round(box.uah / usdRate), 'USD') + '</div>' : '';
+      var usd = usdRate ? '<span class="cal-dayhead__usd">' +
+        (isPlan ? ' · ~' : ' · ≈') + U.money(Math.round(box.uah / usdRate), 'USD') + '</span>' : '';
 
       return '<div class="cal-dayhead__money' + (isPlan ? ' is-plan' : '') +
         '" title="' + U.esc(title) + '">' +
-        (isPlan ? '~' : '') + (box.exact ? '' : '≈') + txt + '</div>' + usd;
+        (isPlan ? '~' : '') + (box.exact ? '' : '≈') + txt + usd + '</div>';
     }
 
     var d = block(done, false);

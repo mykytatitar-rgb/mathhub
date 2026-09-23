@@ -1233,25 +1233,25 @@ a { color: inherit; text-decoration: none; }
 .cal-head__days { flex: 1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .cal--day .cal-head__days { grid-template-columns: minmax(0, 1fr); }
 
-.cal-dayhead { padding: 9px 6px 10px; text-align: center; border-left: 1px solid var(--line); }
+.cal-dayhead { padding: 6px 6px 7px; text-align: center; border-left: 1px solid var(--line); }
 .cal-dayhead:first-child { border-left: 0; }
 .cal-dayhead__wd {
-  font-size: 10.5px; font-weight: 700; letter-spacing: .6px;
+  font-size: 9.5px; font-weight: 700; letter-spacing: .5px;
   text-transform: uppercase; color: var(--muted);
 }
-.cal-dayhead__num { font-size: 19px; font-weight: 800; letter-spacing: -.5px; margin-top: 2px; }
+.cal-dayhead__num { font-size: 16px; font-weight: 800; letter-spacing: -.4px; margin-top: 1px; }
 .cal-dayhead__n {
-  display: inline-block; margin-top: 3px;
-  font-size: 10px; font-weight: 700;
+  display: inline-block; margin-top: 2px;
+  font-size: 9.5px; font-weight: 700;
   background: var(--blue-50); color: var(--blue-700);
-  border-radius: 20px; padding: 1px 7px;
+  border-radius: 20px; padding: 0 6px;
 }
 .cal-dayhead.is-today .cal-dayhead__num { color: var(--blue-600); }
 .cal-dayhead.is-today .cal-dayhead__wd { color: var(--blue-600); }
 
 /* Сітка займає весь екран, що лишився під шапкою: інакше день видно
    вузькою смужкою, а решта тижня — за краєм вікна */
-.cal-body { display: flex; max-height: calc(100vh - 215px); min-height: 420px; overflow-y: auto; }
+.cal-body { display: flex; max-height: calc(100vh - 195px); min-height: 420px; overflow-y: auto; }
 .cal-gutter { width: 58px; flex: 0 0 58px; border-right: 1px solid var(--line); }
 .cal-hour { position: relative; }
 .cal-hour span {
@@ -1371,20 +1371,15 @@ body.is-navdrag .nav-item { touch-action: none; }
 
 /* Заробіток за день у шапці */
 .cal-dayhead__money {
-  margin-top: 4px;
-  font-size: 11px; font-weight: 750;
+  margin-top: 3px;
+  font-size: 10.5px; font-weight: 750;
   color: #0C8A50;
   white-space: nowrap;
 }
 .cal-dayhead__money.is-plan { color: var(--muted-2); font-weight: 650; }
 /* Той самий заробіток у доларах — дрібніше, під гривнями */
-.cal-dayhead__usd {
-  margin-top: 1px;
-  font-size: 10.5px; font-weight: 700;
-  color: var(--muted);
-  white-space: nowrap;
-}
-.cal-dayhead__usd.is-plan { color: var(--muted-2); font-weight: 600; }
+.cal-dayhead__usd { font-weight: 650; color: var(--muted); }
+.cal-dayhead__money.is-plan .cal-dayhead__usd { color: var(--muted-2); }
 
 /* Перенесений урок */
 .cal-ev.is-moved { border-left-style: dashed; }

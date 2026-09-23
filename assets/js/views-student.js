@@ -93,7 +93,9 @@
           (stat.balance < 0 ? 'Борг' : 'Баланс') + '</div>' +
           '<div class="small muted truncate" style="margin-top:2px">' +
           U.money(Math.abs(stat.balance), cur) +
-          (stat.balance >= st.price ? ' · ' + U.pl(Math.floor(stat.balance / st.price), 'урок', 'уроки', 'уроків') : '') +
+          (st.price > 0 && (stat.credit != null ? stat.credit : stat.balance) >= st.price
+            ? ' · наперед ' + U.pl(Math.floor((stat.credit != null ? stat.credit : stat.balance) / st.price),
+                'урок', 'уроки', 'уроків') : '') +
           '</div></div><span class="quick__arrow">' + icon('chevronR', 18) + '</span></button>' +
       '</div>' +
 
@@ -306,7 +308,10 @@
     var paid = U.sum(list, function (p) { return p.amount; });
     var doneLessons = S.lessonsOf(st.id).filter(function (l) { return l.status === 'done'; });
     var used = U.sum(doneLessons, function (l) { return l.price || 0; });
-    var left = Math.floor(stat.balance / st.price);
+    /* Рахуємо за справжнім запасом: уроки, які вже відбулися, але не
+       відмічені проведеними, ще не списані з балансу — і без цього
+       «вистачить ще на 3 уроки» було б неправдою. */
+    var left = st.price > 0 ? Math.floor((stat.credit != null ? stat.credit : stat.balance) / st.price) : 0;
 
     var rows = list.length ? list.map(function (p) {
       return '<tr><td class="nowrap">' + U.fmtDate(p.date) + '</td>' +
@@ -340,7 +345,10 @@
           '<div class="small" style="opacity:.9;margin-top:8px">' +
           (stat.balance < 0
             ? 'Проведено уроків на більшу суму, ніж сплачено'
-            : left >= 1 ? 'Вистачить ще на ' + U.pl(left, 'урок', 'уроки', 'уроків') : 'Наступний урок потребує оплати') +
+            : left >= 1 ? 'Вистачить ще на ' + U.pl(left, 'урок', 'уроки', 'уроків')
+            : stat.unmarked ? U.pl(stat.unmarked, 'урок уже відбувся, але не відмічений',
+                'уроки вже відбулися, але не відмічені', 'уроків уже відбулися, але не відмічені')
+            : 'Наступний урок потребує оплати') +
           '</div>' +
         '</div>' +
 

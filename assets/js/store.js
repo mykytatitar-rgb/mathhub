@@ -762,6 +762,31 @@
     return Math.floor(S.balance(studentId) / price);
   };
 
+  /**
+   * Уроки, які вже минули, але не відмічені проведеними.
+   *
+   * Поки урок не відмічено, його вартість не віднімається від оплат — і
+   * гроші за нього виглядають як аванс на майбутнє. Саме звідси беруться
+   * «3 уроки оплачено» у того, в кого попереду неоплачений урок.
+   */
+  S.unmarkedOf = function (studentId) {
+    var now = new Date();
+    return db.lessons.filter(function (l) {
+      return l.studentId === studentId && l.status === 'planned' && U.toDate(l.date) < now;
+    });
+  };
+
+  /**
+   * Справжній запас: оплати мінус проведені уроки мінус ті, що вже
+   * відбулися, але ще не відмічені.
+   */
+  S.creditOf = function (studentId) {
+    var st = S.get('students', studentId);
+    var price = (st && st.price) || db.tutor.defaultPrice || 0;
+    var hidden = U.sum(S.unmarkedOf(studentId), function (l) { return l.price || price || 0; });
+    return S.balance(studentId) - hidden;
+  };
+
   /** Оплати за період. Якщо вказано code — лише в цій валюті. */
   S.paymentsBetween = function (from, to, code) {
     var a = U.ymd(from), b = U.ymd(to);
@@ -844,6 +869,8 @@
       avgProgress: prog.length ? Math.round(U.sum(prog, function (p) { return p.level; }) / prog.length) : 0,
       topicsCovered: prog.length,
       lastLesson: done.length ? done[0] : null,
+      unmarked: S.unmarkedOf(studentId).length,
+      credit: S.creditOf(studentId),
       nextLesson: U.sortBy(lessons.filter(function (l) {
         return l.status === 'planned' && U.toDate(l.date) >= U.today();
       }), function (l) { return l.date; })[0] || null,

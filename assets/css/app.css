@@ -308,6 +308,12 @@ a { color: inherit; text-decoration: none; }
   color: #fff;
 }
 .hero--short { padding-bottom: 34px; }
+/* Розклад: шапка коротка, бо головне тут — сітка тижня, і вона має
+   починатися одразу, а не після пів екрана заставки */
+.hero--tight { padding: 16px 40px 18px; }
+.hero--tight .hero__title { font-size: 26px; letter-spacing: -.6px; }
+.hero--tight .hero__sub { font-size: 12px; margin-top: 3px; }
+.hero--tight .hero-btn { padding: 9px 15px; }
 
 /* Клітинка, як у зошиті: тема наша власна, а не запозичений візерунок.
    Ближче до низу гасне, щоб не сперечатися з картками, які на неї наїжджають. */
@@ -361,6 +367,9 @@ a { color: inherit; text-decoration: none; }
    ============================================================ */
 
 .page { padding: 30px 40px 56px; }
+/* Сторінка, де головне — сама сітка (розклад): відступи менші, щоб
+   тиждень починався одразу під шапкою */
+.page--tight { padding: 14px 40px 22px; }
 .page--overlap { margin-top: -66px; padding-top: 0; position: relative; z-index: 2; }
 
 .page-head { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 22px; flex-wrap: wrap; }
@@ -1240,7 +1249,9 @@ a { color: inherit; text-decoration: none; }
 .cal-dayhead.is-today .cal-dayhead__num { color: var(--blue-600); }
 .cal-dayhead.is-today .cal-dayhead__wd { color: var(--blue-600); }
 
-.cal-body { display: flex; max-height: calc(100vh - 300px); min-height: 460px; overflow-y: auto; }
+/* Сітка займає весь екран, що лишився під шапкою: інакше день видно
+   вузькою смужкою, а решта тижня — за краєм вікна */
+.cal-body { display: flex; max-height: calc(100vh - 215px); min-height: 420px; overflow-y: auto; }
 .cal-gutter { width: 58px; flex: 0 0 58px; border-right: 1px solid var(--line); }
 .cal-hour { position: relative; }
 .cal-hour span {

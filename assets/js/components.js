@@ -211,7 +211,8 @@
         (b.icon ? icon(b.icon, 17) : '') + U.esc(b.label) + '</button>';
     }).join('');
 
-    return '<div class="hero' + (opts.short ? ' hero--short' : '') + '">' +
+    return '<div class="hero' + (opts.short ? ' hero--short' : '') +
+      (opts.tight ? ' hero--tight' : '') + '">' +
       C.mathPattern() +
       '<div class="hero__inner">' +
       (opts.back ? '<button class="hero__back" data-act="' + opts.back.act + '"' +

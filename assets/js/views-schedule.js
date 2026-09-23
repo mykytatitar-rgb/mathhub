@@ -287,6 +287,7 @@
 
     return C.hero({
       short: true,
+      tight: true,
       title: 'Розклад',
       sub: label,
       actions: [
@@ -295,9 +296,9 @@
       ]
     }) +
 
-    '<div class="page">' +
+    '<div class="page page--tight">' +
       ratesNotice() +
-      '<div class="row row--wrap mb-3" style="gap:10px">' +
+      '<div class="row row--wrap mb-2" style="gap:10px">' +
         '<div class="seg" style="background:#fff;box-shadow:var(--shadow-sm)">' +
           '<button class="seg__btn' + (view === 'week' ? ' is-active' : '') +
             '" data-act="cal-view" data-arg="week">Тиждень</button>' +

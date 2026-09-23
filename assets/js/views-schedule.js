@@ -154,11 +154,22 @@
 
   var PANEL_KEY = 'mathhub.calPanel';
 
+  var MONEY_KEY = 'mathhub.calMoney';
+
   V.panelHidden = function () {
     try { return localStorage.getItem(PANEL_KEY) === 'hidden'; } catch (e) { return false; }
   };
   V.toggleCalPanel = function () {
     try { localStorage.setItem(PANEL_KEY, V.panelHidden() ? 'shown' : 'hidden'); } catch (e) {}
+  };
+
+  /* Заробіток у шапці дня потрібен не завжди: коли дивишся розклад під час
+     уроку, суми лише займають висоту. Ховаються одним натисканням. */
+  V.moneyHidden = function () {
+    try { return localStorage.getItem(MONEY_KEY) === 'hidden'; } catch (e) { return false; }
+  };
+  V.toggleCalMoney = function () {
+    try { localStorage.setItem(MONEY_KEY, V.moneyHidden() ? 'shown' : 'hidden'); } catch (e) {}
   };
 
   V.schedule = function (query) {
@@ -322,6 +333,10 @@
                 ? ' · ≈' + U.money(Math.round(weekUAH.uah / window.Rates.get('USD')), 'USD') : '') +
               '</span>'
             : C.badge(U.moneyMap(money), 'badge--grey')) +
+          '<button class="btn btn--ghost btn--sm" data-act="cal-money" ' +
+            'title="' + (V.moneyHidden() ? 'Показати заробіток у шапці днів' : 'Сховати заробіток у шапці днів') + '">' +
+            icon(V.moneyHidden() ? 'eyeOff' : 'wallet', 15) +
+            (V.moneyHidden() ? 'Суми' : 'Суми') + '</button>' +
           '<button class="btn btn--ghost btn--sm" data-act="cal-panel" ' +
             'title="Показати або сховати праву панель">' + icon('layers', 15) + 'Панель</button>' +
         '</div>' +
@@ -329,7 +344,8 @@
 
       '<div class="cal-layout' + (panelHidden ? ' cal-layout--full' : '') + '">' +
         '<div class="card card--pad0" style="overflow:hidden">' +
-          '<div class="cal' + (view === 'day' ? ' cal--day' : '') + '">' +
+          '<div class="cal' + (view === 'day' ? ' cal--day' : '') +
+            (V.moneyHidden() ? ' cal--nomoney' : '') + '">' +
             '<div class="cal-head">' +
               '<div class="cal-head__corner"></div>' +
               '<div class="cal-head__days">' + head + '</div>' +

@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v108';
+  App.BUILD = 'v109';
   window.APP_BUILD = App.BUILD;
 
   var NAV = [
@@ -538,6 +538,7 @@
     'cal-view': function (arg) { setQuery({ v: arg === 'week' ? '' : arg, off: '' }); },
     'cal-nav': function (arg) { setQuery({ off: arg === '0' ? '' : arg }); },
     'cal-panel': function () { V.toggleCalPanel(); App.render(); },
+    'cal-money': function () { V.toggleCalMoney(); App.render(); },
     'rates-refresh': function () {
       if (!window.Rates) return;
       U.toast('Питаю курс у НБУ…');

@@ -2696,8 +2696,19 @@
         '<span class="sel-bar__sep"></span>';
     }
 
+    /* Розмір усього виділеного одразу — для кількох обʼєктів. Кути рамки
+       теж тягнуться, а кнопки — для пальця й точних кроків по 10 %. */
+    var sizeBtns = n > 1
+      ? '<button class="sel-bar__btn" data-act="board-scale" data-arg="0.9" title="Зменшити виділене">' +
+          icon('zoomOut', 16) + '</button>' +
+        '<button class="sel-bar__btn" data-act="board-scale" data-arg="1.1" title="Збільшити виділене">' +
+          icon('zoomIn', 16) + '</button>' +
+        '<span class="sel-bar__sep"></span>'
+      : '';
+
     bar.innerHTML =
       '<span class="sel-bar__count">' + U.pl(n, 'об’єкт', 'об’єкти', 'об’єктів') + '</span>' +
+      sizeBtns +
       extra +
       '<button class="sel-bar__btn" data-act="board-copy" title="Копіювати (Ctrl+C)">' +
         icon('copy', 16) + '</button>' +
@@ -3681,6 +3692,12 @@
     'board-delete': function () { cur.engine.deleteSelection(); },
     'board-link-kind': function (arg) { setLinkKindOf(arg); },
     'board-link-dash': function () { toggleLinkDash(); },
+    'board-scale': function (arg) {
+      var k = Number(arg);
+      if (!cur || !(k > 0)) return;
+      holdSelBar();                        // панель лишається під пальцем між натисканнями
+      cur.engine.scaleSelection(k);
+    },
     'board-stroke-up': function () { stepStroke(1); },
     'board-stroke-down': function () { stepStroke(-1); },
     'board-point-up': function () { stepPoint(1); },

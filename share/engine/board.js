@@ -1488,6 +1488,43 @@
     }
   }
 
+  /**
+   * Масштабувати обʼєкт навколо точки (ax, ay) у k разів — від знімка src.
+   *
+   * Для виділення з кількох обʼєктів: усі збільшуються чи зменшуються як
+   * одне ціле, пропорційно, разом із товщиною ліній і розміром тексту —
+   * як група в Miro. Беремо від знімка на початку жесту, а не від поточного
+   * стану: інакше похибка округлення накопичувалась би з кожним рухом миші.
+   * Точки, прив'язані до фігури, і побудови їдуть за своїми фігурами самі.
+   */
+  function scaleItemFrom(it, src, k, ax, ay) {
+    if (it.t === 'c' || it.t === 'd') return;
+    if (it.t === 'o' && it.on && it.on.pid) return;
+    function sx(x) { return round(ax + (x - ax) * k); }
+    function sy(y) { return round(ay + (y - ay) * k); }
+
+    if (it.t === 'o') {
+      it.p = [sx(src.p[0]), sy(src.p[1])];
+      return;
+    }
+    if (it.t === 'p' && src.d) {
+      it.d = src.d.map(function (v, i) { return i % 2 ? sy(v) : sx(v); });
+    } else if (it.t === 'x' && src.p) {
+      // точка тексту — лінія основи; верх = p[1] − s, тож масштабується разом
+      it.s = Math.max(6, Math.min(400, Math.round(src.s * k)));
+      it.p = [sx(src.p[0]), sy(src.p[1])];
+      return;
+    } else if (src.a) {
+      it.a = [sx(src.a[0]), sy(src.a[1]), sx(src.a[2]), sy(src.a[3])];
+    }
+    if (typeof src.w === 'number') it.w = Math.max(0.5, Math.round(src.w * k * 10) / 10);
+  }
+
+  /** Знімок геометрії для scaleItemFrom. */
+  function geomOf(it) {
+    return JSON.parse(JSON.stringify({ p: it.p, d: it.d, a: it.a, s: it.s, w: it.w }));
+  }
+
   /* ============================================================
      Кеш картинок (файли лежать в IndexedDB)
      ============================================================ */
@@ -2621,8 +2658,44 @@
     return unionBounds(this.selection);
   };
 
+  /* Кути спільної рамки кількох виділених обʼєктів — за них група
+     збільшується чи зменшується цілком. Рамка малюється з відступом, тож і
+     маркери стоять на її кутах, а не всередині. */
+  Board.prototype._groupFrame = function () {
+    if (this.selection.length < 2) return null;
+    var gb = unionBounds(this.selection);
+    if (!gb) return null;
+    var pad = 11 / this.scale;
+    return { x1: gb.x1 - pad, y1: gb.y1 - pad, x2: gb.x2 + pad, y2: gb.y2 + pad };
+  };
+
+  /**
+   * Збільшити чи зменшити все виділене в k разів навколо центра рамки —
+   * для кнопок на панелі виділення: пальцем за кут не завжди влучиш, а
+   * кроком по 10 % зручно підганяти точно.
+   */
+  Board.prototype.scaleSelection = function (k) {
+    if (this.readOnly || !this.selection.length) return;
+    var gb = unionBounds(this.selection);
+    if (!gb) return;
+    this.snapshot();
+    var cx = (gb.x1 + gb.x2) / 2, cy = (gb.y1 + gb.y2) / 2;
+    this.selection.forEach(function (it) { scaleItemFrom(it, geomOf(it), k, cx, cy); });
+    this.syncConstructions();
+    this.changed();
+    if (this.opts.onSelect) this.opts.onSelect(this.selection);
+  };
+
   Board.prototype._handles = function () {
-    if (this.selection.length !== 1) return null;   // маркери — лише для одного об'єкта
+    if (this.selection.length > 1) {
+      var f = this._groupFrame();
+      if (!f) return null;
+      return [
+        { id: 'gnw', x: f.x1, y: f.y1 }, { id: 'gne', x: f.x2, y: f.y1 },
+        { id: 'gse', x: f.x2, y: f.y2 }, { id: 'gsw', x: f.x1, y: f.y2 }
+      ];
+    }
+    if (this.selection.length !== 1) return null;
     var it = this.selection[0];
     /* У точки один маркер — вона сама. Тягнення ним не просто пересуває
        точку, а заново шукає, до чого вона липне: так її можна зняти з
@@ -3002,6 +3075,23 @@
 
     if (this.tool === 'select') {
       var handle = this._handleAt(w.x, w.y);
+      if (handle && handle.id.charAt(0) === 'g' && handle.id.length === 3) {
+        // кут спільної рамки: уся група масштабується навколо протилежного кута
+        var fr = this._groupFrame();
+        if (fr) {
+          this.snapshot();
+          var c = handle.id.slice(1);
+          this._gscale = {
+            ax: c.indexOf('w') >= 0 ? fr.x2 : fr.x1,
+            ay: c.indexOf('n') >= 0 ? fr.y2 : fr.y1,
+            w0: Math.max(1e-6, fr.x2 - fr.x1),
+            h0: Math.max(1e-6, fr.y2 - fr.y1),
+            items: this.selection.slice(),
+            src: this.selection.map(geomOf)
+          };
+        }
+        return;
+      }
       if (handle) {
         this.snapshot();
         this._resize = { id: handle.id, item: this.selection[0] };
@@ -3206,6 +3296,18 @@
       return;
     }
 
+    if (this._gscale) {
+      var gs = this._gscale;
+      // пропорційно: беремо більшу з двох змін, як у тексту
+      var kf = Math.max(Math.abs(w.x - gs.ax) / gs.w0, Math.abs(w.y - gs.ay) / gs.h0);
+      kf = Math.max(0.05, Math.min(40, kf));
+      gs.items.forEach(function (it, i) { scaleItemFrom(it, gs.src[i], kf, gs.ax, gs.ay); });
+      this.syncConstructions();
+      this.render();
+      if (this.opts.onSelect) this.opts.onSelect(this.selection);
+      return;
+    }
+
     if (this._drag) {
       var dx = w.x - this._drag.x, dy = w.y - this._drag.y;
       this._drag.items.forEach(function (it) { moveItem(it, dx, dy); });
@@ -3231,7 +3333,8 @@
         var h = this._handleAt(w.x, w.y);
         if (h) {
           var cs = { nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize',
-                     sw: 'nesw-resize', p1: 'crosshair', p2: 'crosshair' };
+                     sw: 'nesw-resize', p1: 'crosshair', p2: 'crosshair',
+                     gnw: 'nwse-resize', gse: 'nwse-resize', gne: 'nesw-resize', gsw: 'nesw-resize' };
           this.canvas.style.cursor = cs[h.id] || 'pointer';
         } else {
           this.canvas.style.cursor = this._hitTest(w.x, w.y) ? 'move' : 'default';
@@ -3278,6 +3381,11 @@
     if (this._resize) {
       this._resize = null;
       svFit = null;                       // тягнення скінчилося — фіксація не потрібна
+      if (this.opts.onChange) this.opts.onChange();
+      return;
+    }
+    if (this._gscale) {
+      this._gscale = null;
       if (this.opts.onChange) this.opts.onChange();
       return;
     }

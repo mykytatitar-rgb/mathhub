@@ -1343,6 +1343,16 @@ a { color: inherit; text-decoration: none; }
 .cal-layout--full { grid-template-columns: minmax(0, 1fr); }
 @media (max-width: 1180px) { .cal-layout { grid-template-columns: minmax(0, 1fr); } }
 
+/* Розділи можна переставляти: беремо й тягнемо */
+.nav-item.is-dragging {
+  opacity: .92;
+  box-shadow: var(--shadow-md);
+  background: #fff;
+  transform: scale(1.02);
+}
+body.is-navdrag { user-select: none; cursor: grabbing; }
+body.is-navdrag .nav-item { touch-action: none; }
+
 /* Заробіток за день у шапці */
 .cal-dayhead__money {
   margin-top: 4px;

@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v102';
+  App.BUILD = 'v103';
   window.APP_BUILD = App.BUILD;
 
   var NAV = [
@@ -130,17 +130,119 @@
      Сайдбар
      ============================================================ */
 
+  /* ---------- Порядок розділів ----------
+
+     Розділи стоять так, як їх переставила людина: порядок лежить у самій
+     базі (tutor.nav), отже однаковий на всіх пристроях — як усе інше.
+     Нові розділи, яких у збереженому списку ще немає, стають на свої
+     типові місця, а не зникають. */
+
+  function navOrder() {
+    var saved = (S.db().tutor && S.db().tutor.nav) || [];
+    var rest = NAV.filter(function (n) { return saved.indexOf(n.hash) < 0; });
+    var out = [];
+    saved.forEach(function (h) {
+      var n = NAV.filter(function (x) { return x.hash === h; })[0];
+      if (n) out.push(n);
+    });
+    // новий розділ вставляємо туди, де він стоїть за задумом
+    rest.forEach(function (n) {
+      var at = NAV.indexOf(n);
+      var i = out.length;
+      for (var k = 0; k < out.length; k++) {
+        if (NAV.indexOf(out[k]) > at) { i = k; break; }
+      }
+      out.splice(i, 0, n);
+    });
+    return out;
+  }
+
+  function saveNavOrder(box) {
+    var order = Array.prototype.map.call(box.querySelectorAll('.nav-item'), function (el) {
+      return el.dataset.arg;
+    }).filter(Boolean);
+    if (!order.length) return;
+    var t = S.db().tutor || (S.db().tutor = {});
+    if (JSON.stringify(t.nav || []) === JSON.stringify(order)) return;
+    t.nav = order;
+    S.save();
+  }
+
+  /* Перетягування розділів. Не HTML5 drag: він не працює пальцем на
+     планшеті, а кабінет відкривають і з нього. */
+  var dragEndedAt = 0;
+
+  function bindNavDrag(box) {
+    var moving = null, startY = 0, moved = false;
+
+    box.addEventListener('pointerdown', function (e) {
+      var el = e.target.closest && e.target.closest('.nav-item');
+      if (!el || e.button) return;
+      moving = el;
+      startY = e.clientY;
+      moved = false;
+    });
+
+    box.addEventListener('pointermove', function (e) {
+      if (!moving) return;
+      if (!moved) {
+        if (Math.abs(e.clientY - startY) < 6) return;
+        moved = true;
+        moving.classList.add('is-dragging');
+        document.body.classList.add('is-navdrag');
+        if (moving.setPointerCapture) { try { moving.setPointerCapture(e.pointerId); } catch (err) {} }
+      }
+      e.preventDefault();
+
+      /* Сусіда шукаємо за його місцем на екрані, а не «що під курсором»:
+         так само працює і пальцем, і коли пункт уже тягнеться під рукою. */
+      var sibs = Array.prototype.slice.call(moving.parentNode.querySelectorAll('.nav-item'));
+      var over = null, before = false;
+      for (var i = 0; i < sibs.length; i++) {
+        var r = sibs[i].getBoundingClientRect();
+        if (e.clientY >= r.top && e.clientY <= r.bottom) {
+          over = sibs[i];
+          before = e.clientY < r.top + r.height / 2;
+          break;
+        }
+      }
+      if (!over) {                       // вище першого або нижче останнього
+        var firstR = sibs[0].getBoundingClientRect();
+        var lastR = sibs[sibs.length - 1].getBoundingClientRect();
+        if (e.clientY < firstR.top) { over = sibs[0]; before = true; }
+        else if (e.clientY > lastR.bottom) { over = sibs[sibs.length - 1]; before = false; }
+      }
+      if (!over || over === moving) return;
+      over.parentNode.insertBefore(moving, before ? over : over.nextSibling);
+    }, { passive: false });
+
+    function stop() {
+      if (!moving) return;
+      var was = moved;
+      moving.classList.remove('is-dragging');
+      document.body.classList.remove('is-navdrag');
+      moving = null;
+      if (!was) return;
+      dragEndedAt = Date.now();       // це було перетягування, а не перехід у розділ
+      saveNavOrder(box);
+    }
+
+    box.addEventListener('pointerup', stop);
+    box.addEventListener('pointercancel', stop);
+    box.addEventListener('lostpointercapture', stop);
+  }
+
   function renderSidebar(route) {
     var students = S.students();
     var activeStudent = route.parts[0] === 'student' ? route.parts[1] : null;
     var path = '#' + (route.path === '/' ? '/' : route.path);
 
-    var nav = NAV.map(function (n) {
+    var nav = navOrder().map(function (n) {
       var active = n.hash === '#/' ? (path === '#/' || path === '#') : path.indexOf(n.hash) === 0;
       if (n.hash === '#/students' && activeStudent) active = false;
       var cnt = n.count ? n.count() : 0;
       return '<button class="nav-item' + (active ? ' is-active' : '') + '" data-act="nav" data-arg="' + n.hash +
-        '" title="' + U.esc(n.label) + '">' +
+        '" title="' + U.esc(n.label) + ' · перетягніть, щоб переставити">' +
         icon(n.icon, 19) + '<span>' + n.label + '</span>' +
         (cnt ? '<span class="nav-item__count">' + cnt + '</span>' : '') + '</button>';
     }).join('');
@@ -217,6 +319,8 @@
       ? { id: act.id, pos: act.selectionStart } : null;
 
     side.innerHTML = renderSidebar(route);
+    var navBox = side.querySelector('.side-scroll');
+    if (navBox) bindNavDrag(navBox);
 
     var html;
     try {
@@ -820,6 +924,8 @@
   document.addEventListener('click', function (e) {
     var el = e.target.closest('[data-act]');
     if (!el) return;
+    // щойно переставляли розділи — це не клік по розділу
+    if (Date.now() - dragEndedAt < 350 && el.classList.contains('nav-item')) return;
     // не перехоплюємо звичайні посилання
     if (el.tagName === 'A' && el.href) return;
     var fn = ACTIONS[el.dataset.act];

@@ -94,9 +94,16 @@
       var title = raw + ' · за курсом того дня' +
         (box.missing.length ? ' · немає курсу: ' + box.missing.join(', ') : '');
 
+      /* Та сама сума ще й у доларах. Половина учнів платить у доларах, і
+         тримати перерахунок у голові щодня — зайва робота; місце під
+         числом є, тож нехай стоять обидві мірки. */
+      var usdRate = R.get('USD');
+      var usd = usdRate ? '<div class="cal-dayhead__usd' + (isPlan ? ' is-plan' : '') + '">' +
+        (isPlan ? '~' : '≈') + U.money(Math.round(box.uah / usdRate), 'USD') + '</div>' : '';
+
       return '<div class="cal-dayhead__money' + (isPlan ? ' is-plan' : '') +
         '" title="' + U.esc(title) + '">' +
-        (isPlan ? '~' : '') + (box.exact ? '' : '≈') + txt + '</div>';
+        (isPlan ? '~' : '') + (box.exact ? '' : '≈') + txt + '</div>' + usd;
     }
 
     var d = block(done, false);
@@ -310,7 +317,10 @@
             ? '<span class="badge badge--green" title="' +
               U.esc(Object.keys(money).map(function (c) { return U.money(money[c], c); }).join(' + ') +
                 (weekUAH.partial ? ' · немає курсу: ' + weekUAH.missing.join(', ') : '')) + '">' +
-              (weekUAH.partial ? '≈ ' : '') + U.money(Math.round(weekUAH.uah), 'UAH') + '</span>'
+              (weekUAH.partial ? '≈ ' : '') + U.money(Math.round(weekUAH.uah), 'UAH') +
+              (window.Rates.get('USD')
+                ? ' · ≈' + U.money(Math.round(weekUAH.uah / window.Rates.get('USD')), 'USD') : '') +
+              '</span>'
             : C.badge(U.moneyMap(money), 'badge--grey')) +
           '<button class="btn btn--ghost btn--sm" data-act="cal-panel" ' +
             'title="Показати або сховати праву панель">' + icon('layers', 15) + 'Панель</button>' +

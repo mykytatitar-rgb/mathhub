@@ -776,6 +776,13 @@ create policy boards_own on public.boards
   using (owner = auth.uid())
   with check (owner = auth.uid());
 
+/* Права на саму таблицю — окремо від правила вище. Без них правило нічого
+   не дає: сервер відповідає «permission denied for table boards», і жоден
+   пристрій не може прочитати дошки. Так і сталося у вересні 2026: запис
+   ішов через save_board (вона працює з правами власника), а читання — ні,
+   і кожен пристрій бачив лише своє. Пишуть у таблицю лише функції. */
+grant select, delete on public.boards to authenticated;
+
 /* Скільки об'єктів на дошці. Потрібно, щоб відрізнити свідоме стирання
    від запису, який просто приїхав із давнього пристрою. */
 create or replace function public.board_items(p_data jsonb)
@@ -1045,6 +1052,9 @@ create policy board_ops_own on public.board_ops
   for all to authenticated
   using (owner = auth.uid())
   with check (owner = auth.uid());
+
+-- читати журнал свого акаунта; дописує лише append_board_ops (див. boards вище)
+grant select on public.board_ops to authenticated;
 
 /* На якій дії зроблено знімок дошки. Без цього при відкритті довелося б
    перечитувати весь журнал від початку часів. */

@@ -24,6 +24,7 @@ create or replace function public.slide_hidden(p_slide jsonb)
 returns boolean
 language sql
 immutable
+set search_path = public, pg_temp
 as $$
   select coalesce(p_slide->>'hidden', '0') in ('1', 'true');
 $$;
@@ -34,6 +35,7 @@ create or replace function public.board_hidden_slides(p_data jsonb)
 returns text[]
 language sql
 immutable
+set search_path = public, pg_temp
 as $$
   select coalesce(array_agg(s->>'id'), '{}')
   from jsonb_array_elements(coalesce(p_data->'slides', '[]'::jsonb)) as s
@@ -47,6 +49,7 @@ create or replace function public.op_visible(p_op jsonb, p_hidden text[])
 returns boolean
 language sql
 immutable
+set search_path = public, pg_temp
 as $$
   select case
     when p_op->>'t' = 's+' then not public.slide_hidden(p_op->'sl')

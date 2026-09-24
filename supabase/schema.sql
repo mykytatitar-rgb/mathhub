@@ -201,8 +201,14 @@ drop policy if exists shares_write  on storage.objects;
 drop policy if exists shares_update on storage.objects;
 drop policy if exists shares_delete on storage.objects;
 
+/* Читати файли учень може й без цього правила: кошик публічний, і файл за
+   прямою адресою віддається всім. Правило потрібне лише для переліку
+   файлів — а перелік виказав би коди всіх уроків разом. Тому переглядати
+   список може тільки власник, у своїй теці (це ж потрібно для перезапису). */
 create policy shares_read on storage.objects
-  for select using (bucket_id = 'shares');
+  for select using (
+    bucket_id = 'shares' and (storage.foldername(name))[1] = auth.uid()::text
+  );
 
 create policy shares_write on storage.objects
   for insert with check (
@@ -297,6 +303,7 @@ grant delete on public.share_contributions to authenticated;
 create or replace function public.shares_touch()
 returns trigger
 language plpgsql
+set search_path = public, pg_temp
 as $$
 begin
   if new.data is distinct from old.data then
@@ -404,8 +411,10 @@ drop policy if exists uploads_read   on storage.objects;
 drop policy if exists uploads_write  on storage.objects;
 drop policy if exists uploads_delete on storage.objects;
 
-create policy uploads_read on storage.objects
-  for select using (bucket_id = 'uploads');
+/* Правила на читання тут немає навмисно. Фото відкриваються за прямою
+   адресою й без нього (кошик публічний), учень лише додає файли — для цього
+   досить права на запис. А правило на читання дозволило б кожному
+   переглянути список файлів — і з ним коди всіх посилань. */
 
 /* Перевірку виносимо в окрему функцію, бо саме правило виконується з правами
    того, хто вантажить, — тобто учня. Прямого доступу до таблиці посилань
@@ -566,6 +575,7 @@ begin
 end;
 $$;
 
+revoke all on function public.save_state(text, bigint, text, boolean) from public, anon;
 grant execute on function public.save_state(text, bigint, text, boolean) to authenticated;
 
 -- ============================================================
@@ -626,6 +636,7 @@ create policy portals_del on public.portals
 create or replace function public.portals_touch()
 returns trigger
 language plpgsql
+set search_path = public, pg_temp
 as $$
 begin
   if new.data is distinct from old.data then
@@ -771,6 +782,7 @@ create or replace function public.board_items(p_data jsonb)
 returns bigint
 language sql
 immutable
+set search_path = public, pg_temp
 as $$
   select coalesce(sum(jsonb_array_length(coalesce(s->'items', '[]'::jsonb))), 0)
   from jsonb_array_elements(coalesce(p_data->'slides', '[]'::jsonb)) as s;
@@ -785,6 +797,7 @@ create or replace function public.board_slides(p_data jsonb)
 returns bigint
 language sql
 immutable
+set search_path = public, pg_temp
 as $$
   select count(*)
   from jsonb_array_elements(coalesce(p_data->'slides', '[]'::jsonb)) as s

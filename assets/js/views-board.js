@@ -744,6 +744,7 @@
     if (cur.pullTimer) clearInterval(cur.pullTimer);
     if (cur.savedOff) { cur.savedOff(); cur.savedOff = null; }
     if (cur.live) { cur.live.leave(); cur.live = null; }
+    if (cur.own) { cur.own.leave(); cur.own = null; }
 
     /* Усе своє — в журнал, свіжий знімок — на сервер: з нього почнуть інший
        пристрій і сторінка учня. */
@@ -823,6 +824,8 @@
     paintSaved();
     if (cur.saveTimer) clearTimeout(cur.saveTimer);
     cur.saveTimer = setTimeout(flushSave, 700);
+    // на сервер — не чекаючи запису в браузер
+    if (window.BoardSync && BoardSync.soon) BoardSync.soon(cur.lessonId);
   }
 
   /* ============================================================
@@ -1008,7 +1011,29 @@
      дошку — за ним ми одразу забираємо внесок із бази, як і раніше, лише
      без трисекундного очікування. */
 
+  /* Свій канал дошки — між вашими ж пристроями, для будь-якого уроку, а не
+     лише надісланого учневі. У ньому немає вмісту дошки, лише «на сервері
+     нове, до номера N»: пристрій, який це чує, одразу забирає зміни з бази
+     своїм входом. Тож чужий, навіть знаючи назву каналу, нічого не
+     прочитає — і нічого не впише. */
+  function joinOwn() {
+    if (!cur || cur.own || !window.Live || !(window.Cloud && Cloud.userId && Cloud.userId())) return;
+    var lessonId = cur.lessonId;
+    cur.own = Live.join('own-' + Cloud.userId() + '-' + lessonId, function (event, data) {
+      if (!cur || cur.lessonId !== lessonId || event !== 'saved') return;
+      var seen = window.BoardOps && BoardOps.seenAt ? BoardOps.seenAt(lessonId) : 0;
+      if (!data || !data.upto || data.upto > seen) pullOps();
+    });
+  }
+
+  function pullSoon() {
+    pullOps();
+    // сигнал міг прийти раніше, ніж запис став видимий у базі, — ще раз трохи згодом
+    setTimeout(pullOps, 800);
+  }
+
   function joinLive() {
+    joinOwn();
     if (!cur || cur.live || !window.Live) return;
     var token = cur.board.share && cur.board.share.token;
     if (!token) return;
@@ -1018,7 +1043,8 @@
       if (!cur || cur.lessonId !== lessonId) return;
       if (event === 'ink' || event === 'hw') pullContributions();
       // хтось (учень чи інший пристрій) записав дії в журнал — забираємо одразу
-      if (event === 'ops') pullOps();
+      if (event === 'ops') pullSoon();
+      if (event === 'saved') pullOps();
       // сторінці учня бракує нового слайда чи картинки — перевидаємо негайно
       if (event === 'need') {
         cur.structural = true;
@@ -1029,6 +1055,12 @@
   }
 
   if (window.BoardOps) {
+    BoardOps.onSaved = function (boardId, upto) {
+      if (!cur || cur.lessonId !== boardId) return;
+      if (cur.own) cur.own.send('saved', { upto: upto });
+      if (cur.live) cur.live.send('saved', { upto: upto });
+    };
+
     BoardOps.onDiff = function (boardId, ops) {
       if (!cur || cur.lessonId !== boardId) return;
       var structural = ops.some(function (op) {

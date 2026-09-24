@@ -625,7 +625,9 @@
        Отримати ту саму дію двічі безпечно — вона називає свій обʼєкт. */
     if (O.onDiff) { try { O.onDiff(id, ops); } catch (e) { console.warn('onDiff:', e); } }
 
+    var upto = 0;
     return appendOps(id, ops, function (chunk, lastId) {
+      if (lastId > upto) upto = lastId;
       chunk.forEach(function (op) {
         var f = k.clone(op);
         f._upto = lastId;
@@ -638,6 +640,10 @@
       delete errs[id];
       sentAt[id] = Date.now();
       setPending(id, false);
+      /* Сервер прийняв — тепер і лише тепер можна сказати іншим пристроям
+         «забирайте»: раніше вони питали сервер, поки запис ще йшов, нічого
+         не знаходили й чекали наступної перевірки. */
+      if (O.onSaved) { try { O.onSaved(id, upto); } catch (e) { console.warn('onSaved:', e); } }
       return ops.length;
     });
   }

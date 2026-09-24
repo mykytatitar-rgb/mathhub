@@ -16,6 +16,7 @@
   var S = window.S;
   var B = {};
   var PUSH_DELAY = 900;
+  var FAST_DELAY = 250;       // відкрита дошка: штрих їде за чверть секунди
   var timers = {};
   var started = false;
 
@@ -40,6 +41,21 @@
       timers[boardId] = null;
       O().record(boardId);
     }, PUSH_DELAY);
+  };
+
+  /* Відкрита дошка — відправити майже одразу. Досі штрих чекав двічі:
+     0,7 с на запис у браузер і ще 0,9 с на відправку, — і на іншому
+     пристрої зʼявлявся секунд через п'ять. Відправка не мусить чекати на
+     запис у браузер: вона бере дошку просто з памʼяті. */
+  B.soon = function (boardId) {
+    if (!boardId || !O()) return;
+    var b = S.getBoard(boardId);
+    if (b) O().prepare(b);
+    if (timers[boardId]) clearTimeout(timers[boardId]);
+    timers[boardId] = setTimeout(function () {
+      timers[boardId] = null;
+      O().record(boardId);
+    }, FAST_DELAY);
   };
 
   /** Відправити одну дошку зараз. true — дошка на сервері й збігається. */

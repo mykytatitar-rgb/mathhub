@@ -964,6 +964,28 @@
     });
   };
 
+  /**
+   * Новий пароль — з пристрою, де вже виконано вхід; старий не потрібен.
+   * Інакше, забувши пароль, людина не могла б увійти з нового пристрою:
+   * відновлення через лист у кабінеті немає.
+   */
+  Cloud.setPassword = function (password) {
+    if (!Cloud.signedIn()) return Promise.reject(new Error('Спершу треба увійти'));
+    return api('/auth/v1/user', {
+      method: 'PUT',
+      body: JSON.stringify({ password: password })
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (j) {
+        if (res.ok) return true;
+        var code = j.error_code || j.code || '';
+        if (code === 'same_password') throw new Error('Це й так ваш теперішній пароль');
+        if (code === 'weak_password') throw new Error('Пароль закороткий або надто простий');
+        if (code === 'reauthentication_needed') throw new Error('Supabase просить підтвердити вхід ще раз: вийдіть і увійдіть');
+        throw new Error(j.msg || j.message || j.error_description || ('Сервер відповів ' + res.status));
+      });
+    });
+  };
+
   Cloud.signOut = function () {
     setSess(null);
     meta.rev = 0;

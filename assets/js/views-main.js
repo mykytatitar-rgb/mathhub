@@ -1390,7 +1390,10 @@
       '<div class="guard guard--on"><span class="guard__dot"></span><span>Ви увійшли як <b>' +
         U.esc(st.email || '') + '</b>. Учні, розклад, дошки й задачі лежать на сервері й однакові ' +
         'на всіх пристроях — нічого зберігати чи синхронізувати не треба.</span></div>' +
-      '<div class="row mt-2"><button class="btn btn--ghost btn--sm" data-act="sync-signout">Вийти</button></div>' +
+      '<div class="row mt-2" style="gap:8px">' +
+        '<button class="btn btn--ghost btn--sm" data-act="account-password">' + icon('edit', 15) + 'Змінити пароль</button>' +
+        '<button class="btn btn--ghost btn--sm" data-act="sync-signout">Вийти</button>' +
+      '</div>' +
       '</div>';
   };
 

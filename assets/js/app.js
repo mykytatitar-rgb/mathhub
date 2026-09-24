@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v113';
+  App.BUILD = 'v114';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -760,6 +760,48 @@
       });
     },
 
+    /* Новий пароль прямо з кабінету, де вже виконано вхід. Поле пошти
+       в формі — щоб браузер запропонував зберегти пару «пошта + пароль»
+       і сам підставив її на телефоні. */
+    'account-password': function () {
+      if (!window.Cloud || !Cloud.signedIn()) return;
+      var email = (Cloud.status() || {}).email || '';
+      C.modal({
+        title: 'Новий пароль',
+        sub: 'старий знати не треба — ви вже в кабінеті',
+        body:
+          '<form id="acc-pass" class="stack" data-submit="save">' +
+            '<label class="field"><span class="field__label">Пошта акаунта</span>' +
+              '<input class="input" name="email" type="email" autocomplete="username" readonly value="' +
+              U.esc(email) + '"></label>' +
+            '<label class="field"><span class="field__label">Новий пароль</span>' +
+              '<input class="input" name="p1" type="password" autocomplete="new-password" minlength="8"></label>' +
+            '<label class="field"><span class="field__label">Ще раз</span>' +
+              '<input class="input" name="p2" type="password" autocomplete="new-password"></label>' +
+            '<div class="field__hint">Щонайменше 8 символів. Браузер запропонує його зберегти — ' +
+              'погодьтеся: тоді на телефоні він підставиться сам.</div>' +
+          '</form>',
+        buttons: [
+          { label: 'Скасувати', kind: 'btn--ghost' },
+          {
+            label: 'Зберегти', kind: 'btn--primary', act: 'save',
+            onClick: function (wrap, close) {
+              var v = C.readForm(wrap.querySelector('#acc-pass'));
+              if (String(v.p1 || '').length < 8) { U.toast('Пароль — щонайменше 8 символів', 'err'); return false; }
+              if (v.p1 !== v.p2) { U.toast('Паролі не збігаються', 'err'); return false; }
+              Cloud.setPassword(v.p1).then(function () {
+                close();
+                U.toast('Пароль змінено', 'ok');
+              }).catch(function (e) {
+                U.toast(e && e.message ? e.message : 'Не вдалося змінити пароль', 'err');
+              });
+              return false;
+            }
+          }
+        ]
+      });
+    },
+
     'sync-signout': function () {
       C.confirm('Вийти з синхронізації?',
         'Дані залишаться в цьому браузері, але оновлюватися з сервера перестануть. ' +
@@ -1324,7 +1366,7 @@
       title: 'Увійдіть у кабінет',
       sub: 'щоб дошки, учні й розклад були на всіх пристроях і в учнів',
       body:
-        '<form id="ask-signin" class="stack">' +
+        '<form id="ask-signin" class="stack" data-submit="signin">' +
           '<label class="field"><span class="field__label">Пошта</span>' +
             '<input class="input" name="email" type="email" autocomplete="username"></label>' +
           '<label class="field"><span class="field__label">Пароль</span>' +
@@ -1352,15 +1394,16 @@
 
   window.addEventListener('load', function () { setTimeout(askSignIn, 400); });
 
-  /* Enter у полі пароля — те саме, що кнопка «Увійти». Обробник тут, а не
-     атрибутом onsubmit у розмітці: захист сторінки від чужих скриптів
-     (CSP) не виконує жодного коду, вписаного прямо в HTML. */
+  /* Enter у формі вікна — те саме, що його головна кнопка (data-submit
+     каже, яка саме). Обробник тут, а не атрибутом onsubmit у розмітці:
+     захист сторінки від чужих скриптів (CSP) не виконує жодного коду,
+     вписаного прямо в HTML. */
   document.addEventListener('submit', function (e) {
     var form = e.target;
-    if (!form || form.id !== 'ask-signin') return;
+    if (!form || !form.hasAttribute || !form.hasAttribute('data-submit')) return;
     e.preventDefault();
     var wrap = form.closest('.modal');
-    var btn = wrap && wrap.querySelector('[data-mb="signin"]');
+    var btn = wrap && wrap.querySelector('[data-mb="' + form.getAttribute('data-submit') + '"]');
     if (btn) btn.click();
   });
 

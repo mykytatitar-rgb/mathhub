@@ -1056,6 +1056,38 @@ create policy board_ops_own on public.board_ops
 -- читати журнал свого акаунта; дописує лише append_board_ops (див. boards вище)
 grant select on public.board_ops to authenticated;
 
+-- ============================================================
+-- Тихий журнал кабінету (assets/js/journal.js)
+-- ============================================================
+--
+-- Відмови сервера, збої програми й щоденна самоперевірка кожного пристрою.
+-- Людині не показується; читає той, хто лагодить. Кожен бачить лише своє.
+
+create table if not exists public.client_log (
+  id     bigserial   primary key,
+  owner  uuid        not null default auth.uid() references auth.users(id) on delete cascade,
+  at     timestamptz not null default now(),
+  kind   text        not null,          -- server | error | check
+  msg    text        not null,
+  detail jsonb,
+  build  text,
+  device text,
+  page   text
+);
+
+create index if not exists client_log_owner_at on public.client_log (owner, at desc);
+
+alter table public.client_log enable row level security;
+
+drop policy if exists client_log_own on public.client_log;
+create policy client_log_own on public.client_log
+  for all to authenticated
+  using (owner = auth.uid())
+  with check (owner = auth.uid());
+
+grant select, insert, delete on public.client_log to authenticated;
+grant usage on sequence public.client_log_id_seq to authenticated;
+
 /* На якій дії зроблено знімок дошки. Без цього при відкритті довелося б
    перечитувати весь журнал від початку часів. */
 alter table public.boards add column if not exists last_op bigint not null default 0;

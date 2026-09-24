@@ -484,6 +484,10 @@
     return authFetch(path, opts).then(function (res) {
       if (res.status !== 401) return res;
       return refresh().then(function () { return authFetch(path, opts); });
+    }).then(function (res) {
+      // відмову сервера — у тихий журнал (journal.js), а не лише в консоль
+      if (!res.ok && window.Journal) Journal.server(path, (opts && opts.method) || 'GET', res);
+      return res;
     });
   }
 

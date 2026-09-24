@@ -24,7 +24,10 @@
   var synced = {};       // { ключ: true }
   var queue = [];        // ключі, що чекають відправки
   var busy = false;
-  var missing = {};      // ключі, яких немає й на сервері — щоб не питати вічно
+  var missing = {};      // ключ → коли сервер сказав «немає»: не питати щосекунди
+  var absent = {};       // ключ → коли файлу не було тут: відправимо, щойно зʼявиться
+  var MISSING_MS = 60000;
+  var ABSENT_MS = 120000;
 
   function loadSynced() {
     try {
@@ -53,8 +56,12 @@
     // getLocal з'являється лише після перехоплення — до того читаємо звичайним get
     var read = IS.getLocal || IS.get;
     return read.call(IS, key).then(function (blob) {
-      // немає локально — нічого відправляти (ключ прийшов з іншого пристрою)
-      if (!blob) { synced[key] = true; saveSynced(); return; }
+      /* Файлу тут поки немає — ні відправляти, ні вважати відправленим.
+         Раніше тут ставилась позначка «на сервері», і фото учня, що в цю
+         мить ще докачувалося, не відправлялося вже ніколи: на іншому
+         пристрої слайд ДЗ лишався без фото. */
+      if (!blob) { absent[key] = Date.now(); return; }
+      delete absent[key];
       return Cloud.request(objectPath(key), {
         method: 'POST',
         headers: { 'Content-Type': blob.type || 'application/octet-stream', 'x-upsert': 'true' },
@@ -106,10 +113,36 @@
   CI.sync = function () {
     if (!ready() || !window.S || !S.usedImageKeys) return;
     var used = S.usedImageKeys();
+    var now = Date.now();
     used.forEach(function (k) {
+      if (absent[k] && now - absent[k] < ABSENT_MS) return;
       if (!synced[k] && !tooBig[k] && queue.indexOf(k) < 0) queue.push(k);
     });
     drain();
+  };
+
+  /**
+   * Звірка з тим, що справді лежить у сховищі. Позначка «на сервері» — лише
+   * памʼять цього пристрою, і вона могла помилитися (див. uploadOne). Що
+   * сервер має — позначаємо; чого не має, хоч позначене, — ставимо в чергу
+   * знову, якщо файл тут є.
+   */
+  CI.verify = function () {
+    if (!ready() || !window.S || !S.usedImageKeys) return Promise.resolve(0);
+    return CI.listRemote().then(function (list) {
+      if (!list || !list.length) return 0;          // перелік не прочитався — нічого не чіпаємо
+      var remote = {};
+      list.forEach(function (r) { remote[r.key] = 1; });
+      var redo = 0;
+      S.usedImageKeys().forEach(function (k) {
+        if (remote[k]) { synced[k] = true; delete missing[k]; return; }
+        if (synced[k]) { delete synced[k]; redo++; }
+      });
+      saveSynced();
+      if (redo) console.warn('Картинки: ' + redo + ' позначені відправленими, але на сервері їх немає — відправляю');
+      CI.sync();
+      return redo;
+    });
   };
 
   CI.pending = function () { return queue.length + (busy ? 1 : 0); };
@@ -145,7 +178,7 @@
       }).then(function (rows) {
         if (!rows || !rows.length) return out;
         rows.forEach(function (r) {
-          if (!r || !r.name) return;
+          if (!r || !r.name || r.id === null) return;      // тека, а не файл
           out.push({ key: r.name, size: (r.metadata && r.metadata.size) || 0 });
         });
         return rows.length < PAGE ? out : page(offset + rows.length);
@@ -163,9 +196,10 @@
      ============================================================ */
 
   function download(key) {
-    if (!ready() || missing[key] || !navigator.onLine) return Promise.resolve(null);
+    if (!ready() || !navigator.onLine) return Promise.resolve(null);
+    if (missing[key] && Date.now() - missing[key] < MISSING_MS) return Promise.resolve(null);
     return Cloud.request(objectPath(key), { method: 'GET' }).then(function (res) {
-      if (res.status === 404 || res.status === 400) { missing[key] = true; return null; }
+      if (res.status === 404 || res.status === 400) { missing[key] = Date.now(); return null; }
       if (!res.ok) return null;
       return res.blob();
     }).catch(function () { return null; });
@@ -209,6 +243,9 @@
     // періодично перевіряємо, чи не з'явилося нових картинок
     setInterval(function () { CI.sync(); }, 20000);
     CI.sync();
+
+    // раз на запуск — звірка зі сховищем, коли все інше вже вляглося
+    setTimeout(function () { CI.verify().catch(function () {}); }, 30000);
   };
 
   window.CloudImages = CI;

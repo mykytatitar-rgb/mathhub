@@ -229,10 +229,51 @@
      Монтування
      ============================================================ */
 
+  /* Звідки взяти картинку дошки, якої на цьому пристрої немає.
+
+     Спершу — своє сховище (IndexedDB), за ним — ваше сховище на сервері
+     (це робить cloudimages.js, перехоплюючи ImgStore.get). Якщо й там
+     немає — ще два місця, де фото лежить від самого початку: копія в
+     опублікованому уроці (shares) і файл, який надіслав учень (uploads).
+     Знайдене кладемо собі — звідти воно ж поїде й у ваше сховище, і
+     наступний пристрій уже не шукатиме. Досі телефон дивився лише у ваше
+     сховище: фото ДЗ, яке компʼютер туди так і не відправив, на телефоні
+     не зʼявлялося ніколи, хоча лежало на сервері в двох інших місцях. */
+  function cabinetImageSource(key, item) {
+    if (!window.ImgStore || !ImgStore.available()) return null;
+    return ImgStore.get(key).then(function (blob) {
+      if (blob) return blob;
+      if (!(window.Cloud && Cloud.available())) return null;
+      var pub = Cloud.base() + '/storage/v1/object/public/';
+      var token = cur && cur.board && cur.board.share && cur.board.share.token;
+      var urls = [];
+      if (item && item.src) urls.push(item.src);
+      if (token && Cloud.userId()) {
+        urls.push(pub + 'shares/' + encodeURIComponent(Cloud.userId()) + '/' +
+          encodeURIComponent(token) + '/img/' + encodeURIComponent(key));
+      }
+      if (token) urls.push(pub + 'uploads/' + encodeURIComponent(token) + '/' + encodeURIComponent(key));
+
+      return urls.reduce(function (chain, url) {
+        return chain.then(function (got) {
+          if (got) return got;
+          return fetch(url).then(function (r) {
+            var ct = r.headers.get('content-type') || '';
+            return r.ok && ct.indexOf('image/') === 0 ? r.blob() : null;
+          }).catch(function () { return null; });
+        });
+      }, Promise.resolve(null)).then(function (got) {
+        if (got) ImgStore.put(key, got).catch(function () {});
+        return got;
+      });
+    });
+  }
+
   V.mountBoard = function (lessonId) {
     var canvas = document.getElementById('board-canvas');
     if (!canvas) return;
 
+    if (window.Board) window.Board.imageSource = cabinetImageSource;
     var board = S.ensureBoard(lessonId);
     var engine = new window.Board(canvas, {
       onChange: function () { markDirty(); refreshUndo(); refreshEmpty(); scheduleThumb(); updateSelBar(); },
@@ -311,6 +352,11 @@
     cur.pullTimer = setInterval(function () {
       pullContributions();
       pullOps();
+      // картинки, що не завантажились, — ще раз: інший пристрій міг довантажити їх на сервер
+      if (cur && window.Board && Board.retryFailedImages && Board.retryFailedImages(20000)) {
+        cur.engine.ensureImages();
+        cur.engine.render();
+      }
     }, PULL_MS);
 
     /* Урок, опублікований старішою версією програми, оновлюємо мовчки: учень

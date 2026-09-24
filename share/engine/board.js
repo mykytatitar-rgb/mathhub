@@ -1549,16 +1549,18 @@
     var src = sourceOf(key, item);
     if (!src) { e.state = 'fail'; return e; }
 
+    function fail() { e.state = 'fail'; e.at = Date.now(); }
+
     Promise.resolve(src).then(function (got) {
-      if (!got) { e.state = 'fail'; if (onReady) onReady(); return; }
+      if (!got) { fail(); if (onReady) onReady(); return; }
       var own = typeof got !== 'string';
       var url = own ? URL.createObjectURL(got) : got;
       var img = new Image();
       if (!own) img.crossOrigin = 'anonymous';
       img.onload = function () { e.img = img; e.url = url; e.state = 'ok'; if (onReady) onReady(); };
-      img.onerror = function () { e.state = 'fail'; if (own) URL.revokeObjectURL(url); if (onReady) onReady(); };
+      img.onerror = function () { fail(); if (own) URL.revokeObjectURL(url); if (onReady) onReady(); };
       img.src = url;
-    }).catch(function () { e.state = 'fail'; if (onReady) onReady(); });
+    }).catch(function () { fail(); if (onReady) onReady(); });
 
     return e;
   }
@@ -1567,6 +1569,19 @@
   Board.forgetImage = function (key) {
     var e = imgCache[key];
     if (e && e.state !== 'ok') delete imgCache[key];
+  };
+
+  /* Картинки, які не завантажились давніше ніж olderMs тому, — забути,
+     щоб наступне малювання спробувало ще раз. Раніше невдача була
+     остаточною до перезапуску: фото, яке інший пристрій довантажив на
+     сервер хвилиною пізніше, так і не зʼявлялося. Повертає, скільки забуто. */
+  Board.retryFailedImages = function (olderMs) {
+    var n = 0, now = Date.now();
+    Object.keys(imgCache).forEach(function (k) {
+      var e = imgCache[k];
+      if (e && e.state === 'fail' && now - (e.at || 0) > (olderMs || 20000)) { delete imgCache[k]; n++; }
+    });
+    return n;
   };
 
   function imageKeysIn(slides) {

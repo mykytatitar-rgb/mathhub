@@ -11,7 +11,14 @@
      дошку заразом, а пристрій із давніми даними приносив старе про все одразу.
      Тепер запис дошки не торкається учнів і фінансів, а запис бази не
      торкається дошок. */
-  var BOARDS_KEY = 'mathhub.boards.v1';
+  var BOARDS_KEY = 'mathhub.boards.v1';          // давній формат: усі дошки одним записом
+  /* Кожна дошка — окремим записом, плюс список їхнього порядку. Коли дошки
+     лежали одним записом, збереження після кожного штриха переписувало всі
+     дошки разом — 5 МБ і 70–200 мс заморозки, і олівець підвисав. Тепер
+     переписується лише змінена дошка. Давній запис не стирається: з нього
+     дочитується те, чого раптом бракує в новому. */
+  var BOARD_PREFIX = 'mathhub.board:';
+  var BOARD_ORDER = 'mathhub.boards.order';
   var U = window.U;
 
   var S = {};
@@ -203,6 +210,53 @@
    * Ті, що лишилися в документі, не чіпаємо: вони знадобляться, якщо
    * доведеться відкрити цю базу старою версією програми.
    */
+  function diskGet(k) { return window.Disk ? Disk.get(k) : localStorage.getItem(k); }
+  function diskSet(k, v) {
+    if (window.Disk) { Disk.set(k, v); return; }
+    if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v);
+  }
+  function diskKeys(prefix) {
+    if (window.Disk && Disk.keys) return Disk.keys(prefix);
+    var out = [];
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (k && k.indexOf(prefix) === 0) out.push(k);
+    }
+    return out;
+  }
+  function boardKey(b) { return b && (b.lessonId || b.id); }
+
+  /** Дошки з окремих записів. null — нового формату ще немає. Кидає, якщо не розібрався. */
+  function readSplitBoards() {
+    var order = diskGet(BOARD_ORDER);
+    if (!order) return null;
+    var ids = JSON.parse(order);
+    if (!Array.isArray(ids)) throw new Error('очікувався список дошок');
+    var list = [], seen = {}, missing = [];
+    ids.forEach(function (id) {
+      var raw = diskGet(BOARD_PREFIX + id);
+      if (raw) { list.push(JSON.parse(raw)); seen[id] = 1; } else missing.push(id);
+    });
+    // записані окремо, але не внесені в порядок — запис міг перерватися
+    diskKeys(BOARD_PREFIX).forEach(function (key) {
+      var id = key.slice(BOARD_PREFIX.length);
+      if (seen[id]) return;
+      var raw = diskGet(key);
+      if (raw) { list.push(JSON.parse(raw)); seen[id] = 1; }
+    });
+    // чого бракує — з давнього спільного запису
+    if (missing.length) {
+      var old = [];
+      try { old = JSON.parse(diskGet(BOARDS_KEY) || '[]') || []; } catch (e) { old = []; }
+      old.forEach(function (b) {
+        var id = boardKey(b);
+        if (id && !seen[id] && missing.indexOf(id) >= 0) { list.push(b); seen[id] = 1; }
+      });
+      boardsDirty = true;                  // дописати його вже окремими записами
+    }
+    return list;
+  }
+
   function adoptBoardsStore(doc) {
     if (window.Disk && Disk.broken()) {
       // дошки лежать в IndexedDB, який зараз не читається, — «порожньо» тут не правда
@@ -211,6 +265,17 @@
       warnBlocked();
       return;
     }
+    try {
+      var split = readSplitBoards();
+      if (split) { doc.boards = split; return; }
+    } catch (e) {
+      console.warn('Дошки не прочиталися:', e);
+      readFailed.boards = true;
+      doc.boards = [];
+      warnBlocked();
+      return;
+    }
+
     var raw = null;
     try { raw = window.Disk ? Disk.get(BOARDS_KEY) : localStorage.getItem(BOARDS_KEY); } catch (e) { raw = null; }
 
@@ -220,7 +285,8 @@
          немає» — не існує: саме він і стирав їх усі разом. */
       try {
         var arr = JSON.parse(raw);
-        if (Array.isArray(arr)) { doc.boards = arr; return; }
+        // прочитано з давнього формату — наступне збереження перекладе в новий
+        if (Array.isArray(arr)) { doc.boards = arr; boardsDirty = true; return; }
         throw new Error('очікувався список дошок');
       } catch (e) {
         console.warn('Дошки не прочиталися:', e);
@@ -237,11 +303,37 @@
   }
 
   /* Дошки серіалізуються окремо й лише коли справді змінилися: інакше
-     збереження одного учня щоразу переписувало б усі дошки цілком. */
+     збереження одного учня щоразу переписувало б усі дошки цілком.
+     boardsDirty — переписати всі; dirtyIds — лише названі. */
   var boardsDirty = false;
+  var dirtyIds = {};
+  var writtenOrder = null;
 
-  /** Сказати сховищу, що дошки змінилися повз S.saveBoard. */
-  S.touchBoards = function () { boardsDirty = true; };
+  /** Сказати сховищу, що дошка (id) або всі дошки змінилися повз S.saveBoard. */
+  S.touchBoards = function (id) {
+    if (id) dirtyIds[id] = 1; else boardsDirty = true;
+  };
+
+  function writeBoards() {
+    var ids = db.boards.map(boardKey);
+    var order = JSON.stringify(ids);
+    if (boardsDirty) {
+      db.boards.forEach(function (b) { diskSet(BOARD_PREFIX + boardKey(b), JSON.stringify(b)); });
+      diskKeys(BOARD_PREFIX).forEach(function (key) {
+        if (ids.indexOf(key.slice(BOARD_PREFIX.length)) < 0) diskSet(key, null);
+      });
+    } else {
+      Object.keys(dirtyIds).forEach(function (id) {
+        var b = null;
+        for (var i = 0; i < db.boards.length; i++) if (boardKey(db.boards[i]) === id) { b = db.boards[i]; break; }
+        diskSet(BOARD_PREFIX + id, b ? JSON.stringify(b) : null);
+      });
+    }
+    // порядок — останнім: окремі записи дошок лягають раніше за список
+    if (boardsDirty || order !== writtenOrder) { diskSet(BOARD_ORDER, order); writtenOrder = order; }
+    boardsDirty = false;
+    dirtyIds = {};
+  }
 
   /* Хто хоче знати про зміни в базі. Потрібно тому, що портал учня —
      це знімок даних на сервері, і його треба переробляти сам, а не
@@ -277,11 +369,10 @@
       localStorage.setItem(KEY, lastDoc);
       lastSaveFailed = false;
 
-      if (boardsDirty && !readFailed.boards) {
-        if (window.Disk) Disk.set(BOARDS_KEY, JSON.stringify(db.boards));
-        else localStorage.setItem(BOARDS_KEY, JSON.stringify(db.boards));
-        boardsDirty = false;
-      } else if (boardsDirty) {
+      var anyDirty = boardsDirty || Object.keys(dirtyIds).length > 0;
+      if (anyDirty && !readFailed.boards) {
+        writeBoards();
+      } else if (anyDirty) {
         warnBlocked();
       }
     } catch (e) {
@@ -1043,7 +1134,7 @@
     var b = S.getBoard(lessonId);
     if (b) {
       if (!b.slides || !b.slides.length) b.slides = [S.newSlide()];
-      if (S.ensureItemIds(b)) { boardsDirty = true; S.save(); }
+      if (S.ensureItemIds(b)) { S.touchBoards(boardKey(b)); S.save(); }
       return b;
     }
     /* Перший слайд має однаковий номер на всіх пристроях. Якщо дошку того
@@ -1060,7 +1151,7 @@
     };
     db.boards.push(b);
     if (window.BoardOps && BoardOps.prepare) BoardOps.prepare(b);
-    boardsDirty = true;
+    S.touchBoards(boardKey(b));
     S.save();
     return b;
   };
@@ -1069,7 +1160,7 @@
     board.updatedAt = new Date().toISOString();
     var i = db.boards.findIndex(function (b) { return b.id === board.id; });
     if (i < 0) db.boards.push(board);
-    boardsDirty = true;
+    S.touchBoards(boardKey(board));
     S.save();
     if (window.BoardSync) BoardSync.mark(board.lessonId);
   };
@@ -1504,7 +1595,10 @@
     if (!window.ImgStore || !window.ImgStore.available()) return Promise.resolve(0);
 
     var stored = [];
-    try { stored = JSON.parse((window.Disk ? Disk.get(BOARDS_KEY) : localStorage.getItem(BOARDS_KEY)) || '[]') || []; } catch (e) { stored = []; }
+    try {
+      stored = JSON.parse(diskGet(BOARD_ORDER) || 'null') ||
+               JSON.parse(diskGet(BOARDS_KEY) || '[]') || [];
+    } catch (e) { stored = []; }
     if (stored.length && !(db.boards || []).length) {
       return Promise.reject(new Error('Дошки прочитані не повністю — прибирання скасовано'));
     }

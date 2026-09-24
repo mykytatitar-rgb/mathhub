@@ -2781,9 +2781,9 @@
         '<span class="sel-bar__sep"></span>';
     }
 
-    /* Розмір усього виділеного одразу — для кількох обʼєктів. Кути рамки
-       теж тягнуться, а кнопки — для пальця й точних кроків по 10 %. */
-    var sizeBtns = n > 1
+    /* Розмір виділеного — і групи, і одного обʼєкта. Кути рамки теж
+       тягнуться, а кнопки — для пальця й точних кроків по 10 %. */
+    var sizeBtns = n >= 1
       ? '<button class="sel-bar__btn" data-act="board-scale" data-arg="0.9" title="Зменшити виділене">' +
           icon('zoomOut', 16) + '</button>' +
         '<button class="sel-bar__btn" data-act="board-scale" data-arg="1.1" title="Збільшити виділене">' +

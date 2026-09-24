@@ -193,18 +193,30 @@
 
   /* ---------- запис на диск ---------- */
 
+  /* На диск — лише ті дошки, що змінились (id); без id — усі. Раніше
+     переписувались усі дошки разом, і після кожного штриха все завмирало. */
   var saveTimer = null;
-  function persistSoon() {
+  var touched = {}, touchedAll = false;
+  function touch(id) { if (id) touched[id] = 1; else touchedAll = true; }
+  function flushTouch() {
+    if (touchedAll) S.touchBoards();
+    else Object.keys(touched).forEach(function (id) { S.touchBoards(id); });
+    touched = {};
+    touchedAll = false;
+  }
+  function persistSoon(id) {
+    touch(id);
     if (saveTimer) return;
     saveTimer = setTimeout(function () {
       saveTimer = null;
-      S.touchBoards();
+      flushTouch();
       S.save();
     }, 800);
   }
-  function persistNow() {
+  function persistNow(id) {
+    touch(id);
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-    S.touchBoards();
+    flushTouch();
     S.save();
   }
 
@@ -510,7 +522,7 @@
         v: 2, base: T, seen: last, fly: [], recent: s.recent || [], floor: s.floor || 0,
         atSeen: atSeen, snapRev: row ? row.rev : 0, snapSeen: from, snapAt: 0
       };
-      if (putContent(board, fresh)) persistNow(); else persistSoon();
+      if (putContent(board, fresh)) persistNow(id); else persistSoon(id);
       return true;
     });
   }
@@ -554,7 +566,7 @@
 
       var fresh = overlay(known(board), loc, k.strip(board), sent);
       var changed = putContent(board, fresh);
-      if (changed) persistNow(); else persistSoon();
+      if (changed) persistNow(id); else persistSoon(id);
 
       // тут лишилось своє, чого сервер ще не має (зокрема повернений слайд) — везти
       if (k.diff(known(board), k.strip(board)).length) sendSoon(id);
@@ -584,7 +596,7 @@
     board = board || S.getBoard(boardId);
     if (!ready() || !boardId || !board) return Promise.resolve(0);
     if (viewBusy(boardId)) { pullLater(boardId); return Promise.resolve(0); }
-    if (O.prepare(board)) persistSoon();
+    if (O.prepare(board)) persistSoon(boardId);
 
     return lock(boardId, function () {
       if (viewBusy(boardId)) { pullLater(boardId); return 0; }
@@ -633,7 +645,7 @@
         f._upto = lastId;
         s.fly.push(f);
       });
-      persistSoon();
+      persistSoon(id);
     }).then(function () {
       s.lastSig = sig;                    // лише те, що справді поїхало
       s.lastSigAt = Date.now();
@@ -775,7 +787,7 @@
           s.snapRev = rev;
           s.snapSeen = data._seen;
           s.snapAt = Date.now();
-          persistSoon();
+          persistSoon(board.lessonId);
           return true;
         }
         return false;
@@ -949,7 +961,7 @@
 
         if (!lost && !found) return 0;
         console.warn('Звірка дошки ' + boardId + ': на сервер ' + lost + ', із сервера ' + found);
-        persistNow();
+        persistNow(boardId);
         if (lost) sendSoon(boardId);                   // поїде звичайною дорогою — різницею
         return lost + found;
       });

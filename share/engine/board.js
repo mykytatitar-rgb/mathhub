@@ -2676,8 +2676,20 @@
   /* Кути спільної рамки кількох виділених обʼєктів — за них група
      збільшується чи зменшується цілком. Рамка малюється з відступом, тож і
      маркери стоять на її кутах, а не всередині. */
+  /* Обʼєкти зі своїми маркерами розміру (кути рамки, кінці лінії, вершини).
+     Решту — насамперед рукописний штрих — один виділений обʼєкт масштабує
+     тією самою рамкою, що й група: інакше його не було як збільшити. */
+  var OWN_RESIZE = { o: 1, l: 1, a: 1, n: 1, r: 1, e: 1, i: 1, g: 1, s: 1, f: 1, x: 1 };
+  var NO_SCALE = { c: 1, d: 1 };
+
+  Board.prototype._framed = function () {
+    var sel = this.selection;
+    if (sel.length > 1) return true;
+    return sel.length === 1 && !OWN_RESIZE[sel[0].t] && !NO_SCALE[sel[0].t];
+  };
+
   Board.prototype._groupFrame = function () {
-    if (this.selection.length < 2) return null;
+    if (!this._framed()) return null;
     var gb = unionBounds(this.selection);
     if (!gb) return null;
     var pad = 11 / this.scale;
@@ -2702,7 +2714,7 @@
   };
 
   Board.prototype._handles = function () {
-    if (this.selection.length > 1) {
+    if (this._framed()) {
       var f = this._groupFrame();
       if (!f) return null;
       return [
@@ -4115,8 +4127,8 @@
       });
       ctx.setLineDash([]);
 
-      // спільна рамка групи
-      if (this.selection.length > 1) {
+      // спільна рамка групи (і одного обʼєкта без власних маркерів)
+      if (this._framed()) {
         var gb = unionBounds(this.selection);
         if (gb) {
           var gp = 11 * k;

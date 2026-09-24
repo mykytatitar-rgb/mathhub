@@ -27,7 +27,10 @@
 
   /* Що переїжджає. База учнів лишається в localStorage: вона невелика,
      і на її подію storage тримається синхронізація вкладок у cloud.js. */
-  var BIG = ['mathhub.boards.v1', 'mathhub.before-sync', 'mathhub.ops.base', 'mathhub.rec.hash'];
+  var BIG = ['mathhub.boards.v1', 'mathhub.boards.order', 'mathhub.before-sync', 'mathhub.ops.base', 'mathhub.rec.hash'];
+  /* Кожна дошка — окремим записом (див. store.js): після штриха
+     переписується лише вона, а не всі дошки разом. */
+  var PREFIXES = ['mathhub.board:'];
   var MOVED_FLAG = 'mathhub.disk.moved';      // перенесення вже було — localStorage більше не джерело
 
   var mem = {};           // ключ → рядок (null — запису немає)
@@ -38,7 +41,11 @@
   var idb = null;
   var channel = null;
 
-  function isBig(key) { return BIG.indexOf(key) >= 0; }
+  function isBig(key) {
+    if (BIG.indexOf(key) >= 0) return true;
+    for (var i = 0; i < PREFIXES.length; i++) if (String(key).indexOf(PREFIXES[i]) === 0) return true;
+    return false;
+  }
 
   function lsGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
 
@@ -59,6 +66,22 @@
       var tx = idb.transaction(STORE, 'readonly');
       var r = tx.objectStore(STORE).get(key);
       r.onsuccess = function () { resolve(r.result == null ? null : r.result); };
+      r.onerror = function () { reject(r.error); };
+    });
+  }
+
+  /** Усі записи, чий ключ починається з prefix: [[ключ, значення], …]. */
+  function idbPrefix(prefix) {
+    return new Promise(function (resolve, reject) {
+      var out = [];
+      var tx = idb.transaction(STORE, 'readonly');
+      var r = tx.objectStore(STORE).openCursor(IDBKeyRange.bound(prefix, prefix + '\uffff'));
+      r.onsuccess = function () {
+        var c = r.result;
+        if (!c) { resolve(out); return; }
+        out.push([c.key, c.value]);
+        c.continue();
+      };
       r.onerror = function () { reject(r.error); };
     });
   }
@@ -143,6 +166,22 @@
 
   D.remove = function (key) { D.set(key, null); };
 
+  /** Ключі важких записів, що починаються з prefix (і справді є). */
+  D.keys = function (prefix) {
+    var out = [];
+    if (fallback || !ready) {
+      try {
+        for (var i = 0; i < localStorage.length; i++) {
+          var k = localStorage.key(i);
+          if (k && k.indexOf(prefix) === 0) out.push(k);
+        }
+      } catch (e) { /* немає доступу — порожньо */ }
+      return out;
+    }
+    Object.keys(mem).forEach(function (k) { if (k.indexOf(prefix) === 0 && mem[k] != null) out.push(k); });
+    return out;
+  };
+
   /* ---------- старт ---------- */
 
   function finish() {
@@ -190,7 +229,14 @@
       idb = db;
       return Promise.all(BIG.map(function (key) {
         return idbGet(key).then(function (v) { return [key, v]; });
-      }));
+      })).then(function (pairs) {
+        return Promise.all(PREFIXES.map(idbPrefix)).then(function (lists) {
+          lists.forEach(function (list) {
+            list.forEach(function (kv) { mem[kv[0]] = kv[1] == null ? null : String(kv[1]); });
+          });
+          return pairs;
+        });
+      });
     }).then(function (pairs) {
       if (ready) return;           // уже пішли старим шляхом — не змішуємо
       var migrate = [];

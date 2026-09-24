@@ -1378,6 +1378,7 @@
   /** Ключі всіх картинок — і з дошок, і з домашніх завдань. */
   S.usedImageKeys = function () {
     var keys = [];
+    if (!db) return keys;               // база ще не прочитана (Disk вантажиться) — нічого не знаємо
     function add(k) { if (k && keys.indexOf(k) < 0) keys.push(k); }
     db.boards.forEach(function (b) {
       (b.slides || []).forEach(function (s) {

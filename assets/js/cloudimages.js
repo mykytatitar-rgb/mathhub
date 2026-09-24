@@ -110,8 +110,13 @@
   }
 
   /** Поставити в чергу все, що використовується дошками й домашніми, але ще не на сервері. */
+  /* База ще не прочитана з диска: старт через подію load буває раніше,
+     ніж Disk дочитав дошки. Тоді нічого не робимо — наступний раз за 20 с.
+     Досі тут падало, і звірка зі сховищем у такий запуск не вмикалась. */
+  function dbReady() { return !!(window.S && S.db && S.db() && S.usedImageKeys); }
+
   CI.sync = function () {
-    if (!ready() || !window.S || !S.usedImageKeys) return;
+    if (!ready() || !dbReady()) return;
     var used = S.usedImageKeys();
     var now = Date.now();
     used.forEach(function (k) {
@@ -128,7 +133,7 @@
    * знову, якщо файл тут є.
    */
   CI.verify = function () {
-    if (!ready() || !window.S || !S.usedImageKeys) return Promise.resolve(0);
+    if (!ready() || !dbReady()) return Promise.resolve(0);
     return CI.listRemote().then(function (list) {
       if (!list || !list.length) return 0;          // перелік не прочитався — нічого не чіпаємо
       var remote = {};

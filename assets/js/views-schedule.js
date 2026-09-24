@@ -273,7 +273,7 @@
           icon('present', 14) + '</a>' : '') +
         '<button class="icon-btn" data-act="lesson-toggle-done" data-arg="' + l.id + '" ' +
         'title="Провести й відмітити оплату">' + icon('check', 16) + '</button>' +
-        '<button class="icon-btn" data-act="lesson-open" data-arg="' + l.id + '">' +
+        '<button class="icon-btn" data-act="lesson-open" data-arg="' + l.id + '" aria-label="Відкрити урок" title="Відкрити урок">' +
         icon('chevronR', 16) + '</button>' +
         '</div>';
     }).join('') : C.empty('calendar', 'Уроків не заплановано', '');
@@ -316,10 +316,10 @@
             '" data-act="cal-view" data-arg="day">День</button>' +
         '</div>' +
         '<button class="icon-btn" data-act="cal-nav" data-arg="' + (off - 1) +
-          '" style="background:#fff;box-shadow:var(--shadow-sm)">' + icon('chevronL', 18) + '</button>' +
+          '" aria-label="Назад" title="Назад" style="background:#fff;box-shadow:var(--shadow-sm)">' + icon('chevronL', 18) + '</button>' +
         '<button class="btn btn--ghost btn--sm" data-act="cal-nav" data-arg="0" style="background:#fff">Сьогодні</button>' +
         '<button class="icon-btn" data-act="cal-nav" data-arg="' + (off + 1) +
-          '" style="background:#fff;box-shadow:var(--shadow-sm)">' + icon('chevronR', 18) + '</button>' +
+          '" aria-label="Вперед" title="Вперед" style="background:#fff;box-shadow:var(--shadow-sm)">' + icon('chevronR', 18) + '</button>' +
         '<div class="spacer row row--wrap" style="gap:8px">' +
           C.badge(U.pl(planW.length, 'запланований', 'заплановані', 'запланованих'), '') +
           C.badge(U.pl(doneW.length, 'проведений', 'проведені', 'проведених'), 'badge--green') +
@@ -350,7 +350,7 @@
               '<div class="cal-head__corner"></div>' +
               '<div class="cal-head__days">' + head + '</div>' +
             '</div>' +
-            '<div class="cal-body">' +
+            '<div class="cal-body" tabindex="0" aria-label="Розклад">' +
               '<div class="cal-gutter">' + gutter + '</div>' +
               '<div class="cal-days" style="height:' + gridH + 'px;' +
                 'background-size:100% ' + HOUR_PX + 'px">' + cols + '</div>' +
@@ -365,7 +365,7 @@
         '<div class="stack">' +
           '<div class="card card--pad0">' +
             '<div class="card-head" style="padding:20px 20px 12px;margin:0">' +
-              '<div><h3 class="card-title">Найближчі уроки</h3>' +
+              '<div><h2 class="card-title">Найближчі уроки</h2>' +
               '<div class="card-sub">що буде далі</div></div></div>' +
             '<div class="list">' + upHtml + '</div>' +
           '</div>' +

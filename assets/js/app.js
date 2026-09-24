@@ -15,8 +15,53 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v112';
+  App.BUILD = 'v113';
   window.APP_BUILD = App.BUILD;
+
+  /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
+     Це третина всього кабінету, а відкривають дошку далеко не щоразу —
+     тож на старті його не тягнемо. Вантажиться, коли дошку відкривають
+     (або коли треба перевидати урок учневі), і ще раз мовчки у фоні, коли
+     кабінет уже показався: тоді дошка відкривається так само миттєво.
+
+     Номер версії в адресі — той самий, що в index.html: файл однієї версії
+     браузер бере зі свого кешу, не питаючи сервер (див. sw.js). */
+  var LAZY = {
+    board: [
+      'assets/js/shapefacts.js',
+      'share/engine/constructions.js',
+      'share/engine/plot.js',
+      'share/engine/solids.js',
+      'share/engine/points.js',
+      'share/engine/board.js'
+    ]
+  };
+  var lazyDone = {};
+
+  App.versioned = function (src) {
+    return src + '?v=' + String(App.BUILD).replace(/\D/g, '');
+  };
+
+  /** Підвантажити групу файлів. Разом тягнуться паралельно, виконуються по черзі. */
+  App.need = function (name) {
+    if (lazyDone[name]) return lazyDone[name];
+    var files = LAZY[name] || [];
+    lazyDone[name] = new Promise(function (resolve, reject) {
+      var left = files.length;
+      if (!left) { resolve(); return; }
+      files.forEach(function (src) {
+        var el = document.createElement('script');
+        el.src = App.versioned(src);
+        el.async = false;                   // порядок виконання — як у списку
+        el.onload = function () { if (--left === 0) resolve(); };
+        el.onerror = function () { reject(new Error('не завантажився ' + src)); };
+        document.head.appendChild(el);
+      });
+    });
+    // невдача не має залипати: наступна спроба вантажить наново
+    lazyDone[name].catch(function () { delete lazyDone[name]; });
+    return lazyDone[name];
+  };
 
   var NAV = [
     { hash: '#/',          icon: 'grid',      label: 'Огляд' },
@@ -98,13 +143,24 @@
     try { localStorage.setItem(SIDEBAR_KEY, JSON.stringify(sidebarState)); } catch (e) {}
   }
 
-  /** На вузьких екранах сайдбар згорнутий примусово, незалежно від вибору. */
+  /** На вузьких екранах сайдбар згорнутий примусово, незалежно від вибору.
+      На телефоні — навпаки, повний: там він не стоїть збоку, а виїжджає
+      поверх сторінки з кнопки меню, тож місця не забирає. */
+  var PHONE = 640;
+
   function applySidebar() {
     var app = document.querySelector('.app');
     if (!app) return;
-    var collapsed = window.innerWidth < 900 || sidebarState.collapsed;
+    var w = window.innerWidth;
+    var collapsed = w > PHONE && (w < 900 || sidebarState.collapsed);
     app.classList.toggle('is-collapsed', collapsed);
+    if (w > PHONE) app.classList.remove('is-menu');
     document.documentElement.style.setProperty('--sidebar-w', sidebarState.width + 'px');
+  }
+
+  function closeMenu() {
+    var app = document.querySelector('.app');
+    if (app) app.classList.remove('is-menu');
   }
 
   function startResize(e) {
@@ -293,7 +349,7 @@
       if (n.hash === '#/students' && activeStudent) active = false;
       var cnt = n.count ? n.count() : 0;
       return '<button class="nav-item' + (active ? ' is-active' : '') + '" data-act="nav" data-arg="' + n.hash +
-        '" title="' + U.esc(n.label) + ' · перетягніть, щоб переставити">' +
+        '" aria-label="' + U.esc(n.label) + '" title="' + U.esc(n.label) + ' · перетягніть, щоб переставити">' +
         icon(n.icon, 19) + '<span>' + n.label + '</span>' +
         (cnt ? '<span class="nav-item__count">' + cnt + '</span>' : '') + '</button>';
     }).join('');
@@ -333,7 +389,7 @@
 
       '<div class="side-foot">' +
         '<button class="nav-item' + (path.indexOf('#/settings') === 0 ? ' is-active' : '') +
-        '" data-act="nav" data-arg="#/settings">' +
+        '" data-act="nav" data-arg="#/settings" aria-label="Налаштування" title="Налаштування">' +
         icon('settings', 19) + '<span>Налаштування</span></button>' +
       '</div>';
   }
@@ -345,7 +401,21 @@
   App.render = function () {
     // база ще не прочитана (disk.js підтягує дошки) — малювати нічого
     if (!S.db()) return;
+    closeMenu();
     var route = parseRoute();
+
+    /* Посилання з ключем банку задач (#/bank-key/…): ключ іде в базу — а з
+       нею на всі пристрої, — а з адреси й історії браузера зникає одразу. */
+    if (route.parts[0] === 'bank-key') {
+      if (window.BankSeal) BankSeal.setKey(route.parts[1] || '');
+      try {
+        history.replaceState(null, '', location.pathname + location.search + '#/bank');
+      } catch (e) {
+        location.replace('#/bank');
+        return;
+      }
+      route = parseRoute();
+    }
     var main = document.getElementById('main');
     var side = document.getElementById('sidebar');
     var app = document.querySelector('.app');
@@ -356,6 +426,21 @@
       if (V.boardMountedFor() === route.parts[1]) return;
       V.unmountBoard();
       app.classList.add('is-board');
+      if (!window.Board) {
+        // рушій дошки ще не вантажився — тихе тло на мить, без написів
+        main.innerHTML = '<div class="board-wait"></div>';
+        var want = location.hash;
+        App.need('board').then(function () {
+          if (location.hash === want) App.render();
+        }, function () {
+          if (location.hash !== want) return;
+          main.innerHTML = '<div class="page"><div class="card">' +
+            C.empty('alert', 'Дошка не відкрилась', 'Немає звʼязку, а цієї версії дошки ще немає на пристрої.',
+              '<button class="btn btn--primary" data-act="board-retry">Спробувати ще</button>') +
+            '</div></div>';
+        });
+        return;
+      }
       main.innerHTML = V.board(route.parts[1]);
       V.mountBoard(route.parts[1]);
       window.scrollTo(0, 0);
@@ -435,7 +520,14 @@
      ============================================================ */
 
   var ACTIONS = {
-    'nav': function (arg) { location.hash = arg; },
+    'nav': function (arg) { closeMenu(); location.hash = arg; },
+
+    'board-retry': function () { App.render(); },
+
+    'menu': function () {
+      var app = document.querySelector('.app');
+      if (app) app.classList.toggle('is-menu');
+    },
 
     'sidebar-toggle': function () {
       sidebarState.collapsed = !sidebarState.collapsed;
@@ -443,7 +535,7 @@
       applySidebar();
     },
 
-    'student-open': function (arg) { location.hash = '#/student/' + arg; },
+    'student-open': function (arg) { closeMenu(); location.hash = '#/student/' + arg; },
     'student-add': function () { F.student(null); },
     'student-edit': function (arg) { F.student(arg); },
     'student-restore': function (arg) { S.update('students', arg, { archived: false }); U.toast('Учня повернуто', 'ok'); App.render(); },
@@ -977,6 +1069,23 @@
      Слухачі
      ============================================================ */
 
+  /* Відкрите меню на телефоні: дотик будь-де поза ним — закрити. Сторінка
+     під затемненням у цю мить не має реагувати, тож клік далі не йде. */
+  document.addEventListener('click', function (e) {
+    var app = document.querySelector('.app');
+    if (!app || !app.classList.contains('is-menu')) return;
+    if (e.target.closest('.sidebar')) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    closeMenu();
+  }, true);
+
+  // поле з посиланням: клік виділяє його цілим, щоб одразу скопіювати
+  document.addEventListener('click', function (e) {
+    var f = e.target.closest && e.target.closest('[data-selectall]');
+    if (f && f.select) f.select();
+  });
+
   document.addEventListener('click', function (e) {
     var el = e.target.closest('[data-act]');
     if (!el) return;
@@ -1096,6 +1205,14 @@
 
   if (window.Disk) Disk.ready(boot); else boot();
 
+  /* Рушій дошки готуємо заздалегідь, але вже після того, як кабінет
+     показався й ожив: тоді й старт швидкий, і дошка потім відкривається
+     без паузи. */
+  setTimeout(function () {
+    var idle = window.requestIdleCallback || function (fn) { return setTimeout(fn, 1); };
+    idle(function () { App.need('board').catch(function () {}); });
+  }, 4000);
+
   /* Рядок стану синхронізації оновлюємо на місці, без перемальовування сторінки:
      інакше він застигає таким, яким був у момент рендеру. */
   if (window.Cloud && window.Cloud.onChange) {
@@ -1176,6 +1293,19 @@
     });
   }
 
+  /* Service worker вмикаємо лише на справжньому сайті (https).
+     На localhost і при відкритті файлу напряму він не реєструється —
+     інакше кеш заважав би бачити щойно внесені зміни.
+     Раніше це стояло окремим скриптом прямо в index.html; захист сторінки
+     від чужих скриптів (CSP) такого не виконує, тож тепер воно тут. */
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function (e) {
+        console.warn('SW не зареєструвався:', e);
+      });
+    });
+  }
+
   /* Вхід — одним вікном на початку, а не написами по всіх кутах.
 
      Без входу дошки живуть лише в цьому браузері, і досі про це нагадували
@@ -1194,7 +1324,7 @@
       title: 'Увійдіть у кабінет',
       sub: 'щоб дошки, учні й розклад були на всіх пристроях і в учнів',
       body:
-        '<form id="ask-signin" class="stack" onsubmit="return false">' +
+        '<form id="ask-signin" class="stack">' +
           '<label class="field"><span class="field__label">Пошта</span>' +
             '<input class="input" name="email" type="email" autocomplete="username"></label>' +
           '<label class="field"><span class="field__label">Пароль</span>' +
@@ -1221,6 +1351,18 @@
   }
 
   window.addEventListener('load', function () { setTimeout(askSignIn, 400); });
+
+  /* Enter у полі пароля — те саме, що кнопка «Увійти». Обробник тут, а не
+     атрибутом onsubmit у розмітці: захист сторінки від чужих скриптів
+     (CSP) не виконує жодного коду, вписаного прямо в HTML. */
+  document.addEventListener('submit', function (e) {
+    var form = e.target;
+    if (!form || form.id !== 'ask-signin') return;
+    e.preventDefault();
+    var wrap = form.closest('.modal');
+    var btn = wrap && wrap.querySelector('[data-mb="signin"]');
+    if (btn) btn.click();
+  });
 
   /* Сесія закінчилась посеред роботи (пароль змінили деінде, вийшли з іншого
      пристрою). Мовчки працювати далі не можна: усе нове лишалося б лише

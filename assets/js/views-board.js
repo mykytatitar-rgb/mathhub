@@ -3116,7 +3116,7 @@
   /** Що вийде з цих чисел — видно ще до натискання «Застосувати». */
   function numlinePreview(from, to, step, fmt) {
     var bad = numlineProblem(from, to, step);
-    if (bad) return '<span style="color:var(--red)">' + U.esc(bad) + '</span>';
+    if (bad) return '<span style="color:var(--red-ink)">' + U.esc(bad) + '</span>';
 
     function label(v) {
       /* Десятковий беремо в самої дошки: підказка не має обіцяти
@@ -3282,7 +3282,7 @@
                тож відмінювати нічого не треба: «6-кутників» — це нісенітниця. */
             box.innerHTML = r
               ? 'Вийде ' + r.poly.length + '-кутник.'
-              : '<span style="color:var(--red)">Ці три точки лежать на одній прямій — ' +
+              : '<span style="color:var(--red-ink)">Ці три точки лежать на одній прямій — ' +
                 'площину через них не провести.</span>';
           }
           U.$$('select', extra).forEach(function (sel) { sel.addEventListener('change', note); });
@@ -3398,7 +3398,7 @@
           var v = C.readForm(root);
           var r = window.Plot ? Plot.compile(v.ex) : { err: 'Модуль формул не завантажився' };
           box.innerHTML = r.err
-            ? '<span style="color:var(--red)">' + U.esc(r.err) + '</span>'
+            ? '<span style="color:var(--red-ink)">' + U.esc(r.err) + '</span>'
             : '<span class="muted">Формула читається: f(1) = ' +
               U.esc(String(Math.round(r.f(1) * 1000) / 1000)) + ', f(2) = ' +
               U.esc(String(Math.round(r.f(2) * 1000) / 1000)) + '</span>';
@@ -3479,7 +3479,7 @@
           var v = C.readForm(root);
           var r = window.Plot ? Plot.compile(v.ex) : { err: 'Модуль формул не завантажився' };
           if (r.err) {
-            box.innerHTML = '<span style="color:var(--red)">' + U.esc(r.err) + '</span>';
+            box.innerHTML = '<span style="color:var(--red-ink)">' + U.esc(r.err) + '</span>';
             return null;
           }
           var lo = typeof it.from === 'number' ? it.from : -5;
@@ -4496,7 +4496,17 @@
    * На відміну від publishLessonBoard, шле беззастережно: тут ми вже
    * знаємо, що в учня старе, і причина не у версії переглядача.
    */
-  V.republishLesson = function (lessonId) {
+  /* Перевидання «запікає» фігури рушієм дошки, а його на старті кабінету
+     немає — він підвантажується окремо (App.need у app.js). */
+  function withEngine(fn) {
+    return function () {
+      var args = arguments, self = this;
+      if (window.Board || !window.App || !App.need) return fn.apply(self, args);
+      return App.need('board').then(function () { return fn.apply(self, args); });
+    };
+  }
+
+  V.republishLesson = withEngine(function (lessonId) {
     var board = S.getBoard(lessonId);
     if (!board || !board.share || !board.share.token) return Promise.resolve(false);
     if (!(window.Cloud && Cloud.available() && Cloud.signedIn())) {
@@ -4516,7 +4526,7 @@
       publogSet(lessonId, false, e && e.message ? e.message : 'немає звʼязку');
       throw e;
     });
-  };
+  });
 
   /** Уроки, у яких останнє відправлення учневі не вдалося. */
   V.staleForStudents = function () {
@@ -4526,7 +4536,7 @@
     }).map(function (b) { return b.lessonId; });
   };
 
-  V.publishLessonBoard = function (lessonId) {
+  V.publishLessonBoard = withEngine(function (lessonId) {
     if (!window.Cloud || !Cloud.available() || !Cloud.signedIn()) return Promise.resolve('');
 
     var board = S.getBoard(lessonId);
@@ -4562,7 +4572,7 @@
       S.saveBoard(board);
       return Cloud.shareUrl(token);
     });
-  };
+  });
 
   /** Опублікувати урок і покласти посилання в буфер обміну. */
   function publishShare(l, st, token, isUpdate, root) {
@@ -4647,7 +4657,7 @@
           'Учень відкриє цю сторінку без жодного входу й побачить <b>тільки цей урок</b>. ' +
           'До решти ваших даних доступу немає.</p>' +
           '<input class="input" readonly value="' + U.esc(url) + '" ' +
-          'onclick="this.select()" style="font-size:12px">' +
+          'data-selectall style="font-size:12px">' +
           '<div class="field__hint mt-2">Сторінка оновлюється сама: під час роботи — ' +
           'приблизно раз на хвилину, і одразу коли ви виходите з дошки. ' +
           'Кнопка «Оновити» потрібна лише якщо хочете не чекати.</div>' +

@@ -21,10 +21,6 @@
 
   var O = {};
 
-  var BASE = {
-    olymp: 'assets/data/olymp/',
-    book: 'assets/data/book/'
-  };
   var BANKS = ['olymp', 'book'];
 
   var index = null;                 // зведений покажчик обох банків
@@ -37,11 +33,9 @@
   var sols = {};                    // «банк:домен» → {id: розвʼязання}
   var byId = {};
 
+  /* Файли банку зашифровані — читає й розшифровує їх bankseal.js. */
   function get(bank, path) {
-    return fetch(BASE[bank] + path, { cache: 'default' }).then(function (r) {
-      if (!r.ok) throw new Error('файл не прочитався (' + r.status + ')');
-      return r.json();
-    });
+    return window.BankSeal.json(bank + '/' + path);
   }
 
   /* ============================================================
@@ -253,6 +247,28 @@
   };
 
   O.hasSolution = function (p) { return !!p && p.bank === 'olymp'; };
+
+  /** Малюнок до задачі — розшифрований, як і самі задачі. */
+  O.imgHtml = function (p) {
+    if (!p || !p.img) return '';
+    return '<img class="bk-img" src="' + window.BankSeal.imageSrc(p.img) + '" data-bank-img="' +
+      window.U.esc(p.img) + '" alt="Рисунок до задачі" loading="lazy">';
+  };
+
+  /** Що сказати, коли банк не відкрився: [заголовок, пояснення]. */
+  O.failText = function () {
+    var st = window.BankSeal ? BankSeal.state() : '';
+    if (window.BankSeal && !BankSeal.supported()) {
+      return ['Банк задач тут не відкриється', 'Цей браузер застарий: він не вміє розшифровувати файли банку. Оновіть його або відкрийте кабінет в іншому.'];
+    }
+    if (st === 'nokey') {
+      return ['Банк задач закритий', 'Задачі з підручників зашифровані. Відкрийте один раз посилання з ключем — і банк відкриється на всіх ваших пристроях.'];
+    }
+    if (st === 'badkey') {
+      return ['Банк задач не відкрився', 'Ключ у кабінеті не підходить до цих файлів. Відкрийте свіже посилання з ключем.'];
+    }
+    return ['Банк задач не завантажився', 'Перевірте звʼязок і оновіть сторінку.'];
+  };
 
   /* ============================================================
      Складність

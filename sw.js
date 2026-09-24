@@ -7,13 +7,25 @@
 
    Версію треба піднімати щоразу, коли змінюється склад файлів. */
 
-var VERSION = 'vektor-v112';
+var VERSION = 'vektor-v113';
 
-var SHELL = [
+/* Банк задач — окремий кеш: він не залежить від версії кабінету й не
+   чиститься з кожним оновленням. Кожен файл банку приходить з відбитком
+   вмісту в адресі (?h=…), тож застаріти не може. */
+var BANK = 'vektor-bank';
+
+/* Код і стилі кешуються з номером версії в адресі (app.js?v=112) — той
+   самий номер, що в index.html і App.BUILD; піднімає всі три tools/bump.js. */
+var V = VERSION.replace(/\D/g, '');
+
+var PAGES = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './assets/icon.svg',
+  './assets/icon.svg'
+];
+
+var CODE = [
   './assets/css/app.css',
   './assets/css/board.css',
   './assets/js/icons.js',
@@ -37,25 +49,29 @@ var SHELL = [
   './assets/js/live.js',
   './assets/js/recsync.js',
   './assets/js/cloudimages.js',
-  './assets/js/shapefacts.js',
-  './share/engine/constructions.js',
-  './share/engine/plot.js',
-  './share/engine/solids.js',
-  './share/engine/points.js',
-  './share/engine/board.js',
   './assets/js/views-main.js',
   './assets/js/views-schedule.js',
   './assets/js/views-student.js',
   './assets/js/views-board.js',
+  './assets/js/bankseal.js',
   './assets/js/olymp.js',
   './assets/js/views-olymp.js',
   './assets/js/views-bank.js',
   './assets/js/mathmap-data.js',
   './assets/js/mathmap-extras.js',
-  './assets/js/mathmap-content.js',
   './assets/js/views-mathmap.js',
-  './assets/js/app.js'
+  './assets/js/app.js',
+  // вантажаться не на старті, а коли знадобляться, — але без інтернету теж мають бути
+  './assets/js/mathmap-content.js',
+  './assets/js/shapefacts.js',
+  './share/engine/constructions.js',
+  './share/engine/plot.js',
+  './share/engine/solids.js',
+  './share/engine/points.js',
+  './share/engine/board.js'
 ];
+
+var SHELL = PAGES.concat(CODE.map(function (u) { return u + '?v=' + V; }));
 
 self.addEventListener('install', function (e) {
   e.waitUntil(
@@ -70,7 +86,7 @@ self.addEventListener('activate', function (e) {
   e.waitUntil(
     caches.keys()
       .then(function (keys) {
-        return Promise.all(keys.filter(function (k) { return k !== VERSION; })
+        return Promise.all(keys.filter(function (k) { return k !== VERSION && k !== BANK; })
           .map(function (k) { return caches.delete(k); }));
       })
       .then(function () { return self.clients.claim(); })
@@ -84,8 +100,24 @@ self.addEventListener('fetch', function (e) {
   var url = new URL(req.url);
   if (url.origin !== self.location.origin) return;   // курс НБУ й інші зовнішні — повз кеш
 
-  // Сторінка: свіжа версія важливіша за швидкість, кеш — запасний варіант
-  if (req.mode === 'navigate' || url.pathname.endsWith('.html')) {
+  // Файл банку з відбитком: кеш банку, мережа — лише вперше
+  if (url.pathname.indexOf('/assets/bank/') >= 0 && url.searchParams.has('h')) {
+    e.respondWith(
+      caches.open(BANK).then(function (c) {
+        return c.match(req).then(function (hit) {
+          return hit || fetch(req).then(function (res) {
+            if (res && res.status === 200) c.put(req, res.clone());
+            return res;
+          });
+        });
+      })
+    );
+    return;
+  }
+
+  // Сторінка й покажчик банку: свіжа версія важливіша за швидкість, кеш — запасний варіант
+  if (req.mode === 'navigate' || url.pathname.endsWith('.html') ||
+      url.pathname.endsWith('/assets/bank/manifest.json')) {
     e.respondWith(
       fetch(req)
         .then(function (res) {
@@ -98,7 +130,29 @@ self.addEventListener('fetch', function (e) {
     return;
   }
 
-  /* Код застосунку: спершу мережа, кеш — запасний варіант.
+  /* Код із номером версії в адресі: кеш одразу, без жодного запиту.
+
+     Такий файл не може застаріти — нова версія має нову адресу, бо
+     index.html завжди береться свіжим (див. вище). Раніше кожне відкриття
+     кабінету перепитувало сервер про всі сорок файлів і чекало відповіді
+     до півтори секунди — на мобільному інтернеті це й була пауза на старті. */
+  if (isCode(url) && url.searchParams.has('v')) {
+    e.respondWith(
+      caches.match(req).then(function (hit) {
+        return hit || fetch(req).then(function (res) {
+          if (res && res.status === 200) {
+            var copy = res.clone();
+            caches.open(VERSION).then(function (c) { c.put(req, copy); });
+          }
+          return res;
+        });
+      })
+    );
+    return;
+  }
+
+  /* Код без номера версії (сторінка учня, старі вкладки): спершу мережа,
+     кеш — запасний варіант.
 
      Раніше було навпаки — кеш одразу, а свіже підтягувалося у фоні. Через це
      кожна зміна показувалася аж наступного відкриття, і збоку це виглядало

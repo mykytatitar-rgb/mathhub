@@ -68,8 +68,8 @@
       var box = document.querySelector('[data-bk]');
       if (!box) return;
       if (!list) {
-        box.innerHTML = '<div class="card">' + C.empty('alert', 'Банк задач не завантажився',
-          'Файли з задачами лежать поруч із програмою. Перевірте звʼязок і оновіть сторінку.') + '</div>';
+        var why = O().failText();
+        box.innerHTML = '<div class="card">' + C.empty('alert', why[0], why[1]) + '</div>';
         return;
       }
       all = list;
@@ -271,7 +271,7 @@
         '<div class="bk-search">' + icon('search', 16) +
           '<input class="input" id="bk-q" placeholder="Пошук: трапеція, модуль, 14.23, prime…" value="' + U.esc(f.q) + '">' +
         '</div>' +
-        '<select class="input bk-sort" data-bk-sort>' +
+        '<select class="input bk-sort" data-bk-sort aria-label="Порядок задач">' +
           [['', 'За джерелом'], ['easy', 'Спершу легші'], ['hard', 'Спершу складніші'], ['rand', 'Випадково']]
             .map(function (o) {
               return '<option value="' + o[0] + '"' + (f.sort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
@@ -326,7 +326,7 @@
           icon('present', 16) + '</button>' +
       '</div>' +
       '<div class="ol-card__p">' + fmt(p.p) + '</div>' +
-      (p.img ? '<img class="bk-img" src="assets/data/book/img/' + U.esc(p.img) + '" alt="Рисунок до задачі" loading="lazy">' : '') +
+      O().imgHtml(p) +
       (p.f && !p.img ? '<div class="ol-fig">' + (isBook
         ? 'До задачі є рисунок — він у підручнику' + (p.pg ? ' (с. ' + p.pg + ' файлу)' : '') + '.'
         : 'В умові був рисунок — його в наборі немає.') + '</div>' : '') +

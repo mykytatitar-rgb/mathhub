@@ -1,16 +1,41 @@
 # Правила кешування для Cloudflare Pages / Netlify.
 # Сторінка й службові файли — завжди свіжі, код — з кешу, але з перевіркою.
 
+#
+# Content-Security-Policy — захист від чужого коду на сторінці: виконується
+# лише те, що лежить на цьому сайті, а звʼязок дозволений тільки з базою
+# (Supabase) і курсом НБУ. Якщо колись знадобиться новий зовнішній сервіс,
+# його адресу треба дописати в connect-src — інакше браузер його заблокує.
+# Ні рядка коду прямо в HTML (onclick="…", <script>…</script>) — теж з цієї причини.
+
+/
+  Cache-Control: no-cache
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://kcxqienzhopnsqmykhqv.supabase.co wss://kcxqienzhopnsqmykhqv.supabase.co https://bank.gov.ua; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+
 /index.html
   Cache-Control: no-cache
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://kcxqienzhopnsqmykhqv.supabase.co wss://kcxqienzhopnsqmykhqv.supabase.co https://bank.gov.ua; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 
-# Сторінка уроку для учня — так само завжди свіжа
+# Сторінка уроку для учня — так само завжди свіжа. Її код вбудований у саму
+# сторінку, тож суворе правило для скриптів тут не підходить; лишаємо те,
+# що нічого не ламає: сторінку не можна вставити в чужий сайт.
+/share
+  Cache-Control: no-cache
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Content-Security-Policy: frame-ancestors 'none'; object-src 'none'; base-uri 'self'
+
 /share.html
   Cache-Control: no-cache
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
+  Content-Security-Policy: frame-ancestors 'none'; object-src 'none'; base-uri 'self'
 
 /sw.js
   Cache-Control: no-cache

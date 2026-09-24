@@ -17,6 +17,7 @@ import io
 import json
 import os
 import re
+import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -355,4 +356,14 @@ def write(path, data):
     print('  ', os.path.basename(path), os.path.getsize(path) // 1024, 'КБ')
 
 
+def seal():
+    """Сайт бачить лише зашифровані копії банку (assets/bank) — оновлюємо їх."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    try:
+        subprocess.run(['node', os.path.join(here, 'bank_seal.js')], check=True)
+    except Exception as e:
+        print('УВАГА: банк не зашифровано — запустіть node tools/bank_seal.js:', e)
+
+
 main()
+seal()

@@ -14,6 +14,9 @@
   z-index: 40;
 }
 
+/* Мить, поки підвантажується рушій дошки: те саме тло, без написів */
+.board-wait { position: fixed; inset: 0; background: var(--bg); z-index: 40; }
+
 /* ---------- Верхня панель ---------- */
 
 .board-top {

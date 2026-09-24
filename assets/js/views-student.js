@@ -133,14 +133,14 @@
         '</div>' +
 
         (st.target ? '<div class="card">' +
-          '<div class="card-head"><div><h3 class="card-title">Ціль і контекст</h3></div>' +
+          '<div class="card-head"><div><h2 class="card-title">Ціль і контекст</h2></div>' +
           '<button class="icon-btn spacer" data-act="student-edit" data-arg="' + st.id + '">' + icon('edit', 16) + '</button></div>' +
           '<div class="pre-wrap" style="color:var(--ink-2)">' + U.esc(st.target) + '</div>' +
           '</div>' : '') +
 
         '<div class="card card--pad0">' +
           '<div class="card-head" style="padding:22px 24px 14px;margin:0">' +
-            '<div><h3 class="card-title">Останні уроки</h3>' +
+            '<div><h2 class="card-title">Останні уроки</h2>' +
             '<div class="card-sub">що проходили нещодавно</div></div>' +
             '<button class="btn btn--ghost btn--sm spacer" data-act="tab" data-arg="lessons">Усі уроки</button>' +
           '</div>' +
@@ -168,7 +168,7 @@
           var p = V.studentMapProgress ? V.studentMapProgress(st.id) : null;
           if (!p) return '';
           return '<button class="card card--btn center" data-act="tab" data-arg="map">' +
-            '<div class="card-head" style="justify-content:center"><div><h3 class="card-title">Карта математики</h3>' +
+            '<div class="card-head" style="justify-content:center"><div><h2 class="card-title">Карта математики</h2>' +
             '<div class="card-sub">' + U.esc(p.scopeLabel) + ' · знає ' + p.known + ' з ' + p.n + '</div></div></div>' +
             '<div style="display:grid;place-items:center;padding:6px 0 14px">' + C.ring(p.pct, 128, 12) + '</div>' +
             (p.marked
@@ -182,7 +182,7 @@
 
         (boards.length ? '<div class="card card--pad0">' +
           '<div class="card-head" style="padding:22px 24px 12px;margin:0">' +
-            '<div><h3 class="card-title">Архів дошок</h3>' +
+            '<div><h2 class="card-title">Архів дошок</h2>' +
             '<div class="card-sub">' + U.pl(boards.length, 'урок із записами', 'уроки із записами', 'уроків із записами') +
             '</div></div>' +
             '<button class="btn btn--ghost btn--sm spacer" data-act="tab" data-arg="lessons">Усі</button>' +
@@ -202,7 +202,7 @@
           }).join('') + '</div></div>' : '') +
 
         (strong.length ? '<div class="card">' +
-          '<div class="card-head"><div><h3 class="card-title">Сильні теми</h3></div></div>' +
+          '<div class="card-head"><div><h2 class="card-title">Сильні теми</h2></div></div>' +
           strong.map(function (p) {
             return '<div style="margin-bottom:14px">' +
               '<div class="row small" style="margin-bottom:6px"><span style="font-weight:600">' + U.esc(p.topic) + '</span>' +
@@ -210,7 +210,7 @@
           }).join('') + '</div>' : '') +
 
         (weak.length ? '<div class="card">' +
-          '<div class="card-head"><div><h3 class="card-title">Над чим працювати</h3>' +
+          '<div class="card-head"><div><h2 class="card-title">Над чим працювати</h2>' +
           '<div class="card-sub">найнижчі рівні</div></div></div>' +
           weak.map(function (p) {
             return '<div style="margin-bottom:14px">' +
@@ -219,7 +219,7 @@
           }).join('') + '</div>' : '') +
 
         (contacts.length ? '<div class="card">' +
-          '<div class="card-head"><div><h3 class="card-title">Контакти</h3></div></div>' +
+          '<div class="card-head"><div><h2 class="card-title">Контакти</h2></div></div>' +
           contacts.map(function (c) {
             return '<div class="row" style="gap:11px;padding:9px 0;border-bottom:1px solid var(--line)">' +
               '<span style="color:var(--muted)">' + icon(c.i, 17) + '</span>' +
@@ -228,7 +228,7 @@
           }).join('') + '</div>' : '') +
 
         '<div class="card">' +
-          '<div class="card-head"><div><h3 class="card-title">Умови</h3></div></div>' +
+          '<div class="card-head"><div><h2 class="card-title">Умови</h2></div></div>' +
           '<div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)">' +
             '<span class="small muted">Ціна уроку</span><span class="bold">' +
             U.money(st.price, S.curOf(st.id)) + '</span></div>' +
@@ -263,13 +263,13 @@
     var future = all.filter(function (l) { return l.status === 'planned' && U.toDate(l.date) >= U.today(); });
     var past = all.filter(function (l) { return future.indexOf(l) < 0; });
 
-    return (future.length ? '<h3 class="card-title mb-2">Заплановані</h3>' +
+    return (future.length ? '<h2 class="card-title mb-2">Заплановані</h2>' +
       '<div class="stack mb-3">' +
       U.sortBy(future, function (l) { return l.date; }).map(function (l) {
         return C.lessonRow(l, numberOf[l.id], { withHw: true });
       }).join('') + '</div>' : '') +
 
-      '<div class="row mb-2"><h3 class="card-title">Історія</h3>' +
+      '<div class="row mb-2"><h2 class="card-title">Історія</h2>' +
       '<button class="btn btn--soft btn--sm spacer" data-act="lesson-add-for" data-arg="' + st.id + '">' +
       icon('plus', 15) + 'Додати урок</button></div>' +
 
@@ -317,7 +317,7 @@
       return '<tr><td class="nowrap">' + U.fmtDate(p.date) + '</td>' +
         '<td>' + C.badge(p.method || '—', 'badge--grey') + '</td>' +
         '<td class="muted small">' + U.esc(p.note || '') + '</td>' +
-        '<td class="num" style="color:var(--green)">+' + U.money(p.amount, S.paymentCur(p)) + '</td>' +
+        '<td class="num" style="color:var(--green-ink)">+' + U.money(p.amount, S.paymentCur(p)) + '</td>' +
         '<td class="right"><button class="icon-btn" data-act="pay-edit" data-arg="' + p.id + '">' +
         icon('edit', 16) + '</button></td></tr>';
     }).join('') : '<tr><td colspan="5" class="center muted" style="padding:34px">Оплат ще не було</td></tr>';
@@ -325,12 +325,12 @@
     return '<div class="grid grid--main">' +
       '<div class="card card--pad0">' +
         '<div class="card-head" style="padding:22px 24px 8px;margin:0">' +
-          '<div><h3 class="card-title">Історія оплат</h3></div>' +
+          '<div><h2 class="card-title">Історія оплат</h2></div>' +
           '<button class="btn btn--primary btn--sm spacer" data-act="pay-add" data-arg="' + st.id + '">' +
           icon('plus', 15) + 'Записати</button>' +
         '</div>' +
-        '<div style="overflow-x:auto"><table class="tbl">' +
-        '<thead><tr><th>Дата</th><th>Спосіб</th><th>Коментар</th><th class="num">Сума</th><th></th></tr></thead>' +
+        '<div style="overflow-x:auto" tabindex="0"><table class="tbl">' +
+        '<thead><tr><th>Дата</th><th>Спосіб</th><th>Коментар</th><th class="num">Сума</th><th><span class="sr-only">Дії</span></th></tr></thead>' +
         '<tbody>' + rows + '</tbody></table></div>' +
       '</div>' +
 
@@ -387,7 +387,7 @@
         '<button class="btn btn--primary" data-act="note-add" data-arg="' + st.id + '">' +
         icon('plus', 16) + 'Додати нотатку</button>');
 
-    return '<div class="row mb-2"><h3 class="card-title">Нотатки про учня</h3>' +
+    return '<div class="row mb-2"><h2 class="card-title">Нотатки про учня</h2>' +
       '<button class="btn btn--soft btn--sm spacer" data-act="note-add" data-arg="' + st.id + '">' +
       icon('plus', 15) + 'Нова нотатка</button></div>' +
       '<div class="stack" style="max-width:820px">' + cards + '</div>';

@@ -493,5 +493,15 @@ def write(path, data):
     print('  ', os.path.basename(path), max(1, os.path.getsize(path) // 1024), 'КБ')
 
 
+def seal():
+    """Сайт бачить лише зашифровані копії банку (assets/bank) — оновлюємо їх."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    try:
+        subprocess.run(['node', os.path.join(here, 'bank_seal.js')], check=True)
+    except Exception as e:
+        print('УВАГА: банк не зашифровано — запустіть node tools/bank_seal.js:', e)
+
+
 if __name__ == '__main__':
     main()
+    seal()

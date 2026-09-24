@@ -311,7 +311,7 @@
     if (contentState === 'loading') return;
     contentState = 'loading';
     var sc = document.createElement('script');
-    sc.src = 'assets/js/mathmap-content.js';
+    sc.src = window.App && App.versioned ? App.versioned('assets/js/mathmap-content.js') : 'assets/js/mathmap-content.js';
     function finish(ok) {
       contentState = ok && window.MATH_CONTENT ? 'ready' : 'failed';
       var list = contentWaiters;
@@ -506,7 +506,7 @@
     if (stu && !stu.mapImported) {
       var plan = legacyPlan(stu.id);
       if (plan && plan.changes.length) {
-        legacy = '<div class="card mm-legacy"><h3 class="mm-h3">Зі старого «Шляху»</h3>' +
+        legacy = '<div class="card mm-legacy"><h2 class="mm-h3">Зі старого «Шляху»</h2>' +
           '<div class="mm-sub">Там було ' + pl(plan.steps, 'етап', 'етапи', 'етапів') +
             (plan.done ? ', пройдено ' + plan.done : '') +
             (plan.rated ? ', і ' + pl(plan.rated, 'оцінка', 'оцінки', 'оцінок') + ' засвоєння' : '') + '. ' +
@@ -528,7 +528,7 @@
     /* ---- Швидкий старт ---- */
     var quick = '';
     if (marked === 0 && !legacy) {
-      quick = '<div class="card mm-quick"><h3 class="mm-h3">Швидкий старт</h3>' +
+      quick = '<div class="card mm-quick"><h2 class="mm-h3">Швидкий старт</h2>' +
         '<div class="mm-sub">' + tx.quickSub + '</div>' +
         MAP.stages.filter(function (s) { return s.id <= max; }).map(function (s) {
           return '<div class="mm-qrow"><div class="mm-qrow__name"><b>' + s.id + ' · ' + esc(s.name) + '</b>' +
@@ -573,7 +573,7 @@
 
     return '<div class="mm-hero">' +
         '<div class="card mm-here">' + here + '</div>' +
-        '<div class="card"><h3 class="mm-h3">' + totalTitle + '</h3><div class="mm-sub">' + totalSub + '</div>' +
+        '<div class="card"><h2 class="mm-h3">' + totalTitle + '</h2><div class="mm-sub">' + totalSub + '</div>' +
           '<div class="mm-ring">' + ring + '<div><div class="mm-ring__big">' +
             (all.n ? Math.round(all.known / all.n * 100) : 0) + '%</div>' +
           '<div class="muted small" style="margin-bottom:10px">' + tx.rootWord + '</div><div class="mm-ring__legend">' + legend + '</div></div></div>' +
@@ -584,12 +584,12 @@
       legacy +
       quick +
       '<div class="grid grid--2">' +
-        '<div class="card"><h3 class="mm-h3">Наступні кроки</h3><div class="mm-sub">' + tx.nextSub + '</div>' +
+        '<div class="card"><h2 class="mm-h3">Наступні кроки</h2><div class="mm-sub">' + tx.nextSub + '</div>' +
           '<div class="mm-list">' + nextHtml + '</div></div>' +
-        '<div class="card"><h3 class="mm-h3">' + tx.learningTitle + '</h3><div class="mm-sub">' + tx.learningSub + '</div>' +
+        '<div class="card"><h2 class="mm-h3">' + tx.learningTitle + '</h2><div class="mm-sub">' + tx.learningSub + '</div>' +
           '<div class="mm-list">' + learnHtml + '</div></div>' +
       '</div>' +
-      '<div class="card" style="margin-top:18px"><h3 class="mm-h3">За доменами</h3><div class="mm-sub">' + tx.ringDark + '</div>' +
+      '<div class="card" style="margin-top:18px"><h2 class="mm-h3">За доменами</h2><div class="mm-sub">' + tx.ringDark + '</div>' +
         doms + '</div>' +
       (who ? '' : wishesCard());
   }
@@ -631,7 +631,7 @@
     if (!list.length) return '';
     return '<div class="card mm-wishes" style="margin-top:18px">' +
       '<div class="row" style="gap:10px;align-items:flex-start">' +
-        '<div style="flex:1"><h3 class="mm-h3">Побажання для Claude</h3>' +
+        '<div style="flex:1"><h2 class="mm-h3">Побажання для Claude</h2>' +
         '<div class="mm-sub">' + pl(list.length, 'тема чекає', 'теми чекають', 'тем чекають') +
           ' на доробку. Скопіюйте й надішліть мені одним повідомленням.</div></div>' +
         '<button class="btn btn--primary btn--sm" data-mm="wishes-copy">' + icon('copy', 15) + 'Скопіювати</button>' +

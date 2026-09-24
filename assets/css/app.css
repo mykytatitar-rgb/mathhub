@@ -30,9 +30,11 @@
   --ink:      #17163A;
   --ink-2:    #3D3B63;
   /* Приглушений текст усе одно має читатися: 4.95:1 на білому
-     і 4.57:1 на тлі сторінки — обидва вище норми 4.5 для дрібного тексту. */
+     і 4.57:1 на тлі сторінки — обидва вище норми 4.5 для дрібного тексту.
+     Другий рівень раніше був #9C9AB6 — 2.7:1, підписи в меню й під
+     графіками на телефоні просто зникали. Тепер 4.65:1 на білому. */
   --muted:    #6F6D8C;
-  --muted-2:  #9C9AB6;
+  --muted-2:  #737194;
 
   --bg:       #F6F5FB;
   --surface:  #FFFFFF;
@@ -46,6 +48,13 @@
   --red-bg:   #FCEAEB;
   --violet:   #9333EA;
   --violet-bg:#F5E9FE;
+
+  /* Ті самі кольори для тексту: яскраві --green/--amber/--red добрі для
+     смуг і крапок, але написані ними слова читаються гірше за норму
+     (3.3, 3.0 і 4.3 до 1). Для слів — темніші відтінки. */
+  --green-ink: #0A7D48;
+  --amber-ink: #9A5808;
+  --red-ink:   #B8323A;
 
   --r-lg: 18px;
   --r-md: 13px;
@@ -86,6 +95,14 @@ a { color: inherit; text-decoration: none; }
 }
 
 ::selection { background: var(--brand-100); color: var(--brand-900); }
+
+/* Текст лише для програм читання з екрана: на око його немає */
+.sr-only {
+  /* left/top обовʼязкові: без них елемент лишається там, де стояв би в
+     тексті, — наприклад, у кінці широкої таблиці, — і розпирає сторінку */
+  position: absolute; left: 0; top: 0; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: #D3D0E6; border-radius: 20px; border: 3px solid transparent; background-clip: content-box; }
@@ -478,7 +495,7 @@ a { color: inherit; text-decoration: none; }
 .btn--soft:hover { background: #D6D1FB; }
 .btn--ghost { background: transparent; color: var(--ink-2); border: 1px solid var(--line); }
 .btn--ghost:hover { background: var(--brand-50); border-color: var(--brand-100); color: var(--brand-700); }
-.btn--danger { background: var(--red-bg); color: var(--red); }
+.btn--danger { background: var(--red-bg); color: var(--red-ink); }
 .btn--danger:hover { background: #F9DADC; }
 .btn--sm { padding: 8px 15px; font-size: 13px; }
 .btn--block { width: 100%; }
@@ -506,11 +523,11 @@ a { color: inherit; text-decoration: none; }
   background: var(--blue-50); color: var(--blue-700);
   white-space: nowrap;
 }
-.badge--green  { background: var(--green-bg); color: #0C8A50; }
-.badge--amber  { background: var(--amber-bg); color: #B8690B; }
-.badge--red    { background: var(--red-bg); color: #C93B3F; }
+.badge--green  { background: var(--green-bg); color: var(--green-ink); }
+.badge--amber  { background: var(--amber-bg); color: var(--amber-ink); }
+.badge--red    { background: var(--red-bg); color: var(--red-ink); }
 .badge--violet { background: var(--violet-bg); color: #5B3FD6; }
-.badge--grey   { background: #EEF2F8; color: var(--muted); }
+.badge--grey   { background: #EEF2F8; color: #62607F; }
 
 .chip {
   display: inline-flex; align-items: center; gap: 7px;
@@ -1213,7 +1230,51 @@ a { color: inherit; text-decoration: none; }
   .check-row { grid-template-columns: 1fr; }
 }
 
+/* --- Телефон: меню за кнопкою ---
+   Згорнута панель з іконками забирала 76 пікселів із 375 — п'яту частину
+   екрана. Тут вона ховається зовсім і виїжджає поверх сторінки. */
+.m-bar { display: none; }
+
+@media (max-width: 640px) {
+  .app { display: block; }
+  .m-bar {
+    display: flex; align-items: center; gap: 6px;
+    height: 54px; padding: 0 10px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+  }
+  .m-bar__btn {
+    width: 42px; height: 42px; border-radius: 12px;
+    display: grid; place-items: center;
+    border: 0; background: transparent; color: var(--ink);
+    cursor: pointer; padding: 0;
+  }
+  .m-bar__btn:active { background: var(--bg); }
+  .m-bar__logo { font-weight: 800; font-size: 18px; letter-spacing: -.3px; }
+  .m-bar__logo span { color: var(--brand-600); }
+
+  .sidebar {
+    position: fixed; left: 0; top: 0; bottom: 0;
+    height: 100%; width: min(86vw, 300px); flex: none;
+    transform: translateX(-100%);
+    z-index: 60;
+  }
+  .app:not(.is-resizing) .sidebar { transition: transform .22s ease; }
+  .app.is-menu .sidebar { transform: none; box-shadow: var(--shadow-lg); }
+  .app.is-menu::after {
+    content: ''; position: fixed; inset: 0; z-index: 55;
+    background: rgba(23, 22, 58, .32);
+  }
+  .app.is-board .m-bar { display: none; }
+  /* Довідник тримає всю висоту екрана — під шапкою з кнопкою меню теж */
+  .app:has(.ref) { display: flex; flex-direction: column; }
+  .app:has(.ref) .main { flex: 1; min-height: 0; }
+
+  .page, .hero { padding-left: 16px; padding-right: 16px; }
+}
+
 @media print {
+  .m-bar { display: none !important; }
   .sidebar, .hero__actions, .page-head__actions, .btn, .icon-btn { display: none !important; }
   .card, .lesson-row, .stat { box-shadow: none; border: 1px solid var(--line); }
   body { background: #fff; }
@@ -1522,7 +1583,7 @@ body.is-navdrag .nav-item { touch-action: none; }
 
 /* Матеріал, у якому ні файлу, ні посилання — учневі відкривати нічого */
 .mat-pick__r.is-empty span { color: var(--muted); }
-.mat-pick__empty { color: var(--amber); font-weight: 650; }
+.mat-pick__empty { color: var(--amber-ink); font-weight: 650; }
 
 /* ============================================================
    Домашні завдання просто з уроку
@@ -2246,7 +2307,7 @@ body.is-navdrag .nav-item { touch-action: none; }
 .ol-lvl--2 { background: var(--blue-50, #EAF1FE); color: #1D4ED8; }
 .ol-lvl--3 { background: var(--violet-bg, #EDEBFE); color: #4B3FDB; }
 .ol-lvl--4 { background: var(--amber-bg); color: #8A5409; }
-.ol-lvl--5 { background: var(--red-bg); color: var(--red); }
+.ol-lvl--5 { background: var(--red-bg); color: var(--red-ink); }
 
 .ol-extra { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 12px; }
 .ol-extra[hidden] { display: none; }

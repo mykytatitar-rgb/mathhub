@@ -313,6 +313,7 @@
      ============================================================ */
 
   var modalStack = [];
+  var modalSeq = 0;
 
   /**
    * opts: { title, sub, body, wide, buttons: [{label, kind, act, close}], onMount(root, close) }
@@ -332,9 +333,10 @@
 
     wrap.innerHTML =
       '<div class="modal__scrim" data-close="1"></div>' +
-      '<div class="modal' + (opts.wide ? ' modal--wide' : '') + '" role="dialog" aria-modal="true">' +
+      '<div class="modal' + (opts.wide ? ' modal--wide' : '') + '" role="dialog" aria-modal="true" ' +
+        'aria-labelledby="mt-' + (++modalSeq) + '">' +
       '<div class="modal__head"><div style="flex:1;min-width:0">' +
-      '<h2 class="modal__title">' + U.esc(opts.title) + '</h2>' +
+      '<h2 class="modal__title" id="mt-' + modalSeq + '">' + U.esc(opts.title) + '</h2>' +
       (opts.sub ? '<div class="modal__sub">' + U.esc(opts.sub) + '</div>' : '') +
       '</div><button class="icon-btn" data-close="1" aria-label="Закрити">' + icon('x', 20) + '</button></div>' +
       '<div class="modal__body">' + (opts.body || '') + '</div>' +
@@ -405,9 +407,22 @@
     return out;
   };
 
+  /* Підпис привʼязаний до поля: клік по ньому ставить курсор у поле, а
+     браузер і програми читання з екрана знають, як поле зветься. Доти
+     підпис стояв поруч сам по собі. */
+  var fieldSeq = 0;
+
   C.field = function (label, inputHtml, hint) {
-    return '<div class="field"><label class="field__label">' + U.esc(label) + '</label>' +
-      inputHtml + (hint ? '<div class="field__hint">' + U.esc(hint) + '</div>' : '') + '</div>';
+    var forId = '';
+    var html = String(inputHtml).replace(/<(input|select|textarea)\b[^>]*>/, function (tag) {
+      var had = /\sid="([^"]+)"/.exec(tag);
+      if (had) { forId = had[1]; return tag; }
+      forId = 'fld-' + (++fieldSeq);
+      return tag.replace(/^<(input|select|textarea)\b/, '<$1 id="' + forId + '"');
+    });
+    return '<div class="field"><label class="field__label"' + (forId ? ' for="' + forId + '"' : '') + '>' +
+      U.esc(label) + '</label>' +
+      html + (hint ? '<div class="field__hint">' + U.esc(hint) + '</div>' : '') + '</div>';
   };
 
   C.input = function (name, value, attrs) {

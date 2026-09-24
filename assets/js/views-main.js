@@ -80,7 +80,7 @@
       centerTop: U.money(Math.round(total), 'UAH'), center: 'за місяць' });
     if (!pie) return '';
     return '<div class="card">' +
-      '<div class="card-head"><div><h3 class="card-title">Хто приносить дохід</h3>' +
+      '<div class="card-head"><div><h2 class="card-title">Хто приносить дохід</h2>' +
       '<div class="card-sub">оплати цього місяця, у гривнях за курсом</div></div></div>' + pie + '</div>';
   }
 
@@ -93,7 +93,7 @@
 
     if (!list.length) {
       return '<div class="card">' +
-        '<div class="card-head"><div><h3 class="card-title">Борги</h3>' +
+        '<div class="card-head"><div><h2 class="card-title">Борги</h2>' +
         '<div class="card-sub">усі розрахувалися</div></div></div>' +
         '<div class="field__hint">Ніхто нічого не винен — можна не нагадувати.</div></div>';
     }
@@ -103,14 +103,14 @@
         C.avatar(x.s, 32) +
         '<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:14px">' +
         U.esc(x.s.name) + (x.s.archived ? ' <span class="badge badge--grey">архів</span>' : '') + '</div></div>' +
-        '<span class="bold" style="color:var(--red)">' + U.esc(U.money(x.debt, x.cur)) + '</span>' +
+        '<span class="bold" style="color:var(--red-ink)">' + U.esc(U.money(x.debt, x.cur)) + '</span>' +
         '</button>';
     }).join('');
 
     var total = list.reduce(function (a, x) { return a + x.uah; }, 0);
     return '<div class="card card--pad0">' +
       '<div class="card-head" style="padding:22px 24px 10px;margin:0">' +
-        '<div><h3 class="card-title">Кому нагадати про оплату</h3>' +
+        '<div><h2 class="card-title">Кому нагадати про оплату</h2>' +
         '<div class="card-sub">' + U.pl(list.length, 'боржник', 'боржники', 'боржників') +
         ' · разом ' + U.esc(U.money(Math.round(total), 'UAH')) + '</div></div>' +
       '</div><div class="list">' + rows + '</div></div>';
@@ -255,7 +255,7 @@
       '<div class="grid grid--main">' +
         '<div class="stack">' +
           '<div class="card">' +
-            '<div class="card-head"><div><h3 class="card-title">Дохід за півроку</h3>' +
+            '<div class="card-head"><div><h2 class="card-title">Дохід за півроку</h2>' +
             '<div class="card-sub">усі валюти разом, за курсом дня оплати' +
             (incomeUah.partial ? ' · для частини валют курсу немає' : '') + '</div></div>' +
             '<button class="btn btn--ghost btn--sm spacer" data-act="nav" data-arg="#/finance">Фінанси</button></div>' +
@@ -264,7 +264,7 @@
 
           '<div class="card card--pad0">' +
             '<div class="card-head" style="padding:22px 24px 14px;margin:0">' +
-              '<div><h3 class="card-title">Сьогодні</h3>' +
+              '<div><h2 class="card-title">Сьогодні</h2>' +
               '<div class="card-sub">' + U.fmtDateLong(today) + '</div></div>' +
               '<button class="btn btn--soft btn--sm spacer" data-act="lesson-add">' + icon('plus', 15) + 'Урок</button>' +
             '</div>' +
@@ -273,7 +273,7 @@
 
           '<div class="card card--pad0">' +
             '<div class="card-head" style="padding:22px 24px 14px;margin:0">' +
-              '<div><h3 class="card-title">Найближчі уроки</h3>' +
+              '<div><h2 class="card-title">Найближчі уроки</h2>' +
               '<div class="card-sub">що заплановано далі</div></div>' +
               '<button class="btn btn--ghost btn--sm spacer" data-act="nav" data-arg="#/schedule">Весь розклад</button>' +
             '</div>' +
@@ -290,7 +290,7 @@
           whoPaysCard(monthStart, monthEnd) +
 
           '<div class="card">' +
-            '<div class="card-head"><div><h3 class="card-title">Навантаження на тиждень</h3>' +
+            '<div class="card-head"><div><h2 class="card-title">Навантаження на тиждень</h2>' +
             '<div class="card-sub">' + U.pl(U.sum(days, function (x) { return x.count; }), 'урок', 'уроки', 'уроків') + '</div></div></div>' +
             '<div class="chart">' + chart + '</div>' +
           '</div>' +
@@ -301,7 +301,7 @@
           (function () {
             var pc = earnedUah > 0 ? Math.round(Math.min(incomeUah.uah, earnedUah) / earnedUah * 100) : 0;
             return '<div class="card">' +
-              '<div class="card-head"><div><h3 class="card-title">Скільки вже зібрано</h3>' +
+              '<div class="card-head"><div><h2 class="card-title">Скільки вже зібрано</h2>' +
               '<div class="card-sub">' + U.MONTHS_NOM[today.getMonth()].toLowerCase() + '</div></div></div>' +
               (earnedUah > 0
                 ? '<div class="row" style="justify-content:space-between;margin-bottom:8px">' +
@@ -316,7 +316,7 @@
           })() +
 
           '<div class="card">' +
-            '<div class="card-head"><div><h3 class="card-title">Учні</h3>' +
+            '<div class="card-head"><div><h2 class="card-title">Учні</h2>' +
             '<div class="card-sub">активні зараз</div></div>' +
             '<button class="btn btn--ghost btn--sm spacer" data-act="nav" data-arg="#/students">Усі</button></div>' +
             '<div class="row" style="justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)">' +
@@ -417,7 +417,7 @@
       '</div>' +
       '<div class="grid grid--auto">' + cards + '</div>' +
 
-      (archived.length ? '<h3 class="card-title mt-3 mb-2">В архіві</h3>' +
+      (archived.length ? '<h2 class="card-title mt-3 mb-2">В архіві</h2>' +
         '<div class="card card--pad0"><div class="list">' +
         archived.map(function (s) {
           var stat = S.studentStats(s.id);
@@ -515,7 +515,7 @@
 
     return '<div class="card tot mb-3" data-act="income-what" style="cursor:pointer" ' +
       'title="Показати, з чого склалася сума">' +
-      '<div class="card-head"><div><h3 class="card-title">Загальний дохід за місяць</h3>' +
+      '<div class="card-head"><div><h2 class="card-title">Загальний дохід за місяць</h2>' +
       '<div class="card-sub">усі валюти разом, за курсом · натисніть, щоб побачити кожну оплату</div></div>' +
       (diff != null
         ? '<span class="spacer badge ' + (diff >= 0 ? 'badge--green' : 'badge--red') + '">' +
@@ -570,8 +570,8 @@
         'title="Видалити цю оплату">' + icon('trash', 16) + '</button></td></tr>';
     }).join('');
 
-    return '<div style="overflow-x:auto"><table class="tbl">' +
-      '<thead><tr><th>Дата</th><th>Учень</th><th>Коментар</th><th class="num">Сума</th><th></th></tr></thead>' +
+    return '<div style="overflow-x:auto" tabindex="0"><table class="tbl">' +
+      '<thead><tr><th>Дата</th><th>Учень</th><th>Коментар</th><th class="num">Сума</th><th><span class="sr-only">Дії</span></th></tr></thead>' +
       '<tbody>' + rows + '</tbody></table></div>' +
       '<div class="tot__parts mt-2">Разом: ' + U.esc(U.moneyMap(map)) + ' — ' +
       U.pl(list.length, 'оплата', 'оплати', 'оплат') + '</div>';
@@ -646,7 +646,7 @@
       centerTop: uah(paidUah), center: 'за місяць' });
     if (p1) {
       cards.push('<div class="card">' +
-        '<div class="card-head"><div><h3 class="card-title">Хто приносить дохід</h3>' +
+        '<div class="card-head"><div><h2 class="card-title">Хто приносить дохід</h2>' +
         '<div class="card-sub">оплати цього місяця, ' + U.esc(inCur) + ' за курсом</div></div></div>' +
         p1 + '</div>');
     }
@@ -656,7 +656,7 @@
       centerTop: collected + '%', center: 'зібрано' }) : '';
     if (p2) {
       cards.push('<div class="card">' +
-        '<div class="card-head"><div><h3 class="card-title">Скільки вже зібрано</h3>' +
+        '<div class="card-head"><div><h2 class="card-title">Скільки вже зібрано</h2>' +
         '<div class="card-sub">нараховано за проведені уроки: ' + U.esc(uah(earnedUah)) +
         '</div></div></div>' + p2 + '</div>');
     }
@@ -666,7 +666,7 @@
       center: 'борг' });
     if (p3) {
       cards.push('<div class="card">' +
-        '<div class="card-head"><div><h3 class="card-title">Хто винен</h3>' +
+        '<div class="card-head"><div><h2 class="card-title">Хто винен</h2>' +
         '<div class="card-sub">поточна заборгованість, ' + U.esc(inCur) + ' за курсом</div></div></div>' +
         p3 + '</div>');
     }
@@ -757,7 +757,7 @@
         '<div class="chart__top">' + cap + '</div>' +
         '<div class="chart__bar" style="height:' + (empty ? 3 : Math.max(6, (m.value / maxM) * 100)) + '%' +
         (empty ? ';background:var(--line)' : (isCur ? '' : ';background:linear-gradient(180deg,#9CC0FF,#6E9DFF)')) + '"></div>' +
-        '<div class="chart__cap"' + (empty ? ' style="color:var(--muted-2)"' : '') + '>' + m.label + '</div></div>';
+        '<div class="chart__cap">' + m.label + '</div></div>';
     }).join('');
 
     /* Усі оплати, незалежно від валюти.
@@ -818,7 +818,7 @@
 
       '<div class="grid grid--main mb-3">' +
         '<div class="card">' +
-          '<div class="card-head"><div><h3 class="card-title">Дохід за півроку</h3>' +
+          '<div class="card-head"><div><h2 class="card-title">Дохід за півроку</h2>' +
           /* Валюту треба назвати. Стовпчики рахують лише вибрану, і без
              підпису «281» під карткою, де написано «$321», читається як
              розбіжність, хоча це просто різні речі: тут долари, там усе
@@ -837,7 +837,7 @@
 
         '<div class="card card--pad0">' +
           '<div class="card-head" style="padding:22px 24px 14px;margin:0">' +
-            '<div><h3 class="card-title">Борги</h3><div class="card-sub">' +
+            '<div><h2 class="card-title">Борги</h2><div class="card-sub">' +
             (debts.length ? 'потрібно нагадати' : 'усе сплачено') + '</div></div>' +
           '</div>' +
           '<div class="list">' +
@@ -849,7 +849,7 @@
               (x.s.archived ? ' <span class="badge badge--grey">в архіві</span>' : '') + '</div>' +
               '<div class="small muted">' + U.pl(Math.ceil(-x.b / (x.s.price || 1)),
                 'неоплачений урок', 'неоплачені уроки', 'неоплачених уроків') + '</div></div>' +
-              '<span class="bold" style="color:var(--red)">' + U.money(-x.b, code) + '</span></button>';
+              '<span class="bold" style="color:var(--red-ink)">' + U.money(-x.b, code) + '</span></button>';
           }).join('') : C.empty('check', 'Боргів немає', 'Усі учні мають додатний або нульовий баланс.')) +
           '</div>' +
         '</div>' +
@@ -857,23 +857,23 @@
 
       '<div class="card card--pad0 mb-3">' +
         '<div class="card-head" style="padding:22px 24px 8px;margin:0">' +
-          '<div><h3 class="card-title">Баланси учнів</h3>' +
+          '<div><h2 class="card-title">Баланси учнів</h2>' +
           '<div class="card-sub">оплачено мінус вартість проведених уроків</div></div>' +
         '</div>' +
-        '<div style="overflow-x:auto"><table class="tbl">' +
+        '<div style="overflow-x:auto" tabindex="0"><table class="tbl">' +
           '<thead><tr><th>Учень</th><th class="num">Ціна</th><th class="num">Уроків</th>' +
-          '<th class="num">Сплачено</th><th class="num">Баланс</th><th></th></tr></thead>' +
+          '<th class="num">Сплачено</th><th class="num">Баланс</th><th><span class="sr-only">Дії</span></th></tr></thead>' +
           '<tbody>' + (rows || '<tr><td colspan="6" class="center muted" style="padding:30px">Немає учнів</td></tr>') + '</tbody>' +
         '</table></div>' +
       '</div>' +
 
       '<div class="card card--pad0">' +
         '<div class="card-head" style="padding:22px 24px 8px;margin:0">' +
-          '<div><h3 class="card-title">Останні оплати</h3>' +
+          '<div><h2 class="card-title">Останні оплати</h2>' +
           '<div class="card-sub">усі валюти разом — тут видно кожну оплату</div></div>' +
         '</div>' +
-        '<div style="overflow-x:auto"><table class="tbl">' +
-          '<thead><tr><th>Дата</th><th>Учень</th><th>Спосіб</th><th>Коментар</th><th class="num">Сума</th><th></th></tr></thead>' +
+        '<div style="overflow-x:auto" tabindex="0"><table class="tbl">' +
+          '<thead><tr><th>Дата</th><th>Учень</th><th>Спосіб</th><th>Коментар</th><th class="num">Сума</th><th><span class="sr-only">Дії</span></th></tr></thead>' +
           '<tbody>' + (recent.length ? recent.map(function (p) {
             var s = S.get('students', p.studentId);
             return '<tr><td class="nowrap">' + U.fmtDate(p.date) + '</td>' +
@@ -1385,7 +1385,7 @@
     if (!Cl || !Cl.available() || !Cl.signedIn()) return V.syncCard();   // форма входу
     var st = Cl.status();
     return '<div class="card">' +
-      '<div class="card-head"><div><h3 class="card-title">Акаунт</h3>' +
+      '<div class="card-head"><div><h2 class="card-title">Акаунт</h2>' +
       '<div class="card-sub">усе зберігається на сервері саме</div></div></div>' +
       '<div class="guard guard--on"><span class="guard__dot"></span><span>Ви увійшли як <b>' +
         U.esc(st.email || '') + '</b>. Учні, розклад, дошки й задачі лежать на сервері й однакові ' +
@@ -1396,7 +1396,7 @@
 
   V.syncCard = function () {
     var Cl = window.Cloud;
-    var head = '<div class="card-head"><div><h3 class="card-title">Синхронізація</h3>' +
+    var head = '<div class="card-head"><div><h2 class="card-title">Синхронізація</h2>' +
       '<div class="card-sub">спільні дані на всіх пристроях і автоматичні копії</div></div></div>';
 
     /* Немає адреси проєкту — нічого вмикати */
@@ -1413,7 +1413,7 @@
     /* Налаштована, але вхід не зроблено */
     if (!Cl.signedIn()) {
       return '<div class="card">' +
-        '<div class="card-head"><div><h3 class="card-title">Вхід у кабінет</h3>' +
+        '<div class="card-head"><div><h2 class="card-title">Вхід у кабінет</h2>' +
         '<div class="card-sub">один раз — і все зберігається на сервері саме, на всіх пристроях</div></div></div>' +
         '<div id="sync-form">' +
           C.field('Пошта', C.input('email', '', 'type="email" autocomplete="username" placeholder="ваша@пошта"')) +
@@ -1524,7 +1524,7 @@
           : '') + '.</span></div>' +
 
         '<input class="input mt-2" readonly value="' + U.esc(url) + '" ' +
-        'onclick="this.select()" style="font-size:12px">' +
+        'data-selectall style="font-size:12px">' +
 
         '<div class="row row--wrap mt-2" style="gap:8px">' +
           '<button class="btn btn--primary btn--sm" data-act="cal-copy">' +
@@ -1543,7 +1543,7 @@
     }
 
     return '<div class="card mt-3">' +
-      '<div class="card-head"><div><h3 class="card-title">Google Календар</h3>' +
+      '<div class="card-head"><div><h2 class="card-title">Google Календар</h2>' +
       '<div class="card-sub">розклад уроків одним посиланням</div></div></div>' +
       body +
       '</div>';
@@ -1551,7 +1551,7 @@
 
   V.telegramCard = function () {
     return '<div class="card mt-3">' +
-      '<div class="card-head"><div><h3 class="card-title">Нагадування в Telegram</h3>' +
+      '<div class="card-head"><div><h2 class="card-title">Нагадування в Telegram</h2>' +
       '<div class="card-sub">про уроки — вам, у ваш чат із ботом</div></div></div>' +
       '<div data-tg class="muted">Перевіряю…</div>' +
       '</div>';
@@ -1604,7 +1604,7 @@
 
   V.healthCard = function () {
     return '<div class="card">' +
-      '<div class="card-head"><div><h3 class="card-title">Чи все ціле</h3>' +
+      '<div class="card-head"><div><h2 class="card-title">Чи все ціле</h2>' +
       '<div class="card-sub">перевірки, які видно з одного погляду</div></div></div>' +
       '<div data-health class="muted">Перевіряю…</div>' +
       '</div>';
@@ -2077,7 +2077,7 @@
     '<div class="page">' +
       '<div class="grid grid--2">' +
         '<div class="card">' +
-          '<div class="card-head"><div><h3 class="card-title">Профіль репетитора</h3>' +
+          '<div class="card-head"><div><h2 class="card-title">Профіль репетитора</h2>' +
           '<div class="card-sub">як вас називати в інтерфейсі</div></div></div>' +
           '<div id="tutor-form">' +
             C.field('Ім\'я', C.input('name', t.name)) +
@@ -2107,7 +2107,7 @@
             if (!codes.length) codes = ['USD', 'EUR'];
             var fresh = R.isFresh();
             return '<div class="card">' +
-              '<div class="card-head"><div><h3 class="card-title">Курс валют</h3>' +
+              '<div class="card-head"><div><h2 class="card-title">Курс валют</h2>' +
               '<div class="card-sub">щоб зводити заробіток у гривні</div></div>' +
               '<button class="btn btn--soft btn--sm spacer" data-act="rates-refresh">' +
               icon('link', 15) + 'Оновити з НБУ</button></div>' +
@@ -2149,7 +2149,7 @@
     return C.hero({ short: true, title: 'Службове', sub: 'копії, перевірки, експорт' }) +
       '<div class="page"><div class="stack" style="max-width:760px">' +
           '<div class="card">' +
-            '<div class="card-head"><div><h3 class="card-title">Дані</h3>' +
+            '<div class="card-head"><div><h2 class="card-title">Дані</h2>' +
             '<div class="card-sub">' + (syncOn()
             ? 'копії робляться самі, ця кнопка — про запас'
             : 'усе зберігається лише у вашому браузері') + '</div></div></div>' +
@@ -2169,7 +2169,7 @@
           V.healthCard() +
 
           '<div class="card">' +
-            '<div class="card-head"><div><h3 class="card-title">Що зараз у базі</h3></div></div>' +
+            '<div class="card-head"><div><h2 class="card-title">Що зараз у базі</h2></div></div>' +
             '<div class="grid grid--2" style="gap:12px">' +
             ['students:Учнів:users', 'lessons:Уроків:book', 'homeworks:ДЗ:checklist',
                'payments:Оплат:wallet', 'notes:Нотаток:note', 'materials:Матеріалів:folder',
@@ -2191,7 +2191,7 @@
           '</div>' +
 
           '<div class="card">' +
-            '<div class="card-head"><div><h3 class="card-title">Небезпечна зона</h3></div></div>' +
+            '<div class="card-head"><div><h2 class="card-title">Небезпечна зона</h2></div></div>' +
             '<div class="row row--wrap" style="gap:10px">' +
               '<button class="btn btn--ghost" data-act="reset-demo">' + icon('sparkles', 16) + 'Повернути демо-дані</button>' +
               '<button class="btn btn--danger" data-act="wipe">' + icon('trash', 16) + 'Очистити все</button>' +

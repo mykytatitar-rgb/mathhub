@@ -12,3 +12,5 @@
 *.webp binary
 *.ico binary
 *.zip binary
+# Зашифрований банк задач: git не має права «виправляти» в ньому кінці рядків
+*.bin binary

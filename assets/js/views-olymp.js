@@ -83,10 +83,8 @@
   };
 
   function failed(box) {
-    box.innerHTML = '<div class="card">' +
-      C.empty('alert', 'Банк задач не завантажився',
-        'Файли з задачами лежать поруч із програмою. Перевірте звʼязок і оновіть сторінку.') +
-      '</div>';
+    var why = O().failText();
+    box.innerHTML = '<div class="card">' + C.empty('alert', why[0], why[1]) + '</div>';
   }
 
   function matches(p) {
@@ -294,7 +292,7 @@
           'title="Покласти на дошку уроку">' + icon('present', 16) + '</button>' +
       '</div>' +
       '<div class="ol-card__p">' + fmt(p.p) + '</div>' +
-      (p.img ? '<img class="bk-img" src="assets/data/book/img/' + U.esc(p.img) + '" alt="Рисунок до задачі" loading="lazy">' : '') +
+      O().imgHtml(p) +
       (p.f && !p.img ? '<div class="ol-fig">' + (p.bank === 'book'
         ? 'До задачі є рисунок — він у підручнику' + (p.pg ? ' на с. ' + p.pg + ' файлу' : '') + '.'
         : 'В умові був рисунок — його в наборі немає.') + '</div>' : '') +
@@ -371,7 +369,7 @@
       sub: lvl.name + ' рівень · ' + lvl.hint,
       body: '<div class="ol-dialog">' +
           '<div class="ol-card__p">' + fmt(p.p) + '</div>' +
-          (p.img ? '<img class="bk-img" src="assets/data/book/img/' + U.esc(p.img) + '" alt="Рисунок до задачі" loading="lazy">' : '') +
+          O().imgHtml(p) +
           (p.a ? '<div class="ol-answer"><b>Відповідь:</b> ' + fmt(p.a) + '</div>' : '') +
           (O().hasSolution(p)
             ? '<div class="ol-sol" data-ol-dlg-sol><button class="btn btn--soft btn--sm" ' +

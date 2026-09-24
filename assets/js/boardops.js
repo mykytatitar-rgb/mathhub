@@ -19,8 +19,13 @@
    обʼєкта.
 
    Знімок у таблиці boards — тільки прискорення. З нього починає новий
-   пристрій і сторінка учня, а далі дочитують журнал. Знімок пишеться з
-   base і знає, до якої дії він дійшов (_seen).
+   пристрій і сторінка учня, а далі дочитують журнал. Знімок знає, до якої
+   дії він дійшов (_seen), і складається лише з того, що лежить на сервері
+   (попередній знімок + журнал), а не з памʼяті пристрою: інакше одна
+   помилка в тій памʼяті розходилася б на всі інші пристрої.
+
+   Звірка (O.verify) раз у раз перевіряє, чи памʼять пристрою про сервер
+   ще правдива, і зводить розбіжності докупи, нічого не стираючи.
 
    Людина нічого з цього не бачить і нічого не натискає. */
 
@@ -379,6 +384,36 @@
     return page(0);
   }
 
+  var MATURE_MS = 30000;      // дії молодші за це в знімок не йдуть: запис бази міг ще не завершитись
+
+  /**
+   * Дошка такою, якою її знає сервер: знімок і дії журналу після нього.
+   * mature — лише дії, старші за MATURE_MS: для знімка, щоб
+   * запис бази, видимий із запізненням, не опинився позаду його _seen.
+   */
+  function serverTruth(id, mature) {
+    var k = K(), row = null, T, from = 0;
+    return fetchSnapshot(id).then(function (r) {
+      row = r;
+      T = r && r.data ? k.strip(r.data) : { slides: [] };
+      from = r && r.data && r.data._seen ? Number(r.data._seen) || 0 : 0;
+      return fetchOps(id, from, null);
+    }).then(function (rows) {
+      var last = from;
+      // від годинника пристрою: якщо він відстає, дії просто дозрівають пізніше
+      var cut = mature ? Date.now() - MATURE_MS : null;
+      var used = [];
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        if (cut !== null && (Date.parse(r.at || '') || 0) > cut) break;
+        fold(T, r);
+        used.push(r);
+        if (r.id > last) last = r.id;
+      }
+      return { T: T, rows: used, from: from, last: last, row: row };
+    });
+  }
+
   function appendOps(id, ops, onChunk) {
     var chunks = [];
     for (var i = 0; i < ops.length; i += BATCH) chunks.push(ops.slice(i, i + BATCH));
@@ -701,42 +736,44 @@
       .catch(function (e) { console.warn('Знімок дошки не записався:', id, e && e.message); });
   }
 
+  /* Знімок — попередній знімок плюс журнал після нього, і нічого з памʼяті
+     пристрою. Раніше писався base пристрою: якщо та памʼять колись розійшлася
+     з журналом, знімок переносив розбіжність на кожен новий пристрій і на
+     сторінку учня. */
   function writeSnapshot(board, retried) {
     var s = board._sync;
-    if (!s || !s.base || (s.fly || []).length) return Promise.resolve(false);
-    var data = K().clone(s.base);
-    data.id = board.id;
-    data.lessonId = board.lessonId;
-    if (board.createdAt) data.createdAt = board.createdAt;
-    data._seen = s.seen || 0;
+    if (!s || !s.base) return Promise.resolve(false);
 
-    return req('/rest/v1/rpc/save_board', {
-      method: 'POST',
-      body: JSON.stringify({
-        p_board: board.lessonId, p_rev: s.snapRev || 0, p_data: data,
-        p_device: device(), p_force: true
-      })
-    }).then(function (rev) {
-      rev = Number(rev);
-      if (rev === -1) {
-        if (retried) return false;
-        return req('/rest/v1/boards?select=rev,seen:data->_seen&board_id=eq.' + enc(board.lessonId))
-          .then(function (rows) {
-            var r = rows && rows[0];
-            s.snapRev = r ? r.rev : 0;
-            // хтось уже записав знімок, свіжіший за наш, — нехай лишається
-            if (r && Number(r.seen || 0) >= (s.seen || 0)) { s.snapSeen = Number(r.seen || 0); return false; }
-            return writeSnapshot(board, true);
-          });
-      }
-      if (rev > 0) {
-        s.snapRev = rev;
-        s.snapSeen = data._seen;
+    return serverTruth(board.lessonId, true).then(function (res) {
+      if (res.last <= res.from) {                 // нового після знімка немає
+        if (res.row) { s.snapRev = res.row.rev; s.snapSeen = res.from; }
         s.snapAt = Date.now();
-        persistSoon();
-        return true;
+        return false;
       }
-      return false;
+      var data = res.T;
+      data.id = board.id;
+      data.lessonId = board.lessonId;
+      if (board.createdAt) data.createdAt = board.createdAt;
+      data._seen = res.last;
+
+      return req('/rest/v1/rpc/save_board', {
+        method: 'POST',
+        body: JSON.stringify({
+          p_board: board.lessonId, p_rev: res.row ? res.row.rev : 0, p_data: data,
+          p_device: device(), p_force: true
+        })
+      }).then(function (rev) {
+        rev = Number(rev);
+        if (rev === -1) return retried ? false : writeSnapshot(board, true);   // хтось записав між читанням і записом
+        if (rev > 0) {
+          s.snapRev = rev;
+          s.snapSeen = data._seen;
+          s.snapAt = Date.now();
+          persistSoon();
+          return true;
+        }
+        return false;
+      });
     });
   }
 
@@ -746,6 +783,8 @@
     if (!board || !ready()) return Promise.resolve();
     return O.record(boardId, board).then(function () {
       return O.pull(boardId, board);
+    }).then(function () {
+      return O.verify(boardId);
     }).then(function () {
       return snapshotSoon(board, true);
     });
@@ -819,6 +858,133 @@
         });
       });
     }, Promise.resolve());
+  };
+
+  /* ============================================================
+     Звірка з сервером
+     ============================================================
+
+     Пристрій памʼятає, що вже має сервер (base), і шле лише різницю. Якщо
+     ця памʼять колись розійшлася з правдою, різниця виходить порожньою — і
+     вміст так і лишається на одному пристрої, а решта його не бачать.
+     Звірка читає правду з сервера й зводить обидва боки докупи, нічого не
+     стираючи:
+       • тут є, пристрій певен, що сервер це має, а там цього немає —
+         поїде на сервер;
+       • на сервері є, а пристрій про це не знав — приходить сюди.
+     Стерте кимось після того, що пристрій уже прочитав, не чіпаємо: це
+     звичайне читання, воно прийде саме. */
+
+  O.verify = function (boardId) {
+    var board = S.getBoard(boardId);
+    if (!ready() || !board || !established(board) || viewBusy(boardId)) return Promise.resolve(0);
+
+    return lock(boardId, function () {
+      if (viewBusy(boardId)) return 0;
+      var k = K(), s = board._sync;
+      return serverTruth(boardId, false).then(function (res) {
+        /* Пристрій ще не дочитав журнал — спершу звичайне читання. Інакше
+           стерте кимось (а воно могло вже лягти й у знімок) виглядало б як
+           «сервер загубив», і звірка повернула б його назад. */
+        if ((s.seen || 0) < res.last) {
+          return pullNow(board).then(function () { return res; });
+        }
+        return res;
+      }).then(function (res) {
+        var T = res.T;
+
+        var after = {};
+        res.rows.forEach(function (r) {
+          if (!r.op || r.id <= (s.seen || 0)) return;
+          if (r.op.t === 'i-') (r.op.ids || []).forEach(function (x) { after['i:' + x] = 1; });
+          if (r.op.t === 's-' && r.op.s) after['s:' + r.op.s] = 1;
+        });
+        // своє стерте, що вже в дорозі, назад не повертаємо
+        (s.fly || []).forEach(function (op) {
+          if (op.t === 'i-') (op.ids || []).forEach(function (x) { after['i:' + x] = 1; });
+          if (op.t === 's-' && op.s) after['s:' + op.s] = 1;
+        });
+
+        var kn = known(board), B = k.strip(board);
+        var tS = byId(T.slides), kS = byId(kn.slides);
+        var lost = 0, found = 0;
+
+        // 1) пристрій певен, що сервер це має, — а там цього немає
+        B.slides.forEach(function (bs) {
+          var ks = kS[bs.id];
+          if (!ks || after['s:' + bs.id]) return;       // ще не відправлене — звичайна черга
+          var ts = tS[bs.id];
+          if (!ts) { k.apply(s.base, { t: 's-', s: bs.id }); lost++; return; }
+          var tI = byId(ts.items), kI = byId(ks.items), gone = [];
+          (bs.items || []).forEach(function (it) {
+            if (it && it.id && kI[it.id] && !tI[it.id] && !after['i:' + it.id]) gone.push(it.id);
+          });
+          if (gone.length) { k.apply(s.base, { t: 'i-', s: bs.id, ids: gone }); lost += gone.length; }
+        });
+
+        // 2) на сервері є, а пристрій про це не знав
+        var down = [];
+        T.slides.forEach(function (ts, i) {
+          if (after['s:' + ts.id]) return;
+          var ks = kS[ts.id];
+          if (!ks) { down.push({ t: 's+', sl: k.clone(ts), i: i }); return; }
+          var kI = byId(ks.items);
+          (ts.items || []).forEach(function (it, j) {
+            if (it && it.id && !kI[it.id] && !after['i:' + it.id]) down.push({ t: 'i+', s: ts.id, it: k.clone(it), at: j });
+          });
+        });
+        if (down.length) {
+          var loc = k.diff(kn, B);                      // тут намальоване й ще не відправлене
+          var sent = (s.fly || []).slice();
+          down.forEach(function (op) { k.apply(s.base, op); });
+          putContent(board, overlay(known(board), loc, B, sent));
+          found = down.length;
+        }
+
+        if (!lost && !found) return 0;
+        console.warn('Звірка дошки ' + boardId + ': на сервер ' + lost + ', із сервера ' + found);
+        persistNow();
+        if (lost) sendSoon(boardId);                   // поїде звичайною дорогою — різницею
+        return lost + found;
+      });
+    }).then(function (n) {
+      if (n && O.view && O.view.id === boardId && O.view.refresh) {
+        try { O.view.refresh(); } catch (e) { console.warn('refresh:', e); }
+      }
+      return n;
+    }, function (e) {
+      console.warn('Звірка дошки не вдалася:', boardId, e && e.message);
+      return 0;
+    });
+  };
+
+  /* Звірка всіх дошок, що мінялися останнім часом, — у фоні, по одній і
+     не частіше ніж раз на добу кожну. Так розбіжність лікується й на
+     дошці, яку зараз ніхто не відкриває. */
+  var VERIFIED = 'mathhub.boards.verified';
+  O.verifySweep = function (days) {
+    if (!ready()) return Promise.resolve(0);
+    var done = {};
+    try { done = JSON.parse(localStorage.getItem(VERIFIED) || '{}') || {}; } catch (e) { done = {}; }
+    var since = Date.now() - (days || 45) * 86400000;
+    var today = new Date().toISOString().slice(0, 10);
+    var ids = (S.db().boards || []).filter(function (b) {
+      if (!b || !b.lessonId || !established(b) || done[b.lessonId] === today) return false;
+      return !b.updatedAt || Date.parse(b.updatedAt) >= since;
+    }).map(function (b) { return b.lessonId; });
+
+    var fixed = 0;
+    return ids.reduce(function (chain, id) {
+      return chain.then(function () {
+        if (!ready()) return;
+        return O.verify(id).then(function (n) {
+          fixed += n;
+          done[id] = today;
+          try { localStorage.setItem(VERIFIED, JSON.stringify(done)); } catch (e) {}
+          return new Promise(function (r) { setTimeout(r, 1200); });
+        });
+      });
+    }, Promise.resolve()).then(function () { return fixed; });
   };
 
   /* ============================================================

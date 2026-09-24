@@ -111,6 +111,17 @@
     });
   };
 
+  /* Звірка дошок, що мінялися останнім часом, — у фоні, коли все інше
+     вже зроблено. Кожна дошка — не частіше ніж раз на добу. */
+  var sweeping = false;
+  function sweepLater(ms) {
+    if (sweeping || !O() || !O().verifySweep) return;
+    sweeping = true;
+    setTimeout(function () {
+      O().verifySweep(45).catch(function () {}).then(function () { sweeping = false; });
+    }, ms);
+  }
+
   B.start = function () {
     if (started || !O() || !O().ready()) return;
     started = true;
@@ -118,12 +129,13 @@
     O().flush()
       .then(function () { return B.pullAll(); })
       .then(function () { return B.syncMissing(); })
+      .then(function () { sweepLater(20000); })
       .catch(function (e) { console.warn('Дошки:', e && e.message); });
 
     window.addEventListener('online', function () { O().flush(); });
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'hidden') O().flush();
-      else B.pullAll();
+      else { B.pullAll(); sweepLater(15000); }
     });
   };
 

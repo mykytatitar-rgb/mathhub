@@ -154,6 +154,30 @@
   .tool-fly__row { flex-wrap: wrap; max-width: 190px; }
 }
 
+/* Телефон: шапка дошки в один рядок. Кнопок дев'ять, і з підписами вони
+   складалися в чотири ряди — третина екрана йшла на шапку, а не на дошку.
+   Тут лише іконки (підказка — у title), а що не влізло, гортається вбік. */
+@media (max-width: 700px) {
+  .board-top { flex-wrap: nowrap; gap: 6px; padding: 6px 8px; }
+  .board-top .avatar { display: none; }
+  .board-top__head { flex: 1 1 auto; min-width: 0; }
+  .board-top__title { font-size: 14px; }
+  .board-top__sub { font-size: 11px; margin-top: 1px; }
+  .board-top__acts {
+    flex: 0 1 auto; min-width: 0;
+    flex-wrap: nowrap !important; gap: 2px !important;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .board-top__acts::-webkit-scrollbar { display: none; }
+  .board-top__acts .btn {
+    font-size: 0; gap: 0; padding: 0;
+    flex: 0 0 38px; width: 38px; height: 38px;
+    justify-content: center;
+  }
+  .board-top__acts .btn svg { width: 19px; height: 19px; }
+  .board-top__acts .btn--ghost { background: transparent; border-color: transparent; box-shadow: none; }
+}
+
 /* ---------- Підменю налаштувань інструмента ---------- */
 
 .board-opts {

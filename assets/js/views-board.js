@@ -117,7 +117,7 @@
       '<div class="board-top">' +
         '<button class="icon-btn" data-act="board-exit" title="Вийти з дошки">' + icon('arrowLeft', 20) + '</button>' +
         (st ? C.avatar(st, 32) : '') +
-        '<div style="min-width:0">' +
+        '<div class="board-top__head" style="min-width:0">' +
           '<div class="board-top__title truncate">' +
           U.esc(lesson ? (lesson.topic || 'Урок без теми') : (deskItem.title || 'Моя справа')) + '</div>' +
           '<div class="board-top__sub">' +
@@ -127,7 +127,7 @@
           '</div>' +
         '</div>' +
 
-        '<div class="spacer row" style="gap:8px;flex-wrap:wrap">' +
+        '<div class="spacer row board-top__acts" style="gap:8px;flex-wrap:wrap">' +
           '<button class="board-top__saved" data-saved data-act="board-saved" hidden></button>' +
           /* Стан копії учня. Досі перевидання відбувалося мовчки, і так само
              мовчки падало: репетитор малював, а учень бачив старе — і жоден
@@ -150,11 +150,11 @@
             'title="Попередні версії цієї дошки">' + icon('refresh', 15) + 'Історія</button>' +
           (lesson
             ? '<button class="btn btn--ghost btn--sm" data-act="board-hw" title="Домашнє завдання цього уроку">' +
-              icon('checklist', 15) + 'ДЗ<span data-hw-count></span></button>'
+              icon('note', 15) + 'ДЗ<span data-hw-count></span></button>'
             : '') +
-          '<button class="btn btn--ghost btn--sm" data-act="board-png">' + icon('image', 15) + 'PNG</button>' +
+          '<button class="btn btn--ghost btn--sm" data-act="board-png" title="Зберегти слайд картинкою">' + icon('image', 15) + 'PNG</button>' +
           (lesson
-            ? '<button class="btn btn--primary btn--sm" data-act="board-share">' +
+            ? '<button class="btn btn--primary btn--sm" data-act="board-share" title="Надіслати учню">' +
               icon('share', 15) + 'Надіслати учню</button>'
             : '<button class="btn btn--primary btn--sm" data-act="nav" data-arg="#/desk">' +
               icon('folder', 15) + 'До моїх справ</button>') +
@@ -284,7 +284,14 @@
         refresh: function () { refreshFromSync(); }
       };
     }
-    pullOps();
+    /* Перше читання, а за ним — звірка з сервером: якщо памʼять цього
+       пристрою про сервер колись розійшлася з правдою, тут це й лікується —
+       своє доїжджає на сервер, пропущене приходить сюди. */
+    if (window.BoardOps) {
+      BoardOps.pull(lessonId, cur.board).then(function () {
+        if (cur && cur.lessonId === lessonId && BoardOps.verify) return BoardOps.verify(lessonId);
+      });
+    }
 
     updateHwCount();
 

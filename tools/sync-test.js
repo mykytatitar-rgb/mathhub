@@ -651,6 +651,102 @@ scenario('Оплати видалених уроків і двійники не 
   });
 });
 
+/* ---------- Звірка: памʼять пристрою розійшлася з сервером ---------- */
+
+// пристрій «памʼятає», що сервер має обʼєкт, хоча там його немає
+function believe(dev, id, slideIdx, item) {
+  var b = dev.board(id);
+  b.slides[slideIdx].items.push(JSON.parse(JSON.stringify(item)));
+  b._sync.base.slides[slideIdx].items.push(JSON.parse(JSON.stringify(item)));
+}
+function onServer(srv, id, itemId) {
+  return srv.ops.some(function (o) {
+    return o.board === id && ((o.op.it && o.op.it.id === itemId) ||
+      (o.op.sl && (o.op.sl.items || []).some(function (it) { return it.id === itemId; })));
+  });
+}
+
+scenario('Звірка: сервер не має того, що пристрій вважає відправленим, — довозить', function () {
+  var srv = new Server(), A = new Device('A', srv), B = new Device('B', srv);
+  A.newBoard('L1');
+  A.draw('L1', 0, 'a1');
+  return A.sync('L1').then(function () { return B.ctx.BoardOps.fetchMissing(); })
+  .then(function () { return B.pull('L1'); })
+  .then(function () {
+    believe(A, 'L1', 0, { id: 'hw1', t: 'i', k: 'photo' });
+    return A.send('L1');
+  }).then(function () {
+    ok(!onServer(srv, 'L1', 'hw1'), 'до звірки фото на сервер не їде (так і губилось)');
+    return A.ctx.BoardOps.verify('L1');
+  }).then(function (n) {
+    ok(n > 0, 'звірка помітила розбіжність');
+    return wait(500);
+  }).then(function () { return B.pull('L1'); })
+  .then(function () {
+    ok(onServer(srv, 'L1', 'hw1'), 'після звірки фото на сервері');
+    same(B.ids('L1').join(), 'a1,hw1', 'і на другому пристрої');
+  });
+});
+
+scenario('Звірка: пристрій пропустив чуже — приносить', function () {
+  var srv = new Server(), A = new Device('A', srv), B = new Device('B', srv);
+  A.newBoard('L1');
+  A.draw('L1', 0, 'a1');
+  return A.sync('L1').then(function () { return B.ctx.BoardOps.fetchMissing(); })
+  .then(function () { return B.pull('L1'); })
+  .then(function () { A.draw('L1', 0, 'a2'); return A.sync('L1'); })
+  .then(function () {
+    var s = B.board('L1')._sync;
+    s.seen = srv.nextId + 5; s.floor = s.seen;       // памʼять B «уже прочитала» a2, хоч не бачила
+    return B.pull('L1');
+  }).then(function () {
+    same(B.ids('L1').join(), 'a1', 'звичайне читання a2 не приносить');
+    return B.ctx.BoardOps.verify('L1');
+  }).then(function () {
+    same(B.ids('L1').join(), 'a1,a2', 'після звірки a2 на B');
+  });
+});
+
+scenario('Звірка не воскрешає стерте, яке пристрій ще не прочитав', function () {
+  var srv = new Server(), A = new Device('A', srv), B = new Device('B', srv);
+  A.newBoard('L1');
+  A.draw('L1', 0, 'x'); A.draw('L1', 0, 'y');
+  return A.sync('L1').then(function () { return B.ctx.BoardOps.fetchMissing(); })
+  .then(function () { return B.pull('L1'); })
+  .then(function () { B.erase('L1', 'x'); return B.sync('L1'); })
+  .then(function () { return A.ctx.BoardOps.verify('L1'); })
+  .then(function () { return wait(500); })
+  .then(function () { return A.pull('L1'); })
+  .then(function () { return B.pull('L1'); })
+  .then(function () {
+    same(A.ids('L1').join(), 'y', 'на A стерте зникло');
+    same(B.ids('L1').join(), 'y', 'на B не воскресло');
+  });
+});
+
+scenario('Знімок складається з журналу, а не з памʼяті пристрою', function () {
+  var srv = new Server(), A = new Device('A', srv), C = new Device('C', srv);
+  A.newBoard('L1');
+  A.draw('L1', 0, 'a1');
+  return A.sync('L1').then(function () {
+    believe(A, 'L1', 0, { id: 'ghost', t: 'p', d: [9] });   // памʼять A хибна
+    A.draw('L1', 0, 'a2');
+    A.board('L1')._sync.snapAt = 0;                          // знімок — одразу, без 20 с паузи
+    return A.sync('L1');
+  }).then(function () { return wait(50); })
+  .then(function () {
+    var snap = srv.boards.L1 && srv.boards.L1.data;
+    ok(!!snap, 'знімок є');
+    var ids = [];
+    (snap ? snap.slides : []).forEach(function (s) { s.items.forEach(function (it) { ids.push(it.id); }); });
+    same(ids.sort().join(), 'a1,a2', 'у знімку лише те, що є в журналі');
+    return C.ctx.BoardOps.fetchMissing();
+  }).then(function () { return C.pull('L1'); })
+  .then(function () {
+    same(C.ids('L1').join(), 'a1,a2', 'новий пристрій бачить те саме, що журнал');
+  });
+});
+
 /* ============================================================ */
 
 var only = process.argv[2];

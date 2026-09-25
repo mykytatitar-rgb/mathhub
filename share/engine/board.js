@@ -3497,12 +3497,19 @@
     if (this.opts && this.opts.onShrink) { try { this.opts.onShrink(); } catch (e) {} }
   };
 
+  /* Гумка стирає лише написане від руки — штрихи олівця, як у Miro.
+     Досі вона прибирала все, чого торкнулась, і разом із позначками на
+     фото ДЗ зникало саме фото. Фото, текст, фігури й графіки — окремі
+     обʼєкти: їх прибирають виділенням і Delete. */
+  var ERASABLE = { p: 1 };
+
   Board.prototype._erase = function (x, y) {
     var r = Math.max(8, this.width * 3) / this.scale;
     var items = this.items();
     var before = items.length;
     for (var i = items.length - 1; i >= 0; i--) {
-      if (this.editable(items[i]) && hitItem(items[i], x, y, r)) items.splice(i, 1);
+      var it = items[i];
+      if (ERASABLE[it.t] && this.editable(it) && hitItem(it, x, y, r)) items.splice(i, 1);
     }
     if (items.length !== before) { this._shrank(); this.render(); }
   };

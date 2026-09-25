@@ -20,7 +20,7 @@
   var TOOLS = [
     { id: 'select',  icon: 'cursor',     label: 'Вибір і переміщення (V)' },
     { id: 'pen',     icon: 'pen',        label: 'Олівець (P)',    opts: 'stroke' },
-    { id: 'eraser',  icon: 'eraser',     label: 'Гумка (E)' },
+    { id: 'eraser',  icon: 'eraser',     label: 'Гумка — стирає написане олівцем (E)' },
     { id: 'text',    icon: 'textT',      label: 'Текст (T)',      opts: 'text' },
 
     { id: 'shape',   icon: 'shapes',     label: 'Фігури (S)',       opts: 'shape',  group: 'geo' },

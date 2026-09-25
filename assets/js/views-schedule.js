@@ -539,6 +539,17 @@
     touch = null;
   }
 
+  /* Що сталося з дотиком до уроку — у тихий журнал. На справжньому
+     телефоні палець поводиться інакше, ніж будь-яка імітація, і без цього
+     про збій можна лише здогадуватись. */
+  function note(outcome, t) {
+    if (!window.Journal) return;
+    Journal.add('touch', 'розклад: ' + outcome, {
+      held: !!(t && t.held), ms: t ? Date.now() - t.at : null,
+      w: window.innerWidth, view: document.querySelector('.cal--day') ? 'день' : 'тиждень'
+    });
+  }
+
   document.addEventListener('touchstart', function (e) {
     if (e.touches.length !== 1) { cancelTouch(); return; }
     var ev = e.target.closest && e.target.closest('[data-ev]');
@@ -548,7 +559,8 @@
       ev: ev,
       grip: e.target.closest('[data-grip]'),
       x: t.clientX, y: t.clientY,
-      held: false
+      held: false,
+      at: Date.now()
     };
     touch.timer = setTimeout(function () {
       if (!touch) return;
@@ -566,7 +578,10 @@
       moveDrag(t.clientX, t.clientY);
       return;
     }
-    if (Math.abs(t.clientX - touch.x) > SLOP || Math.abs(t.clientY - touch.y) > SLOP) cancelTouch();
+    if (Math.abs(t.clientX - touch.x) > SLOP || Math.abs(t.clientY - touch.y) > SLOP) {
+      note('рух одразу — прокрутка', touch);
+      cancelTouch();
+    }
   }, { passive: false });
 
   document.addEventListener('touchend', function (e) {
@@ -575,11 +590,13 @@
     cancelTouch();
     // без цього слідом прийшов би ще й клік — і відкрив би щось удруге
     if (e.cancelable) e.preventDefault();
-    if (t0.held) { endDrag(); return; }
+    if (t0.held) { note(drag && drag.moved ? 'затримання — перенесено' : 'затримання без руху', t0); endDrag(); return; }
+    note('торкання — картка уроку', t0);
     if (window.F) window.F.lessonView(t0.ev.dataset.ev);
   }, { passive: false });
 
   document.addEventListener('touchcancel', function () {
+    if (touch) note('телефон перервав дотик (touchcancel)', touch);
     var held = touch && touch.held;
     cancelTouch();
     if (held && drag) {

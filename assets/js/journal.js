@@ -156,7 +156,8 @@
 
   J.check = function (force) {
     if (!ready()) return Promise.resolve(null);
-    var today = new Date().toISOString().slice(0, 10);
+    // раз на добу — і ще раз щоразу, як пристрій отримав нову версію коду
+    var today = new Date().toISOString().slice(0, 10) + '|' + (window.APP_BUILD || '');
     if (!force && localStorage.getItem(CHECKED) === today) return Promise.resolve(null);
 
     var bad = [];
@@ -209,7 +210,7 @@
 
   window.addEventListener('online', flushSoon);
   window.addEventListener('load', function () {
-    setTimeout(function () { J.check().catch(function () {}); flush(); }, 15000);
+    setTimeout(function () { J.check().catch(function () {}); flush(); }, 5000);
   });
   // вхід відбувся — те, що чекало, їде
   setInterval(function () { if (buf.length) flush(); }, 60000);

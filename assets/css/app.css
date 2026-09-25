@@ -1454,6 +1454,21 @@ body.is-navdrag .nav-item { touch-action: none; }
 .cal-ev.is-moved .cal-ev__badge { color: var(--violet); }
 .slot--moved { background: var(--violet-bg); border-left-color: var(--violet); }
 
+/* Телефон, тиждень: колонки вузькі.
+   Кружечок «проведено» закривав майже весь блок — торкнувся уроку, щоб
+   відкрити, а він позначився проведеним. На телефоні відмічають у картці
+   уроку. Суму дня кладемо двома рядками, дрібніше: гривні й долари
+   одним рядком налазили на сусідні дні. */
+@media (max-width: 640px) {
+  .cal:not(.cal--day) .cal-ev__tick { display: none; }
+  .cal:not(.cal--day) .cal-dayhead__money { font-size: 9.5px; letter-spacing: -.2px; line-height: 1.25; }
+  .cal:not(.cal--day) .cal-dayhead__usd { display: block; }
+  .cal:not(.cal--day) .cal-dayhead__sep { display: none; }
+}
+
+/* Урок пальцем тримають і тягнуть — без виділення тексту й меню «копіювати» */
+.cal-ev { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+
 /* Проведений урок: закреслюємо й ставимо галочку */
 .cal-ev__tick {
   position: absolute;

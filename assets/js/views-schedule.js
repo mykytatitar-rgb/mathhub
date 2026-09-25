@@ -97,8 +97,8 @@
       /* Та сама сума ще й у доларах — тим самим рядком: половина учнів
          платить у доларах, а зайвий рядок у шапці дня з'їдає висоту сітки. */
       var usdRate = R.get('USD');
-      var usd = usdRate ? '<span class="cal-dayhead__usd">' +
-        (isPlan ? ' · ~' : ' · ≈') + U.money(Math.round(box.uah / usdRate), 'USD') + '</span>' : '';
+      var usd = usdRate ? '<span class="cal-dayhead__usd"><span class="cal-dayhead__sep"> · </span>' +
+        (isPlan ? '~' : '≈') + U.money(Math.round(box.uah / usdRate), 'USD') + '</span>' : '';
 
       return '<div class="cal-dayhead__money' + (isPlan ? ' is-plan' : '') +
         '" title="' + U.esc(title) + '">' +
@@ -420,41 +420,44 @@
     return Math.round(mins / SNAP_MIN) * SNAP_MIN;
   }
 
-  document.addEventListener('pointerdown', function (e) {
-    var grip = e.target.closest('[data-grip]');
-    var ev = e.target.closest('[data-ev]');
-    if (!ev) return;
-    // кнопки всередині блока працюють самі — не перехоплюємо їх перетягуванням
-    if (e.target.closest('[data-act]')) return;
+  /** Узяти урок: ev — блок, grip — чи за нижній край (тривалість). */
+  function startDrag(ev, grip, clientY) {
     var lesson = S.get('lessons', ev.dataset.ev);
-    if (!lesson) return;
-
-    e.preventDefault();
+    if (!lesson) return false;
     var col = ev.closest('.cal-day');
-    var from = +col.dataset.from;
     var rect = ev.getBoundingClientRect();
-
     drag = {
       id: lesson.id,
       el: ev,
       mode: grip ? 'resize' : 'move',
-      from: from,
-      grabDy: e.clientY - rect.top,
+      from: +col.dataset.from,
+      grabDy: clientY - rect.top,
       startH: rect.height,
       moved: false,
       origDay: col.dataset.day,
       origTop: parseFloat(ev.style.top) || 0
     };
     ev.classList.add('is-dragging');
+    return true;
+  }
+
+  document.addEventListener('pointerdown', function (e) {
+    if (e.pointerType === 'touch') return;          // палець — окремо, нижче
+    var grip = e.target.closest('[data-grip]');
+    var ev = e.target.closest('[data-ev]');
+    if (!ev) return;
+    // кнопки всередині блока працюють самі — не перехоплюємо їх перетягуванням
+    if (e.target.closest('[data-act]')) return;
+    if (startDrag(ev, grip, e.clientY)) e.preventDefault();
   });
 
-  document.addEventListener('pointermove', function (e) {
+  function moveDrag(clientX, clientY) {
     if (!drag) return;
     drag.moved = true;
 
     if (drag.mode === 'resize') {
       var top = drag.el.getBoundingClientRect().top;
-      var h = Math.max(HOUR_PX / 4, e.clientY - top);
+      var h = Math.max(HOUR_PX / 4, clientY - top);
       // прилипання до 15 хвилин
       var mins = Math.round((h / HOUR_PX * 60) / SNAP_MIN) * SNAP_MIN;
       drag.newDuration = Math.max(SNAP_MIN, mins);
@@ -466,12 +469,12 @@
     var target = null;
     dayColumns().forEach(function (c) {
       var r = c.getBoundingClientRect();
-      if (e.clientX >= r.left && e.clientX <= r.right) target = c;
+      if (clientX >= r.left && clientX <= r.right) target = c;
     });
     if (!target) target = drag.el.closest('.cal-day');
 
     var tr = target.getBoundingClientRect();
-    var y = e.clientY - tr.top - drag.grabDy;
+    var y = clientY - tr.top - drag.grabDy;
     var mins2 = timeFromY(Math.max(0, y), drag.from);
     drag.newDay = target.dataset.day;
     drag.newMinutes = mins2;
@@ -480,9 +483,19 @@
     if (target !== drag.el.parentNode) target.appendChild(drag.el);
     var tm = drag.el.querySelector('.cal-ev__time');
     if (tm) tm.textContent = U.pad(Math.floor(mins2 / 60)) + ':' + U.pad(mins2 % 60);
+  }
+
+  document.addEventListener('pointermove', function (e) {
+    if (e.pointerType === 'touch') return;
+    moveDrag(e.clientX, e.clientY);
   });
 
   document.addEventListener('pointerup', function (e) {
+    if (e.pointerType === 'touch') return;
+    endDrag();
+  });
+
+  function endDrag() {
     if (!drag) return;
     var d = drag;
     drag = null;
@@ -506,6 +519,74 @@
       }
     }
     if (window.App) window.App.refresh();
+  }
+
+  /* ---------- Пальцем: телефон і планшет ----------
+
+     Палець, що веде вгору чи вниз, — це прокрутка розкладу, тож урок не
+     може братися від першого ж руху (досі браузер забирав цей рух собі, і
+     перенести урок пальцем було неможливо). Як у календарі телефона:
+       • коротке торкання — відкрити урок;
+       • потримати ~0,4 с — урок береться (коротка вібрація), далі їде за
+         пальцем, а сторінка не гортається;
+       • повели одразу — звичайна прокрутка. */
+  var HOLD_MS = 380;
+  var SLOP = 10;
+  var touch = null;
+
+  function cancelTouch() {
+    if (touch && touch.timer) clearTimeout(touch.timer);
+    touch = null;
+  }
+
+  document.addEventListener('touchstart', function (e) {
+    if (e.touches.length !== 1) { cancelTouch(); return; }
+    var ev = e.target.closest && e.target.closest('[data-ev]');
+    if (!ev || e.target.closest('[data-act]')) return;
+    var t = e.touches[0];
+    touch = {
+      ev: ev,
+      grip: e.target.closest('[data-grip]'),
+      x: t.clientX, y: t.clientY,
+      held: false
+    };
+    touch.timer = setTimeout(function () {
+      if (!touch) return;
+      if (!startDrag(touch.ev, touch.grip, touch.y)) { cancelTouch(); return; }
+      touch.held = true;
+      try { if (navigator.vibrate) navigator.vibrate(12); } catch (x) { /* не всі вміють */ }
+    }, HOLD_MS);
+  }, { passive: true });
+
+  document.addEventListener('touchmove', function (e) {
+    if (!touch) return;
+    var t = e.touches[0];
+    if (touch.held) {
+      e.preventDefault();                           // урок у руці — сторінка стоїть
+      moveDrag(t.clientX, t.clientY);
+      return;
+    }
+    if (Math.abs(t.clientX - touch.x) > SLOP || Math.abs(t.clientY - touch.y) > SLOP) cancelTouch();
+  }, { passive: false });
+
+  document.addEventListener('touchend', function (e) {
+    if (!touch) return;
+    var t0 = touch;
+    cancelTouch();
+    // без цього слідом прийшов би ще й клік — і відкрив би щось удруге
+    if (e.cancelable) e.preventDefault();
+    if (t0.held) { endDrag(); return; }
+    if (window.F) window.F.lessonView(t0.ev.dataset.ev);
+  }, { passive: false });
+
+  document.addEventListener('touchcancel', function () {
+    var held = touch && touch.held;
+    cancelTouch();
+    if (held && drag) {
+      drag.el.classList.remove('is-dragging');
+      drag = null;
+      if (window.App) window.App.refresh();           // повернути блок на місце
+    }
   });
 
   /** Клік по вільному місцю — новий урок у цей час. */

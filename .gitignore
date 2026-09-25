@@ -27,3 +27,6 @@ tools/books/merzliak-8-algebra.json
 
 # Ключ до зашифрованого банку — лише на цьому комп'ютері й у базі репетитора
 tools/books/bank.key
+
+# Особистий хук дозволів Claude Code (див. .claude/settings.local.json)
+.claude/hooks/

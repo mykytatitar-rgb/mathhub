@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v125';
+  App.BUILD = 'v128';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -34,6 +34,16 @@
       'share/engine/solids.js',
       'share/engine/points.js',
       'share/engine/board.js'
+    ],
+    /* Зміст бази формул: сотні доведень, потрібні лише в самій базі
+       (і в шухляді теми на карті) */
+    formulas: [
+      'assets/js/formulas-algebra.js',
+      'assets/js/formulas-trig.js',
+      'assets/js/formulas-analysis.js',
+      'assets/js/formulas-prob.js',
+      'assets/js/formulas-plane.js',
+      'assets/js/formulas-space.js'
     ]
   };
   var lazyDone = {};
@@ -70,10 +80,9 @@
         return S.lessonsOnDay(U.today()).filter(function (l) { return l.status === 'planned'; }).length; } },
     { hash: '#/finance',   icon: 'wallet',    label: 'Фінанси' },
     { hash: '#/materials', icon: 'folder',    label: 'Матеріали' },
-    /* Довідник окремим пунктом, а не всередині матеріалів: до нього
+    /* База формул окремим пунктом, а не всередині матеріалів: до неї
        заглядають посеред уроку, і зайвий крок тут дорого коштує. */
-    { hash: '#/reference', icon: 'book',      label: 'Довідник',  count: function () {
-        return S.db().materials.filter(function (m) { return m.type === 'theory'; }).length; } },
+    { hash: '#/reference', icon: 'book',      label: 'Формули' },
     /* Власна математика окремо від учнівської: те, у чому розбираєшся сам,
        не має домішуватися в розклад, фінанси й портали. */
     /* Олімпіадні задачі поруч із картою: вони й прив'язані до її тем,
@@ -347,6 +356,8 @@
     var nav = navOrder().map(function (n) {
       var active = n.hash === '#/' ? (path === '#/' || path === '#') : path.indexOf(n.hash) === 0;
       if (n.hash === '#/students' && activeStudent) active = false;
+      // англійські шпаргалки — частина бази формул, пункт той самий
+      if (n.hash === '#/reference' && path.indexOf('#/sheet') === 0) active = true;
       var cnt = n.count ? n.count() : 0;
       return '<button class="nav-item' + (active ? ' is-active' : '') + '" data-act="nav" data-arg="' + n.hash +
         '" aria-label="' + U.esc(n.label) + '" title="' + U.esc(n.label) + ' · перетягніть, щоб переставити">' +
@@ -477,8 +488,9 @@
           html = V.finance(route.query); break;
         case 'materials':
           html = V.materials(route.query); break;
-        case 'sheet':
         case 'reference':
+          html = V.formulas(route.query); break;
+        case 'sheet':
           html = V.sheet(route.parts[1], route.query); break;
         case 'desk':
           html = V.desk(route.query); break;
@@ -995,7 +1007,7 @@
         function () {
           S.remove('materials', id);
           U.toast('Тему видалено');
-          location.hash = '#/reference';
+          location.hash = '#/sheet';
           App.render();
         },
         'Видалити');
@@ -1115,6 +1127,7 @@
   Object.keys(V.boardActions).forEach(function (k) { ACTIONS[k] = V.boardActions[k]; });
   if (V.olympActions) Object.keys(V.olympActions).forEach(function (k) { ACTIONS[k] = V.olympActions[k]; });
   if (V.bankActions) Object.keys(V.bankActions).forEach(function (k) { ACTIONS[k] = V.bankActions[k]; });
+  if (V.formulaActions) Object.keys(V.formulaActions).forEach(function (k) { ACTIONS[k] = V.formulaActions[k]; });
 
   /* ============================================================
      Слухачі

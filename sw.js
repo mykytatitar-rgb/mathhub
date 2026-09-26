@@ -7,7 +7,7 @@
 
    Версію треба піднімати щоразу, коли змінюється склад файлів. */
 
-var VERSION = 'vektor-v125';
+var VERSION = 'vektor-v128';
 
 /* Банк задач — окремий кеш: він не залежить від версії кабінету й не
    чиститься з кожним оновленням. Кожен файл банку приходить з відбитком
@@ -58,12 +58,19 @@ var CODE = [
   './assets/js/olymp.js',
   './assets/js/views-olymp.js',
   './assets/js/views-bank.js',
+  './assets/js/views-formulas.js',
   './assets/js/mathmap-data.js',
   './assets/js/mathmap-extras.js',
   './assets/js/views-mathmap.js',
   './assets/js/app.js',
   // вантажаться не на старті, а коли знадобляться, — але без інтернету теж мають бути
   './assets/js/mathmap-content.js',
+  './assets/js/formulas-algebra.js',
+  './assets/js/formulas-trig.js',
+  './assets/js/formulas-analysis.js',
+  './assets/js/formulas-prob.js',
+  './assets/js/formulas-plane.js',
+  './assets/js/formulas-space.js',
   './assets/js/shapefacts.js',
   './share/engine/constructions.js',
   './share/engine/plot.js',

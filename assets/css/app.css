@@ -1831,6 +1831,8 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 .mf .mf-v { font-style: italic; }
 .mf sup, .mf sub { font-size: .66em; line-height: 1; }
 .mf .mf-fn { padding-right: .18em; }
+/* і перед назвою функції, якщо вона не на початку: «sin α cos α», а не «sin αcos α» */
+.mf .mf-fn:not(:first-child) { padding-left: .14em; }
 
 /* Сам дріб лишається щільним: 1.32 потрібне тільки між перенесеними
    рядками, а чисельник із знаменником мають стояти впритул. */
@@ -2054,6 +2056,124 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
   .ref__main { padding: 0; overflow: visible; background: #fff; }
   .sheet { columns: 2; }
   .gcard { break-inside: avoid; box-shadow: none; }
+}
+
+/* ============================================================
+   База формул
+   ============================================================
+
+   Одна колонка, а не сітка: доведення читають зверху вниз, і розгорнута
+   картка в сітці розсувала б сусідні. Ширина обмежена — рядок доведення
+   довший за 80 знаків читати важко. */
+
+.fxn { padding-top: 4px; }
+.fxn__dom { font-size: 11px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase;
+            color: var(--muted-2); padding: 14px 12px 6px; }
+.fxn__dom:first-child { padding-top: 8px; }
+.fxn__n { margin-left: auto; font-size: 11.5px; font-weight: 700; color: var(--muted-2);
+          font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+.ref__t.is-on .fxn__n { color: rgba(255,255,255,.8); }
+
+.ref--fx .ref__main { padding-bottom: 60px; }
+.fx-list { max-width: 860px; display: flex; flex-direction: column; gap: 14px; }
+.fx-intro { max-width: 860px; font-size: 14px; line-height: 1.65; color: var(--ink-2); margin: -4px 0 16px; }
+.fx-topicbar { margin-bottom: 2px; }
+.fx-all { margin-left: auto; border: 0; background: none; font: inherit; font-size: 13px; font-weight: 700;
+          color: var(--blue-700); cursor: pointer; padding: 4px 8px; border-radius: 8px; letter-spacing: 0;
+          text-transform: none; }
+.fx-all:hover { background: var(--blue-50); }
+
+.fx { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+      box-shadow: var(--shadow-sm); padding: 16px 18px 14px; scroll-margin-top: 12px;
+      transition: box-shadow .3s, border-color .3s; }
+.fx.is-hit { border-color: var(--blue-300); box-shadow: 0 0 0 4px var(--blue-100); }
+.fx__head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.fx__t { margin: 0; font-size: 15.5px; font-weight: 800; letter-spacing: -.2px; color: var(--ink); }
+.fx__en { font-size: 12px; color: var(--muted); font-style: italic; }
+.fx__sec { margin-left: auto; border: 0; background: var(--blue-50); color: var(--blue-700);
+           font: inherit; font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px; cursor: pointer; }
+
+.fx__f { margin: 12px 0 4px; padding: 14px 16px; text-align: center; font-size: 21px;
+         background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-sm);
+         overflow-x: auto; line-height: 1.7; }
+.fx__w { display: flex; gap: 7px; align-items: flex-start; margin-top: 8px;
+         font-size: 13px; color: var(--muted); line-height: 1.6; }
+.fx__w svg { flex: 0 0 auto; margin-top: 3px; color: var(--blue-500); }
+.fx__ex { margin-top: 6px; font-size: 13px; color: var(--ink-2); line-height: 1.7; }
+.fx__ex b { color: var(--ink); }
+
+.fx__acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.fx__proofbtn { display: inline-flex; align-items: center; gap: 6px; border: 0; cursor: pointer;
+                font: inherit; font-size: 13px; font-weight: 750; color: #fff; background: var(--blue-600);
+                padding: 7px 13px 7px 10px; border-radius: 999px; }
+.fx__proofbtn:hover { background: var(--blue-700); }
+.fx__proofbtn svg { transition: transform .18s; }
+.fx.is-open .fx__proofbtn { background: var(--blue-50); color: var(--blue-700); }
+.fx.is-open .fx__proofbtn svg { transform: rotate(90deg); }
+.fx__links { margin-left: auto; display: flex; gap: 4px; flex-wrap: wrap; }
+.fx__link { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; cursor: pointer;
+            font: inherit; font-size: 12.5px; font-weight: 650; color: var(--muted); padding: 6px 8px; border-radius: 8px; }
+.fx__link:hover { background: var(--bg); color: var(--blue-700); }
+
+.fx__proof { display: none; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.fx.is-open .fx__proof { display: block; }
+.fx__steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 8px;
+             font-size: 14px; line-height: 1.7; color: var(--ink-2); }
+.fx__steps li::marker { color: var(--blue-500); font-weight: 750; }
+.fx__steps .mf-block { margin: 6px 0 2px; text-align: center; font-size: 17px; overflow-x: auto; }
+.fx__qed { text-align: right; color: var(--muted-2); font-size: 15px; margin-top: 4px; }
+.fx__note { margin-top: 10px; }
+.fx__note.blk-warn b { color: #7A4506; }
+
+.fx__rel { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12.5px;
+           color: var(--muted); margin-bottom: 10px; }
+.fx__rel > span { font-weight: 650; }
+.fx__rel--back { margin: 10px 0 0; }
+.fx-chip { border: 1px solid var(--blue-100); background: var(--blue-50); color: var(--blue-700);
+           font: inherit; font-size: 12px; font-weight: 650; padding: 3px 9px; border-radius: 999px; cursor: pointer; }
+.fx-chip:hover { background: var(--blue-100); }
+
+/* Малюнок до доведення */
+.fx__fig { display: flex; justify-content: center; margin: 4px 0 12px; }
+.fxg { max-width: 100%; height: auto; overflow: visible; }
+.fxg-l { fill: none; stroke: var(--ink-2); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.fxg-d { stroke-dasharray: 4 4; stroke: var(--muted-2); stroke-width: 1.3; }
+.fxg-h { stroke: var(--blue-600); stroke-width: 2.2; }
+.fxg-thin { stroke-width: 1.2; }
+.fxg-arc { stroke: var(--blue-500); stroke-width: 1.3; }
+.fxg-arrow { fill: var(--blue-600); }
+.fxg-fill { fill: var(--blue-50); stroke: none; }
+.fxg-dot { fill: var(--ink); }
+.fxg-t { font-family: 'Source Serif 4', Georgia, serif; font-style: italic; font-size: 14px;
+         fill: var(--ink); text-anchor: middle; }
+.fxg-t--a { font-size: 12.5px; fill: var(--blue-700); }
+.fxg-t--s { font-style: normal; font-family: inherit; font-size: 11.5px; fill: var(--muted); }
+
+@media (max-width: 1000px) {
+  /* шапка розділу: назва — рядком, лічильник і «розгорнути» — під нею */
+  .ref--fx .ref__h { flex-wrap: wrap; row-gap: 2px; }
+  .ref--fx .ref__h .fx-all { margin-left: -8px; flex-basis: 100%; text-align: left; }
+  .ref--fx .ref__bar [data-act="sheet-print"] { display: none; }
+  .fxn__dom { display: none; }
+  .fxn__n { margin-left: 6px; }
+  .fx { padding: 14px 14px 12px; }
+  .fx__f { font-size: 18px; padding: 12px 10px; }
+  .fx__links { margin-left: 0; }
+}
+
+/* Формули теми в шухляді карти математики */
+.mm-fx { display: flex; flex-direction: column; gap: 6px; }
+.mm-fx__i { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 100%;
+            border: 1px solid var(--line); background: var(--surface); border-radius: var(--r-sm);
+            padding: 9px 11px; cursor: pointer; font: inherit; text-align: left; color: var(--ink); }
+.mm-fx__i:hover { border-color: var(--blue-300); background: var(--blue-50); }
+.mm-fx__t { font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
+.mm-fx__f { font-size: 14px; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+@media print {
+  .fx__acts, .fx__rel--back, .fx-all { display: none !important; }
+  .fx { box-shadow: none; break-inside: avoid; }
+  .fx-list { max-width: none; }
 }
 
 /* Позначка повтору в переліку тем. Жовтий, як і решта «придивись» у

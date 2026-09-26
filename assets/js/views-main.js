@@ -1075,7 +1075,9 @@
 
     return '<div class="ref">' +
       '<div class="ref__bar">' +
-        '<div class="ref__title">Довідник</div>' +
+        '<button class="btn btn--ghost btn--sm" data-act="nav" data-arg="#/reference">' +
+          icon('arrowLeft', 15) + 'База формул</button>' +
+        '<div class="ref__title">Шпаргалки англ.</div>' +
         '<div class="ref__count">' + U.pl(all.length, 'тема', 'теми', 'тем') + '</div>' +
         '<input class="ref__q" data-ref-q type="search" placeholder="Знайти правило…" ' +
           'value="' + U.esc(q) + '" autocomplete="off">' +
@@ -2279,6 +2281,7 @@
     if (V.mountMathmap) V.mountMathmap(route);
     if (V.mountOlymp && route && route.parts && route.parts[0] === 'olymp') V.mountOlymp();
     if (V.mountBank && route && route.parts && route.parts[0] === 'bank') V.mountBank();
+    if (V.mountFormulas && route && route.parts && route.parts[0] === 'reference') V.mountFormulas(route.query);
     if (V.scrollScheduleToWork) V.scrollScheduleToWork();
 
     // курс НБУ потрібен розкладу й фінансам — тягнемо один раз на день

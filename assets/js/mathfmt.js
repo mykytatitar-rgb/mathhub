@@ -48,6 +48,9 @@
     varphi: 'φ', varepsilon: 'ε', vartheta: 'ϑ', varrho: 'ϱ', ell: 'ℓ',
     Gamma: 'Γ', Theta: 'Θ', Lambda: 'Λ', Xi: 'Ξ', Pi: 'Π',
     Phi: 'Φ', Psi: 'Ψ',
+    // рівність фігур, наслідування у зворотний бік, заперечення, включення
+    cong: '≅', Leftarrow: '⇐', neg: '¬', subseteq: '⊆', supseteq: '⊇',
+    supset: '⊃', setminus: '∖',
     ldots: '…', cdots: '⋯', quad: ' ', qquad: '  '
   };
 
@@ -180,6 +183,14 @@
 
         if (name === 'hline' || name === 'vline' || name === 'notag' || name === 'nonumber') continue;
 
+        /* Дуга кола: ◡AB — так її позначають у шкільних підручниках. */
+        if (name === 'arc') {
+          var ag = readArg(s, i);
+          i = ag.end;
+          out += '◡' + parse(ag.body);
+          continue;
+        }
+
         /* Множина чисел: \\mathbb{R} — дійсні, \\mathbb{Z} — цілі. */
         if (name === 'mathbb') {
           var bb = readGroup(s, i);
@@ -193,7 +204,9 @@
             name === 'mbox' || name === 'operatorname') {
           var tg = readGroup(s, i);
           i = tg.end;
-          out += '<span class="mf-fn">' + esc(tg.body) + '</span>';
+          // слова — без проміжку, що стоїть після назви функції: «(n множників)», а не «… )»
+          var word = name === 'text' || name === 'textrm' || name === 'mbox';
+          out += '<span class="' + (word ? 'mf-tx' : 'mf-fn') + '">' + esc(tg.body) + '</span>';
           continue;
         }
 

@@ -1518,7 +1518,9 @@
   }
 
   /** Після кожного рендеру: оживити карту й шухляду — або прибрати їх, якщо карти на сторінці немає. */
-  V.mountMathmap = function () {
+  var topicFromHash = null;
+
+  V.mountMathmap = function (route) {
     var root = $('.mm');
     if (!root) {
       svgEl = worldEl = treeSvg = treeWorld = null;
@@ -1562,6 +1564,16 @@
     if (hint) setTimeout(function () { hint.hidden = true; }, 6000);
 
     if (selected && byId[selected]) renderDrawer();
+
+    /* Тема з адреси (#/mathmap?t=an.log) — так на неї посилається база
+       формул. Один раз на адресу: інакше кожне перемальовування знову
+       відкривало б щойно закриту шухляду. */
+    var want = route && route.query && route.query.t;
+    if (want && byId[want] && topicFromHash !== location.hash) {
+      topicFromHash = location.hash;
+      openTopic(want);
+    }
+    if (!want) topicFromHash = null;
 
     /* Зміст підтягуємо один раз. Коли він приїде — домальовуємо те, що
        вже на екрані, а не всю сторінку: інакше загубилась би прокрутка й
@@ -1690,6 +1702,25 @@
              '<div data-mm-olymp hidden></div>';
     }
 
+    /* Формули теми з бази формул — кожна веде до свого доведення. База
+       велика й вантажиться окремо, тож блок заповнюється, коли вона приїде;
+       у тем без формул (здебільшого університетських) його просто немає. */
+    function formulaBlock(topic) {
+      if (!window.V.formulasForTopic || !window.MathFmt) return '';
+      window.V.formulasForTopic(topic.id, function (list) {
+        var box = document.querySelector('[data-mm-fx]');
+        if (!box || selected !== topic.id || !list.length) return;
+        box.innerHTML = '<div class="mm-dr__h">Формули з доведеннями · ' + list.length + '</div>' +
+          '<div class="mm-fx">' + list.map(function (x) {
+            return '<button class="mm-fx__i" data-act="fx-go" data-arg="' + x.id + '">' +
+              '<span class="mm-fx__t">' + MathFmt.text(x.t) + '</span>' +
+              '<span class="mm-fx__f">' + MathFmt.render(x.f) + '</span></button>';
+          }).join('') + '</div>';
+        box.hidden = false;
+      });
+      return '<div data-mm-fx hidden></div>';
+    }
+
     /* Побажання — завжди до власної карти репетитора, навіть у картці учня:
        це про те, яким має бути блок теми, а не про конкретного учня. */
     function wishHtml(topic) {
@@ -1740,6 +1771,7 @@
         '<div class="mm-studies" style="--c:' + d.color + '">' + study + '</div>' +
         (window.MathExtras && MathExtras.has(t.id)
           ? '<div class="mm-extra" data-mm-extra="' + t.id + '" style="--c:' + d.color + '"></div>' : '') +
+        formulaBlock(t) +
         olympBlock(t) +
         '<div class="mm-dr__h">Спирається на · ' + t.req.length + '</div>' +
         chips(t.req, 'Ні на що — з цієї теми все починається.') +

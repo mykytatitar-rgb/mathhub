@@ -38,8 +38,9 @@
      Сторінка
      ============================================================ */
 
-  var PAGE = 30;                 // скільки задач показуємо за раз
+  var PAGE = 30;                 // скільки задач показуємо за раз (на телефоні — 12)
   var shown = PAGE;
+  var fOpen = false;             // фільтри розгорнуті (на телефоні вони за кнопкою)
   var KEYS = ['q', 'topic', 'level', 'src', 'bank', 'grade', 'sec', 'ans'];
   var filters = {};
 
@@ -49,6 +50,8 @@
     /* Тут — лише олімпіади: сторінка про підготовку до змагань. Задачі з
        підручників живуть у «Банку задач» разом з усіма іншими. */
     filters.bank = 'olymp';
+    // на телефоні задача займає майже екран — порція менша
+    PAGE = window.innerWidth <= 640 ? 12 : 30;
     shown = PAGE;
 
     return C.hero({
@@ -209,11 +212,20 @@
     }
 
     var any = KEYS.some(function (k) { return k !== 'bank' && filters[k]; });
+    /* На телефоні видно лише пошук; решта фільтрів — за кнопкою, з
+       кількістю вибраних. Чотири списки стовпчиком займали пів екрана
+       над першою задачею. На великому екрані обгортка «розчиняється». */
+    var nSet = KEYS.filter(function (k) { return k !== 'bank' && k !== 'q' && filters[k]; }).length;
     var head = tabs +
-      '<div class="card ol-filters">' +
+      '<div class="card ol-filters' + (fOpen ? ' is-open' : '') + '">' +
         '<div class="row row--wrap" style="gap:10px;align-items:flex-end">' +
-          fields.join('') +
-          (any ? '<button class="btn btn--ghost btn--sm" data-act="ol-clear">Скинути</button>' : '') +
+          fields[0] +
+          '<button class="btn btn--soft btn--sm ol-ftoggle" data-act="ol-ftoggle">' + icon('filter', 15) +
+            'Фільтри' + (nSet ? ' · ' + nSet : '') + '</button>' +
+          '<div class="ol-more-f">' +
+            fields.slice(1).join('') +
+            (any ? '<button class="btn btn--ghost btn--sm" data-act="ol-clear">Скинути</button>' : '') +
+          '</div>' +
         '</div>' +
         '<div class="muted small mt-2">' +
           'Знайдено ' + U.pl(list.length, 'задача', 'задачі', 'задач') +
@@ -386,6 +398,12 @@
      ============================================================ */
 
   V.olympActions = {
+    'ol-ftoggle': function () {
+      fOpen = !fOpen;
+      var f = document.querySelector('.ol-filters');
+      if (f) f.classList.toggle('is-open', fOpen);
+    },
+
     'ol-more': function () {
       shown += PAGE;
       var box = document.querySelector('[data-ol]');

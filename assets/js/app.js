@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v131';
+  App.BUILD = 'v132';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -376,6 +376,49 @@
     '<button class="m-tab' + (any ? '' : ' is-on') + '" data-act="menu">' + icon('menu', 22) + '<span>Ще</span></button>';
   }
 
+  /* Телефон: назва сторінки — у верхній смузі, як у звичайних застосунках.
+     Банер із великою назвою на телефоні ховається (див. app.css), а все,
+     що в ньому було корисного, переїжджає сюди: назва, дрібний підпис під
+     нею («Субота, 26 вересня»), «назад» і кнопки дій — головна з підписом,
+     решта значками. Банер учня з аватаркою лишається: це вже зміст. */
+  var TITLES = {
+    '': 'Огляд', students: 'Учні', student: 'Учні', schedule: 'Розклад', finance: 'Фінанси',
+    materials: 'Матеріали', reference: 'Формули', sheet: 'Шпаргалки англ.', bank: 'Банк задач',
+    olymp: 'Олімпіади', desk: 'Моє', mathmap: 'Карта математики', settings: 'Налаштування'
+  };
+
+  function renderTopBar(route) {
+    var bar = document.querySelector('.m-bar');
+    if (!bar) return;
+    var hero = document.querySelector('#main .hero');
+    var person = hero && hero.querySelector('.avatar');
+    var t = hero && hero.querySelector('.hero__title');
+    var title = TITLES[route.parts[0] || ''] || (t ? t.textContent : 'Вектор');
+    var subEl = hero && !person && hero.querySelector('.hero__sub');
+    var back = hero && hero.querySelector('.hero__back');
+    var acts = hero && !person ? U.$$('.hero__actions .hero-btn', hero) : [];
+
+    function attrs(el) {
+      return ' data-act="' + U.esc(el.getAttribute('data-act') || '') + '"' +
+        (el.getAttribute('data-arg') ? ' data-arg="' + U.esc(el.getAttribute('data-arg')) + '"' : '');
+    }
+
+    bar.innerHTML =
+      (back ? '<button class="m-bar__btn"' + attrs(back) + ' aria-label="Назад">' + icon('arrowLeft', 22) + '</button>' : '') +
+      '<div class="m-bar__t' + (back ? '' : ' m-bar__t--pad') + '">' +
+        '<div class="m-bar__title">' + U.esc(title) + '</div>' +
+        (subEl && subEl.textContent.trim() ? '<div class="m-bar__sub">' + U.esc(subEl.textContent.trim()) + '</div>' : '') +
+      '</div>' +
+      acts.map(function (b) {
+        var solid = b.classList.contains('hero-btn--solid');
+        var label = b.textContent.trim();
+        var svg = b.querySelector('svg');
+        return '<button class="m-act' + (solid ? ' m-act--solid' : '') + '"' + attrs(b) +
+          ' aria-label="' + U.esc(label) + '" title="' + U.esc(label) + '">' +
+          (svg ? svg.outerHTML : '') + (solid ? '<span>' + U.esc(label) + '</span>' : '') + '</button>';
+      }).join('');
+  }
+
   function renderSidebar(route) {
     var students = S.students();
     var activeStudent = route.parts[0] === 'student' ? route.parts[1] : null;
@@ -550,6 +593,7 @@
     var sameRoute = lastRendered === location.hash;
     var keepY = window.scrollY;
     main.innerHTML = html;
+    renderTopBar(route);
     if (route.parts[0] !== 'students') window.scrollTo(0, sameRoute ? keepY : 0);
     lastRendered = location.hash;
     if (V.afterRender) V.afterRender(route);

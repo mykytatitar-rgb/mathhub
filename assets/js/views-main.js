@@ -572,7 +572,7 @@
         'title="Видалити цю оплату">' + icon('trash', 16) + '</button></td></tr>';
     }).join('');
 
-    return '<div style="overflow-x:auto" tabindex="0"><table class="tbl">' +
+    return '<div style="overflow-x:auto" tabindex="0"><table class="tbl tbl--pays">' +
       '<thead><tr><th>Дата</th><th>Учень</th><th>Коментар</th><th class="num">Сума</th><th><span class="sr-only">Дії</span></th></tr></thead>' +
       '<tbody>' + rows + '</tbody></table></div>' +
       '<div class="tot__parts mt-2">Разом: ' + U.esc(U.moneyMap(map)) + ' — ' +
@@ -862,7 +862,7 @@
           '<div><h2 class="card-title">Баланси учнів</h2>' +
           '<div class="card-sub">оплачено мінус вартість проведених уроків</div></div>' +
         '</div>' +
-        '<div style="overflow-x:auto" tabindex="0"><table class="tbl">' +
+        '<div style="overflow-x:auto" tabindex="0"><table class="tbl tbl--bal">' +
           '<thead><tr><th>Учень</th><th class="num">Ціна</th><th class="num">Уроків</th>' +
           '<th class="num">Сплачено</th><th class="num">Баланс</th><th><span class="sr-only">Дії</span></th></tr></thead>' +
           '<tbody>' + (rows || '<tr><td colspan="6" class="center muted" style="padding:30px">Немає учнів</td></tr>') + '</tbody>' +
@@ -874,7 +874,7 @@
           '<div><h2 class="card-title">Останні оплати</h2>' +
           '<div class="card-sub">усі валюти разом — тут видно кожну оплату</div></div>' +
         '</div>' +
-        '<div style="overflow-x:auto" tabindex="0"><table class="tbl">' +
+        '<div style="overflow-x:auto" tabindex="0"><table class="tbl tbl--pays6">' +
           '<thead><tr><th>Дата</th><th>Учень</th><th>Спосіб</th><th>Коментар</th><th class="num">Сума</th><th><span class="sr-only">Дії</span></th></tr></thead>' +
           '<tbody>' + (recent.length ? recent.map(function (p) {
             var s = S.get('students', p.studentId);
@@ -1245,6 +1245,14 @@
     '</div>';
   };
 
+  // розгорнуті групи «Матеріалів»: тема → true/false
+  var matOpen = {};
+  // подія toggle не спливає, тому ловимо на етапі занурення
+  document.addEventListener('toggle', function (e) {
+    var d = e.target;
+    if (d && d.classList && d.classList.contains('mat-group')) matOpen[d.getAttribute('data-mg')] = d.open;
+  }, true);
+
   /* Довгий перелік файлів — перші кілька, решта за кнопкою. Картка з
      41 файлом розтягувалась на три екрани телефона, і до наступного
      матеріалу доводилося гортати через неї. */
@@ -1342,13 +1350,19 @@
     });
     groups.sort(function (a, b) { return a.topic.localeCompare(b.topic, 'uk'); });
 
+    /* Групи розгортаються. На телефоні — згорнуті: перелік тем читається
+       одним екраном, а не через десять екранів карток. Що розгорнули, те
+       й лишається розгорнутим, поки кабінет відкритий. */
+    var phone = window.innerWidth <= 640;
     var cards = list.length
       ? groups.map(function (g) {
-          return '<div class="mat-group">' +
-            '<div class="mat-group__h">' + U.esc(g.topic) +
-            '<span class="mat-group__n">' + g.items.length + '</span></div>' +
+          var open = Object.prototype.hasOwnProperty.call(matOpen, g.topic)
+            ? matOpen[g.topic] : (!phone || groups.length === 1);
+          return '<details class="mat-group" data-mg="' + U.esc(g.topic) + '"' + (open ? ' open' : '') + '>' +
+            '<summary class="mat-group__h">' + icon('chevronR', 15) + '<span class="truncate">' + U.esc(g.topic) + '</span>' +
+            '<span class="mat-group__n">' + g.items.length + '</span></summary>' +
             '<div class="grid grid--auto">' + g.items.map(card).join('') + '</div>' +
-          '</div>';
+          '</details>';
         }).join('')
       : C.empty('folder', 'Бібліотека порожня',
           'Складіть сюди посилання, файли й методичні нотатки, щоб не шукати їх щоразу.',

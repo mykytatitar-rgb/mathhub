@@ -53,6 +53,8 @@
 
   V.bank = function (query) {
     parse(query);
+    // на телефоні задача займає майже екран — порція менша
+    PAGE = window.innerWidth <= 640 ? 12 : 30;
     shown = PAGE;
     return C.hero({
       short: true,

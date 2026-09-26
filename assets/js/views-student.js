@@ -329,7 +329,7 @@
           '<button class="btn btn--primary btn--sm spacer" data-act="pay-add" data-arg="' + st.id + '">' +
           icon('plus', 15) + 'Записати</button>' +
         '</div>' +
-        '<div style="overflow-x:auto" tabindex="0"><table class="tbl">' +
+        '<div style="overflow-x:auto" tabindex="0"><table class="tbl tbl--pays">' +
         '<thead><tr><th>Дата</th><th>Спосіб</th><th>Коментар</th><th class="num">Сума</th><th><span class="sr-only">Дії</span></th></tr></thead>' +
         '<tbody>' + rows + '</tbody></table></div>' +
       '</div>' +

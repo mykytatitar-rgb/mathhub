@@ -758,6 +758,26 @@ a { color: inherit; text-decoration: none; }
 .modal__foot { padding: 16px 26px 22px; display: flex; gap: 10px; justify-content: flex-end; border-top: 1px solid var(--line); margin-top: 12px; }
 .modal__foot .spacer { margin-right: auto; }
 
+/* Меню «⋯» у шапці вікна: видалення й архів — окремо від «Зберегти» */
+.modal__more { position: relative; }
+.modal__menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 5;
+  min-width: 210px; padding: 6px;
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 12px; box-shadow: var(--shadow-lg);
+}
+.modal__menu[hidden] { display: none; }
+.modal__mi {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 10px 12px; border: 0; border-radius: 8px; background: none;
+  font: inherit; font-size: 14px; font-weight: 600; color: var(--ink-2);
+  text-align: left; cursor: pointer;
+}
+.modal__mi:hover { background: var(--bg); }
+.modal__mi.is-danger { color: var(--red-ink); }
+.modal__mi.is-danger:hover { background: var(--red-bg); }
+
 /* Телефон: вікно — шторка знизу, як у Preply.
    Посередині екрана вікну з відступами по 24 px лишалось 327 px, а рядки
    всередині не переносились — картка уроку вилазила за правий край.
@@ -1300,6 +1320,43 @@ a { color: inherit; text-decoration: none; }
   .page, .hero { padding-left: 16px; padding-right: 16px; }
 }
 
+/* --- Телефон: назва сторінки у верхній смузі (див. renderTopBar в app.js) --- */
+@media (max-width: 640px) {
+  .m-bar { position: sticky; top: 0; z-index: 40; gap: 4px; padding: 0 8px; }
+  .m-bar__t { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+  .m-bar__t--pad { padding-left: 8px; }
+  .m-bar__title {
+    font-size: 18px; font-weight: 800; letter-spacing: -.4px; line-height: 1.2; color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .m-bar__sub {
+    font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .m-act {
+    flex: none; width: 40px; height: 40px; padding: 0;
+    display: grid; place-items: center;
+    border: 0; border-radius: 12px; background: none; color: var(--brand-600); cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .m-act svg { width: 21px; height: 21px; }
+  .m-act:active { background: var(--bg); }
+  .m-act--solid {
+    width: auto; height: 36px; padding: 0 13px 0 10px; margin-left: 2px;
+    display: inline-flex; align-items: center; gap: 6px;
+    border-radius: 999px; background: var(--brand-600); color: #fff;
+    font: inherit; font-size: 13px; font-weight: 700; white-space: nowrap;
+  }
+  .m-act--solid svg { width: 17px; height: 17px; }
+  .m-act--solid:active { background: var(--brand-700); }
+
+  /* Банер без людини — сховано: назва, підпис і кнопки вже у смузі.
+     Банер учня лишається — аватар, ім'я й дії з учнем там і є змістом. */
+  .hero:not(:has(.avatar)) { display: none; }
+  .hero:has(.avatar) .hero__back { display: none; }
+  .ref--fx .ref__bar .ref__title, .ref--fx .ref__bar .ref__count { display: none; }
+}
+
 /* --- Телефон: нижня панель розділів --- */
 .m-tabs { display: none; }
 
@@ -1433,6 +1490,58 @@ a { color: inherit; text-decoration: none; }
 
   /* Дрібні цілі для пальця */
   .icon-btn { min-width: 38px; min-height: 38px; }
+}
+
+/* --- Телефон: таблиці рядками ---
+   Таблиця на шість колонок у 375 пікселях гортається вбік, і суму
+   доводиться шукати за краєм екрана. Тут кожен рядок таблиці стає
+   рядком списку: зверху хто й скільки, під ним дрібно — решта. */
+@media (max-width: 640px) {
+  .tbl--pays thead, .tbl--pays6 thead, .tbl--bal thead { display: none; }
+  .tbl--pays, .tbl--pays6, .tbl--bal,
+  .tbl--pays tbody, .tbl--pays6 tbody, .tbl--bal tbody { display: block; width: 100%; }
+  .tbl--pays tr, .tbl--pays6 tr, .tbl--bal tr {
+    display: grid; align-items: center; gap: 3px 10px;
+    padding: 11px 16px; border-bottom: 1px solid var(--line);
+  }
+  .tbl--pays tbody tr:last-child, .tbl--pays6 tbody tr:last-child, .tbl--bal tbody tr:last-child { border-bottom: 0; }
+  .tbl--pays td, .tbl--pays6 td, .tbl--bal td { display: block; padding: 0; border: 0; min-width: 0; font-size: 14px; }
+  .tbl--pays td[colspan], .tbl--pays6 td[colspan], .tbl--bal td[colspan] { grid-column: 1 / -1; grid-row: 1; padding: 18px 0; }
+
+  /* дата · учень/спосіб · коментар · сума · дія */
+  .tbl--pays tr { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+  .tbl--pays td:nth-child(2) { grid-column: 1 / 3; grid-row: 1; font-weight: 650; }
+  .tbl--pays td:nth-child(4) { grid-column: 3; grid-row: 1; }
+  .tbl--pays td:nth-child(5) { grid-column: 4; grid-row: 1 / 3; }
+  .tbl--pays td:nth-child(1) { grid-column: 1; grid-row: 2; font-size: 12.5px; color: var(--muted); }
+  .tbl--pays td:nth-child(3) { grid-column: 2 / 4; grid-row: 2; font-size: 12.5px;
+                               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* дата · учень · спосіб · коментар · сума · дія */
+  .tbl--pays6 tr { grid-template-columns: auto auto minmax(0, 1fr) auto auto; }
+  .tbl--pays6 td:nth-child(2) { grid-column: 1 / 4; grid-row: 1; font-weight: 650; }
+  .tbl--pays6 td:nth-child(5) { grid-column: 4; grid-row: 1; }
+  .tbl--pays6 td:nth-child(6) { grid-column: 5; grid-row: 1 / 3; }
+  .tbl--pays6 td:nth-child(1) { grid-column: 1; grid-row: 2; font-size: 12.5px; color: var(--muted); }
+  .tbl--pays6 td:nth-child(3) { grid-column: 2; grid-row: 2; }
+  .tbl--pays6 td:nth-child(4) { grid-column: 3 / 5; grid-row: 2; font-size: 12.5px;
+                                white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* учень · ціна · уроків · сплачено · баланс · «Оплата» */
+  .tbl--bal tr { grid-template-columns: auto auto minmax(0, 1fr) auto; }
+  .tbl--bal td:nth-child(1) { grid-column: 1 / 4; grid-row: 1; }
+  .tbl--bal td:nth-child(5) { grid-column: 4; grid-row: 1; font-size: 15px; font-weight: 750; }
+  .tbl--bal td:nth-child(2), .tbl--bal td:nth-child(3), .tbl--bal td:nth-child(4) {
+    grid-row: 2; font-size: 12.5px; font-weight: 600; color: var(--muted); text-align: left; white-space: nowrap;
+  }
+  .tbl--bal td:nth-child(2) { grid-column: 1; padding-left: 42px; }
+  .tbl--bal td:nth-child(3) { grid-column: 2; }
+  .tbl--bal td:nth-child(4) { grid-column: 3; }
+  .tbl--bal td:nth-child(6) { grid-column: 4; grid-row: 2; }
+  .tbl--bal td:nth-child(2)::before { content: 'ціна '; font-weight: 500; }
+  .tbl--bal td:nth-child(3)::before { content: 'уроків '; font-weight: 500; }
+  .tbl--bal td:nth-child(4)::before { content: 'сплачено '; font-weight: 500; }
+  .tbl--bal td:nth-child(6) .btn { padding: 5px 10px; }
 }
 
 /* Постійний розклад у формі учня: сім полів часу */
@@ -1816,6 +1925,25 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
   font-size: 13px; font-weight: 750; letter-spacing: .4px;
   text-transform: uppercase; color: var(--muted, #7e90ae);
   margin-bottom: 12px;
+  cursor: pointer; list-style: none; user-select: none;
+}
+.mat-group__h::-webkit-details-marker { display: none; }
+.mat-group__h svg { flex: none; transition: transform .15s; }
+.mat-group[open] > .mat-group__h svg { transform: rotate(90deg); }
+.mat-group:not([open]) { margin-bottom: 14px; }
+.mat-group:not([open]) > .mat-group__h { margin-bottom: 0; }
+
+/* Телефон: згорнуті групи — рядками списку */
+@media (max-width: 640px) {
+  .mat-group { margin-bottom: 8px; }
+  .mat-group > .mat-group__h {
+    margin: 0; padding: 14px 14px; background: var(--surface);
+    border: 1px solid var(--line); border-radius: var(--r-md);
+    font-size: 14.5px; font-weight: 700; letter-spacing: 0; text-transform: none; color: var(--ink);
+  }
+  .mat-group > .mat-group__h .mat-group__n { margin-left: auto; }
+  .mat-group[open] > .mat-group__h { margin-bottom: 10px; border-color: var(--blue-100); background: var(--blue-50); }
+  .mat-group[open] { margin-bottom: 18px; }
 }
 .mat-group__n {
   font-size: 11.5px; font-weight: 700; letter-spacing: 0;
@@ -2681,6 +2809,16 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
    перед очима, а не ховалася за вікном. */
 
 .ol-filters .field__label { font-size: 11.5px; }
+/* великий екран: обгортка фільтрів «розчиняється», кнопки «Фільтри» немає */
+.ol-more-f { display: contents; }
+.ol-ftoggle { display: none; }
+@media (max-width: 640px) {
+  .ol-ftoggle { display: inline-flex; }
+  .ol-filters .row > .field:first-child { flex-basis: 100% !important; min-width: 0 !important; }
+  .ol-filters:not(.is-open) .ol-more-f { display: none; }
+  .ol-filters.is-open .ol-more-f { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+  .ol-more-f .field { min-width: 0 !important; }
+}
 
 .ol-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
 .ol-tab {

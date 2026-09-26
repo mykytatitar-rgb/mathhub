@@ -327,9 +327,19 @@
     // розкладка — у CSS: на телефоні вікно стає шторкою знизу
     wrap.className = 'modal-wrap';
 
-    var btns = (opts.buttons || []).map(function (b) {
+    /* Видалення (і все, що позначено menu) — не поруч зі «Зберегти», а в
+       меню «⋯» у шапці вікна. Червона кнопка на відстані пальця від
+       головної — це запрошення промахнутися, особливо на телефоні. */
+    var inMenu = function (b) { return b && (b.menu || b.act === 'del'); };
+    var buttons = (opts.buttons || []).filter(Boolean);
+    var btns = buttons.filter(function (b) { return !inMenu(b); }).map(function (b) {
       return '<button class="btn ' + (b.kind || 'btn--ghost') + '" data-mb="' + U.esc(b.act || '') + '">' +
         (b.icon ? icon(b.icon, 16) : '') + U.esc(b.label) + '</button>';
+    }).join('');
+    var menuItems = buttons.filter(inMenu).map(function (b) {
+      var danger = b.act === 'del' || /danger/.test(b.kind || '');
+      return '<button class="modal__mi' + (danger ? ' is-danger' : '') + '" data-mb="' + U.esc(b.act || '') + '">' +
+        icon(b.icon || (danger ? 'trash' : 'folder'), 16) + U.esc(b.label) + '</button>';
     }).join('');
 
     wrap.innerHTML =
@@ -339,7 +349,12 @@
       '<div class="modal__head"><div style="flex:1;min-width:0">' +
       '<h2 class="modal__title" id="mt-' + modalSeq + '">' + U.esc(opts.title) + '</h2>' +
       (opts.sub ? '<div class="modal__sub">' + U.esc(opts.sub) + '</div>' : '') +
-      '</div><button class="icon-btn" data-close="1" aria-label="Закрити">' + icon('x', 20) + '</button></div>' +
+      '</div>' +
+      (menuItems
+        ? '<div class="modal__more"><button class="icon-btn" data-mmore aria-label="Ще дії" aria-expanded="false">' +
+          icon('dots', 20) + '</button><div class="modal__menu" hidden>' + menuItems + '</div></div>'
+        : '') +
+      '<button class="icon-btn" data-close="1" aria-label="Закрити">' + icon('x', 20) + '</button></div>' +
       '<div class="modal__body">' + (opts.body || '') + '</div>' +
       (btns ? '<div class="modal__foot">' + btns + '</div>' : '') +
       '</div>';
@@ -358,7 +373,21 @@
       el.addEventListener('click', close);
     });
 
-    (opts.buttons || []).forEach(function (b) {
+    var moreBtn = wrap.querySelector('[data-mmore]');
+    if (moreBtn) {
+      var menuEl = wrap.querySelector('.modal__menu');
+      moreBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        menuEl.hidden = !menuEl.hidden;
+        moreBtn.setAttribute('aria-expanded', String(!menuEl.hidden));
+      });
+      // дотик поза меню — згорнути його
+      wrap.addEventListener('click', function (e) {
+        if (!menuEl.hidden && !e.target.closest('.modal__more')) menuEl.hidden = true;
+      });
+    }
+
+    buttons.forEach(function (b) {
       var el = wrap.querySelector('[data-mb="' + (b.act || '') + '"]');
       if (!el) return;
       el.addEventListener('click', function () {

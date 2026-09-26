@@ -101,7 +101,7 @@
       sub: isNew ? 'Заповніть базове — решту можна додати пізніше' : data.name,
       body: body,
       buttons: [
-        !isNew ? { label: 'Видалити', kind: 'btn--danger', act: 'del', close: true, onClick: function () {
+        !isNew ? { label: 'Видалити учня', kind: 'btn--danger', act: 'del', close: true, onClick: function () {
           C.confirm('Видалити учня?',
             'Разом з ним зникнуть усі уроки, домашні завдання, оплати та нотатки. Дію не можна скасувати.',
             function () { S.removeStudent(id); U.toast('Учня видалено'); location.hash = '#/students'; refresh(); });
@@ -111,13 +111,13 @@
            видалення, нічого не зникає: історія, оплати й дошки лишаються,
            а учень зникає лише з розкладу й списків. */
         !isNew ? (data.archived
-          ? { label: 'Повернути з архіву', kind: 'btn--ghost', act: 'unarch', close: true,
+          ? { label: 'Повернути з архіву', kind: 'btn--ghost', act: 'unarch', close: true, menu: true, icon: 'refresh',
               onClick: function () {
                 S.setArchived(id, false);
                 U.toast('Учня повернуто', 'ok');
                 refresh();
               } }
-          : { label: 'В архів', kind: 'btn--ghost', act: 'arch', close: true,
+          : { label: 'Перевести в архів', kind: 'btn--ghost', act: 'arch', close: true, menu: true, icon: 'folder',
               onClick: function () {
                 /* Скільки саме зникне з розкладу — числом. «Зникне зі
                    списків» звучить безневинно, поки не побачиш порожній

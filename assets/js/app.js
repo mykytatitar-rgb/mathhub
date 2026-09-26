@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v124';
+  App.BUILD = 'v125';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -1174,6 +1174,11 @@
   });
 
   window.addEventListener('hashchange', App.render);
+
+  /* Прокрутку веде сам кабінет (див. App.render і розклад, що відкривається
+     на «Зараз»). Браузер після оновлення сторінки повертав стару позицію
+     вже після нас — і список розкладу стрибав на початок. */
+  try { history.scrollRestoration = 'manual'; } catch (e) {}
 
   document.addEventListener('mousedown', function (e) {
     if (e.target.closest('.sidebar__resize')) startResize(e);

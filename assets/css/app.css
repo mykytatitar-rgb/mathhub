@@ -1534,14 +1534,15 @@ a { color: inherit; text-decoration: none; }
   .tbl--bal td:nth-child(2), .tbl--bal td:nth-child(3), .tbl--bal td:nth-child(4) {
     grid-row: 2; font-size: 12.5px; font-weight: 600; color: var(--muted); text-align: left; white-space: nowrap;
   }
-  .tbl--bal td:nth-child(2) { grid-column: 1; padding-left: 42px; }
+  .tbl--bal td:nth-child(2) { grid-column: 1; }
   .tbl--bal td:nth-child(3) { grid-column: 2; }
-  .tbl--bal td:nth-child(4) { grid-column: 3; }
-  .tbl--bal td:nth-child(6) { grid-column: 4; grid-row: 2; }
+  .tbl--bal td:nth-child(4) { grid-column: 3; overflow: hidden; text-overflow: ellipsis; }
+  .tbl--bal td:nth-child(6) { grid-column: 4; grid-row: 2; justify-self: end; }
   .tbl--bal td:nth-child(2)::before { content: 'ціна '; font-weight: 500; }
   .tbl--bal td:nth-child(3)::before { content: 'уроків '; font-weight: 500; }
   .tbl--bal td:nth-child(4)::before { content: 'сплачено '; font-weight: 500; }
-  .tbl--bal td:nth-child(6) .btn { padding: 5px 10px; }
+  /* «+ Оплата» — лише плюсом: підпис налазив на «сплачено» */
+  .tbl--bal td:nth-child(6) .btn { font-size: 0; gap: 0; width: 34px; height: 34px; padding: 0; justify-content: center; }
 }
 
 /* Постійний розклад у формі учня: сім полів часу */

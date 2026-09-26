@@ -210,8 +210,9 @@
       ]
     }) +
 
-    '<div class="page page--overlap">' +
-      '<div class="quick-row mb-3">' +
+    '<div class="page page--overlap dash">' +
+      // на телефоні плитки ховаються: те саме нижче показують «Сьогодні» й «Дохід»
+      '<div class="quick-row quick-row--dash mb-3">' +
         '<button class="quick" data-act="nav" data-arg="#/schedule">' +
           '<div class="quick__icon">' + icon('calendar', 21) + '</div>' +
           '<div><div class="quick__title">Уроки сьогодні' +
@@ -254,7 +255,8 @@
 
       '<div class="grid grid--main">' +
         '<div class="stack">' +
-          '<div class="card">' +
+          // на телефоні графік стає під уроками: у кишені шукають, хто наступний
+          '<div class="card dash-chart">' +
             '<div class="card-head"><div><h2 class="card-title">Дохід за півроку</h2>' +
             '<div class="card-sub">усі валюти разом, за курсом дня оплати' +
             (incomeUah.partial ? ' · для частини валют курсу немає' : '') + '</div></div>' +
@@ -374,7 +376,7 @@
           C.ring(V.studentMapProgress ? V.studentMapProgress(s.id).pct : 0, 44, 5) +
         '</div>' +
 
-        '<div style="margin-top:14px">' + C.balanceBadge(stat.balance, s.price, S.curOf(s.id), stat) +
+        '<div class="stu-card__badges">' + C.balanceBadge(stat.balance, s.price, S.curOf(s.id), stat) +
         (stat.hwPending ? ' ' + C.badge(U.pl(stat.hwPending, 'ДЗ', 'ДЗ', 'ДЗ') + ' в роботі', 'badge--amber') : '') +
         '</div>' +
 
@@ -406,14 +408,14 @@
     }) +
 
     '<div class="page">' +
-      '<div class="row row--wrap mb-3" style="gap:10px">' +
-        '<div style="position:relative;min-width:250px">' +
+      '<div class="row row--wrap mb-3 stu-filters" style="gap:10px">' +
+        '<div class="stu-filters__q" style="position:relative;min-width:250px">' +
           '<span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted)">' +
           icon('search', 17) + '</span>' +
           '<input class="input" id="stu-search" placeholder="Пошук за іменем…" value="' + U.esc(query.q || '') +
           '" style="padding-left:40px;border-radius:999px;background:#fff">' +
         '</div>' +
-        chips +
+        '<div class="row row--wrap chip-row" style="gap:10px">' + chips + '</div>' +
       '</div>' +
       '<div class="grid grid--auto">' + cards + '</div>' +
 
@@ -1199,23 +1201,23 @@
           '<button class="icon-btn" data-act="desk-edit" data-arg="' + d.id + '" ' +
             'title="Редагувати">' + icon('edit', 16) + '</button>' +
         '</div>' +
-        (d.note ? '<div class="desk__n">' + U.esc(d.note) + '</div>' : '') +
+        // довга нотатка згорнута до кількох рядків; дотик — розгорнути
+        (d.note ? '<div class="desk__n" data-act="note-more">' + U.esc(d.note) + '</div>' : '') +
 
         /* Посилання й файли просто в картці, а не за ще одним натисканням:
            до справи повертаються саме по них — відкрити розділ підручника
            чи перечитати конспект. */
         ((d.links || []).length || (d.files || []).length
           ? '<div class="file-strip mt-2" style="border:0;padding:0">' +
-            (d.links || []).map(function (l) {
+            clampRows((d.links || []).map(function (l) {
               return '<a class="file-row" href="' + U.esc(l.url) + '" target="_blank" rel="noopener">' +
                 '<span class="file-row__i">' + icon('link', 15) + '</span>' +
                 '<span class="file-row__n truncate">' + U.esc(l.title || l.url) + '</span></a>';
-            }).join('') +
-            (d.files || []).map(function (fl) {
+            }).concat((d.files || []).map(function (fl) {
               return '<button class="file-row" data-act="desk-file" data-arg="' + U.esc(fl.key) + '">' +
                 '<span class="file-row__i">' + icon('file', 15) + '</span>' +
                 '<span class="file-row__n truncate">' + U.esc(fl.name || 'файл') + '</span></button>';
-            }).join('') +
+            })), 4) +
             '</div>'
           : '') +
 
@@ -1242,6 +1244,17 @@
             icon('plus', 16) + 'Створити першу</button>') + '</div>') +
     '</div>';
   };
+
+  /* Довгий перелік файлів — перші кілька, решта за кнопкою. Картка з
+     41 файлом розтягувалась на три екрани телефона, і до наступного
+     матеріалу доводилося гортати через неї. */
+  function clampRows(rows, limit) {
+    if (rows.length <= limit + 1) return rows.join('');
+    return rows.slice(0, limit).join('') +
+      '<div class="more-rows" hidden>' + rows.slice(limit).join('') + '</div>' +
+      '<button class="more-btn" data-act="more-rows">' + icon('chevronD', 15) +
+        'Ще ' + U.pl(rows.length - limit, 'файл', 'файли', 'файлів') + '</button>';
+  }
 
   V.materials = function (query) {
     var topic = query.topic || '';
@@ -1282,14 +1295,14 @@
         '</div>' +
         (m.note ? '<div class="small muted pre-wrap" style="line-height:1.55">' + U.esc(m.note) + '</div>' : '') +
         (files.length
-          ? '<div class="file-list">' + files.map(function (f) {
+          ? '<div class="file-list">' + clampRows(files.map(function (f) {
               return '<button class="file-row" data-act="mat-file" data-arg="' + U.esc(f.key) + '">' +
                 '<span class="file-row__i">' + icon('file', 15) + '</span>' +
                 '<span class="file-row__n">' + U.esc(f.name || 'файл') + '</span>' +
                 '<span class="small muted spacer">' + fileSize(f.size) + '</span>' +
                 '<span class="file-row__d">' + icon('download', 15) + '</span>' +
               '</button>';
-            }).join('') + '</div>'
+            }), 4) + '</div>'
           : '') +
         /* Аркуш показуємо не списком назв, а тим, заради чого його й
            заводили, — самими формулами. Три перші вистачає, щоб упізнати. */
@@ -2282,6 +2295,8 @@
     if (V.mountOlymp && route && route.parts && route.parts[0] === 'olymp') V.mountOlymp();
     if (V.mountBank && route && route.parts && route.parts[0] === 'bank') V.mountBank();
     if (V.mountFormulas && route && route.parts && route.parts[0] === 'reference') V.mountFormulas(route.query);
+    // довгі нотатки в «Моє» згорнуті; позначаємо ті, що справді обрізані, — лише їх і розгортають
+    U.$$('.desk__n').forEach(function (n) { n.classList.toggle('is-clamped', n.scrollHeight > n.clientHeight + 4); });
     if (V.scrollScheduleToWork) V.scrollScheduleToWork();
 
     // курс НБУ потрібен розкладу й фінансам — тягнемо один раз на день

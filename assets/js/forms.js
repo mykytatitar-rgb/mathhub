@@ -80,7 +80,8 @@
       '</div>' +
       C.field('Колір картки', '<div class="swatches" id="sw">' + swatches + '</div>') +
       '<div class="field"><label class="field__label">Постійний розклад</label>' +
-        '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:7px">' + days + '</div>' +
+        // сім полів часу в ряд не влазили в телефон — там вони йдуть у два ряди
+        '<div class="week-slots">' + days + '</div>' +
         '<div class="field__hint">Залиште порожнім, якщо в цей день уроку немає. ' +
         'Уроки за цим розкладом створюються самі — одразу після збереження й далі ' +
         'на чотири тижні вперед щоразу, коли ви відкриваєте програму.</div>' +

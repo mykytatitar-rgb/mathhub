@@ -431,7 +431,8 @@
         '<button class="btn btn--ghost btn--sm" data-act="cal-nav" data-arg="0" style="background:#fff">Сьогодні</button>' +
         '<button class="icon-btn" data-act="cal-nav" data-arg="' + (off + 1) +
           '" aria-label="Вперед" title="Вперед" style="background:#fff;box-shadow:var(--shadow-sm)">' + icon('chevronR', 18) + '</button>' +
-        '<div class="spacer row row--wrap" style="gap:8px">' +
+        // підсумки тижня й перемикачі панелей — для великого екрана; на телефоні суми вже в шапці днів
+        '<div class="spacer row row--wrap cal-stats" style="gap:8px">' +
           C.badge(U.pl(planW.length, 'запланований', 'заплановані', 'запланованих'), '') +
           C.badge(U.pl(doneW.length, 'проведений', 'проведені', 'проведених'), 'badge--green') +
           C.badge(U.num(hours, 1) + ' год', 'badge--grey') +

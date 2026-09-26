@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v128';
+  App.BUILD = 'v129';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -348,6 +348,34 @@
     box.addEventListener('dragstart', function (e) { e.preventDefault(); });
   }
 
+  /* Телефон: головні розділи — панеллю внизу, як у Preply. Досі кожен
+     перехід ішов через меню: відкрити, знайти, торкнутись — два дотики
+     замість одного. Решта розділів — у «Ще», тобто в тому самому меню. */
+  var TABS = [
+    { hash: '#/',          icon: 'grid',     label: 'Огляд' },
+    { hash: '#/schedule',  icon: 'calendar', label: 'Розклад' },
+    { hash: '#/students',  icon: 'users',    label: 'Учні' },
+    { hash: '#/reference', icon: 'book',     label: 'Формули' }
+  ];
+
+  function renderTabs(route) {
+    var el = document.getElementById('m-tabs');
+    if (!el) return;
+    var path = '#' + (route.path === '/' ? '/' : route.path);
+    function on(h) {
+      if (h === '#/') return path === '#/';
+      if (h === '#/students' && path.indexOf('#/student/') === 0) return true;
+      if (h === '#/reference' && path.indexOf('#/sheet') === 0) return true;
+      return path.indexOf(h) === 0;
+    }
+    var any = TABS.some(function (t) { return on(t.hash); });
+    el.innerHTML = TABS.map(function (t) {
+      return '<button class="m-tab' + (on(t.hash) ? ' is-on' : '') + '" data-act="nav" data-arg="' + t.hash + '">' +
+        icon(t.icon, 22) + '<span>' + t.label + '</span></button>';
+    }).join('') +
+    '<button class="m-tab' + (any ? '' : ' is-on') + '" data-act="menu">' + icon('menu', 22) + '<span>Ще</span></button>';
+  }
+
   function renderSidebar(route) {
     var students = S.students();
     var activeStudent = route.parts[0] === 'student' ? route.parts[1] : null;
@@ -467,6 +495,7 @@
 
     /* Поки розділ тягнуть під рукою, панель не перемальовуємо: інакше
        перемальовування посеред руху викинуло б той самий пункт з-під пальця. */
+    renderTabs(route);
     if (!document.body.classList.contains('is-navdrag')) {
       side.innerHTML = renderSidebar(route);
       var navBox = side.querySelector('.side-scroll');
@@ -1013,6 +1042,17 @@
         'Видалити');
     },
     'sheet-print': function () { window.print(); },
+
+    // «Ще N файлів» — показати решту переліку на місці
+    'more-rows': function (_a, el) {
+      var box = el && el.previousElementSibling;
+      if (box && box.classList.contains('more-rows')) box.hidden = false;
+      if (el) el.remove();
+    },
+    // згорнута нотатка справи: дотик розгортає й згортає
+    'note-more': function (_a, el) {
+      if (el && el.classList.contains('is-clamped')) el.classList.toggle('is-open');
+    },
 
     'desk-file': function (key) {
       if (!window.ImgStore || !key) return;

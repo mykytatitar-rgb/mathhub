@@ -646,6 +646,7 @@ a { color: inherit; text-decoration: none; }
 .stu-card__strip { position: absolute; top: 0; left: 0; right: 0; height: 4px; }
 .stu-card__name { font-size: 17px; font-weight: 750; letter-spacing: -.3px; }
 .stu-card__sub { font-size: 12.5px; color: var(--muted); font-weight: 550; margin-top: 2px; }
+.stu-card__badges { margin-top: 14px; }
 .stu-card__stats { display: flex; gap: 18px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
 .stu-card__stat-v { font-size: 17px; font-weight: 750; }
 .stu-card__stat-l { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .4px; margin-top: 2px; }
@@ -1298,6 +1299,139 @@ a { color: inherit; text-decoration: none; }
 
   .page, .hero { padding-left: 16px; padding-right: 16px; }
 }
+
+/* --- Телефон: нижня панель розділів --- */
+.m-tabs { display: none; }
+
+@media (max-width: 640px) {
+  .m-tabs {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 45;
+    height: calc(58px + env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
+    background: rgba(255, 255, 255, .96);
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    border-top: 1px solid var(--line);
+  }
+  .m-tab {
+    flex: 1; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    border: 0; background: none; padding: 0; cursor: pointer;
+    font: inherit; font-size: 11px; font-weight: 650; color: var(--muted);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .m-tab.is-on { color: var(--brand-600); }
+  .m-tab:active { background: var(--bg); }
+  .app.is-board .m-tabs { display: none; }
+
+  /* Сторінка не ховається під панеллю */
+  .main { padding-bottom: calc(58px + env(safe-area-inset-bottom)); }
+  .app.is-board .main { padding-bottom: 0; }
+  .ag-fab { bottom: calc(58px + 14px + env(safe-area-inset-bottom)); }
+  .toast-root { bottom: calc(70px + env(safe-area-inset-bottom)); }
+  body:has(.ag-fab) .toast-root { bottom: calc(136px + env(safe-area-inset-bottom)); }
+}
+
+/* --- Телефон: ущільнення ---
+   Банер кожної сторінки займав на телефоні від третини до половини
+   першого екрана: великий заголовок, підзаголовок капсом, кнопки по дві
+   в стовпчик. Показники — по одному на рядок, списки — великими картками.
+   Тут усе те саме, лише щільніше: головне видно без прокрутки. */
+@media (max-width: 640px) {
+  .hero, .hero--tight, .hero--short { padding: 14px 16px 16px; }
+  .hero__pattern { display: none; }
+  .hero__back { margin-bottom: 8px; padding: 8px 0; }
+  .hero__row { gap: 10px 14px; }
+  .hero__title, .hero--tight .hero__title { font-size: 23px; letter-spacing: -.5px; }
+  .hero__sub, .hero--tight .hero__sub {
+    font-size: 12.5px; text-transform: none; letter-spacing: 0; margin-top: 3px; opacity: .85;
+  }
+  /* кнопки банера — одним рядком, що гортається, а не стовпчиком */
+  .hero__actions {
+    margin: 0 -16px 0 0; padding-right: 16px; width: calc(100% + 16px);
+    flex-wrap: nowrap; overflow-x: auto; gap: 8px; scrollbar-width: none;
+  }
+  .hero__actions::-webkit-scrollbar { display: none; }
+  .hero-btn, .hero--tight .hero-btn { padding: 8px 13px; font-size: 13px; gap: 7px; white-space: nowrap; flex: 0 0 auto; }
+  .hero .avatar--76 { width: 54px; height: 54px; font-size: 19px; border-width: 2px; }
+
+  .page { padding-top: 16px; }
+  .page--overlap { margin-top: 0; padding-top: 14px; }
+  .mb-3 { margin-bottom: 14px; }
+
+  /* Показники — по два в ряд, компактні */
+  .grid:has(> .stat) { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .grid > .stat { padding: 13px 14px; border-radius: var(--r-md); }
+  .grid > .stat .stat__icon { display: none; }
+  .grid > .stat .stat__label { font-size: 11px; letter-spacing: .3px; line-height: 1.3; }
+  .grid > .stat .stat__value { font-size: 21px; margin-top: 6px; letter-spacing: -.6px; }
+  .grid > .stat .stat__note { font-size: 11.5px; margin-top: 5px; line-height: 1.35; }
+  .grid > .stat .stat__alt { font-size: 12.5px; }
+
+  .card { padding: 16px; }
+  .card--pad0 { padding: 0; }
+  .card-head { margin-bottom: 12px; }
+  .grid, .stack { gap: 12px; }
+
+  /* Огляд: плитки дублюють картки нижче, а уроки — вище за графік */
+  .dash .quick-row--dash { display: none; }
+  .dash .stack > .dash-chart { order: 3; }
+
+  /* Ряди фільтрів-«таблеток» — одним рядком, що гортається: теги «Мого»
+     займали вісім рядків ще до першої справи */
+  .row--wrap:has(> .chip), .chip-row {
+    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    margin-left: -16px; margin-right: -16px; padding: 2px 16px 4px;
+  }
+  .row--wrap:has(> .chip)::-webkit-scrollbar, .chip-row::-webkit-scrollbar { display: none; }
+  .row--wrap:has(> .chip) > .chip, .chip-row > .chip { flex: 0 0 auto; white-space: nowrap; }
+  .stu-filters { flex-direction: column; align-items: stretch; flex-wrap: nowrap; }
+  .stu-filters__q { min-width: 0 !important; }
+  .stu-filters .chip-row { margin-top: -2px; }
+
+  /* Учні: картка щільніша, кільце карти — на сторінці учня */
+  .grid--auto { gap: 10px; }
+  .stu-card { padding: 14px 16px; border-radius: var(--r-md); }
+  .stu-card .ring { display: none; }
+  .stu-card__name { font-size: 16px; }
+  .stu-card__stats { margin-top: 12px; padding-top: 10px; gap: 16px; }
+  .stu-card__stat-v { font-size: 15.5px; }
+  .stu-card__badges { margin-top: 10px; }
+
+  /* Розклад: підсумки тижня й перемикачі панелі — для великого екрана */
+  .cal-stats { display: none !important; }
+
+  /* Вкладки (учень, карта): видно, що їх можна гортати */
+  .tabs { -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent);
+          mask-image: linear-gradient(90deg, #000 85%, transparent); }
+
+  /* Дрібні цілі для пальця */
+  .icon-btn { min-width: 38px; min-height: 38px; }
+}
+
+/* Постійний розклад у формі учня: сім полів часу */
+.week-slots { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 7px; }
+.week-slots .input { min-width: 0; width: 100%; padding: 8px 4px; text-align: center; font-size: 12.5px; }
+@media (max-width: 640px) { .week-slots { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 10px; } }
+
+/* «Ще N файлів» */
+.more-rows { display: contents; }
+.more-rows[hidden] { display: none; }
+.more-btn {
+  display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
+  border: 0; background: none; cursor: pointer; padding: 6px 2px;
+  font: inherit; font-size: 13px; font-weight: 700; color: var(--blue-700);
+}
+
+/* Довга нотатка справи згорнута: дотик розгортає */
+.desk__n { max-height: 12.5em; overflow: hidden; position: relative; }
+.desk__n.is-clamped { cursor: pointer; }
+.desk__n.is-clamped:not(.is-open)::after {
+  content: 'Показати все'; position: absolute; left: 0; right: 0; bottom: 0;
+  padding: 26px 12px 8px; font-weight: 700; color: var(--blue-700);
+  background: linear-gradient(rgba(246, 245, 251, 0), var(--bg) 60%);
+}
+.desk__n.is-open { max-height: none; }
+@media (max-width: 640px) { .desk__n { max-height: 9.5em; } }
 
 @media print {
   .m-bar { display: none !important; }

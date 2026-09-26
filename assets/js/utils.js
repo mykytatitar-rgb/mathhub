@@ -107,15 +107,18 @@
 
   /* ---------- Валюти ---------- */
 
+  /* Знак валюти — завжди після числа, як заведено в українському записі:
+     «1 000 ₴», «40 $». Коли гривня стояла праворуч, а долар ліворуч, у
+     списку уроків суми в різних валютах читалися врізнобій. */
   U.CURRENCIES = {
-    UAH: { symbol: '₴',  label: 'Гривня',               after: true,  step: 50 },
-    USD: { symbol: '$',  label: 'Долар США',            after: false, step: 5 },
-    EUR: { symbol: '€',  label: 'Євро',                 after: false, step: 5 },
-    PLN: { symbol: 'zł', label: 'Злотий',               after: true,  step: 10 },
-    GBP: { symbol: '£',  label: 'Фунт стерлінгів',      after: false, step: 5 },
-    CZK: { symbol: 'Kč', label: 'Чеська крона',         after: true,  step: 100 },
-    CAD: { symbol: 'C$', label: 'Канадський долар',     after: false, step: 5 },
-    AUD: { symbol: 'A$', label: 'Австралійський долар', after: false, step: 5 }
+    UAH: { symbol: '₴',  label: 'Гривня',               after: true, step: 50 },
+    USD: { symbol: '$',  label: 'Долар США',            after: true, step: 5 },
+    EUR: { symbol: '€',  label: 'Євро',                 after: true, step: 5 },
+    PLN: { symbol: 'zł', label: 'Злотий',               after: true, step: 10 },
+    GBP: { symbol: '£',  label: 'Фунт стерлінгів',      after: true, step: 5 },
+    CZK: { symbol: 'Kč', label: 'Чеська крона',         after: true, step: 100 },
+    CAD: { symbol: 'C$', label: 'Канадський долар',     after: true, step: 5 },
+    AUD: { symbol: 'A$', label: 'Австралійський долар', after: true, step: 5 }
   };
 
   U.CURRENCY_CODES = Object.keys(U.CURRENCIES);

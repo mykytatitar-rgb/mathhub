@@ -375,11 +375,13 @@
   /** Мій розділ «Карта математики». */
   V.mathmap = function () {
     switchTo(null);
+    // шапка низька, як у розкладу: головне тут — сама карта
     return C.hero({
       short: true,
+      tight: true,
       title: 'Карта математики',
       sub: 'уся математика — і де в ній я'
-    }) + '<div class="page">' + panelHtml() + '</div>';
+    }) + '<div class="page page--tight">' + panelHtml() + '</div>';
   };
 
   /** Вкладка «Карта» в картці учня. */

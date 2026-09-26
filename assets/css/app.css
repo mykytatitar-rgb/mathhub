@@ -1421,8 +1421,11 @@ a { color: inherit; text-decoration: none; }
   .bk-card__head > .icon-btn:first-of-type { margin-left: auto; }
   .ol-card { padding: 14px; }
 
-  /* Розклад: підсумки тижня й перемикачі панелі — для великого екрана */
+  /* Розклад: підсумки тижня й перемикачі панелі — для великого екрана;
+     «Список · Тиждень · День» — на всю ширину, стрілки — рядком нижче */
   .cal-stats { display: none !important; }
+  .page--tight > .row:has(> .seg) > .seg { flex: 1 1 100%; }
+  .page--tight > .row:has(> .seg) { row-gap: 8px; }
 
   /* Вкладки (учень, карта): видно, що їх можна гортати */
   .tabs { -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent);

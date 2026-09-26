@@ -1212,7 +1212,7 @@
             clampRows((d.links || []).map(function (l) {
               return '<a class="file-row" href="' + U.esc(l.url) + '" target="_blank" rel="noopener">' +
                 '<span class="file-row__i">' + icon('link', 15) + '</span>' +
-                '<span class="file-row__n truncate">' + U.esc(l.title || l.url) + '</span></a>';
+                '<span class="file-row__n truncate">' + U.esc(l.title || prettyUrl(l.url)) + '</span></a>';
             }).concat((d.files || []).map(function (fl) {
               return '<button class="file-row" data-act="desk-file" data-arg="' + U.esc(fl.key) + '">' +
                 '<span class="file-row__i">' + icon('file', 15) + '</span>' +
@@ -1253,7 +1253,15 @@
     return rows.slice(0, limit).join('') +
       '<div class="more-rows" hidden>' + rows.slice(limit).join('') + '</div>' +
       '<button class="more-btn" data-act="more-rows">' + icon('chevronD', 15) +
-        'Ще ' + U.pl(rows.length - limit, 'файл', 'файли', 'файлів') + '</button>';
+        'Показати ще ' + (rows.length - limit) + '</button>';
+  }
+
+  /* Посилання без назви показуємо читабельно: «uk.wikipedia.org/wiki/Теорема_Безу»,
+     а не «https://uk.wikipedia.org/wiki/%D0%A2%D0%B5…». */
+  function prettyUrl(u) {
+    var s = String(u || '');
+    try { s = decodeURI(s); } catch (e) { /* зіпсоване кодування — лишаємо як є */ }
+    return s.replace(/^https?:\/\/(www\.)?/, '');
   }
 
   V.materials = function (query) {

@@ -324,7 +324,8 @@
     root.hidden = false;
 
     var wrap = document.createElement('div');
-    wrap.style.cssText = 'position:absolute;inset:0;display:grid;place-items:center;padding:24px';
+    // розкладка — у CSS: на телефоні вікно стає шторкою знизу
+    wrap.className = 'modal-wrap';
 
     var btns = (opts.buttons || []).map(function (b) {
       return '<button class="btn ' + (b.kind || 'btn--ghost') + '" data-mb="' + U.esc(b.act || '') + '">' +
@@ -381,12 +382,12 @@
   });
 
   /** Підтвердження дії. */
-  C.confirm = function (title, text, onYes, yesLabel) {
+  C.confirm = function (title, text, onYes, yesLabel, noLabel) {
     C.modal({
       title: title,
       body: '<p style="line-height:1.6;color:var(--ink-2);margin:6px 0 18px">' + U.esc(text) + '</p>',
       buttons: [
-        { label: 'Скасувати', kind: 'btn--ghost', act: 'no' },
+        { label: noLabel || 'Скасувати', kind: 'btn--ghost', act: 'no' },
         { label: yesLabel || 'Так, видалити', kind: 'btn--danger', act: 'yes', onClick: onYes }
       ]
     });

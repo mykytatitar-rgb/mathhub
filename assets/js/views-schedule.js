@@ -172,9 +172,125 @@
     try { localStorage.setItem(MONEY_KEY, V.moneyHidden() ? 'shown' : 'hidden'); } catch (e) {}
   };
 
+  /* ============================================================
+     Список — розклад на телефоні, як у Preply
+     ============================================================
+
+     Сітка тижня на екрані телефона — сім колонок по пів сантиметра:
+     імена обрізані, суми налазять, урок не влучиш пальцем. Тут дні йдуть
+     один під одним, урок — картка на всю ширину: хто, коли, скільки й чи
+     проведено. Лінія «Зараз» ділить минуле й майбутнє, і список одразу
+     відкривається на ній. Торкання картки — урок знизу «шторкою». */
+
+  var AG_BACK = 14;       // днів назад
+  var AG_AHEAD = 60;      // днів уперед
+
+  function agCard(l) {
+    var st = S.get('students', l.studentId);
+    var color = st ? st.color : '#4B3FDB';
+    var start = U.toDate(l.date);
+    var end = new Date(start.getTime() + (l.duration || 60) * 60000);
+    var faded = S.INACTIVE_STATUS.indexOf(l.status) >= 0;
+    var cfg = S.LESSON_STATUS[l.status] || S.LESSON_STATUS.planned;
+
+    var mark = '';
+    if (l.status === 'done') {
+      mark = l.paid
+        ? '<span class="ag-mark ag-mark--ok" title="Проведено й оплачено">' + icon('check', 13) + '</span>'
+        : '<span class="ag-mark ag-mark--due" title="Проведено, ще не оплачено">' + icon('wallet', 13) + '</span>';
+    } else if (l.status === 'missed') {
+      mark = '<span class="ag-tag ag-tag--red">' + cfg.label + '</span>';
+    } else if (faded) {
+      mark = '<span class="ag-tag">' + cfg.label + '</span>';
+    } else if (l.paid) {
+      mark = '<span class="ag-mark ag-mark--paid" title="Оплачено наперед">' + icon('wallet', 13) + '</span>';
+    }
+
+    return '<button class="ag-ev' + (faded ? ' is-faded' : '') + (l.status === 'done' ? ' is-done' : '') +
+      '" data-act="lesson-open" data-arg="' + l.id + '" style="--c:' + color + '">' +
+      '<span class="ag-ev__main">' +
+        '<span class="ag-ev__name">' + U.esc(st ? st.name : '—') + '</span>' +
+        '<span class="ag-ev__time">' + U.fmtTime(start) + ' – ' + U.pad(end.getHours()) + ':' + U.pad(end.getMinutes()) +
+          (l.topic ? ' · ' + U.esc(l.topic) : '') + '</span>' +
+      '</span>' +
+      '<span class="ag-ev__side">' +
+        '<span class="ag-ev__price">' + U.money(l.price || 0, S.lessonCur(l)) + '</span>' + mark +
+      '</span>' +
+    '</button>';
+  }
+
+  function agendaHtml() {
+    var today = U.today();
+    var now = Date.now();
+    var lessons = S.lessonsBetween(U.addDays(today, -AG_BACK), U.addDays(today, AG_AHEAD));
+
+    var groups = [], byDay = {};
+    lessons.forEach(function (l) {
+      var key = l.date.slice(0, 10);
+      if (!byDay[key]) { byDay[key] = []; groups.push(key); }
+      byDay[key].push(l);
+    });
+
+    var NOW = '<div class="ag-now" data-ag-now><span>Зараз</span></div>';
+    var html = '', month = null, nowDone = false;
+
+    groups.forEach(function (key) {
+      var d = U.toDate(key + 'T12:00');
+      var m = d.getFullYear() * 12 + d.getMonth();
+      if (m !== month) {
+        month = m;
+        html += '<div class="ag-month">' + U.MONTHS_NOM[d.getMonth()] + ' ' + d.getFullYear() + '</div>';
+      }
+      var isToday = U.isSameDay(d, today);
+      var cards = '';
+      byDay[key].forEach(function (l, i) {
+        if (!nowDone && U.toDate(l.date).getTime() >= now) {
+          nowDone = true;
+          // «зараз» посеред сьогоднішніх уроків — усередині дня, інакше — між днями
+          if (i > 0) cards += NOW; else html += NOW;
+        }
+        cards += agCard(l);
+      });
+      html += '<div class="ag-day' + (isToday ? ' is-today' : '') + '">' +
+        '<div class="ag-date"><div class="ag-date__wd">' + U.DAYS_SHORT[d.getDay()] + '</div>' +
+        '<div class="ag-date__num">' + d.getDate() + '</div></div>' +
+        '<div class="ag-list">' + cards + '</div></div>';
+    });
+    if (!nowDone) html += NOW;
+
+    if (!groups.length) {
+      html = C.empty('calendar', 'Уроків немає', 'Ні за два тижні назад, ні на два місяці вперед.') + NOW;
+    }
+    return '<div class="ag">' + html + '</div>' +
+      '<button class="ag-fab" data-act="lesson-add">' + icon('plus', 18) + 'Урок</button>';
+  }
+
+  function viewSwitch(view) {
+    return '<div class="seg" style="background:#fff;box-shadow:var(--shadow-sm)">' +
+      [['list', 'Список'], ['week', 'Тиждень'], ['day', 'День']].map(function (x) {
+        return '<button class="seg__btn' + (view === x[0] ? ' is-active' : '') +
+          '" data-act="cal-view" data-arg="' + x[0] + '">' + x[1] + '</button>';
+      }).join('') + '</div>';
+  }
+
+  /** Вигляд із адреси; на телефоні без явного вибору — список. */
+  function pickView(query) {
+    if (query.v === 'day' || query.v === 'list' || query.v === 'week') return query.v;
+    return window.innerWidth <= 640 ? 'list' : 'week';
+  }
+
   V.schedule = function (query) {
     var panelHidden = V.panelHidden();
-    var view = query.v === 'day' ? 'day' : 'week';
+    var view = pickView(query);
+
+    if (view === 'list') {
+      // «новий урок» — кругла кнопка внизу, під великим пальцем
+      return C.hero({ short: true, tight: true, title: 'Розклад', sub: 'усі уроки підряд' }) +
+        '<div class="page page--tight">' +
+          '<div class="row row--wrap mb-2" style="gap:10px">' + viewSwitch(view) + '</div>' +
+          agendaHtml() +
+        '</div>';
+    }
     var off = parseInt(query.off || '0', 10) || 0;
     var today = U.today();
 
@@ -309,12 +425,7 @@
     '<div class="page page--tight">' +
       ratesNotice() +
       '<div class="row row--wrap mb-2" style="gap:10px">' +
-        '<div class="seg" style="background:#fff;box-shadow:var(--shadow-sm)">' +
-          '<button class="seg__btn' + (view === 'week' ? ' is-active' : '') +
-            '" data-act="cal-view" data-arg="week">Тиждень</button>' +
-          '<button class="seg__btn' + (view === 'day' ? ' is-active' : '') +
-            '" data-act="cal-view" data-arg="day">День</button>' +
-        '</div>' +
+        viewSwitch(view) +
         '<button class="icon-btn" data-act="cal-nav" data-arg="' + (off - 1) +
           '" aria-label="Назад" title="Назад" style="background:#fff;box-shadow:var(--shadow-sm)">' + icon('chevronL', 18) + '</button>' +
         '<button class="btn btn--ghost btn--sm" data-act="cal-nav" data-arg="0" style="background:#fff">Сьогодні</button>' +
@@ -388,7 +499,22 @@
    * Робимо це лише коли людина ще не гортала сама: інакше кожне
    * перемальовування смикало б сітку назад.
    */
+  var agPlacedFor = null;
+  window.addEventListener('hashchange', function () {
+    if (!/^#\/schedule/.test(location.hash)) agPlacedFor = null;
+  });
+
   V.scrollScheduleToWork = function () {
+    var nowEl = document.querySelector('[data-ag-now]');
+    if (nowEl) {
+      // перемальовування (приїхали зміни) не смикає список назад;
+      // поки база не прочитана й уроків нема — ще не ставимо
+      if (agPlacedFor === location.hash) return;
+      if (document.querySelector('.ag-ev')) agPlacedFor = location.hash;
+      var y = nowEl.getBoundingClientRect().top + window.scrollY - Math.round(window.innerHeight * 0.3);
+      window.scrollTo(0, Math.max(0, y));
+      return;
+    }
     var body = document.querySelector('.cal-body');
     if (!body || body.dataset.placed) return;
     body.dataset.placed = '1';

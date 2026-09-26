@@ -311,14 +311,15 @@
     var hw = S.db().homeworks.filter(function (h) { return h.lessonId === id; });
 
     var body =
-      '<div class="row mb-2" style="gap:14px">' + C.avatar(st, 48) +
-      '<div><div style="font-weight:750;font-size:16px">' + U.esc(st ? st.name : '—') + '</div>' +
+      '<div class="row row--wrap mb-2" style="gap:10px 14px">' + C.avatar(st, 48) +
+      // ім'я поруч з аватаркою, а позначки, коли тісно, — рядком нижче
+      '<div style="flex:1 1 170px;min-width:0"><div style="font-weight:750;font-size:16px">' + U.esc(st ? st.name : '—') + '</div>' +
       '<div class="small muted">' + U.esc(st ? st.grade + ' · ' + st.goal : '') + '</div></div>' +
       '<div class="spacer row" style="gap:6px">' + C.lessonBadge(ls.status) +
       (ls.paid ? C.badge('Оплачено', 'badge--green', 'wallet') : '') + '</div></div>' +
 
       '<div class="card card--flat mb-2" style="padding:16px 18px">' +
-      '<div class="row" style="gap:10px;color:var(--muted);font-size:13px;font-weight:600">' +
+      '<div class="row row--wrap" style="gap:6px 10px;color:var(--muted);font-size:13px;font-weight:600">' +
       icon('clock', 15) + U.fmtDateTime(ls.date) + ' · ' + U.fmtRelative(ls.date) +
       '<span class="spacer">' + U.money(ls.price || 0, S.lessonCur(ls)) + '</span></div>' +
       '<div style="font-size:17px;font-weight:750;margin-top:8px">' + U.esc(ls.topic || 'Тема не вказана') + '</div>' +
@@ -366,6 +367,18 @@
           onClick: function () { setTimeout(function () { F.lesson(id); }, 60); } },
         { label: 'Дошка', kind: 'btn--soft', act: 'board', icon: 'board',
           onClick: function () { location.hash = '#/board/' + id; } },
+        // як у Preply: скасувати — одним рухом із картки, а не через форму
+        ls.status === 'planned'
+          ? { label: 'Скасувати урок', kind: 'btn--ghost', act: 'cancel-lesson', icon: 'x',
+              onClick: function () {
+                setTimeout(function () {
+                  C.confirm('Скасувати урок?',
+                    'Урок лишиться в історії як скасований і не піде ні в розклад, ні в гроші.',
+                    function () { S.update('lessons', id, { status: 'cancelled' }); refresh(); },
+                    'Скасувати урок', 'Ні, лишити');
+                }, 60);
+              } }
+          : null,
         // кнопка лише для найчастішого випадку; поодинці — позначками вище
         (ls.status === 'done' && ls.paid)
           ? null

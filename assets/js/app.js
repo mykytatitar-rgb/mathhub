@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v123';
+  App.BUILD = 'v124';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -503,15 +503,23 @@
           '<button class="btn btn--primary" data-act="nav" data-arg="#/">На головну</button>') + '</div></div>';
     }
 
+    /* Нагору — лише коли відкрили іншу сторінку. Перемальовування тієї самої
+       (приїхали зміни, відмітили урок) лишає сторінку там, де її гортали:
+       інакше після кожної галочки список уроків відлітав на початок. */
+    var sameRoute = lastRendered === location.hash;
+    var keepY = window.scrollY;
     main.innerHTML = html;
+    if (route.parts[0] !== 'students') window.scrollTo(0, sameRoute ? keepY : 0);
+    lastRendered = location.hash;
     if (V.afterRender) V.afterRender(route);
-    if (route.parts[0] !== 'students') window.scrollTo(0, 0);
 
     if (restore) {
       var el = document.getElementById(restore.id);
       if (el) { el.focus(); try { el.setSelectionRange(restore.pos, restore.pos); } catch (e) {} }
     }
   };
+
+  var lastRendered = null;
 
   App.refresh = function () { App.render(); };
 
@@ -627,7 +635,8 @@
     'filter-tag': function (arg) { setQuery({ tag: arg }); },
     'filter-cur': function (arg) { setQuery({ cur: arg }); },
     'week': function (arg) { setQuery({ w: arg === '0' ? '' : arg }); },
-    'cal-view': function (arg) { setQuery({ v: arg === 'week' ? '' : arg, off: '' }); },
+    // вигляд пишемо в адресу завжди: на телефоні без нього відкривається список
+    'cal-view': function (arg) { setQuery({ v: arg, off: '' }); },
     'cal-nav': function (arg) { setQuery({ off: arg === '0' ? '' : arg }); },
     'cal-panel': function () { V.toggleCalPanel(); App.render(); },
     'cal-money': function () { V.toggleCalMoney(); App.render(); },

@@ -1397,6 +1397,30 @@ a { color: inherit; text-decoration: none; }
   .stu-card__stat-v { font-size: 15.5px; }
   .stu-card__badges { margin-top: 10px; }
 
+  /* Плитки («Наступний урок», «Баланс») — по дві в ряд */
+  .quick-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .quick { padding: 12px; gap: 10px; border-radius: var(--r-md); align-items: flex-start; }
+  .quick > div { min-width: 0; }
+  .quick__icon { width: 34px; height: 34px; border-radius: 10px; }
+  .quick__icon svg { width: 18px; height: 18px; }
+  .quick__title { font-size: 14px; }
+  .quick .small { font-size: 12px; line-height: 1.35; }
+  .quick__arrow { display: none; }
+
+  /* Порожні стани — рядок-підказка, а не пів екрана */
+  .empty { padding: 22px 16px; }
+  .empty__icon { width: 44px; height: 44px; border-radius: 14px; margin-bottom: 10px; }
+  .empty__icon svg { width: 22px; height: 22px; }
+  .empty__title { font-size: 14.5px; }
+  .empty__text { font-size: 13px; margin-bottom: 12px; }
+
+  /* Задача банку: ранг і кнопки — рядком, назва джерела — на всю ширину під ними
+     (стиснута між ними, вона розсипалась на три рядки по два слова) */
+  .bk-card__head { flex-wrap: wrap; }
+  .bk-card__head .bk-card__title { order: 3; flex-basis: 100%; }
+  .bk-card__head > .icon-btn:first-of-type { margin-left: auto; }
+  .ol-card { padding: 14px; }
+
   /* Розклад: підсумки тижня й перемикачі панелі — для великого екрана */
   .cal-stats { display: none !important; }
 

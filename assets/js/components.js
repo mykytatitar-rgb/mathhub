@@ -332,7 +332,13 @@
        головної — це запрошення промахнутися, особливо на телефоні. */
     var inMenu = function (b) { return b && (b.menu || b.act === 'del'); };
     var buttons = (opts.buttons || []).filter(Boolean);
-    var btns = buttons.filter(function (b) { return !inMenu(b); }).map(function (b) {
+    // head — значок у шапці (як олівець у картці події Google Calendar):
+    // часта дія, але не головна, і в нижньому ряду їй не вистачає місця
+    var heads = buttons.filter(function (b) { return b.head && !inMenu(b); }).map(function (b) {
+      return '<button class="icon-btn" data-mb="' + U.esc(b.act || '') + '" aria-label="' + U.esc(b.label) +
+        '" title="' + U.esc(b.label) + '">' + icon(b.icon, 19) + '</button>';
+    }).join('');
+    var btns = buttons.filter(function (b) { return !inMenu(b) && !b.head; }).map(function (b) {
       return '<button class="btn ' + (b.kind || 'btn--ghost') + '" data-mb="' + U.esc(b.act || '') + '">' +
         (b.icon ? icon(b.icon, 16) : '') + U.esc(b.label) + '</button>';
     }).join('');
@@ -349,7 +355,7 @@
       '<div class="modal__head"><div style="flex:1;min-width:0">' +
       '<h2 class="modal__title" id="mt-' + modalSeq + '">' + U.esc(opts.title) + '</h2>' +
       (opts.sub ? '<div class="modal__sub">' + U.esc(opts.sub) + '</div>' : '') +
-      '</div>' +
+      '</div>' + heads +
       (menuItems
         ? '<div class="modal__more"><button class="icon-btn" data-mmore aria-label="Ще дії" aria-expanded="false">' +
           icon('dots', 20) + '</button><div class="modal__menu" hidden>' + menuItems + '</div></div>'

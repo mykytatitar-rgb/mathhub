@@ -364,13 +364,14 @@
           ? { label: 'Приєднатися', kind: 'btn--ghost', act: 'meet', icon: 'present',
               onClick: function () { window.open(S.meetUrlFor(ls.studentId), '_blank', 'noopener'); } }
           : null,
-        { label: 'Редагувати', kind: 'btn--ghost', act: 'edit', icon: 'edit',
+        { label: 'Редагувати', act: 'edit', icon: 'edit', head: true,
           onClick: function () { setTimeout(function () { F.lesson(id); }, 60); } },
         { label: 'Дошка', kind: 'btn--soft', act: 'board', icon: 'board',
           onClick: function () { location.hash = '#/board/' + id; } },
-        // як у Preply: скасувати — одним рухом із картки, а не через форму
+        // скасувати — з картки, а не через форму, але в меню «⋯»:
+        // поруч із «Проведено й оплачено» це запрошення промахнутися
         ls.status === 'planned'
-          ? { label: 'Скасувати урок', kind: 'btn--ghost', act: 'cancel-lesson', icon: 'x',
+          ? { label: 'Скасувати урок', kind: 'btn--danger', act: 'cancel-lesson', icon: 'x', menu: true,
               onClick: function () {
                 setTimeout(function () {
                   C.confirm('Скасувати урок?',

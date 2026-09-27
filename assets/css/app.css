@@ -755,7 +755,10 @@ a { color: inherit; text-decoration: none; }
 .modal__title { font-size: 19px; font-weight: 750; letter-spacing: -.3px; margin: 0; }
 .modal__sub { font-size: 13px; color: var(--muted); margin-top: 3px; }
 .modal__body { padding: 4px 26px 8px; overflow-y: auto; flex: 1; }
-.modal__foot { padding: 16px 26px 22px; display: flex; gap: 10px; justify-content: flex-end; border-top: 1px solid var(--line); margin-top: 12px; }
+/* wrap: кнопки, що не влізли, переходять у другий ряд, а не вилазять за вікно */
+.modal__foot { padding: 16px 26px 22px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; border-top: 1px solid var(--line); margin-top: 12px; }
+/* трохи вужчі кнопки: «Приєднатися · Дошка · Проведено й оплачено» — в один ряд */
+.modal__foot .btn { padding-left: 15px; padding-right: 15px; }
 .modal__foot .spacer { margin-right: auto; }
 
 /* Меню «⋯» у шапці вікна: видалення й архів — окремо від «Зберегти» */

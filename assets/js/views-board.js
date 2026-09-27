@@ -2929,7 +2929,10 @@
     'busy': 'Claude зараз перевантажений — спробуйте за хвилину.',
     'refusal': 'Claude відмовився розбирати це виділене.',
     'empty': 'Не вдалося розібрати написане — спробуйте виділити менший шматок.',
-    'net': 'Немає звʼязку з сервером.'
+    'net': 'Немає інтернету.',
+    /* Нерозгорнута функція не відповідає навіть на попередній запит
+       браузера, тож і «404» ми не бачимо — лише обірване зʼєднання. */
+    'unreachable': 'Розпізнавання не відповідає — перевірте, що функцію board-latex розгорнуто в Supabase.'
   };
 
   function typesetSelection() {
@@ -2961,7 +2964,7 @@
         var code = res.status === 404 ? 'not-deployed' : (j && j.error) || 'net';
         throw new Error(code);
       });
-    }, function () { throw new Error('net'); });
+    }, function () { throw new Error(navigator.onLine === false ? 'net' : 'unreachable'); });
 
     // набирач слайда вантажимо, поки Claude читає
     var engine = App.need('beamer').then(function () { return window.Beamer.ready(); });

@@ -574,6 +574,18 @@
 .sel-bar__btn:hover { background: var(--blue-50); color: var(--blue-700); }
 .sel-bar__btn--danger:hover { background: var(--red-bg); color: var(--red); }
 .sel-bar__btn.is-on { background: var(--violet-bg); color: #5B3FD6; }
+/* «Друкований вигляд»: логотип TeX, як його пишуть у LaTeX — E опущене */
+.sel-bar__btn--tex { width: auto; padding: 0 7px; color: #3333B3; }
+.sel-bar__btn--tex b { font-family: Georgia, 'Times New Roman', serif; font-size: 14px; font-weight: 700; letter-spacing: -.5px; }
+.sel-bar__btn--tex sub { font-size: 14px; vertical-align: -3px; margin: 0 -1px; }
+.sel-bar__btn--tex:hover { background: #ECECFA; }
+.sel-bar__btn.is-busy { cursor: progress; }
+.sel-bar__spin {
+  width: 15px; height: 15px; border-radius: 50%;
+  border: 2px solid #C9C9EE; border-top-color: #3333B3;
+  animation: selbar-spin .8s linear infinite;
+}
+@keyframes selbar-spin { to { transform: rotate(360deg); } }
 /* Вид лінії показуємо самою лінією, а не літерою: відрізок від променя
    відрізняють оком, а не назвою. Значок ширший за звичайну іконку. */
 .sel-bar__btn--kind { width: 38px; }

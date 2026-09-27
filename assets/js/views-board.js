@@ -2791,10 +2791,28 @@
         '<span class="sel-bar__sep"></span>'
       : '';
 
+    /* Рукопис → друкований слайд Beamer; а зі слайдів — файл .tex.
+       Поки Claude читає, кнопка крутиться: повторний дотик нічого не шле. */
+    var hasInk = e.selection.some(function (i) { return i.t === 'p'; });
+    var hasTx = e.selection.some(function (i) { return i.t === 'i' && i.tx; });
+    var typesetBtns =
+      (hasInk
+        ? '<button class="sel-bar__btn sel-bar__btn--tex' + (typesetBusy ? ' is-busy' : '') +
+          '" data-act="board-typeset" title="Друкований вигляд — слайд LaTeX Beamer"' +
+          (typesetBusy ? ' disabled' : '') + '>' +
+          (typesetBusy ? '<span class="sel-bar__spin"></span>' : '<b>T<sub>E</sub>X</b>') + '</button>'
+        : '') +
+      (hasTx
+        ? '<button class="sel-bar__btn" data-act="board-tex" title="Завантажити файл Beamer (.tex)">' +
+          icon('download', 16) + '</button>'
+        : '') +
+      (hasInk || hasTx ? '<span class="sel-bar__sep"></span>' : '');
+
     bar.innerHTML =
       '<span class="sel-bar__count">' + U.pl(n, 'об’єкт', 'об’єкти', 'об’єктів') + '</span>' +
       sizeBtns +
       extra +
+      typesetBtns +
       '<button class="sel-bar__btn" data-act="board-copy" title="Копіювати (Ctrl+C)">' +
         icon('copy', 16) + '</button>' +
       '<button class="sel-bar__btn" data-act="board-duplicate" title="Дублювати (Ctrl+D)">' +
@@ -2885,6 +2903,137 @@
    *
    * at — необов'язкова точка на полотні; без неї беремо позицію курсора.
    */
+  /* ============================================================
+     Рукопис → друкований слайд LaTeX Beamer
+     ============================================================
+
+     Виділяєш написане (як для копіювання) і тиснеш «Друкований вигляд».
+     Виділене малюється в картинку й іде на розпізнавання до Claude
+     (функція Supabase board-latex, ключ лежить лише там). Відповідь —
+     зміст слайда; з нього набирається кадр Beamer і лягає на дошку на
+     місце рукопису. Рукопис прибирається одним кроком історії: Ctrl+Z
+     повертає все як було. Якщо серед написаного є малюнок (графік,
+     креслення), рукопис лишається, а слайд стає поруч — малюнок
+     формулами не перепишеш.
+
+     Зміст слайда зберігається в самій картинці (поле tx), тож пізніше з
+     виділених слайдів можна вивантажити файл .tex. */
+
+  var typesetBusy = false;
+
+  var TYPESET_ERRORS = {
+    'not-deployed': 'Розпізнавання ще не підключене: у Supabase немає функції board-latex.',
+    'no-key': 'Розпізнавання не підключене: у секретах Supabase немає ключа Anthropic.',
+    'bad-key': 'Ключ Anthropic у Supabase не підходить — перевірте його в секретах.',
+    'auth': 'Вхід застарів — увійдіть у кабінет ще раз.',
+    'busy': 'Claude зараз перевантажений — спробуйте за хвилину.',
+    'refusal': 'Claude відмовився розбирати це виділене.',
+    'empty': 'Не вдалося розібрати написане — спробуйте виділити менший шматок.',
+    'net': 'Немає звʼязку з сервером.'
+  };
+
+  function typesetSelection() {
+    if (!cur || typesetBusy) return;
+    var e = cur.engine;
+    var sel = e.selection.slice();
+    var strokes = sel.filter(function (it) { return it.t === 'p'; });
+    if (!strokes.length) return;
+    if (!window.Cloud || !Cloud.signedIn()) {
+      U.toast('Щоб перетворювати рукопис, увійдіть у кабінет', 'err');
+      return;
+    }
+    var b = e.selectionBounds();
+    if (!b) return;
+    var slideRef = e.slide;
+
+    // картинка виділеного — те, що бачить розпізнавач
+    var image = Board.renderToCanvas({ items: sel }, 1600).toDataURL('image/png').split(',')[1];
+
+    typesetBusy = true;
+    updateSelBar();
+
+    var recognized = Cloud.request('/functions/v1/board-latex', {
+      method: 'POST',
+      body: JSON.stringify({ image: image })
+    }).then(function (res) {
+      if (res.ok) return res.json();
+      return res.json().catch(function () { return {}; }).then(function (j) {
+        var code = res.status === 404 ? 'not-deployed' : (j && j.error) || 'net';
+        throw new Error(code);
+      });
+    }, function () { throw new Error('net'); });
+
+    // набирач слайда вантажимо, поки Claude читає
+    var engine = App.need('beamer').then(function () { return window.Beamer.ready(); });
+
+    Promise.all([recognized, engine]).then(function (r) {
+      var slide = r[0];
+      return window.Beamer.render(slide).then(function (blob) {
+        return ImgStore.ingest(blob);
+      }).then(function (meta) {
+        if (!cur || cur.engine.slide !== slideRef) throw new Error('moved');
+        placeTypeset(meta, slide, strokes, b);
+      });
+    }).catch(function (err) {
+      var code = err && err.message;
+      if (code === 'moved') return;       // перейшли на інший слайд — мовчки нічого не кладемо
+      U.toast(TYPESET_ERRORS[code] || 'Не вдалося перетворити: ' + (code || 'невідома помилка'), 'err');
+      console.warn('typeset', err);
+    }).then(function () {
+      typesetBusy = false;
+      updateSelBar();
+    });
+  }
+
+  function placeTypeset(meta, slide, strokes, b) {
+    var e = cur.engine;
+    var selW = b.x2 - b.x1, selH = b.y2 - b.y1;
+    /* Розмір — від висоти рукопису: друкований текст має бути приблизно
+       такого ж кегля, як написаний. Але не вужчий за написане. */
+    var ratio = meta.w / meta.h;
+    var h = Math.max(selH * 1.1, 140);
+    var w = h * ratio;
+    if (w < selW) { w = selW; h = w / ratio; }
+    var keep = !!slide.drawings;
+    var box = keep
+      ? { x: b.x2 + 40, y: b.y1, w: w, h: h }
+      : { x: b.x1, y: b.y1, w: w, h: h };
+
+    e.snapshot();
+    if (!keep) {
+      e.slide.items = e.items().filter(function (it) { return strokes.indexOf(it) < 0; });
+    }
+    var item = e.placeImage(meta, box);
+    if (!item) return;
+    item.tx = { title: slide.title || '', blocks: slide.blocks || [], lang: slide.lang || 'uk' };
+    e.setTool('select');
+    e.setSelection([item]);
+    e.changed();
+    e.render();
+    flushSave();
+    renderRail();
+    if (keep) U.toast('На виділеному є малюнок — рукопис лишився, слайд поруч', 'ok');
+  }
+
+  /** Виділені слайди → файл Beamer .tex (кадри — зверху вниз, зліва направо). */
+  function downloadTex() {
+    if (!cur) return;
+    var frames = cur.engine.selection
+      .filter(function (it) { return it.t === 'i' && it.tx; })
+      .sort(function (a, c) { return (a.a[1] - c.a[1]) || (a.a[0] - c.a[0]); })
+      .map(function (it) { return it.tx; });
+    if (!frames.length) return;
+    App.need('beamer').then(function () {
+      var tex = window.Beamer.toTex(frames);
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([tex], { type: 'application/x-tex;charset=utf-8' }));
+      a.download = 'slides-' + U.ymd(new Date()) + '.tex';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    }, function () { U.toast('Немає звʼязку — файл не зібрався', 'err'); });
+  }
+
   function insertImageFiles(files, at) {
     if (!cur) return;
     if (!window.ImgStore || !window.ImgStore.available()) {
@@ -3770,6 +3919,8 @@
       var n = cur.engine.copySelection();
       if (n) U.toast('Скопійовано ' + U.pl(n, 'об’єкт', 'об’єкти', 'об’єктів'), 'ok');
     },
+    'board-typeset': function () { typesetSelection(); },
+    'board-tex': function () { downloadTex(); },
     'board-duplicate': function () {
       var n = cur.engine.duplicateSelection();
       if (n) U.toast('Дубльовано ' + U.pl(n, 'об’єкт', 'об’єкти', 'об’єктів'), 'ok');

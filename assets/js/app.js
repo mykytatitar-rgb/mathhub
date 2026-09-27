@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v135';
+  App.BUILD = 'v137';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -44,6 +44,11 @@
       'assets/js/formulas-prob.js',
       'assets/js/formulas-plane.js',
       'assets/js/formulas-space.js'
+    ],
+    // рукопис на дошці → слайд Beamer: набір слайда й MathJax (2 МБ) — лише коли перетворюють
+    beamer: [
+      'assets/js/beamer.js',
+      'assets/vendor/mathjax/tex-svg-full.js'
     ],
     // англійський переклад бази — лише коли перемкнулись на ENG
     'formulas-en': [

@@ -116,6 +116,57 @@ function visit(id, trail) {
 }
 Object.keys(byId).forEach(function (id) { visit(id, []); });
 
+/* Англійський переклад: усе, що є українською, має бути й англійською,
+   і без жодної кирилиці — інакше в режимі ENG вилізла б українська. */
+var enFiles = ((/'formulas-en':\s*\[([\s\S]*?)\]/.exec(app) || [, ''])[1].match(/'[^']+'/g) || [])
+  .map(function (s) { return s.slice(1, -1); });
+enFiles.forEach(function (f) { if (fs.existsSync(path.join(root, f))) load(f); else err('немає файлу перекладу ' + f); });
+var E = W.FORMULAS_EN || { sections: {}, items: {} };
+var CYR = /[А-Яа-яІіЇїЄєҐґʼ]/;
+function enTex(s) {
+  return String(s).replace(/\\arcctg(?![a-zA-Z])/g, '\\arccot').replace(/\\arctg(?![a-zA-Z])/g, '\\arctan')
+    .replace(/\\ctg(?![a-zA-Z])/g, '\\cot').replace(/\\tg(?![a-zA-Z])/g, '\\tan').replace(/\{,\}/g, '.');
+}
+function checkEnText(id, key, s) {
+  if (CYR.test(s)) err(id + ' [en ' + key + ']: кирилиця в перекладі: «' + s.match(/.{0,20}[А-Яа-яІіЇїЄєҐґʼ].{0,20}/)[0] + '»');
+  String(s).replace(/\$\$([\s\S]*?)\$\$|\$([^$]+)\$/g, function (w, a, b) {
+    var src = enTex(a != null ? a : b);
+    var left = M.render(src).replace(/<[^>]+>/g, '').match(/\\[a-zA-Z]+/g);
+    if (left) err(id + ' [en ' + key + ']: невідома команда ' + left.join(', '));
+    return w;
+  });
+  var bare = String(s).replace(/\$\$[\s\S]*?\$\$|\$[^$]+\$/g, '');
+  if (bare.indexOf('$') >= 0) err(id + ' [en ' + key + ']: непарний знак $');
+}
+D.sections.forEach(function (s) {
+  var e = E.sections[s.id];
+  if (!e) { err('розділ ' + s.id + ': немає перекладу'); return; }
+  checkEnText(s.id, 'title', e.title);
+  if (s.note && !e.note) err('розділ ' + s.id + ': немає перекладу вступу');
+  if (e.note) checkEnText(s.id, 'note', e.note);
+});
+Object.keys(E.sections).forEach(function (k) { if (!secs[k]) err('переклад розділу, якого немає: ' + k); });
+Object.keys(E.items).forEach(function (k) { if (!byId[k]) err('переклад формули, якої немає: ' + k); });
+D.items.forEach(function (it) {
+  var e = E.items[it.id];
+  if (!e) { err(it.id + ': немає перекладу'); return; }
+  checkEnText(it.id, 't', e.t || '');
+  ['w', 'ex', 'note', 'err'].forEach(function (k) {
+    if (it[k] && !e[k]) err(it.id + ': немає перекладу «' + k + '»');
+    if (!it[k] && e[k]) err(it.id + ': зайвий переклад «' + k + '»');
+    if (e[k]) checkEnText(it.id, k, e[k]);
+  });
+  var pu = (it.p || []).length, pe = (e.p || []).length;
+  if (pu !== pe) err(it.id + ': кроків доведення ' + pu + ', а в перекладі ' + pe);
+  (e.p || []).forEach(function (s, i) { checkEnText(it.id, 'p' + (i + 1), s); });
+  if (CYR.test(it.f) && !e.f) err(it.id + ': у формулі українські слова — потрібна англійська версія f');
+  if (e.f) {
+    if (CYR.test(e.f)) err(it.id + ' [en f]: кирилиця');
+    var left = M.render(enTex(e.f)).replace(/<[^>]+>/g, '').match(/\\[a-zA-Z]+/g);
+    if (left) err(it.id + ' [en f]: невідома команда ' + left.join(', '));
+  }
+});
+
 var withProof = D.items.filter(function (it) { return (it.p || []).length; }).length;
 var withFig = D.items.filter(function (it) { return it.fig; }).length;
 console.log('Розділів: ' + D.sections.length + ', формул: ' + D.items.length +

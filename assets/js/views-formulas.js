@@ -24,44 +24,130 @@
   var V = window.V;
   var MAP = window.MATH_MAP;
 
+  /* ============================================================
+     Мова
+     ============================================================
+
+     База двомовна: українська або англійська (для учнів Cambridge і
+     Precalculus). Перемкнувшись, бачиш усе однією мовою — написи, назви,
+     умови, доведення й навіть позначення: tan замість tg, крапка замість
+     коми в десяткових дробах. Англійський текст лежить окремо, у
+     formulas-en-*.js, і вантажиться, лише коли його вибрали. Вибір — річ
+     одного пристрою, тож живе в localStorage. */
+
+  var LANG_KEY = 'mathhub.fx.lang';
+  var lang = 'uk';
+  try { if (localStorage.getItem(LANG_KEY) === 'en') lang = 'en'; } catch (e) { /* приватне вікно */ }
+
+  function en() { return lang === 'en'; }
+  function T(uk, eng) { return en() ? eng : uk; }
+  /** Кількість зі словом: укр. — трьома формами, англ. — однина/множина. */
+  function N(n, uk1, uk2, uk5, en1, enN) { return en() ? n + ' ' + (n === 1 ? en1 : enN) : U.pl(n, uk1, uk2, uk5); }
+
+  // англійські назви кнопки доведення, коли вона називається інакше, ніж «Доведення»
+  var PT_EN = {
+    'Чому саме так': 'Why it is so',
+    'Доведення від супротивного': 'Proof by contradiction',
+    'Доведення (прийом Гаусса)': 'Proof (Gauss’s trick)',
+    'Доведення (індукція)': 'Proof by induction',
+    'Чому такі обмеження': 'Why these restrictions',
+    'Доведення (через скалярний добуток)': 'Proof via the dot product',
+    'Чому саме такі проміжки': 'Why these intervals',
+    'Доведення (геометричне)': 'Geometric proof',
+    'Звідки це береться': 'Where it comes from',
+    'Доведення (через площі)': 'Proof by areas',
+    'Чому відношення не залежить від трикутника': 'Why the ratio does not depend on the triangle',
+    'Звідки': 'Where it comes from',
+    'Ідея доведення': 'Idea of the proof'
+  };
+
+  /* Позначення англійською: tg → tan, ctg → cot, arctg → arctan, кома в
+     десятковому дробі (0{,}5) → крапка. */
+  function enTex(s) {
+    return String(s)
+      .replace(/\\arcctg(?![a-zA-Z])/g, '\\arccot').replace(/\\arctg(?![a-zA-Z])/g, '\\arctan')
+      .replace(/\\ctg(?![a-zA-Z])/g, '\\cot').replace(/\\tg(?![a-zA-Z])/g, '\\tan')
+      .replace(/\{,\}/g, '.');
+  }
+
   var DOMAINS = [
-    ['alg', 'Алгебра'],
-    ['trig', 'Тригонометрія'],
-    ['an', 'Початки аналізу'],
-    ['prob', 'Комбінаторика та ймовірність'],
-    ['plane', 'Планіметрія'],
-    ['coord', 'Координати й вектори'],
-    ['space', 'Стереометрія']
+    ['alg', 'Алгебра', 'Algebra'],
+    ['trig', 'Тригонометрія', 'Trigonometry'],
+    ['an', 'Початки аналізу', 'Calculus'],
+    ['prob', 'Комбінаторика та ймовірність', 'Combinatorics & probability'],
+    ['plane', 'Планіметрія', 'Plane geometry'],
+    ['coord', 'Координати й вектори', 'Coordinates & vectors'],
+    ['space', 'Стереометрія', 'Solid geometry']
   ];
 
   var topicName = {};
   if (MAP) MAP.topics.forEach(function (t) { topicName[t.id] = t.name; });
 
-  var state = 'idle';           // idle | loading | ready | failed
+  var state = 'idle';           // idle | loading | ready | failed — сама база
+  var stateEn = 'idle';         // те саме для англійського перекладу
   var open = {};                // розгорнуті доведення: id → true
   var byId = null, secById = null, usedBy = null;
   var placedFor = null;         // адреса, для якої вже прокрутили до формули
 
-  function fmt(t) { return window.MathFmt ? MathFmt.text(t) : U.esc(t); }
-  function tex(t) { return window.MathFmt ? MathFmt.render(t) : U.esc(t); }
+  function fmt(t) {
+    if (t == null || t === '') return '';
+    if (en()) t = enTex(t);
+    return window.MathFmt ? MathFmt.text(t) : U.esc(t);
+  }
+  function tex(t) {
+    if (en()) t = enTex(t);
+    return window.MathFmt ? MathFmt.render(t) : U.esc(t);
+  }
+
+  /** Формула вибраною мовою. Англійський переклад заміняє всі тексти:
+      чого в ньому немає, того й не показуємо — щоб не змішувати мови
+      (повноту перекладу стереже tools/formulas-check.js). */
+  function L(it) {
+    if (!en()) return it;
+    var e = (window.FORMULAS_EN && window.FORMULAS_EN.items[it.id]) || {};
+    var o = {};
+    Object.keys(it).forEach(function (k) { o[k] = it[k]; });
+    ['w', 'ex', 'note', 'err', 'p'].forEach(function (k) { o[k] = e[k]; });
+    o.t = e.t || it.en || it.t;
+    o.f = e.f || it.f;
+    o.pt = e.pt || (it.pt ? PT_EN[it.pt] || 'Proof' : '');
+    return o;
+  }
+  function secTitle(s) {
+    var e = en() && window.FORMULAS_EN && window.FORMULAS_EN.sections[s.id];
+    return e ? e.title : s.title;
+  }
+  function secNote(s) {
+    if (!en()) return s.note;
+    var e = window.FORMULAS_EN && window.FORMULAS_EN.sections[s.id];
+    return e ? e.note || '' : '';
+  }
 
   function onPage() { return /^#\/reference/.test(location.hash); }
 
   /* Перший рендер іде ще під час виконання app.js, а window.App
      зʼявляється лише в кінці файлу. Тому звертаємось до нього на мить
      пізніше — коли файл уже виконано. */
-  function need() {
+  function need(group) {
     return new Promise(function (res) { setTimeout(res, 0); })
-      .then(function () { return window.App.need('formulas'); });
+      .then(function () { return window.App.need(group || 'formulas'); });
   }
   function rerender() { if (onPage() && window.App) window.App.render(); }
 
   function ensure() {
-    if (state !== 'idle') return;
-    state = 'loading';
-    need().then(function () { state = 'ready'; rerender(); },
-                function () { state = 'failed'; rerender(); });
+    if (state === 'idle') {
+      state = 'loading';
+      need('formulas').then(function () { state = 'ready'; rerender(); },
+                            function () { state = 'failed'; rerender(); });
+    }
+    if (en() && stateEn === 'idle') {
+      stateEn = 'loading';
+      need('formulas-en').then(function () { stateEn = 'ready'; rerender(); },
+                               function () { stateEn = 'failed'; rerender(); });
+    }
   }
+  function isReady() { return state === 'ready' && (!en() || stateEn === 'ready'); }
+  function isFailed() { return state === 'failed' || (en() && stateEn === 'failed'); }
 
   function index() {
     if (byId) return;
@@ -241,7 +327,7 @@
     });
 
     return '<svg class="fxg" viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H +
-      '" role="img" aria-label="Малюнок до доведення">' + out + '</svg>';
+      '" role="img" aria-label="' + T('Малюнок до доведення', 'Proof diagram') + '">' + out + '</svg>';
   }
 
   /* ============================================================
@@ -251,40 +337,43 @@
   function chip(id) {
     var x = byId[id];
     if (!x) return '';
-    return '<button class="fx-chip" data-act="fx-go" data-arg="' + id + '">' + fmt(x.t) + '</button>';
+    return '<button class="fx-chip" data-act="fx-go" data-arg="' + id + '">' + fmt(L(x).t) + '</button>';
   }
 
-  function card(it, opts) {
+  function card(raw, opts) {
     opts = opts || {};
+    var it = L(raw);
     var steps = it.p || [];
     var isOpen = !!open[it.id];
     var topic = topicOf(it);
     var back = usedBy[it.id] || [];
 
+    /* Англійська назва поруч з українською прибрана: у кожній мові — лише
+       своя. Англійською формулу й так знаходить пошук. */
     return '<article class="fx' + (isOpen ? ' is-open' : '') + '" id="fx-' + it.id + '">' +
       '<div class="fx__head">' +
         '<h3 class="fx__t">' + fmt(it.t) + '</h3>' +
-        (it.en ? '<span class="fx__en">' + U.esc(it.en) + '</span>' : '') +
         (opts.withSec && secById[it.sec]
-          ? '<button class="fx__sec" data-act="fx-go" data-arg="' + it.id + '">' + U.esc(secById[it.sec].title) + '</button>'
+          ? '<button class="fx__sec" data-act="fx-go" data-arg="' + it.id + '">' + U.esc(secTitle(secById[it.sec])) + '</button>'
           : '') +
       '</div>' +
       '<div class="fx__f">' + tex(it.f) + '</div>' +
       (it.w ? '<div class="fx__w">' + icon('info', 14) + '<span>' + fmt(it.w) + '</span></div>' : '') +
-      (it.ex ? '<div class="fx__ex"><b>Приклад.</b> ' + fmt(it.ex) + '</div>' : '') +
+      (it.ex ? '<div class="fx__ex"><b>' + T('Приклад.', 'Example.') + '</b> ' + fmt(it.ex) + '</div>' : '') +
       (it.fig && !steps.length ? '<div class="fx__fig">' + figure(it.fig) + '</div>' : '') +
 
       '<div class="fx__acts">' +
         (steps.length
           ? '<button class="fx__proofbtn" data-act="fx-proof" data-arg="' + it.id + '" aria-expanded="' + isOpen + '">' +
-            icon('chevronR', 15) + '<span>' + (it.pt || 'Доведення') + '</span></button>'
+            icon('chevronR', 15) + '<span>' + U.esc(it.pt || T('Доведення', 'Proof')) + '</span></button>'
           : '') +
         '<span class="fx__links">' +
           (topic && topicName[topic]
-            ? '<button class="fx__link" data-act="nav" data-arg="#/mathmap?t=' + topic + '" title="' + U.esc(topicName[topic]) + '">' +
-              icon('mathmap', 14) + 'Тема на карті</button>' +
+            ? '<button class="fx__link" data-act="nav" data-arg="#/mathmap?t=' + topic + '"' +
+                (en() ? '' : ' title="' + U.esc(topicName[topic]) + '"') + '>' +
+              icon('mathmap', 14) + T('Тема на карті', 'Map topic') + '</button>' +
               '<button class="fx__link" data-act="nav" data-arg="#/bank?topic=' + topic + '">' +
-              icon('layers', 14) + 'Задачі</button>'
+              icon('layers', 14) + T('Задачі', 'Problems') + '</button>'
             : '') +
         '</span>' +
       '</div>' +
@@ -293,7 +382,7 @@
         ? '<div class="fx__proof">' +
             (it.fig ? '<div class="fx__fig">' + figure(it.fig) + '</div>' : '') +
             ((it.uses || []).length
-              ? '<div class="fx__rel"><span>Спирається на:</span>' + it.uses.map(chip).join('') + '</div>'
+              ? '<div class="fx__rel"><span>' + T('Спирається на:', 'Relies on:') + '</span>' + it.uses.map(chip).join('') + '</div>'
               : '') +
             '<ol class="fx__steps">' + steps.map(function (s) { return '<li>' + fmt(s) + '</li>'; }).join('') + '</ol>' +
             '<div class="fx__qed">∎</div>' +
@@ -301,9 +390,10 @@
         : '') +
 
       (it.note ? '<div class="blk-info fx__note">' + fmt(it.note) + '</div>' : '') +
-      (it.err ? '<div class="blk-warn fx__note">' + icon('alert', 15) + '<span><b>Типова помилка.</b> ' + fmt(it.err) + '</span></div>' : '') +
+      (it.err ? '<div class="blk-warn fx__note">' + icon('alert', 15) + '<span><b>' +
+        T('Типова помилка.', 'Common mistake.') + '</b> ' + fmt(it.err) + '</span></div>' : '') +
       (back.length
-        ? '<div class="fx__rel fx__rel--back"><span>На ній тримаються:</span>' + back.map(chip).join('') + '</div>'
+        ? '<div class="fx__rel fx__rel--back"><span>' + T('На ній тримаються:', 'Used in:') + '</span>' + back.map(chip).join('') + '</div>'
         : '') +
     '</article>';
   }
@@ -315,16 +405,25 @@
   function bar(count, q, proofs) {
     var sheets = S.db().materials.filter(function (m) { return m.type === 'theory'; });
     return '<div class="ref__bar">' +
-      '<div class="ref__title">База формул</div>' +
+      '<div class="ref__title">' + T('База формул', 'Formula base') + '</div>' +
       '<div class="ref__count">' + (count
-        ? U.pl(count, 'формула', 'формули', 'формул') + ' · ' + U.pl(proofs, 'доведення', 'доведення', 'доведень')
-        : 'з доведеннями') + '</div>' +
-      '<input class="ref__q" data-ref-q type="search" placeholder="Знайти формулу…" ' +
+        ? N(count, 'формула', 'формули', 'формул', 'formula', 'formulas') + ' · ' +
+          N(proofs, 'доведення', 'доведення', 'доведень', 'proof', 'proofs')
+        : T('з доведеннями', 'with proofs')) + '</div>' +
+      /* Мову видно й перемкнути одним дотиком; кожна кнопка підписана
+         своєю мовою — так її знайде й той, хто іншої не читає. */
+      '<div class="fx-lang" role="group" aria-label="' + T('Мова', 'Language') + '">' +
+        '<button class="' + (en() ? '' : 'is-on') + '" data-act="fx-lang" data-arg="uk" lang="uk">УКР</button>' +
+        '<button class="' + (en() ? 'is-on' : '') + '" data-act="fx-lang" data-arg="en" lang="en">ENG</button>' +
+      '</div>' +
+      '<input class="ref__q" data-ref-q type="search" placeholder="' + T('Знайти формулу…', 'Find a formula…') + '" ' +
         'value="' + U.esc(q || '') + '" autocomplete="off">' +
-      '<button class="btn btn--ghost btn--sm" data-act="sheet-print">' + icon('download', 15) + 'Друк</button>' +
-      (sheets.length
+      '<button class="btn btn--ghost btn--sm" data-act="sheet-print">' + icon('download', 15) + T('Друк', 'Print') + '</button>' +
+      /* Англійські шпаргалки — лише в англійському режимі: в українському
+         це була б єдина англійська річ на сторінці. */
+      (sheets.length && en()
         ? '<button class="btn btn--ghost btn--sm" data-act="nav" data-arg="#/sheet/' + sheets[0].id + '" ' +
-          'title="Англомовні шпаргалки для Cambridge і Precalculus">' + icon('book', 15) + 'Шпаргалки англ.</button>'
+          'title="Cheat sheets for Cambridge and Precalculus">' + icon('book', 15) + 'Cheat sheets</button>'
         : '') +
     '</div>';
   }
@@ -334,9 +433,9 @@
     return DOMAINS.map(function (d) {
       var secs = D.sections.filter(function (s) { return s.dom === d[0]; });
       if (!secs.length) return '';
-      return '<div class="fxn__dom">' + d[1] + '</div>' + secs.map(function (s) {
+      return '<div class="fxn__dom">' + T(d[1], d[2]) + '</div>' + secs.map(function (s) {
         return '<button class="ref__t' + (s.id === cur ? ' is-on' : '') + '" data-act="fx-sec" data-arg="' + s.id + '">' +
-          '<span class="truncate">' + U.esc(s.title) + '</span>' +
+          '<span class="truncate">' + U.esc(secTitle(s)) + '</span>' +
           '<span class="fxn__n">' + s.items.length + '</span></button>';
       }).join('');
     }).join('');
@@ -344,13 +443,18 @@
 
   function norm(s) { return String(s || '').toLowerCase().replace(/ё/g, 'е'); }
 
+  /* Пошук — вибраною мовою: українською в назвах, ключових словах і
+     умовах, англійською — в англійських. Сам запис формули — однаковий. */
   function search(q) {
     var ql = norm(q), qs = ql.replace(/\s+/g, '');
-    return window.FORMULAS.items.filter(function (it) {
-      var s = secById[it.sec];
-      var hay = norm([it.t, it.en, it.k, s && s.title, it.w].join(' '));
+    return window.FORMULAS.items.filter(function (raw) {
+      var it = L(raw);
+      var s = secById[raw.sec];
+      var hay = norm((en()
+        ? [it.t, raw.en, s && secTitle(s), it.w]
+        : [it.t, raw.k, s && s.title, it.w]).join(' '));
       if (hay.indexOf(ql) >= 0) return true;
-      return norm(it.f).replace(/\s+/g, '').indexOf(qs) >= 0;
+      return norm(raw.f).replace(/\s+/g, '').indexOf(qs) >= 0;
     });
   }
 
@@ -358,20 +462,19 @@
     query = query || {};
     var q = String(query.q || '').trim();
 
-    if (!window.FORMULAS || state !== 'ready') {
-      if (window.FORMULAS && state === 'idle') state = 'ready';
-      else ensure();
-      if (state !== 'ready') {
-        return '<div class="ref">' + bar(0, q) +
-          (state === 'failed'
-            ? '<div class="page"><div class="card">' +
-                C.empty('alert', 'База формул не відкрилась',
-                  'Немає звʼязку, а на пристрої її ще немає.',
-                  '<button class="btn btn--primary" data-act="fx-retry">Спробувати ще</button>') +
-              '</div></div>'
-            : '<div class="board-wait"></div>') +
-          '</div>';
-      }
+    if (window.FORMULAS && state === 'idle') state = 'ready';
+    if (window.FORMULAS_EN && stateEn === 'idle') stateEn = 'ready';
+    if (!isReady()) {
+      ensure();
+      return '<div class="ref">' + bar(0, q) +
+        (isFailed()
+          ? '<div class="page"><div class="card">' +
+              C.empty('alert', T('База формул не відкрилась', 'The formula base did not open'),
+                T('Немає звʼязку, а на пристрої її ще немає.', 'No connection, and it is not on this device yet.'),
+                '<button class="btn btn--primary" data-act="fx-retry">' + T('Спробувати ще', 'Try again') + '</button>') +
+            '</div></div>'
+          : '<div class="board-wait"></div>') +
+        '</div>';
     }
     index();
 
@@ -382,31 +485,35 @@
     var head, body;
     if (q.length > 1) {
       var found = search(q);
-      head = U.esc(q) + '<span class="ref__sub">' + U.pl(found.length, 'знахідка', 'знахідки', 'знахідок') + '</span>';
+      head = U.esc(q) + '<span class="ref__sub">' + N(found.length, 'знахідка', 'знахідки', 'знахідок', 'result', 'results') + '</span>';
       body = found.length
         ? found.slice(0, 60).map(function (it) { return card(it, { withSec: true }); }).join('')
-        : '<div class="card">' + C.empty('search', 'Нічого не знайшлося',
-            'Шукається в назвах, ключових словах і в самому записі формули: «синус суми», «a^2-b^2», «Герон».') + '</div>';
+        : '<div class="card">' + C.empty('search', T('Нічого не знайшлося', 'Nothing found'),
+            T('Шукається в назвах, ключових словах і в самому записі формули: «синус суми», «a^2-b^2», «Герон».',
+              'Search looks in titles, conditions and the formula itself: “sine of a sum”, “a^2-b^2”, “Heron”.')) + '</div>';
     } else if (topic) {
       var inTopic = D.items.filter(function (it) { return topicOf(it) === topic; });
-      head = U.esc(topicName[topic]) + '<span class="ref__sub">' + U.pl(inTopic.length, 'формула', 'формули', 'формул') + ' теми</span>';
+      // назви тем карти — українські; англійською показуємо лише кількість
+      head = T(U.esc(topicName[topic]), 'Map topic') + '<span class="ref__sub">' +
+        N(inTopic.length, 'формула', 'формули', 'формул', 'formula', 'formulas') + T(' теми', '') + '</span>';
       body = '<div class="fx-topicbar"><button class="btn btn--ghost btn--sm" data-act="fx-sec" data-arg="' + sec.id + '">' +
-          icon('arrowLeft', 15) + 'Усі розділи</button></div>' +
+          icon('arrowLeft', 15) + T('Усі розділи', 'All sections') + '</button></div>' +
         (inTopic.length
           ? inTopic.map(function (it) { return card(it, { withSec: true }); }).join('')
-          : '<div class="card">' + C.empty('book', 'До цієї теми формул ще немає', '') + '</div>');
+          : '<div class="card">' + C.empty('book', T('До цієї теми формул ще немає', 'No formulas for this topic yet'), '') + '</div>');
     } else {
       var allOpen = sec.items.every(function (it) { return !(it.p || []).length || open[it.id]; });
-      head = U.esc(sec.title) + '<span class="ref__sub">' +
-        U.pl(sec.items.length, 'формула', 'формули', 'формул') + '</span>' +
+      var note = secNote(sec);
+      head = U.esc(secTitle(sec)) + '<span class="ref__sub">' +
+        N(sec.items.length, 'формула', 'формули', 'формул', 'formula', 'formulas') + '</span>' +
         '<button class="fx-all" data-act="fx-all" data-arg="' + sec.id + '">' +
-          (allOpen ? 'Згорнути доведення' : 'Розгорнути всі доведення') + '</button>';
-      body = (sec.note ? '<div class="fx-intro">' + fmt(sec.note) + '</div>' : '') +
+          (allOpen ? T('Згорнути доведення', 'Collapse proofs') : T('Розгорнути всі доведення', 'Expand all proofs')) + '</button>';
+      body = (note ? '<div class="fx-intro">' + fmt(note) + '</div>' : '') +
         sec.items.map(function (it) { return card(it); }).join('');
     }
 
     var proofs = D.items.filter(function (it) { return (it.p || []).length; }).length;
-    return '<div class="ref ref--fx">' + bar(D.items.length, q, proofs) +
+    return '<div class="ref ref--fx"' + (en() ? ' lang="en"' : '') + '>' + bar(D.items.length, q, proofs) +
       '<div class="ref__body">' +
         '<nav class="ref__nav fxn">' + nav(q.length > 1 || topic ? '' : sec.id) + '</nav>' +
         '<div class="ref__main" data-fx-main>' +
@@ -471,6 +578,18 @@
       if (location.hash === h) { placedFor = null; V.mountFormulas({ f: id }); }
       else location.hash = h;
     },
-    'fx-retry': function () { state = 'idle'; window.App.render(); }
+    'fx-retry': function () {
+      if (state === 'failed') state = 'idle';
+      if (stateEn === 'failed') stateEn = 'idle';
+      window.App.render();
+    },
+    'fx-lang': function (l) {
+      lang = l === 'en' ? 'en' : 'uk';
+      try { localStorage.setItem(LANG_KEY, lang); } catch (e) { /* приватне вікно — лише до перезавантаження */ }
+      window.App.render();
+    }
   };
+
+  /** Назва розділу у верхній смузі телефона — тією ж мовою, що й сама база. */
+  V.formulasTitle = function () { return T('Формули', 'Formulas'); };
 })();

@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v134';
+  App.BUILD = 'v135';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -44,6 +44,15 @@
       'assets/js/formulas-prob.js',
       'assets/js/formulas-plane.js',
       'assets/js/formulas-space.js'
+    ],
+    // англійський переклад бази — лише коли перемкнулись на ENG
+    'formulas-en': [
+      'assets/js/formulas-en-algebra.js',
+      'assets/js/formulas-en-trig.js',
+      'assets/js/formulas-en-analysis.js',
+      'assets/js/formulas-en-prob.js',
+      'assets/js/formulas-en-plane.js',
+      'assets/js/formulas-en-space.js'
     ]
   };
   var lazyDone = {};
@@ -383,7 +392,7 @@
      решта значками. Банер учня з аватаркою лишається: це вже зміст. */
   var TITLES = {
     '': 'Огляд', students: 'Учні', student: 'Учні', schedule: 'Розклад', finance: 'Фінанси',
-    materials: 'Матеріали', reference: 'Формули', sheet: 'Шпаргалки англ.', bank: 'Банк задач',
+    materials: 'Матеріали', reference: 'Формули', sheet: 'Cheat sheets', bank: 'Банк задач',
     olymp: 'Олімпіади', desk: 'Моє', mathmap: 'Карта математики', settings: 'Налаштування'
   };
 
@@ -393,7 +402,9 @@
     var hero = document.querySelector('#main .hero');
     var person = hero && hero.querySelector('.avatar');
     var t = hero && hero.querySelector('.hero__title');
-    var title = TITLES[route.parts[0] || ''] || (t ? t.textContent : 'Вектор');
+    // база формул двомовна — і назва в смузі тією мовою, що вибрана в ній
+    var title = route.parts[0] === 'reference' && V.formulasTitle ? V.formulasTitle()
+      : TITLES[route.parts[0] || ''] || (t ? t.textContent : 'Вектор');
     var subEl = hero && !person && hero.querySelector('.hero__sub');
     var back = hero && hero.querySelector('.hero__back');
     var acts = hero && !person ? U.$$('.hero__actions .hero-btn', hero) : [];
@@ -1074,16 +1085,17 @@
     'sheet-del': function (id) {
       var m = S.get('materials', id);
       if (!m) return;
-      C.confirm('Видалити «' + (m.title || 'тему') + '»?',
-        U.pl((m.rules || []).length, 'Блок', 'Блоки', 'Блоків') +
-        ' цієї теми зникнуть. Інші теми не зачепить.',
+      // сторінка шпаргалок англійська — і питання про видалення теж
+      var nr = (m.rules || []).length;
+      C.confirm('Delete “' + (m.title || 'topic') + '”?',
+        nr + (nr === 1 ? ' block' : ' blocks') + ' of this topic will be removed. Other topics stay untouched.',
         function () {
           S.remove('materials', id);
-          U.toast('Тему видалено');
+          U.toast('Topic deleted');
           location.hash = '#/sheet';
           App.render();
         },
-        'Видалити');
+        'Delete', 'Cancel');
     },
     'sheet-print': function () { window.print(); },
 

@@ -311,7 +311,7 @@
 
         /* Назви функцій ставимо прямим шрифтом: sin x — це функція, а не
            добуток трьох літер, і курсив тут збиває. */
-        if (/^(sin|cos|tg|ctg|tan|cot|sec|csc|log|ln|lg|arcsin|arccos|arctg|arcctg|arctan|sh|ch|th|max|min|gcd|lcm|det|exp|deg|arg|sup|inf)$/.test(name)) {
+        if (/^(sin|cos|tg|ctg|tan|cot|sec|csc|log|ln|lg|arcsin|arccos|arctg|arcctg|arctan|arccot|sh|ch|th|max|min|gcd|lcm|det|exp|deg|arg|sup|inf)$/.test(name)) {
           out += '<span class="mf-fn">' + name + '</span>';
           continue;
         }

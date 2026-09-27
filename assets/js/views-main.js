@@ -930,10 +930,10 @@
 
     if (!all.length) {
       return '<div class="page"><div class="card">' +
-        C.empty('book', 'Англійських шпаргалок ще немає',
-          'Вони заводяться одним натисканням: теми, розділи, формули, приклади англійською.',
+        C.empty('book', 'No cheat sheets yet',
+          'They are added in one click: topics, sections, formulas and examples in English.',
           '<button class="btn btn--primary" data-act="mat-add-theory">' +
-          icon('book', 16) + 'Завантажити шпаргалки</button>') +
+          icon('book', 16) + 'Add cheat sheets</button>') +
         '</div></div>';
     }
 
@@ -974,10 +974,10 @@
       var dup = seen[(x.title || '').toLowerCase().trim()] > 1;
       return '<button class="ref__t' + (x.id === m.id ? ' is-on' : '') +
         '" data-act="sheet-open" data-arg="' + x.id + '"' +
-        (dup ? ' title="Така сама назва є ще в іншої теми"' : '') + '>' +
+        (dup ? ' title="Another topic has the same title"' : '') + '>' +
         '<span class="ref__n">' + (n + 1) + '.</span>' +
-        '<span class="truncate">' + U.esc(x.title || 'Без назви') + '</span>' +
-        (dup ? '<span class="ref__dup" title="Повтор назви">2</span>' : '') +
+        '<span class="truncate">' + U.esc(x.title || 'Untitled') + '</span>' +
+        (dup ? '<span class="ref__dup" title="Duplicate title">2</span>' : '') +
         icon('chevronR', 14) + '</button>';
     }).join('');
 
@@ -1075,24 +1075,37 @@
         '</div>';
     }).join('');
 
-    return '<div class="ref">' +
+    /* Шпаргалки англомовні — і вся сторінка англійською: заголовки,
+       кнопки й підказки. Українські написи поруч з англійськими формулами
+       читались як дві різні програми на одному екрані. Тема з
+       «Матеріалів» (вона українська) показується англійською назвою. */
+    var TOPIC_EN = {
+      'Числа і вирази': 'Numbers and expressions', 'Функції та графіки': 'Functions and graphs',
+      'Рівняння і нерівності': 'Equations and inequalities', 'Тригонометрія': 'Trigonometry',
+      'Числові послідовності': 'Sequences', 'Похідна та її застосування': 'Derivatives',
+      'Інтеграл і первісна': 'Integrals', 'Комбінаторика, ймовірність, статистика': 'Combinatorics, probability, statistics'
+    };
+    function plEn(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+    var topicEn = TOPIC_EN[m.topic] || (/[А-Яа-яІіЇїЄєҐґ]/.test(m.topic || '') ? '' : m.topic);
+
+    return '<div class="ref" lang="en">' +
       '<div class="ref__bar">' +
         '<button class="btn btn--ghost btn--sm" data-act="nav" data-arg="#/reference">' +
-          icon('arrowLeft', 15) + 'База формул</button>' +
-        '<div class="ref__title">Шпаргалки англ.</div>' +
-        '<div class="ref__count">' + U.pl(all.length, 'тема', 'теми', 'тем') + '</div>' +
-        '<input class="ref__q" data-ref-q type="search" placeholder="Знайти правило…" ' +
+          icon('arrowLeft', 15) + 'Formula base</button>' +
+        '<div class="ref__title">Cheat sheets</div>' +
+        '<div class="ref__count">' + plEn(all.length, 'topic', 'topics') + '</div>' +
+        '<input class="ref__q" data-ref-q type="search" placeholder="Find a rule…" ' +
           'value="' + U.esc(q) + '" autocomplete="off">' +
         '<button class="btn btn--ghost btn--sm" data-act="sheet-print">' +
-          icon('download', 15) + 'Друк</button>' +
+          icon('download', 15) + 'Print</button>' +
         '<button class="btn btn--ghost btn--sm" data-act="mat-edit" data-arg="' + m.id + '">' +
-          icon('edit', 15) + 'Редагувати</button>' +
+          icon('edit', 15) + 'Edit</button>' +
         (canRefresh
           ? '<button class="btn btn--ghost btn--sm" data-act="sheet-refresh" data-arg="' + m.id + '">' +
-            icon('refresh', 15) + 'Оновити тему</button>'
+            icon('refresh', 15) + 'Update topic</button>'
           : '') +
         '<button class="btn btn--ghost btn--sm" data-act="sheet-del" data-arg="' + m.id + '">' +
-          icon('trash', 15) + 'Видалити тему</button>' +
+          icon('trash', 15) + 'Delete topic</button>' +
       '</div>' +
 
       '<div class="ref__body">' +
@@ -1100,41 +1113,40 @@
         '<div class="ref__main">' +
           '<div class="ref__h">' +
             (ql.length > 1
-              ? U.esc(q) + '<span class="ref__sub">' +
-                U.pl(found.length, 'знахідка', 'знахідки', 'знахідок') + '</span>'
+              ? U.esc(q) + '<span class="ref__sub">' + plEn(found.length, 'result', 'results') + '</span>'
               : U.esc(m.title || '') +
-                (m.topic ? '<span class="ref__sub">' + U.esc(m.topic) + '</span>' : '')) +
+                (topicEn ? '<span class="ref__sub">' + U.esc(topicEn) + '</span>' : '')) +
           '</div>' +
           (missing.length
             ? '<div class="ref__new">' +
               '<div style="flex:1;min-width:0">' +
                 '<b>' + (missing.length === 1
-                  ? 'Нова тема у готовому довіднику'
-                  : 'У готовому довіднику ' + U.pl(missing.length, 'нова тема', 'нові теми', 'нових тем')) +
+                  ? 'A new topic in the built-in cheat sheets'
+                  : plEn(missing.length, 'new topic', 'new topics') + ' in the built-in cheat sheets') +
                 '</b><br>' +
                 U.esc(missing.map(function (x) { return x.title; }).join(', ')) +
               '</div>' +
               '<button class="btn btn--primary btn--sm" data-act="mat-add-theory">' +
-              icon('plus', 15) + 'Додати</button>' +
+              icon('plus', 15) + 'Add</button>' +
               '</div>'
             : '') +
 
           (grown.length
             ? '<div class="ref__new">' +
               '<div style="flex:1;min-width:0">' +
-                '<b>' + U.pl(grown.length, 'тема доповнилась', 'теми доповнились', 'тем доповнились') +
-                ' у готовому довіднику</b><br>' +
+                '<b>' + plEn(grown.length, 'topic was', 'topics were') +
+                ' extended in the built-in cheat sheets</b><br>' +
                 U.esc(grown.map(function (x) { return x.title; }).slice(0, 6).join(', ')) +
-                (grown.length > 6 ? ' та інші' : '') +
+                (grown.length > 6 ? ' and others' : '') +
               '</div>' +
               '<button class="btn btn--primary btn--sm" data-act="sheets-refresh-all">' +
-              icon('refresh', 15) + 'Оновити всі</button>' +
+              icon('refresh', 15) + 'Update all</button>' +
               '</div>'
             : '') +
           (dupNow
             ? '<div class="blk-warn mb-3">' + icon('alert', 15) +
-              '<span>Тема з такою назвою є ще раз. Порівняйте їх і зайву приберіть — ' +
-              'кнопка «Видалити тему» вгорі.</span></div>'
+              '<span>There is another topic with this title. Compare them and remove the extra one — ' +
+              'the “Delete topic” button at the top.</span></div>'
             : '') +
           (m.note ? '<div class="blk-text mb-3">' + U.esc(m.note) + '</div>' : '') +
           (ql.length > 1
@@ -1149,15 +1161,15 @@
                       '</div>';
                   }).join('') + '</div>' +
                   (found.length > 60
-                    ? '<div class="blk-text mt-2">Показано перші 60 із ' + found.length +
-                      '. Уточніть запит.</div>' : '')
-                : '<div class="card">' + C.empty('search', 'Нічого не знайшлося',
-                    'Спробуйте коротший запит — шукається і в тексті, і в самому записі формули.') +
+                    ? '<div class="blk-text mt-2">Showing the first 60 of ' + found.length +
+                      '. Refine your search.</div>' : '')
+                : '<div class="card">' + C.empty('search', 'Nothing found',
+                    'Try a shorter query — the search looks both in the text and in the formulas themselves.') +
                   '</div>')
             : groups.length
               ? '<div class="sheet">' + cards + '</div>'
-              : '<div class="card">' + C.empty('book', 'Правил ще немає',
-                  'Відкрийте редагування й додайте перше.') + '</div>') +
+              : '<div class="card">' + C.empty('book', 'No rules yet',
+                  'Open the editor and add the first one.') + '</div>') +
         '</div>' +
       '</div>' +
       '</div>';

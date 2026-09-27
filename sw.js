@@ -7,7 +7,7 @@
 
    Версію треба піднімати щоразу, коли змінюється склад файлів. */
 
-var VERSION = 'vektor-v134';
+var VERSION = 'vektor-v135';
 
 /* Банк задач — окремий кеш: він не залежить від версії кабінету й не
    чиститься з кожним оновленням. Кожен файл банку приходить з відбитком
@@ -71,6 +71,12 @@ var CODE = [
   './assets/js/formulas-prob.js',
   './assets/js/formulas-plane.js',
   './assets/js/formulas-space.js',
+  './assets/js/formulas-en-algebra.js',
+  './assets/js/formulas-en-trig.js',
+  './assets/js/formulas-en-analysis.js',
+  './assets/js/formulas-en-prob.js',
+  './assets/js/formulas-en-plane.js',
+  './assets/js/formulas-en-space.js',
   './assets/js/shapefacts.js',
   './share/engine/constructions.js',
   './share/engine/plot.js',

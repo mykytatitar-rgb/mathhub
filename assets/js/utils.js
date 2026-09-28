@@ -251,7 +251,7 @@
       el.style.opacity = '0';
       el.style.transform = 'translateY(10px)';
       setTimeout(function () { el.remove(); }, 260);
-    }, 2600);
+    }, Math.min(9000, Math.max(2600, String(msg).length * 45)));   // довше — щоб устигнути прочитати
   };
 
   window.U = U;

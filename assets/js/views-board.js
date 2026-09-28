@@ -2986,7 +2986,9 @@
       if (res.ok) return res.json();
       return res.json().catch(function () { return {}; }).then(function (j) {
         var code = res.status === 404 ? 'not-deployed' : (j && j.error) || 'net';
-        throw new Error(code);
+        var er = new Error(code);
+        er.detail = j && j.detail;            // що саме сказав Google чи Anthropic
+        throw er;
       });
     }, function () { throw new Error(navigator.onLine === false ? 'net' : 'unreachable'); });
 
@@ -3004,7 +3006,10 @@
     }).catch(function (err) {
       var code = err && err.message;
       if (code === 'moved') return;       // перейшли на інший слайд — мовчки нічого не кладемо
-      U.toast(TYPESET_ERRORS[code] || 'Не вдалося перетворити: ' + (code || 'невідома помилка'), 'err');
+      var msg = TYPESET_ERRORS[code] || 'Не вдалося перетворити: ' + (code || 'невідома помилка');
+      // без причини від постачальника «повернув помилку» нічого не пояснює
+      if (err.detail && /^(api|busy|bad-key|server)$/.test(code)) msg += ' (' + String(err.detail).slice(0, 180) + ')';
+      U.toast(msg, 'err');
       console.warn('typeset', err);
     }).then(function () {
       typesetBusy = false;

@@ -93,11 +93,15 @@ function parseSlide(text: string): Slide | null {
 }
 
 // Помилка розпізнавача з кодом, який кабінет перекладає людською мовою.
+// detail — що саме сказав постачальник: кабінет показує це в повідомленні,
+// щоб причину було видно одразу, без журналів Supabase.
 class RecognizerError extends Error {
-  constructor(public code: string, public status: number) {
+  constructor(public code: string, public status: number, public detail = "") {
     super(code);
   }
 }
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function viaClaude(image: string): Promise<string> {
   const client = new Anthropic(); // ANTHROPIC_API_KEY — із секретів функції
@@ -127,11 +131,11 @@ async function viaClaude(image: string): Promise<string> {
       .join("\n");
   } catch (error) {
     if (error instanceof RecognizerError) throw error;
-    if (error instanceof Anthropic.AuthenticationError) throw new RecognizerError("bad-key", 503);
-    if (error instanceof Anthropic.RateLimitError) throw new RecognizerError("busy", 429);
+    if (error instanceof Anthropic.AuthenticationError) throw new RecognizerError("bad-key", 503, "Claude");
+    if (error instanceof Anthropic.RateLimitError) throw new RecognizerError("busy", 429, "Claude");
     if (error instanceof Anthropic.APIError) {
       console.error("anthropic", error.status, error.message);
-      throw new RecognizerError("api", 502);
+      throw new RecognizerError("api", 502, `Claude ${error.status}: ${error.message}`.slice(0, 300));
     }
     throw error;
   }
@@ -145,48 +149,63 @@ const GEMINI_BLOCKED = ["SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "IM
 
 type GeminiPart = { text?: string; thought?: boolean };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function googleMessage(body: any): string {
+  const e = body && body.error;
+  return String((e && (e.message || e.status)) || JSON.stringify(body)).slice(0, 240);
+}
+
+/* Google часто відповідає «модель перевантажена» (503) — тоді ще раз за
+   мить, а далі запасна модель. Вичерпаний ліміт однієї моделі (429) — теж
+   привід спробувати іншу: квоти в них окремі. Що саме сказав Google,
+   повертаємо кабінету, щоб причину було видно одразу. */
 async function viaGemini(image: string, key: string): Promise<string> {
+  const tried: Record<string, string> = {};    // остання відповідь кожної моделі
+  let limited = false;
   for (const model of GEMINI_MODELS) {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-      {
-        method: "POST",
-        headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM }] },
-          contents: [{
-            role: "user",
-            parts: [
-              { inlineData: { mimeType: "image/png", data: image } },
-              { text: PROMPT },
-            ],
-          }],
-          generationConfig: { responseMimeType: "application/json" },
-        }),
-      },
-    );
-    if (res.status === 404) {             // такої моделі немає — пробуємо наступну
-      console.error("gemini", model, 404);
-      continue;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        {
+          method: "POST",
+          headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: SYSTEM }] },
+            contents: [{
+              role: "user",
+              parts: [
+                { inlineData: { mimeType: "image/png", data: image } },
+                { text: PROMPT },
+              ],
+            }],
+            generationConfig: { responseMimeType: "application/json" },
+          }),
+        },
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = googleMessage(body);
+        console.error("gemini", model, res.status, msg);
+        tried[model] = `${model} ${res.status}: ${msg}`;
+        if (res.status >= 500 && attempt === 0) { await sleep(1500); continue; }
+        if (res.status >= 500 || res.status === 404) break;          // до наступної моделі
+        if (res.status === 429) { limited = true; break; }
+        if (/API[_ ]key/i.test(msg)) throw new RecognizerError("bad-key", 503, `Gemini: ${msg}`);
+        throw new RecognizerError("api", 502, `Gemini ${res.status}: ${msg}`);
+      }
+      if (body.promptFeedback?.blockReason) throw new RecognizerError("refusal", 422);
+      const cand = body.candidates?.[0];
+      if (!cand) throw new RecognizerError("empty", 422);
+      if (GEMINI_BLOCKED.includes(cand.finishReason)) throw new RecognizerError("refusal", 422);
+      return ((cand.content?.parts || []) as GeminiPart[])
+        .filter((p) => p.text && !p.thought)     // міркування моделі — не відповідь
+        .map((p) => p.text)
+        .join("\n");
     }
-    const body = await res.json().catch(() => ({}));
-    if (res.status === 429) throw new RecognizerError("busy", 429);
-    if (!res.ok) {
-      const msg = JSON.stringify(body).slice(0, 600);
-      console.error("gemini", model, res.status, msg);
-      if (/API[_ ]key/i.test(msg)) throw new RecognizerError("bad-key", 503);
-      throw new RecognizerError("api", 502);
-    }
-    if (body.promptFeedback?.blockReason) throw new RecognizerError("refusal", 422);
-    const cand = body.candidates?.[0];
-    if (!cand) throw new RecognizerError("empty", 422);
-    if (GEMINI_BLOCKED.includes(cand.finishReason)) throw new RecognizerError("refusal", 422);
-    return ((cand.content?.parts || []) as GeminiPart[])
-      .filter((p) => p.text && !p.thought)     // міркування моделі — не відповідь
-      .map((p) => p.text)
-      .join("\n");
   }
-  throw new RecognizerError("api", 502);
+  const detail = Object.values(tried).join(" · ").slice(0, 400);
+  if (limited) throw new RecognizerError("busy", 429, detail);
+  throw new RecognizerError("api", 502, detail);
 }
 
 Deno.serve(async (req) => {
@@ -235,8 +254,10 @@ Deno.serve(async (req) => {
     if (!slide || !slide.blocks.length) return json({ error: "empty" }, 422, origin);
     return json(slide, 200, origin);
   } catch (error) {
-    if (error instanceof RecognizerError) return json({ error: error.code }, error.status, origin);
+    if (error instanceof RecognizerError) {
+      return json({ error: error.code, detail: error.detail || undefined }, error.status, origin);
+    }
     console.error(error);
-    return json({ error: "server" }, 500, origin);
+    return json({ error: "server", detail: String(error).slice(0, 240) }, 500, origin);
   }
 });

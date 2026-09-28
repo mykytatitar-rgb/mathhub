@@ -403,7 +403,23 @@
     });
     var hours = U.sum(lessons.filter(function (l) { return S.INACTIVE_STATUS.indexOf(l.status) < 0; }),
       function (l) { return (l.duration || 60) / 60; });
-    var weekUAH = window.Rates ? window.Rates.sumToUAH(money) : null;
+    /* За курсом кожного уроку — так само, як шапки днів. Досі тиждень
+       рахувався за сьогоднішнім курсом і не дорівнював сумі своїх днів. */
+    var weekUAH = null;
+    if (window.Rates) {
+      weekUAH = { uah: 0, partial: false, missing: [] };
+      doneW.forEach(function (l) {
+        var c = S.lessonCur(l);
+        var v = S.uahOf(l, l.price || 0, c);
+        if (v == null) {
+          weekUAH.partial = true;
+          if (weekUAH.missing.indexOf(c) < 0) weekUAH.missing.push(c);
+          return;
+        }
+        weekUAH.uah += v;
+        if (c !== 'UAH' && !(l.rate > 0) && window.Rates.isHistoric && !window.Rates.isHistoric(c, l.date)) weekUAH.partial = true;
+      });
+    }
 
     var label = view === 'week'
       ? (off === 0 ? 'Поточний тиждень' : off === 1 ? 'Наступний тиждень' : off === -1 ? 'Минулий тиждень'

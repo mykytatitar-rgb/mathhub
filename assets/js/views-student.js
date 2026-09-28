@@ -305,9 +305,10 @@
   function payments(st, stat) {
     var cur = S.curOf(st.id);
     var list = S.paymentsOf(st.id);
-    var paid = U.sum(list, function (p) { return p.amount; });
+    // у валюті учня: давні оплати в іншій валюті зводяться за своїм курсом
+    var paid = S.paidOf(st.id);
     var doneLessons = S.lessonsOf(st.id).filter(function (l) { return l.status === 'done'; });
-    var used = U.sum(doneLessons, function (l) { return l.price || 0; });
+    var used = S.chargedOf(st.id);
     /* Рахуємо за справжнім запасом: уроки, які вже відбулися, але не
        відмічені проведеними, ще не списані з балансу — і без цього
        «вистачить ще на 3 уроки» було б неправдою. */

@@ -128,8 +128,9 @@
                   (soon ? ' — зокрема ' + U.pl(soon, 'запланований урок', 'заплановані уроки',
                     'запланованих уроків') + ' попереду' : '') +
                   ', а нові уроки за його постійним розкладом більше не створюватимуться. ' +
-                  'Нічого не видаляється: історія, оплати й дошки лишаються, і його можна ' +
-                  'повернути будь-коли. Його оплати й далі рахуються в доході — гроші ж отримані.',
+                  'Порожні уроки постійного розкладу попереду прибираються; уроки з темою, ' +
+                  'історія, оплати й дошки лишаються. Якщо повернете учня, розклад заповниться ' +
+                  'знову. Його оплати й далі рахуються в доході — гроші ж отримані.',
                   function () {
                     S.setArchived(id, true);
                     U.toast('Учня переведено в архів', 'ok');
@@ -164,11 +165,40 @@
                 ' за постійним розкладом', 'ok');
               location.hash = '#/student/' + created.id;
             } else {
+              // усе «як було» — до збереження: data і є живий запис учня
+              var oldCur = S.curOf(id);
+              var oldPrice = Number(data.price) || 0;
+              var newCur = v.currency || oldCur;
+              var newPrice = Number(v.price) || 0;
+              /* Валюта — першою: минулим урокам і оплатам, що досі брали
+                 валюту з учня, вона вписується явно, стара. Історія не
+                 перемічується (див. S.setStudentCurrency). */
+              S.setStudentCurrency(id, newCur);
               S.update('students', id, v);
-              // Валюту міняємо окремо: старі уроки й оплати перемічуються, але НЕ конвертуються
-              var changed = S.setStudentCurrency(id, v.currency);
-              if (changed) {
-                U.toast('Валюту змінено на ' + v.currency + '. Суми не перераховувались — перевірте їх.', 'ok');
+
+              /* Заплановані наперед уроки створені зі старою ціною й валютою.
+                 Без питання «Проведено й оплачено» ще місяць записувало б
+                 старі гроші, а виправити можна було лише кожен урок окремо. */
+              if (newPrice !== oldPrice || newCur !== oldCur) {
+                var nowTs = new Date();
+                var ahead = S.lessonsOf(id).filter(function (l) {
+                  return l.status === 'planned' && U.toDate(l.date) >= nowTs &&
+                    ((Number(l.price) || 0) !== newPrice || S.lessonCur(l) !== newCur);
+                });
+                if (ahead.length) {
+                  setTimeout(function () {
+                    C.confirm('Оновити ' + U.pl(ahead.length, 'запланований урок', 'заплановані уроки',
+                        'запланованих уроків') + '?',
+                      'У них лишилась стара вартість — ' + U.money(oldPrice, oldCur) + '. Поставити ' +
+                      U.money(newPrice, newCur) + '? Проведені уроки й оплати не змінюються.',
+                      function () {
+                        ahead.forEach(function (l) {
+                          S.update('lessons', l.id, { price: newPrice, currency: newCur, rate: undefined });
+                        });
+                        refresh();
+                      }, 'Оновити', 'Лишити як є', 'btn--primary');
+                  }, 60);
+                }
               }
               if (newSchedule !== oldSchedule) {
                 /* Спершу прибираємо майбутні уроки за старим розкладом, і лише
@@ -281,7 +311,15 @@
             // порожнє чи безглузде поле не має перетворювати урок на нульовий
             v.duration = U.clamp(v.duration || defaultDuration(v.studentId), 15, 480);
             if (preset.lockStudent) v.studentId = data.studentId;
-            v.currency = S.curOf(v.studentId);
+            /* Новий урок чи урок іншого учня — у валюті учня. Наявний
+               лишається у своїй: учень міг відтоді перейти на іншу валюту,
+               а історія не перемічується. */
+            v.currency = (isNew || v.studentId !== ls.studentId) ? S.curOf(v.studentId) : S.lessonCur(ls);
+            // заморожений курс належить дню уроку; день змінився — курс теж
+            if (!isNew && ls.rate > 0 && v.date.slice(0, 10) !== String(ls.date).slice(0, 10)) {
+              var lr = S.exactRate({ date: v.date }, v.currency);
+              v.rate = lr > 0 ? lr : undefined;
+            }
             if (isNew) { S.add('lessons', v); U.toast('Урок додано', 'ok'); }
             else { S.update('lessons', id, v); }
             refresh();
@@ -713,17 +751,17 @@
             var v = C.readForm(root);
             if (!v.amount) { U.toast('Вкажіть суму', 'err'); return false; }
             if (preset.lockStudent) v.studentId = data.studentId;
-            v.currency = S.curOf(v.studentId);
-            if (isNew) {
-              /* Курс на дату оплати — щоб сума в гривнях більше не мінялась
-                 разом із сьогоднішнім курсом. */
-              var pc = v.currency || S.curOf(v.studentId);
-              if (pc && pc !== 'UAH' && window.Rates && Rates.forDate) {
-                var pr = Rates.forDate(pc, v.date);
-                if (pr > 0) v.rate = pr;
-              }
-              S.add('payments', v); U.toast('Оплату записано', 'ok');
+            /* Нова оплата — у валюті учня. Наявна лишається у своїй: гроші
+               отримано саме в ній, навіть якщо учень відтоді перейшов на іншу. */
+            v.currency = isNew ? S.curOf(v.studentId) : S.paymentCur(p);
+            /* Курс на дату оплати — щоб сума в гривнях більше не мінялась
+               разом із сьогоднішнім курсом. Лише справжній курс того дня;
+               поки його немає, лишаємо порожнім (див. S.exactRate). */
+            if (isNew || v.date !== p.date) {
+              var pr = v.currency === 'UAH' ? 0 : S.exactRate({ date: v.date }, v.currency);
+              v.rate = pr > 0 ? pr : undefined;
             }
+            if (isNew) { S.add('payments', v); U.toast('Оплату записано', 'ok'); }
             else { S.update('payments', id, v); }
             refresh();
           } }
@@ -1492,28 +1530,20 @@
         { label: 'Створити', kind: 'btn--primary', act: 'go', icon: 'sparkles',
           onClick: function (root) {
             var v = C.readForm(root);
-            var start = U.startOfWeek(v.from);
+            var from = v.from ? U.toDate(v.from) : null;
+            if (!from || isNaN(from.getTime())) { U.toast('Вкажіть дату', 'err'); return false; }
             var weeks = U.clamp(+v.weeks || 4, 1, 104);
+            /* Спільним шляхом із постійним розкладом: уроки отримують позначку
+               шаблону (інакше зміна розкладу їх не прибирала б і в учня
+               стояли б і старі дні, і нові), минуле й звільнені місця
+               пропускаються, дублікатів немає. Раніше тут був свій цикл, що
+               ще й відкочував дату до понеділка — у минуле. */
+            var today = U.today();
+            if (from < today) from = today;
             var made = 0;
-
-            for (var w = 0; w < weeks; w++) {
-              S.students().forEach(function (st) {
-                (st.schedule || []).forEach(function (slot) {
-                  var d = U.addDays(start, (w * 7) + slot.day - 1);
-                  var iso = U.ymd(d) + 'T' + slot.time;
-                  var dup = S.db().lessons.some(function (l) {
-                    return l.studentId === st.id && l.date === iso;
-                  });
-                  if (dup) return;
-                  S.add('lessons', {
-                    studentId: st.id, date: iso, duration: st.duration || 60,
-                    price: st.price, currency: st.currency || 'UAH',
-                    topic: '', status: 'planned', notes: ''
-                  });
-                  made++;
-                });
-              });
-            }
+            S.students().forEach(function (st) {
+              made += S.fillStudentTemplate(st.id, weeks * 7, from);
+            });
             U.toast(made ? 'Створено ' + U.pl(made, 'урок', 'уроки', 'уроків') : 'Нових уроків не з\'явилося', made ? 'ok' : null);
             refresh();
           } }

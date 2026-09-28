@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v145';
+  App.BUILD = 'v146';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -647,7 +647,8 @@
     'student-open': function (arg) { closeMenu(); location.hash = '#/student/' + arg; },
     'student-add': function () { F.student(null); },
     'student-edit': function (arg) { F.student(arg); },
-    'student-restore': function (arg) { S.update('students', arg, { archived: false }); U.toast('Учня повернуто', 'ok'); App.render(); },
+    // через S.setArchived: той прибирає уроки часу відсутності й заповнює розклад
+    'student-restore': function (arg) { S.setArchived(arg, false); U.toast('Учня повернуто', 'ok'); App.render(); },
 
     'lesson-add': function () { F.lesson(null, {}); },
     'lesson-add-for': function (arg) { F.lesson(null, { studentId: arg, lockStudent: true }); },
@@ -764,14 +765,19 @@
     'tutor-save': function () {
       var root = document.getElementById('tutor-form');
       var v = C.readForm(root);
-      S.db().tutor = {
+      /* Поля — на місці, а не новий обʼєкт. У tutor живе й службове:
+         код календаря (без нього підписаний Google Календар мовчки
+         застигав), порядок розділів, межа заповненого розкладу. Заміна
+         цілим обʼєктом стирала їх — і стирання їхало на всі пристрої. */
+      var t = S.db().tutor || (S.db().tutor = {});
+      Object.assign(t, {
         name: v.name || 'Репетитор',
         subject: v.subject || 'Математика',
         defaultPrice: v.defaultPrice || 500,
         currency: v.currency || 'UAH',
         defaultDuration: v.defaultDuration || 60,
         meetUrl: v.meetUrl || ''
-      };
+      });
       S.save();
       U.toast('Профіль збережено', 'ok');
       App.render();
@@ -1340,10 +1346,26 @@
      Робимо це як службову дію: саме відкриття програми не має вважатися
      правкою. Інакше пристрій, який тиждень лежав із давніми даними,
      після запуску виглядав «новішим» і затирав те, що з'явилося потім. */
-  try {
-    if (window.Cloud && Cloud.housekeeping) Cloud.housekeeping(S.autoFillTemplates);
-    else S.autoFillTemplates();
-  } catch (e) { console.warn('autoFill:', e); }
+  function fillAhead() {
+    var made = 0;
+    try {
+      // двійники, що лишилися з часів, коли пристрої заповнювали розклад наосліп
+      made += S.dedupeTemplateLessons();
+      made += (window.Cloud && Cloud.housekeeping)
+        ? Cloud.housekeeping(S.autoFillTemplates) : S.autoFillTemplates();
+    } catch (e) { console.warn('autoFill:', e); }
+    return made;
+  }
+  /* З обміном — лише після першого читання з сервера. Пристрій, що
+     прокинувся з давніми даними, не бачить уроків, уже створених іншим, і
+     заповнював би ті самі дні вдруге. Без обміну чекати нема на що. */
+  if (window.Cloud && Cloud.available() && Cloud.signedIn() && window.RecSync && RecSync.afterFirstPull) {
+    RecSync.afterFirstPull(function () {
+      if (fillAhead() && !(window.V && V.boardMountedFor && V.boardMountedFor())) App.render();
+    });
+  } else {
+    fillAhead();
+  }
   App.render();
   applySidebar();
 

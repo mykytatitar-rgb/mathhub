@@ -776,12 +776,46 @@
   };
 
   /**
-   * Перевести в архів або повернути. Дані не чіпаємо: уроки, оплати,
-   * дошки лишаються на місці — архів це про «більше не займається»,
-   * а не про «видалити».
+   * Перевести в архів або повернути. Уроки, оплати й дошки лишаються:
+   * архів — це «більше не займається», а не «видалити».
+   *
+   * Прибираються лише порожні уроки постійного розкладу (isBareTemplate):
+   * при архівації — ті, що попереду, при поверненні — ті, що припали на час
+   * відсутності. Досі вони лишались: минулі рахувались «не відміченими» й
+   * з'їдали запас учня, а після повернення в розкладі зіяла діра, бо
+   * заповнення вже пішло далі. Після повернення розклад заповнюється знову.
    */
   S.setArchived = function (studentId, on) {
-    return S.update('students', studentId, { archived: !!on });
+    var st = S.get('students', studentId);
+    if (!st) return null;
+    var now = new Date();
+    if (on) {
+      dropLessons(db.lessons.filter(function (l) {
+        return l.studentId === studentId && isBareTemplate(l) && U.toDate(l.date) >= now;
+      }));
+      return S.update('students', studentId, { archived: true, archivedAt: U.ymd(U.today()) });
+    }
+    /* Відколи учня не було. Для заархівованих раніше дати немає — тоді від
+       останнього проведеного чи пропущеного уроку: до нього учень ходив,
+       і невідмічене там може бути справжнім. Без жодного — минуле не чіпаємо. */
+    var from = st.archivedAt ? U.toDate(st.archivedAt) : null;
+    if (!from) {
+      db.lessons.forEach(function (l) {
+        if (l.studentId !== studentId || !ARCHIVE_KEEP[l.status]) return;
+        var d = U.toDate(l.date);
+        if (!from || d > from) from = d;
+      });
+    }
+    if (from) {
+      dropLessons(db.lessons.filter(function (l) {
+        if (l.studentId !== studentId || !isBareTemplate(l)) return false;
+        var d = U.toDate(l.date);
+        return d > from && d < now;
+      }));
+    }
+    var rec = S.update('students', studentId, { archived: false, archivedAt: undefined });
+    S.fillStudentTemplate(studentId);
+    return rec;
   };
 
   /* ---------- Валюта ---------- */
@@ -811,18 +845,60 @@
   };
 
   /**
-   * Змінити валюту учня. Суми НЕ конвертуються — записи лише перемічуються,
-   * щоб в одного учня ніколи не змішувалися дві валюти в балансі.
+   * Змінити валюту учня. Історія лишається у своїй валюті.
+   *
+   * Раніше всі уроки й оплати учня перемічувались новою валютою без
+   * перерахунку: «$40» ставало «40 ₴», і дохід за минулі місяці падав у
+   * сорок разів. Тепер кожен запис, що досі брав валюту з учня (поля
+   * currency в ньому не було), отримує її явно — стару. Нова валюта діє
+   * лише на те, що створюватиметься далі; баланс зводить обидві
+   * (див. inStudentCur). Повертає true, якщо валюта справді змінилась.
    */
   S.setStudentCurrency = function (studentId, code) {
     var st = S.get('students', studentId);
-    if (!st) return false;
-    var changed = st.currency !== code;
+    if (!st || !code) return false;
+    var old = S.curOf(studentId);
+    if (old === code) return false;
+    db.lessons.forEach(function (l) {
+      if (l.studentId === studentId && !l.currency) { l.currency = old; l.updatedAt = new Date().toISOString(); }
+    });
+    db.payments.forEach(function (p) {
+      if (p.studentId === studentId && !p.currency) { p.currency = old; p.updatedAt = new Date().toISOString(); }
+    });
     st.currency = code;
-    db.lessons.forEach(function (l) { if (l.studentId === studentId) l.currency = code; });
-    db.payments.forEach(function (p) { if (p.studentId === studentId) p.currency = code; });
+    st.updatedAt = new Date().toISOString();
     S.save();
-    return changed;
+    return true;
+  };
+
+  /* Сума запису у валюті учня. У тій самій валюті — як є, без жодних
+     округлень. В іншій (учень колись платив у доларах, тепер у гривнях) —
+     через гривні: за курсом самого запису, а в валюту учня — за нинішнім. */
+  function inStudentCur(rec, amount, recCur, stCur) {
+    amount = Number(amount) || 0;
+    if (!amount || recCur === stCur) return amount;
+    var uah = S.uahOf(rec, amount, recCur);
+    if (uah == null) return 0;                    // курсу ще немає — не вигадуємо
+    if (stCur === 'UAH') return uah;
+    var r = (window.Rates && Rates.get(stCur)) || 0;
+    return r > 0 ? uah / r : 0;
+  }
+  function cents(x) { return Math.round(x * 100) / 100; }
+
+  /** Скільки учень сплатив — у його валюті. */
+  S.paidOf = function (studentId) {
+    var cur = S.curOf(studentId);
+    return cents(U.sum(S.paymentsOf(studentId), function (p) {
+      return inStudentCur(p, p.amount, S.paymentCur(p), cur);
+    }));
+  };
+
+  /** Вартість проведених уроків — у валюті учня. */
+  S.chargedOf = function (studentId) {
+    var cur = S.curOf(studentId);
+    return cents(U.sum(db.lessons.filter(function (l) {
+      return l.studentId === studentId && l.status === 'done';
+    }), function (l) { return inStudentCur(l, l.price || 0, S.lessonCur(l), cur); }));
   };
 
   /** Згрупувати суми за валютами: {UAH: 12500, USD: 180}. */
@@ -839,11 +915,7 @@
 
   /** Баланс учня: сплачено мінус вартість проведених уроків. Мінус = борг. */
   S.balance = function (studentId) {
-    var paid = U.sum(S.paymentsOf(studentId), function (p) { return p.amount; });
-    var used = U.sum(db.lessons.filter(function (l) {
-      return l.studentId === studentId && l.status === 'done';
-    }), function (l) { return l.price || 0; });
-    return paid - used;
+    return cents(S.paidOf(studentId) - S.chargedOf(studentId));
   };
 
   /** Скільки оплачених уроків лишилось (за поточною ціною). */
@@ -874,8 +946,11 @@
   S.creditOf = function (studentId) {
     var st = S.get('students', studentId);
     var price = (st && st.price) || db.tutor.defaultPrice || 0;
-    var hidden = U.sum(S.unmarkedOf(studentId), function (l) { return l.price || price || 0; });
-    return S.balance(studentId) - hidden;
+    var cur = S.curOf(studentId);
+    var hidden = U.sum(S.unmarkedOf(studentId), function (l) {
+      return l.price ? inStudentCur(l, l.price, S.lessonCur(l), cur) : price;
+    });
+    return cents(S.balance(studentId) - hidden);
   };
 
   /** Оплати за період. Якщо вказано code — лише в цій валюті. */
@@ -1093,6 +1168,27 @@
   };
 
   /**
+   * Курс того самого дня, який можна записати в запис назавжди, — або 0.
+   *
+   * Заморожувати можна лише справжній курс дня: архівний НБУ за ту дату або
+   * сьогоднішній, якщо сьогодні курс уже оновлено. Досі урок, відмічений у
+   * пʼятницю за понеділок, отримував пʼятничний курс (архівний ще не
+   * приїхав, а forDate віддає поточний) — і гривневий дохід назавжди
+   * рахувався неправильно, ще й без позначки «≈». Незаморожений запис
+   * нічого не губить: S.uahOf візьме архівний курс, щойно він приїде.
+   */
+  S.exactRate = function (rec, cur) {
+    var R = window.Rates;
+    if (!cur || cur === 'UAH' || !R || !R.isHistoric) return 0;
+    var when = rec && (rec.date || rec.createdAt);
+    if (!R.isHistoric(cur, when)) return 0;
+    var day = String(when || '').slice(0, 10);
+    if (day >= U.ymd(new Date()) && R.isFresh && !R.isFresh()) return 0;   // сьогоднішній ще не оновлено
+    var rate = R.forDate(cur, when);
+    return rate > 0 ? rate : 0;
+  };
+
+  /**
    * Запамʼятати курс у записі. Викликається в мить, коли гроші стають
    * фактом: урок проведено, оплату внесено.
    */
@@ -1100,7 +1196,7 @@
     if (!cur || cur === 'UAH') return;
     var rec = S.get(name, id);
     if (!rec || rec.rate > 0) return;          // вже заморожено — не чіпаємо
-    var rate = (window.Rates && Rates.get(cur)) || 0;
+    var rate = S.exactRate(rec, cur);
     if (rate > 0) S.update(name, id, { rate: rate });
   };
 
@@ -1207,13 +1303,77 @@
     });
   }
 
+  /* Номер уроку з постійного розкладу складається з учня й часу слота.
+     Той самий слот, заповнений на двох пристроях, стає одним записом, а не
+     двома: обмін зливає записи за номером. */
+  function templateId(studentId, iso) {
+    return 'tpl_' + studentId + '_' + String(iso).replace(/[^0-9]/g, '');
+  }
+
   function createFromSlot(st, iso) {
+    var id = templateId(st.id, iso);
+    // такий номер уже є — урок із цього слота перенесли чи змінили; місце не порожнє
+    if (S.get('lessons', id)) return null;
     return S.add('lessons', {
+      id: id,
       studentId: st.id, date: iso, duration: st.duration || 60,
       price: st.price, currency: st.currency || 'UAH',
       topic: '', status: 'planned', notes: '', fromTemplate: 1
     });
   }
+
+  /* Урок постійного розкладу, у якому ще нічого немає: ні теми, ні
+     конспекту, ні оплати, ні ДЗ, ні записів на дошці. Лише такий програма
+     має право прибрати сама — усе інше вже робота. */
+  function isBareTemplate(l) {
+    if (!l || !l.fromTemplate || l.status !== 'planned') return false;
+    if (l.topic || l.notes || l.paid) return false;
+    if (db.payments.some(function (p) { return p.lessonId === l.id; })) return false;
+    if (db.homeworks.some(function (h) { return h.lessonId === l.id; })) return false;
+    var b = db.boards.filter(function (x) { return x.lessonId === l.id; })[0];
+    return !(b && (b.slides || []).some(function (s) { return (s.items || []).length; }));
+  }
+
+  /* Прибрати уроки всюди — разом із їхніми (порожніми) дошками. Без
+     позначки «місце звільнено»: це прибирання програми, а не рішення
+     людини, і слот лишається доступним для постійного розкладу. */
+  function dropLessons(list) {
+    if (!list || !list.length) return 0;
+    var gone = {};
+    list.forEach(function (l) { gone[l.id] = 1; });
+    Object.keys(gone).forEach(function (id) { S.removeBoard(id); });
+    db.lessons = db.lessons.filter(function (l) { return !gone[l.id]; });
+    Object.keys(gone).forEach(function (id) { syncDel('lessons', id); });
+    S.save();
+    return Object.keys(gone).length;
+  }
+
+  /**
+   * Двійники уроків постійного розкладу: той самий учень і час, обидва
+   * заплановані з шаблону. Лишалися з тих часів, коли два пристрої
+   * заповнювали розклад, не бачачи один одного. Лишаємо той, у якому є
+   * робота, а за рівних — старший; прибираємо лише порожні.
+   */
+  S.dedupeTemplateLessons = function () {
+    var groups = {};
+    db.lessons.forEach(function (l) {
+      if (!l || !l.fromTemplate || l.status !== 'planned') return;
+      var k = l.studentId + '|' + l.date;
+      (groups[k] = groups[k] || []).push(l);
+    });
+    var extra = [];
+    Object.keys(groups).forEach(function (k) {
+      var g = groups[k];
+      if (g.length < 2) return;
+      g.sort(function (a, b) {
+        var wa = isBareTemplate(a) ? 0 : 1, wb = isBareTemplate(b) ? 0 : 1;
+        if (wa !== wb) return wb - wa;
+        return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+      });
+      g.slice(1).forEach(function (l) { if (isBareTemplate(l)) extra.push(l); });
+    });
+    return dropLessons(extra);
+  };
 
   /**
    * Створити уроки за постійним розкладом одного учня — від дати `from`
@@ -1226,16 +1386,21 @@
     var end = U.addDays(start, days || FILL_DAYS);
     var made = 0;
 
+    var nowTs = new Date();
+    // місця, звільнені рукою (урок перенесли чи видалили), не заповнюємо знову
+    var gone = {};
+    (st.slotGone || []).forEach(function (x) { gone[x] = 1; });
+
     var weekStart = U.startOfWeek(start);
     while (weekStart <= end) {
       /* eslint-disable no-loop-func */
       st.schedule.forEach(function (slot) {
         var iso = slotIso(0, slot, weekStart);
         var d = U.toDate(iso);
-        if (d < start || d > end) return;
-        if (hasLessonAt(st.id, iso)) return;
-        createFromSlot(st, iso);
-        made++;
+        // і не в минулому: такий урок одразу рахувався б «не відміченим»
+        if (d < start || d > end || d < nowTs) return;
+        if (gone[iso] || hasLessonAt(st.id, iso)) return;
+        if (createFromSlot(st, iso)) made++;
       });
       weekStart = U.addDays(weekStart, 7);
     }
@@ -1248,9 +1413,10 @@
    * Без цього зміна розкладу лише ДОДАВАЛА нові дні, а старі лишалися в
    * календарі — і виглядало так, ніби зміна не збереглася.
    *
-   * Чіпаємо тільки те, що напевно створене шаблоном і ще нічого не значить:
-   * майбутнє, зі статусом «заплановано», без оплати, домашнього й записів
-   * на дошці. Усе інше — робота, її видаляти не можна.
+   * Чіпаємо тільки те, що напевно створене шаблоном і ще нічого не значить
+   * (isBareTemplate): майбутнє, «заплановано», без теми й конспекту, без
+   * оплати, домашнього й записів на дошці. Урок із вписаною наперед темою
+   * — це вже робота, навіть якщо день змінився: його лишаємо.
    */
   S.pruneStudentTemplate = function (studentId) {
     var st = S.get('students', studentId);
@@ -1262,21 +1428,13 @@
 
     var doomed = db.lessons.filter(function (l) {
       if (l.studentId !== studentId) return false;
-      if (!l.fromTemplate) return false;                 // створене вручну — не чіпаємо
-      if (l.status !== 'planned') return false;          // проведене, скасоване, перенесене
+      if (!isBareTemplate(l)) return false;              // вручну, проведене, з темою, оплатою…
       var d = U.toDate(l.date);
       if (!(d > now)) return false;                      // минуле лишається як історія
 
       var wd = d.getDay() === 0 ? 7 : d.getDay();
       var hhmm = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
-      if (slots[wd + '@' + hhmm]) return false;          // цей день і час досі в розкладі
-
-      if (db.payments.some(function (p) { return p.lessonId === l.id; })) return false;
-      if (db.homeworks.some(function (h) { return h.lessonId === l.id; })) return false;
-      var b = db.boards.filter(function (x) { return x.lessonId === l.id; })[0];
-      if (b && (b.slides || []).some(function (s) { return (s.items || []).length; })) return false;
-
-      return true;
+      return !slots[wd + '@' + hhmm];                    // цей день і час досі в розкладі — лишаємо
     });
 
     doomed.forEach(function (l) { S.removeLesson(l.id); });
@@ -1285,13 +1443,19 @@
 
   /**
    * Тримати розклад заповненим наперед. Заповнюємо лише той проміжок,
-   * якого ще не торкались (`tutor.filledUntil`) — тому видалені вручну
-   * уроки не з'являються знову.
+   * якого ще не торкались (`fillUntil`) — тому видалені вручну уроки не
+   * з'являються знову.
+   *
+   * Межа лежить окремим полем бази, а не в профілі репетитора. У профілі
+   * вона щодня змінювала весь профіль, і пристрій із давніми даними
+   * відправляв разом із нею своє застаріле посилання на зустріч, ціну й
+   * валюту — поверх свіжих. `tutor.filledUntil` лишається для читання.
    */
   S.autoFillTemplates = function () {
     var today = U.today();
     var horizon = U.addDays(today, FILL_DAYS);
-    var last = db.tutor.filledUntil ? U.toDate(db.tutor.filledUntil) : null;
+    var mark = db.fillUntil || (db.tutor && db.tutor.filledUntil);
+    var last = mark ? U.toDate(mark) : null;
     var from = (last && last > today) ? U.addDays(last, 1) : today;
     if (from > horizon) return 0;
 
@@ -1299,7 +1463,7 @@
     S.students().forEach(function (st) {
       made += S.fillStudentTemplate(st.id, U.daysBetween(from, horizon), from);
     });
-    db.tutor.filledUntil = U.ymd(horizon);
+    db.fillUntil = U.ymd(horizon);
     S.save();
     return made;
   };
@@ -1325,8 +1489,10 @@
           studentId: l.studentId, lessonId: lessonId,
           date: l.date.slice(0, 10), amount: l.price || 0,
           currency: pcur, method: 'За урок',
-          // курс беремо з уроку: оплата за нього й отримана тоді ж
-          rate: pcur === 'UAH' ? undefined : (l.rate > 0 ? l.rate : S.rateFor(l, pcur)),
+          /* курс беремо з уроку: оплата за нього й отримана тоді ж. Лише
+             справжній курс того дня — інакше порожньо, і S.uahOf візьме
+             архівний, коли той приїде. */
+          rate: pcur === 'UAH' ? undefined : (l.rate > 0 ? l.rate : (S.exactRate(l, pcur) || undefined)),
           note: 'Оплата за урок ' + U.fmtDate(l.date)
         });
       }
@@ -1350,7 +1516,7 @@
        бути понеділковий. */
     var cur = S.lessonCur(l);
     if (cur !== 'UAH' && !(l.rate > 0)) {
-      var rate = S.rateFor(l, cur);
+      var rate = S.exactRate(l, cur);        // лише справжній курс дня уроку
       if (rate > 0) l.rate = rate;
     }
     S.save();

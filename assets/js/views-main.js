@@ -183,7 +183,8 @@
       : C.empty('calendar', 'Сьогодні уроків немає', 'Гарний день, щоб підготувати матеріали або підбити фінанси.');
 
     /* --- Найближчі уроки --- */
-    var upcoming = S.upcoming(5).filter(function (l) { return !U.isSameDay(l.date, today); });
+    // спершу відкинути сьогоднішні, потім обрізати: інакше при п'яти уроках сьогодні список порожній
+    var upcoming = S.upcoming().filter(function (l) { return !U.isSameDay(l.date, today); }).slice(0, 5);
     var upHtml = upcoming.length
       ? upcoming.map(function (l) {
           var st = S.get('students', l.studentId);
@@ -774,7 +775,7 @@
 
     var rows = studs.map(function (s) {
       var bal = S.balance(s.id);
-      var paid = U.sum(S.paymentsOf(s.id), function (p) { return p.amount; });
+      var paid = S.paidOf(s.id);
       var done = S.lessonsOf(s.id).filter(function (l) { return l.status === 'done'; }).length;
       return '<tr>' +
         '<td><button class="row" data-act="student-open" data-arg="' + s.id + '" ' +

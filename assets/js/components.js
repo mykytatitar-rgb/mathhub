@@ -417,13 +417,14 @@
   });
 
   /** Підтвердження дії. */
-  C.confirm = function (title, text, onYes, yesLabel, noLabel) {
+  // yesKind — для незруйнівних питань («Оновити»): червона кнопка там лякала б
+  C.confirm = function (title, text, onYes, yesLabel, noLabel, yesKind) {
     C.modal({
       title: title,
       body: '<p style="line-height:1.6;color:var(--ink-2);margin:6px 0 18px">' + U.esc(text) + '</p>',
       buttons: [
         { label: noLabel || 'Скасувати', kind: 'btn--ghost', act: 'no' },
-        { label: yesLabel || 'Так, видалити', kind: 'btn--danger', act: 'yes', onClick: onYes }
+        { label: yesLabel || 'Так, видалити', kind: yesKind || 'btn--danger', act: 'yes', onClick: onYes }
       ]
     });
   };
@@ -482,8 +483,14 @@
   };
 
   C.studentSelect = function (name, value) {
-    return C.select(name, value, S.students().map(function (s) {
-      return { value: s.id, label: s.name + ' · ' + s.grade };
+    var list = S.students().slice();
+    /* Учень запису, навіть якщо він уже в архіві. Без нього в списку браузер
+       мовчки обирав першого активного, і збереження уроку чи оплати
+       архівного учня перекидало запис на іншу людину — разом із грошима. */
+    var own = value && S.get('students', value);
+    if (own && list.indexOf(own) < 0) list.unshift(own);
+    return C.select(name, value, list.map(function (s) {
+      return { value: s.id, label: s.name + ' · ' + s.grade + (s.archived ? ' · архів' : '') };
     }));
   };
 

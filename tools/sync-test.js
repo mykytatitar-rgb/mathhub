@@ -583,6 +583,32 @@ scenario('Записи: різні учні з двох пристроїв, то
   });
 });
 
+/* Розклад наперед заповнюється лише після першого вдалого читання: пристрій
+   із давніми даними інакше створював уроки, яких не бачив у іншого. */
+scenario('Дія «після першого читання» чекає на вдале читання й виконується один раз', function () {
+  var srv = new Server(), A = new Device('A', srv);
+  var RA = A.ctx.RecSync;
+  var calls = 0;
+  RA.afterFirstPull(function () { calls++; });
+  A.setOnline(false);
+  return RA.pull().then(function () { return wait(30); })
+    .then(function () {
+      same(calls, 0, 'без мережі не виконалась');
+      A.setOnline(true);
+      return RA.pull();
+    }).then(function () { return wait(30); })
+    .then(function () {
+      same(calls, 1, 'після вдалого читання виконалась');
+      return RA.pull();
+    }).then(function () { return wait(30); })
+    .then(function () {
+      same(calls, 1, 'наступні читання її не повторюють');
+      var late = 0;
+      RA.afterFirstPull(function () { late++; });
+      same(late, 1, 'додана пізніше виконується одразу');
+    });
+});
+
 scenario('Записи: правка, зроблена поки йде читання, не перекривається серверною', function () {
   var srv = new Server(), A = new Device('A', srv), B = new Device('B', srv);
   var RA = A.ctx.RecSync, RB = B.ctx.RecSync;

@@ -269,6 +269,24 @@
 
   var pulling = null;
 
+  /* Дії, яким потрібне свіже з сервера, а не те, з чим пристрій
+     прокинувся. Насамперед — заповнення розкладу наперед: пристрій, що
+     тиждень лежав, досі створював уроки за старими даними раніше, ніж
+     бачив уже створені іншим пристроєм, — і в розкладі з'являлися двійники.
+     Кожна дія виконується один раз, після першого вдалого читання. */
+  var afterPull = [], pulledOnce = false;
+  R.afterFirstPull = function (fn) {
+    if (pulledOnce) { try { fn(); } catch (e) { console.warn('afterFirstPull:', e); } return; }
+    afterPull.push(fn);
+  };
+  function firstPullDone() {
+    if (pulledOnce) return;
+    pulledOnce = true;
+    afterPull.splice(0).forEach(function (fn) {
+      try { fn(); } catch (e) { console.warn('afterFirstPull:', e); }
+    });
+  }
+
   /**
    * Забрати з сервера все, що змінилося після минулого разу.
    *
@@ -302,9 +320,11 @@
     }
 
     R.scan();                                   // спершу помітити своє, щоб його не перекрило
+    var ok = false;
     pulling = R.flush().then(function () {
       return page(0, []);
     }).then(function (rows) {
+      ok = true;
 
       var changed = 0;
       var newest = since;
@@ -347,6 +367,7 @@
       return 0;
     }).then(function (n) {
       pulling = null;
+      if (ok) setTimeout(firstPullDone, 0);
       return n;
     });
     return pulling;

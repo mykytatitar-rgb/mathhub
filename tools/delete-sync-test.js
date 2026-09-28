@@ -149,6 +149,33 @@ var CASES = {
       function (S) { var id = first(S, 'lessons'); S.ensureBoard(id); return id; },
       function (S, id) { S.removeBoard(id); }, false);
   },
+  dedupeTemplateLessons: function () {
+    check('S.dedupeTemplateLessons — двійники уроків шаблону',
+      function (S) {
+        var st = S.db().students[0];
+        if (!st) return null;
+        var d = new Date(); d.setDate(d.getDate() + 5);
+        var iso = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
+          ('0' + d.getDate()).slice(-2) + 'T08:07';
+        S.add('lessons', { studentId: st.id, date: iso, status: 'planned', fromTemplate: 1 });
+        S.add('lessons', { studentId: st.id, date: iso, status: 'planned', fromTemplate: 1 });
+        return st.id;
+      },
+      function (S) { S.dedupeTemplateLessons(); }, true);
+  },
+  setArchived: function () {
+    check('S.setArchived — в архів і назад (порожні уроки шаблону)',
+      function (S) {
+        var st = S.db().students[0];
+        if (!st) return null;
+        var d = new Date(); d.setDate(d.getDate() + 4);
+        var iso = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
+          ('0' + d.getDate()).slice(-2) + 'T08:09';
+        S.add('lessons', { studentId: st.id, date: iso, status: 'planned', fromTemplate: 1 });
+        return st.id;
+      },
+      function (S, id) { S.setArchived(id, true); S.setArchived(id, false); }, true);
+  },
   pruneStudentTemplate: function () {
     check('S.pruneStudentTemplate — зайві уроки шаблону',
       function (S) {
@@ -168,9 +195,11 @@ var CASES = {
    бази за прямим наказом людини; вони в обміні мають власні правила. */
 var probe = freshStore().S;
 var found = Object.keys(probe).filter(function (k) {
-  return typeof probe[k] === 'function' && /^(remove|prune|purge|drop|delete)/.test(k) &&
+  return typeof probe[k] === 'function' && /^(remove|prune|purge|drop|delete|dedupe)/.test(k) &&
     k !== 'purgeUnusedImages';          // картинки — не записи бази
 });
+// прибирають і ті, що звуться інакше: архів чистить порожні уроки шаблону
+['setArchived'].forEach(function (k) { if (typeof probe[k] === 'function') found.push(k); });
 
 found.forEach(function (fn) {
   if (!CASES[fn]) {

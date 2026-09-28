@@ -586,6 +586,65 @@
   animation: selbar-spin .8s linear infinite;
 }
 @keyframes selbar-spin { to { transform: rotate(360deg); } }
+
+/* ---------- Перенесення на іншу дошку ---------- */
+.xfer__search {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 12px; height: 42px; margin-bottom: 10px;
+  border: 1px solid var(--line); border-radius: 12px; color: var(--muted);
+}
+.xfer__search:focus-within { border-color: var(--blue-300); box-shadow: 0 0 0 3px var(--blue-50); }
+.xfer__search input { flex: 1; min-width: 0; border: 0; outline: 0; font: inherit; font-size: 15px; background: none; color: var(--ink); }
+.xfer__list { max-height: min(52vh, 420px); overflow-y: auto; margin: 0 -6px; padding: 0 6px; }
+.xfer__group { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin: 12px 2px 6px; }
+.xfer__group:first-child { margin-top: 2px; }
+.xfer__row {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 9px 10px; border: 0; border-radius: 12px; background: none;
+  font: inherit; text-align: left; color: var(--ink); cursor: pointer;
+}
+.xfer__row:hover { background: var(--bg); }
+.xfer__row > svg { color: var(--muted); flex: none; }
+.xfer__ico { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--blue-50); color: var(--blue-600); flex: none; }
+.xfer__txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.xfer__txt b { font-size: 14.5px; font-weight: 700; }
+.xfer__txt span { font-size: 12.5px; color: var(--muted); }
+.xfer__n { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.xfer__none { padding: 26px 0; text-align: center; color: var(--muted); }
+.xfer__back {
+  display: flex; align-items: center; gap: 6px; max-width: 100%;
+  padding: 6px 10px 6px 6px; margin-bottom: 6px; border: 0; border-radius: 10px;
+  background: var(--bg); font: inherit; font-size: 14px; font-weight: 650; color: var(--ink-2); cursor: pointer;
+}
+.xfer__back:hover { background: var(--blue-50); color: var(--blue-600); }
+.xfer__slides { max-height: min(46vh, 380px); overflow-y: auto; margin: 0 -6px; padding: 0 6px 4px; }
+.xfer__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
+.xfer__slide {
+  display: flex; flex-direction: column; gap: 6px; padding: 6px; min-width: 0;
+  border: 2px solid transparent; border-radius: 12px; background: none;
+  font: inherit; color: var(--ink-2); cursor: pointer; text-align: left;
+}
+.xfer__slide:hover { background: var(--bg); }
+.xfer__slide.is-on { border-color: var(--blue-600); background: var(--blue-50); }
+.xfer__thumb {
+  aspect-ratio: 16 / 10; border-radius: 8px; overflow: hidden;
+  background: #fff; border: 1px solid var(--line);
+  display: grid; place-items: center; color: var(--muted);
+}
+.xfer__thumb canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
+.xfer__slide--new .xfer__thumb { border-style: dashed; background: var(--bg); }
+.xfer__cap { font-size: 12.5px; font-weight: 650; }
+.xfer__move { margin-top: 14px; font-weight: 600; }
+
+/* Підказка, поки набір висить під вказівником */
+.place-bar {
+  position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 40;
+  display: flex; align-items: center; gap: 12px; max-width: calc(100% - 32px);
+  padding: 8px 8px 8px 16px; border-radius: 14px;
+  background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow-lg);
+  font-size: 14px; font-weight: 600; color: var(--ink-2);
+}
+.place-bar span { min-width: 0; }
 /* Вид лінії показуємо самою лінією, а не літерою: відрізок від променя
    відрізняють оком, а не назвою. Значок ширший за звичайну іконку. */
 .sel-bar__btn--kind { width: 38px; }

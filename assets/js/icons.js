@@ -81,6 +81,7 @@
     cursor:    '<path d="M5 3l14 8-6.2 1.6L10.5 19z"/>',
     undo:      '<path d="M4 8h9a5.5 5.5 0 0 1 0 11H8"/><path d="M8 4 4 8l4 4"/>',
     redo:      '<path d="M20 8h-9a5.5 5.5 0 0 0 0 11h5"/><path d="M16 4l4 4-4 4"/>',
+    moveOut:   '<path d="M13 4H5.5A1.5 1.5 0 0 0 4 5.5v13A1.5 1.5 0 0 0 5.5 20H13"/><path d="M10 12h10M16.5 8.5 20 12l-3.5 3.5"/>',
     rotL:      '<rect x="4" y="10" width="11" height="10" rx="1.5"/><path d="M20 12V8.5A4.5 4.5 0 0 0 15.5 4H10"/><path d="M12.5 1.5 10 4l2.5 2.5"/>',
     rotR:      '<rect x="9" y="10" width="11" height="10" rx="1.5"/><path d="M4 12V8.5A4.5 4.5 0 0 1 8.5 4H14"/><path d="M11.5 1.5 14 4l-2.5 2.5"/>',
     zoomIn:    '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.6-4.6M10.5 8v5M8 10.5h5"/>',

@@ -381,6 +381,15 @@
     refreshEmpty();
     updateSlideName();
 
+    // дошку відкрили, щоб покласти сюди набір з іншої дошки
+    if (pendingTransfer && pendingTransfer.to === lessonId) {
+      var tr = pendingTransfer;
+      pendingTransfer = null;
+      if (Date.now() - tr.at < 20000) {
+        setTimeout(function () { if (cur && cur.lessonId === lessonId) beginPlacing(tr); }, 0);
+      }
+    }
+
     var root = document.querySelector('.board');
 
     /* Як у Miro: клік по вже активному інструменту згортає/розгортає його
@@ -2827,6 +2836,8 @@
         icon('copy', 16) + '</button>' +
       '<button class="sel-bar__btn" data-act="board-duplicate" title="Дублювати (Ctrl+D)">' +
         icon('layers', 16) + '</button>' +
+      '<button class="sel-bar__btn" data-act="board-transfer" title="Перенести на іншу дошку">' +
+        icon('moveOut', 16) + '</button>' +
       '<button class="sel-bar__btn sel-bar__btn--danger" data-act="board-delete" title="Видалити (Delete)">' +
         icon('trash', 16) + '</button>';
 
@@ -2887,7 +2898,8 @@
 
   function refreshEmpty() {
     var el = document.querySelector('[data-empty]');
-    if (el && cur) el.hidden = (slide().items || []).length > 0;
+    // поки кладуть набір з іншої дошки, підказка лягала б поверх нього
+    if (el && cur) el.hidden = (slide().items || []).length > 0 || !!cur.engine.placing;
   }
 
   var hintTimer = null;
@@ -3049,6 +3061,319 @@
     }, function () { U.toast('Немає звʼязку — файл не зібрався', 'err'); });
   }
 
+  /* ============================================================
+     Перенесення на іншу дошку
+     ============================================================ */
+
+  /* Набір, що чекає, поки відкриється інша дошка, — там його кладуть туди,
+     куди покаже людина. Живе лише в памʼяті: звідки брали, прибираємо
+     тільки після того, як поклали, тож скасування нічого не губить. */
+  var pendingTransfer = null;
+
+  function boardInfo(id) {
+    var l = S.get('lessons', id), d = l ? null : S.get('desk', id);
+    if (!l && !d) return null;
+    var st = l ? S.get('students', l.studentId) : null;
+    var stats = S.boardStats(id);
+    return {
+      id: id, st: st, desk: !l,
+      name: l ? (st ? st.name : '—') : (d.title || 'Моя справа'),
+      sub: l ? U.fmtDateTime(l.date) + (l.topic ? ' · ' + l.topic : '')
+             : 'Моя справа' + (d.tag ? ' · ' + d.tag : ''),
+      slides: stats ? stats.slides : 0,
+      items: stats ? stats.items : 0
+    };
+  }
+
+  /* Куди найчастіше несуть: ця сама дошка (інший слайд), найближчі уроки
+     й дошки, над якими працювали нещодавно. Пошук — по всіх уроках. */
+  function transferTargets(q) {
+    var out = [], seen = {};
+    function push(id, group) {
+      if (!id || seen[id]) return;
+      var r = boardInfo(id);
+      if (!r) return;
+      seen[id] = 1;
+      r.group = group;
+      out.push(r);
+    }
+    q = String(q || '').trim().toLowerCase();
+    if (q) {
+      S.db().lessons.slice()
+        .sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); })
+        .map(function (l) { return l.id; })
+        .concat(S.deskItems().map(function (d) { return d.id; }))
+        .forEach(function (id) {
+          if (out.length >= 40) return;
+          var r = boardInfo(id);
+          if (r && (r.name + ' ' + r.sub).toLowerCase().indexOf(q) >= 0) push(id, 'found');
+        });
+      return out;
+    }
+    push(cur.lessonId, 'this');
+    var now = Date.now();
+    S.db().lessons
+      .filter(function (l) {
+        var t = U.toDate(l.date).getTime();
+        return l.status === 'planned' && t > now - 3 * 3600e3 && t < now + 14 * 864e5;
+      })
+      .sort(function (a, b) { return U.toDate(a.date) - U.toDate(b.date); })
+      .slice(0, 8)
+      .forEach(function (l) { push(l.id, 'soon'); });
+    S.allBoards().slice(0, 25).forEach(function (b) { push(b.lessonId, 'recent'); });
+    return out;
+  }
+
+  function transferDialog() {
+    if (!cur) return;
+    var payload = cur.engine.exportSelection();
+    if (!payload) return;
+    var fromSlide = slide();
+    var st = { to: null, slideId: null, move: false };
+    var GROUP = { 'this': 'Ця дошка', soon: 'Найближчі уроки', recent: 'Недавні дошки' };
+
+    function listHtml(rows) {
+      if (!rows.length) return '<div class="xfer__none">Нічого не знайдено</div>';
+      var html = '', last = null;
+      rows.forEach(function (r) {
+        if (r.group !== last) {
+          last = r.group;
+          if (GROUP[r.group]) html += '<div class="xfer__group">' + GROUP[r.group] + '</div>';
+        }
+        html += '<button class="xfer__row" data-xfer-board="' + U.esc(r.id) + '">' +
+          (r.st ? C.avatar(r.st, 32) : '<span class="xfer__ico">' + icon('folder', 17) + '</span>') +
+          '<span class="xfer__txt"><b class="truncate">' + U.esc(r.name) + '</b>' +
+            '<span class="truncate">' + U.esc(r.sub) + '</span></span>' +
+          '<span class="xfer__n">' + (r.items ? U.pl(r.slides, 'слайд', 'слайди', 'слайдів') : 'порожня') + '</span>' +
+          icon('chevronR', 16) +
+        '</button>';
+      });
+      return html;
+    }
+
+    // слайди тієї дошки; якої ще немає — матиме перший слайд із відомим номером
+    function slidesOf(id) {
+      var b = S.getBoard(id);
+      return b && b.slides.length ? b.slides : [{ id: 'sl0-' + id, items: [], kind: 'lesson' }];
+    }
+
+    function slidesHtml(id) {
+      var rows = { lesson: [], hw: [] };
+      slidesOf(id).forEach(function (s) { var k = S.slideKind(s); rows[k].push({ s: s, n: rows[k].length + 1 }); });
+      function tile(x, kind) {
+        var here = id === cur.lessonId && x.s.id === fromSlide.id;
+        return '<button class="xfer__slide' + (st.slideId === x.s.id ? ' is-on' : '') +
+          '" data-xfer-slide="' + U.esc(x.s.id) + '">' +
+          '<span class="xfer__thumb" data-thumb="' + U.esc(x.s.id) + '"></span>' +
+          '<span class="xfer__cap truncate">' +
+            U.esc(x.s.title || ((kind === 'hw' ? 'ДЗ ' : 'Слайд ') + x.n)) + (here ? ' · тут' : '') +
+          '</span></button>';
+      }
+      var html = '<div class="xfer__group">Урок</div><div class="xfer__grid">' +
+        rows.lesson.map(function (x) { return tile(x, 'lesson'); }).join('') +
+        '<button class="xfer__slide xfer__slide--new' + (st.slideId === 'new' ? ' is-on' : '') +
+          '" data-xfer-slide="new"><span class="xfer__thumb">' + icon('plus', 22) + '</span>' +
+          '<span class="xfer__cap">Новий слайд</span></button>' +
+        '</div>';
+      if (rows.hw.length) {
+        html += '<div class="xfer__group">ДЗ</div><div class="xfer__grid">' +
+          rows.hw.map(function (x) { return tile(x, 'hw'); }).join('') + '</div>';
+      }
+      return html;
+    }
+
+    function drawThumbs(box, id) {
+      var byId = {};
+      slidesOf(id).forEach(function (s) { byId[s.id] = s; });
+      U.$$('[data-thumb]', box).forEach(function (el) {
+        var s = byId[el.dataset.thumb];
+        if (!s || !(s.items || []).length) return;
+        function paint() {
+          if (!el.isConnected) return;
+          try { el.innerHTML = ''; el.appendChild(window.Board.renderToCanvas(s, 240)); } catch (e) { /* лишається порожнім */ }
+        }
+        paint();
+        if (window.Board.preloadImages) window.Board.preloadImages([s]).then(paint, function () {});
+      });
+    }
+
+    function go() {
+      var t = {
+        from: cur.lessonId, fromSlide: fromSlide.id, ids: payload.ids, items: payload.items,
+        move: st.move, to: st.to, slideId: st.slideId === 'new' ? null : st.slideId, at: Date.now()
+      };
+      if (t.to === cur.lessonId) { setTimeout(function () { beginPlacing(t); }, 0); return; }
+      flushSave();
+      pendingTransfer = t;
+      location.hash = '#/board/' + t.to;
+    }
+
+    C.modal({
+      title: 'Перенести на іншу дошку',
+      // скільки виділила людина; точки й побудови, що їдуть слідом, не рахуємо
+      sub: U.pl(cur.engine.selection.length, 'об’єкт', 'об’єкти', 'об’єктів'),
+      body:
+        '<div class="xfer">' +
+          '<div data-step="board">' +
+            '<label class="xfer__search">' + icon('search', 16) +
+              '<input type="search" data-xfer-q placeholder="Учень, тема або дата" autocomplete="off"></label>' +
+            '<div class="xfer__list" data-xfer-list></div>' +
+          '</div>' +
+          '<div data-step="slide" hidden>' +
+            '<button class="xfer__back" data-xfer-back>' + icon('chevronL', 16) +
+              '<span class="truncate" data-xfer-to></span></button>' +
+            '<div class="xfer__slides" data-xfer-slides></div>' +
+            '<label class="check xfer__move"><input type="checkbox" data-xfer-move>' +
+              'Прибрати звідси — перенести, а не скопіювати</label>' +
+          '</div>' +
+        '</div>',
+      buttons: [
+        { label: 'Скасувати', act: 'xfer-cancel' },
+        { label: 'Обрати місце', kind: 'btn--primary', act: 'xfer-go', icon: 'arrowRight',
+          onClick: function () {
+            if (!st.to || !st.slideId) return false;
+            go();
+          } }
+      ],
+      onMount: function (wrap) {
+        var list = wrap.querySelector('[data-xfer-list]');
+        var q = wrap.querySelector('[data-xfer-q]');
+        var goBtn = wrap.querySelector('[data-mb="xfer-go"]');
+        var stepB = wrap.querySelector('[data-step="board"]');
+        var stepS = wrap.querySelector('[data-step="slide"]');
+        var slides = wrap.querySelector('[data-xfer-slides]');
+
+        function sync() { goBtn.disabled = !(st.to && st.slideId); }
+        function fill() { list.innerHTML = listHtml(transferTargets(q.value)); }
+        function showSlides() {
+          slides.innerHTML = slidesHtml(st.to);
+          drawThumbs(slides, st.to);
+          sync();
+        }
+
+        fill();
+        sync();
+        q.addEventListener('input', fill);
+
+        U.onClick(list, '[data-xfer-board]', function (el) {
+          var id = el.dataset.xferBoard;
+          var info = boardInfo(id);
+          st.to = id;
+          /* Порожня дошка — одразу на її перший слайд; на заповненій
+             безпечніше новий слайд, щоб нічого не лягло поверх. */
+          st.slideId = info && info.items ? 'new' : slidesOf(id)[0].id;
+          wrap.querySelector('[data-xfer-to]').textContent =
+            info ? info.name + ' · ' + info.sub : '';
+          stepB.hidden = true;
+          stepS.hidden = false;
+          showSlides();
+        });
+        U.onClick(slides, '[data-xfer-slide]', function (el) {
+          st.slideId = el.dataset.xferSlide;
+          U.$$('[data-xfer-slide]', slides).forEach(function (b) { b.classList.toggle('is-on', b === el); });
+          sync();
+        });
+        wrap.querySelector('[data-xfer-back]').addEventListener('click', function () {
+          st.to = null; st.slideId = null;
+          stepS.hidden = true;
+          stepB.hidden = false;
+          sync();
+          q.focus();
+        });
+        wrap.querySelector('[data-xfer-move]').addEventListener('change', function (e) {
+          st.move = e.target.checked;
+        });
+        setTimeout(function () { q.focus(); }, 30);
+      }
+    });
+  }
+
+  /** На відкритій дошці: обрати слайд і дати покласти набір, куди треба. */
+  function beginPlacing(t) {
+    if (!cur) return;
+    var i = t.slideId ? cur.board.slides.findIndex(function (s) { return s.id === t.slideId; }) : -1;
+    var made = null, back = cur.index;
+    if (i >= 0) {
+      if (i !== cur.index) selectSlide(i);
+    } else if (!t.slideId) {
+      // новий слайд — у кінець рядка уроку
+      var idx = railIndexes('lesson');
+      var at = idx.length ? idx[idx.length - 1] + 1 : cur.board.slides.length;
+      made = S.newSlide('', 'lesson');
+      cur.board.slides.splice(at, 0, made);
+      markDirty();
+      flushSave();
+      selectSlide(at);
+    }
+    placeBar(true);
+    var ok = cur.engine.startPlacing(t.items, function (placed) {
+      placeBar(false);
+      if (!placed || !placed.length) {
+        // скасували — порожній слайд, зроблений під набір, не лишаємо
+        var mi = made ? cur.board.slides.indexOf(made) : -1;
+        if (mi >= 0 && !(made.items || []).length && cur.board.slides.length > 1) {
+          cur.board.slides.splice(mi, 1);
+          cur.thumbs = {};
+          markDirty();
+          flushSave();
+          selectSlide(Math.min(back, cur.board.slides.length - 1));
+        }
+        refreshEmpty();
+        return;
+      }
+      if (t.move) removeFromSource(t);
+      flushSave();
+    });
+    if (!ok) placeBar(false);
+    refreshEmpty();
+  }
+
+  function placeBar(on) {
+    var body = document.querySelector('.board-body');
+    var bar = body && body.querySelector('[data-place-bar]');
+    if (!on) { if (bar) bar.remove(); return; }
+    if (!body || bar) return;
+    var touch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    bar = document.createElement('div');
+    bar.className = 'place-bar';
+    bar.setAttribute('data-place-bar', '');
+    bar.innerHTML = '<span>' + (touch
+      ? 'Торкніться там, куди покласти'
+      : 'Клацніть там, куди покласти · Enter — сюди · Esc — скасувати') + '</span>' +
+      '<button class="btn btn--ghost btn--sm" data-act="board-place-cancel">Скасувати</button>';
+    body.appendChild(bar);
+  }
+
+  // прибрати з однієї сторінки слайда; відрізки без точок ідуть слідом
+  function stripItems(sl, ids) {
+    var gone = {};
+    ids.forEach(function (id) { gone[id] = 1; });
+    var n = (sl.items || []).length;
+    sl.items = (sl.items || []).filter(function (it) { return !gone[it.id]; });
+    var alive = {};
+    sl.items.forEach(function (it) { if (it.t === 'o' && it.id) alive[it.id] = 1; });
+    sl.items = sl.items.filter(function (it) { return it.t !== 'c' || (alive[it.a1] && alive[it.a2]); });
+    return sl.items.length !== n;
+  }
+
+  /* «Перенести, а не скопіювати»: прибираємо там, звідки взяли, — вже
+     після того, як поклали. На тому самому слайді це крок історії
+     (Ctrl+Z поверне), на іншому — звичайний запис дошки. */
+  function removeFromSource(t) {
+    if (t.from === cur.lessonId) {
+      var i = cur.board.slides.findIndex(function (s) { return s.id === t.fromSlide; });
+      if (i < 0) return;
+      if (i === cur.index) { cur.engine.removeByIds(t.ids); return; }
+      if (stripItems(cur.board.slides[i], t.ids)) { cur.thumbs = {}; markDirty(); renderRail(); }
+      return;
+    }
+    var src = S.getBoard(t.from);
+    var sl = src && src.slides.filter(function (s) { return s.id === t.fromSlide; })[0];
+    if (!sl || !stripItems(sl, t.ids)) return;
+    S.saveBoard(src);
+    if (window.BoardOps) BoardOps.record(t.from, src);
+  }
+
   function insertImageFiles(files, at) {
     if (!cur) return;
     if (!window.ImgStore || !window.ImgStore.available()) {
@@ -3188,6 +3513,13 @@
     var eng = cur.engine;
 
     if (e.key === ' ') { eng.spaceDown = true; eng.canvas.style.cursor = 'grab'; return; }
+
+    // поки набір з іншої дошки висить під вказівником, решта клавіш не діє
+    if (eng.placing) {
+      if (e.key === 'Escape') { e.preventDefault(); eng.cancelPlacing(); }
+      else if (e.key === 'Enter') { e.preventDefault(); eng.placeHere(); }
+      return;
+    }
 
     if (e.ctrlKey || e.metaKey) {
       var k = e.key.toLowerCase();
@@ -3949,6 +4281,8 @@
       holdSelBar();                        // панель лишається під пальцем між натисканнями
       cur.engine.scaleSelection(k);
     },
+    'board-transfer': function () { transferDialog(); },
+    'board-place-cancel': function () { if (cur) cur.engine.cancelPlacing(); },
     'board-rotate': function (arg) {
       var d = Number(arg);
       if (!cur || (d !== 1 && d !== -1)) return;

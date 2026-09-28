@@ -3116,6 +3116,7 @@
       this._pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y) };
       this.draft = null;
       this.band = null;
+      this._placeDown = null;          // два пальці — це масштаб, а не «поклади тут»
       return;
     }
 
@@ -3125,6 +3126,17 @@
       return;
     }
     if (this.readOnly) return;
+
+    /* Кладемо не в мить натискання, а коли відпустили: пальцем набір
+       спершу підводять до місця, а другий палець перетворює жест на масштаб. */
+    if (this.placing) {
+      if (e.button === 0) {
+        this._placeDown = { id: e.pointerId };
+        this.placing.at = w;
+        this.render();
+      }
+      return;
+    }
 
     if (this.tool === 'eraser') {
       this.snapshot();
@@ -3347,6 +3359,8 @@
 
     var w = this.toWorld(p.x, p.y);
 
+    if (this.placing) { this.placing.at = w; this.render(); return; }
+
     if (this._erasing) { this._erase(w.x, w.y); return; }
 
     if (this._resize) {
@@ -3435,6 +3449,16 @@
   Board.prototype._pointerUp = function (e) {
     delete this._pointers[e.pointerId];
     if (Object.keys(this._pointers).length < 2) this._pinch = null;
+
+    if (this._placeDown) {
+      var pd = this._placeDown;
+      this._placeDown = null;
+      if (pd.id === e.pointerId && this.placing) {
+        var pp = this.eventPos(e);
+        this._commitPlacing(this.toWorld(pp.x, pp.y));
+      }
+      return;
+    }
 
     if (this._pan) { this._pan = null; this.canvas.style.cursor = ''; this.applyCursor(); return; }
     if (this._erasing) { this._erasing = false; if (this.opts.onChange) this.opts.onChange(); return; }
@@ -3683,6 +3707,168 @@
     this.setSelection(copies);
     this.changed();
     return copies.length;
+  };
+
+  /* ---------- Перенесення на іншу дошку ---------- */
+
+  /* Порахувати щось для чужого набору обʼєктів: точки на фігурах, відрізки
+     й побудови знаходять своїх «господарів» лише в межах поточного набору. */
+  Board.prototype._scoped = function (items, fn) {
+    setDrawScope(items);
+    var byId = idMap(items), Cn = window.Constructions;
+    items.forEach(function (it) {
+      if (it.t === 'd') prims.set(it, (byId[it.pid] && Cn) ? Cn.resolve(it, byId[it.pid]) : null);
+    });
+    try { return fn(); } finally { setDrawScope(this.items()); }
+  };
+
+  /**
+   * Виділене разом із тим, без чого воно не має сенсу, — щоб перенести на
+   * іншу дошку. Побудови їдуть зі своєю фігурою, точки на фігурі — з нею,
+   * відрізок — коли обидві його точки теж їдуть. Точка, чия фігура
+   * лишається тут, стає вільною на тому самому місці.
+   * Повертає { items: копії, ids: номери оригіналів } або null.
+   */
+  Board.prototype.exportSelection = function () {
+    if (!this.selection.length || !this.slide) return null;
+    var all = this.items(), map = idMap(all), take = {};
+    var picked = this.selection.slice();
+    picked.forEach(function (it) {
+      if (it.id) take[it.id] = 1;
+      // відрізок без своїх точок — ні до чого не привʼязаний
+      if (it.t === 'c') { if (map[it.a1]) take[it.a1] = 1; if (map[it.a2]) take[it.a2] = 1; }
+    });
+    all.forEach(function (it) {
+      if (it.t === 'o' && it.on && take[it.on.pid]) take[it.id] = 1;
+    });
+    all.forEach(function (it) {
+      if (it.t === 'd' && take[it.pid]) take[it.id] = 1;
+      if (it.t === 'c' && take[it.a1] && take[it.a2]) take[it.id] = 1;
+    });
+
+    // порядок — як на слайді, щоб верхнє лишилось верхнім
+    var src = all.filter(function (it) {
+      if (!(it.id ? take[it.id] : picked.indexOf(it) >= 0)) return false;
+      if (it.t === 'd') return !!take[it.pid];
+      if (it.t === 'c') return !!(take[it.a1] && take[it.a2]);
+      return true;
+    });
+    if (!src.length) return null;
+
+    var items = src.map(function (it) {
+      var c = JSON.parse(JSON.stringify(it));
+      if (c.t === 'o' && c.on && !take[c.on.pid]) {
+        var q = window.Points ? Points.at(it, map) : it.p;
+        if (q) c.p = [round(q[0]), round(q[1])];
+        delete c.on;
+      }
+      return c;
+    });
+    return { items: items, ids: src.map(function (it) { return it.id; }).filter(Boolean) };
+  };
+
+  /**
+   * Покласти набір обʼєктів (з exportSelection) на поточний слайд, зсунувши
+   * на dx, dy. Номери — нові, звʼязки між обʼєктами переписуються на них:
+   * інакше друга копія «сиділа б» на фігурах першої.
+   */
+  Board.prototype.importItems = function (items, dx, dy) {
+    if (this.readOnly || !this.slide || !items || !items.length) return [];
+    var copies = JSON.parse(JSON.stringify(items)), ren = {};
+    copies.forEach(function (it) { var old = it.id; reided(it); if (old) ren[old] = it.id; });
+    copies.forEach(function (it) {
+      if (it.t === 'd' && ren[it.pid]) it.pid = ren[it.pid];
+      else if (it.t === 'o' && it.on && ren[it.on.pid]) it.on.pid = ren[it.on.pid];
+      else if (it.t === 'c') {
+        if (ren[it.a1]) it.a1 = ren[it.a1];
+        if (ren[it.a2]) it.a2 = ren[it.a2];
+      }
+      // точки на фігурах, відрізки й побудови їдуть за своїми господарями самі
+      moveItem(it, dx || 0, dy || 0);
+    });
+    this.snapshot();
+    var self = this;
+    copies.forEach(function (it) {
+      self.slide.items.push(it);
+      if (it.t === 'i' && it.k && !imgCache[it.k]) loadImage(it.k, self.render.bind(self), it);
+    });
+    this.rememberInitialView();
+    this.syncConstructions();
+    this.setTool('select');
+    this.setSelection(copies);
+    this.changed();
+    return copies;
+  };
+
+  /** Прибрати обʼєкти з поточного слайда за номерами — одним кроком історії. */
+  Board.prototype.removeByIds = function (ids) {
+    if (this.readOnly || !this.slide || !ids || !ids.length) return 0;
+    var gone = {};
+    ids.forEach(function (id) { gone[id] = 1; });
+    var before = this.items().length;
+    if (!this.items().some(function (it) { return gone[it.id]; })) return 0;
+    this.snapshot();
+    this.slide.items = this.items().filter(function (it) { return !gone[it.id]; });
+    var alive = {};
+    this.slide.items.forEach(function (it) { if (it.t === 'o' && it.id) alive[it.id] = 1; });
+    this.slide.items = this.slide.items.filter(function (it) {
+      return it.t !== 'c' || (alive[it.a1] && alive[it.a2]);
+    });
+    var sel = this.slide.items;
+    this.selection = this.selection.filter(function (it) { return sel.indexOf(it) >= 0; });
+    this._shrank();
+    this.changed();
+    return before - this.slide.items.length;
+  };
+
+  /**
+   * Режим «куди покласти»: набір висить напівпрозорим під вказівником, клік
+   * (дотик) кладе його туди. Колесо, пробіл і права кнопка рухають полотно
+   * як завжди, а між слайдами можна перейти, не відпускаючи набору.
+   * onDone(покладені обʼєкти) — або onDone(null), якщо скасували.
+   */
+  Board.prototype.startPlacing = function (items, onDone) {
+    this.cancelPlacing(true);
+    if (this.readOnly || !items || !items.length) return false;
+    var ghost = JSON.parse(JSON.stringify(items));
+    var b = this._scoped(ghost, function () { return unionBounds(ghost); });
+    if (!b) return false;
+    var self = this;
+    ghost.forEach(function (it) {
+      if (it.t === 'i' && it.k && !imgCache[it.k]) loadImage(it.k, self.render.bind(self), it);
+    });
+    this.setTool('select');
+    this.clearSelection();
+    this.placing = { items: ghost, b: b, at: this.dropPoint(), onDone: onDone };
+    this.applyCursor();
+    this.render();
+    return true;
+  };
+
+  Board.prototype.cancelPlacing = function (silent) {
+    var pl = this.placing;
+    if (!pl) return;
+    this.placing = null;
+    this._placeDown = null;
+    this.applyCursor();
+    this.render();
+    if (!silent && pl.onDone) pl.onDone(null);
+  };
+
+  /** Покласти туди, де набір висить зараз (Enter). */
+  Board.prototype.placeHere = function () {
+    if (this.placing) this._commitPlacing(this.placing.at);
+  };
+
+  Board.prototype._commitPlacing = function (at) {
+    var pl = this.placing;
+    if (!pl) return;
+    this.placing = null;
+    this._placeDown = null;
+    var placed = this.importItems(pl.items,
+      at.x - (pl.b.x1 + pl.b.x2) / 2, at.y - (pl.b.y1 + pl.b.y2) / 2);
+    this.applyCursor();
+    if (pl.onDone) pl.onDone(placed);
   };
 
   /**
@@ -4084,6 +4270,7 @@
     if (this.tool === 'hand') c = 'grab';
     else if (this.tool === 'select') c = 'default';
     else if (this.tool === 'text') c = 'text';
+    if (this.placing) c = 'copy';
     if (this.readOnly) c = 'grab';
     this.canvas.style.cursor = c;
   };
@@ -4117,6 +4304,25 @@
     var self0 = this;
     for (var i = 0; i < items.length; i++) drawItem(ctx, items[i], this.scale);
     if (this.draft) drawItem(ctx, this.draft, this.scale);
+
+    // набір, який переносять з іншої дошки, — напівпрозорий під вказівником
+    if (this.placing && this.placing.at) {
+      var pl = this.placing, pk = 1 / this.scale;
+      ctx.save();
+      ctx.translate(pl.at.x - (pl.b.x1 + pl.b.x2) / 2, pl.at.y - (pl.b.y1 + pl.b.y2) / 2);
+      ctx.globalAlpha = 0.55;
+      this._scoped(pl.items, function () {
+        pl.items.forEach(function (it) { drawItem(ctx, it, self0.scale); });
+      });
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = '#1358F5';
+      ctx.lineWidth = 1.5 * pk;
+      ctx.setLineDash([6 * pk, 4 * pk]);
+      ctx.strokeRect(pl.b.x1 - 10 * pk, pl.b.y1 - 10 * pk,
+        (pl.b.x2 - pl.b.x1) + 20 * pk, (pl.b.y2 - pl.b.y1) + 20 * pk);
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
 
     /* Перша обрана точка зʼєднання. Без цієї позначки незрозуміло, чи
        клацання взагалі влучило, — і друге клацання робиться навмання. */

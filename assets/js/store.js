@@ -1437,6 +1437,9 @@
     var b = db.boards.filter(function (x) { return x.lessonId === id; })[0];
     if (b) { db.boards = db.boards.filter(function (x) { return x !== b; }); boardsDirty = true; }
     db.desk = (db.desk || []).filter(function (d) { return d.id !== id; });
+    /* Серверу треба сказати «видалено» поіменно. Без цього справа зникала
+       лише тут, а наступний обмін привозив її назад із сервера. */
+    syncDel('desk', id);
     S.save();
     S.gcImages();
     if (window.BoardHistory) BoardHistory.drop(id);

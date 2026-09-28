@@ -2235,7 +2235,18 @@
       x = Math.min(it.a[0], it.a[2]); y = Math.min(it.a[1], it.a[3]);
       w = Math.abs(it.a[2] - it.a[0]); h = Math.abs(it.a[3] - it.a[1]);
       var e = imgCache[it.k];
-      if (e && e.state === 'ok') { ctx.drawImage(e.img, x, y, w, h); return; }
+      if (e && e.state === 'ok') {
+        if (!it.q) { ctx.drawImage(e.img, x, y, w, h); return; }
+        /* Повернута на q чвертей: рамка вже рівна й помінялась сторонами,
+           тож малюємо навколо її центра з розмірами «до повороту». */
+        var odd = it.q % 2, dw = odd ? h : w, dh = odd ? w : h;
+        ctx.save();
+        ctx.translate(x + w / 2, y + h / 2);
+        ctx.rotate(it.q * Math.PI / 2);
+        ctx.drawImage(e.img, -dw / 2, -dh / 2, dw, dh);
+        ctx.restore();
+        return;
+      }
       ctx.save();
       ctx.fillStyle = '#F0F5FF';
       ctx.strokeStyle = '#8FB4FF';
@@ -2713,6 +2724,28 @@
     if (this.opts.onSelect) this.opts.onSelect(this.selection);
   };
 
+  /**
+   * Повернути виділені картинки на чверть оберту: dir = 1 — за годинниковою
+   * стрілкою, −1 — проти. Фото з телефона часто лягає боком. Рамка лишається
+   * рівною — її сторони міняються місцями навколо центра, а it.q (0…3)
+   * каже, скількома чвертями повернуто сам файл.
+   */
+  Board.prototype.rotateImages = function (dir) {
+    if (this.readOnly) return;
+    var imgs = this.selection.filter(function (it) { return it.t === 'i'; });
+    if (!imgs.length) return;
+    this.snapshot();
+    imgs.forEach(function (it) {
+      var q = (((it.q || 0) + dir) % 4 + 4) % 4;
+      if (q) it.q = q; else delete it.q;
+      var cx = (it.a[0] + it.a[2]) / 2, cy = (it.a[1] + it.a[3]) / 2;
+      var w = Math.abs(it.a[2] - it.a[0]), h = Math.abs(it.a[3] - it.a[1]);
+      it.a = [round(cx - h / 2), round(cy - w / 2), round(cx + h / 2), round(cy + w / 2)];
+    });
+    this.changed();
+    if (this.opts.onSelect) this.opts.onSelect(this.selection);
+  };
+
   Board.prototype._handles = function () {
     if (this._framed()) {
       var f = this._groupFrame();
@@ -3005,7 +3038,7 @@
     var nw = Math.abs(wx - ax), nh = Math.abs(wy - ay);
 
     var aspect = 0;
-    if (it.t === 'i' && it.r) aspect = it.r;
+    if (it.t === 'i' && it.r) aspect = it.q % 2 ? 1 / it.r : it.r;   // r — пропорції самого файлу
     else if (it.t === 'g' && SHAPES[it.sh] && SHAPES[it.sh].lock) aspect = SHAPES[it.sh].ar || 1;
     if (aspect && !free) {
       if (nw / aspect > nh) nh = nw / aspect; else nw = nh * aspect;

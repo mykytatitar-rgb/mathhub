@@ -2791,6 +2791,15 @@
         '<span class="sel-bar__sep"></span>'
       : '';
 
+    // фото з телефона часто лягає боком — поворот на чверть в обидва боки
+    var rotBtns = e.selection.some(function (i) { return i.t === 'i'; })
+      ? '<button class="sel-bar__btn" data-act="board-rotate" data-arg="-1" title="Повернути ліворуч на 90°">' +
+          icon('rotL', 16) + '</button>' +
+        '<button class="sel-bar__btn" data-act="board-rotate" data-arg="1" title="Повернути праворуч на 90°">' +
+          icon('rotR', 16) + '</button>' +
+        '<span class="sel-bar__sep"></span>'
+      : '';
+
     /* Рукопис → друкований слайд Beamer; а зі слайдів — файл .tex.
        Поки Claude читає, кнопка крутиться: повторний дотик нічого не шле. */
     var hasInk = e.selection.some(function (i) { return i.t === 'p'; });
@@ -2811,6 +2820,7 @@
     bar.innerHTML =
       '<span class="sel-bar__count">' + U.pl(n, 'об’єкт', 'об’єкти', 'об’єктів') + '</span>' +
       sizeBtns +
+      rotBtns +
       extra +
       typesetBtns +
       '<button class="sel-bar__btn" data-act="board-copy" title="Копіювати (Ctrl+C)">' +
@@ -3936,6 +3946,12 @@
       if (!cur || !(k > 0)) return;
       holdSelBar();                        // панель лишається під пальцем між натисканнями
       cur.engine.scaleSelection(k);
+    },
+    'board-rotate': function (arg) {
+      var d = Number(arg);
+      if (!cur || (d !== 1 && d !== -1)) return;
+      holdSelBar();
+      cur.engine.rotateImages(d);
     },
     'board-stroke-up': function () { stepStroke(1); },
     'board-stroke-down': function () { stepStroke(-1); },
@@ -5519,7 +5535,9 @@ VIEWER_SCRIPT +
 'if(it.t==="x"){ctx.font=\'500 \'+it.s+\'px Manrope,"Segoe UI",system-ui,sans-serif\';ctx.textBaseline="alphabetic";ctx.textAlign="left";',
 'String(it.v).split("\\n").forEach(function(l,n){ctx.fillText(l,it.p[0],it.p[1]+n*it.s*1.25);});return;}',
 'if(it.t==="i"){var x=Math.min(it.a[0],it.a[2]),y=Math.min(it.a[1],it.a[3]),w=Math.abs(it.a[2]-it.a[0]),h=Math.abs(it.a[3]-it.a[1]);',
-'var im=IMGS[it.k];if(im&&im.complete&&im.naturalWidth){ctx.drawImage(im,x,y,w,h);}',
+'var im=IMGS[it.k];if(im&&im.complete&&im.naturalWidth){if(!it.q)ctx.drawImage(im,x,y,w,h);',
+'else{var o=it.q%2;ctx.save();ctx.translate(x+w/2,y+h/2);ctx.rotate(it.q*Math.PI/2);',
+'ctx.drawImage(im,-(o?h:w)/2,-(o?w:h)/2,o?h:w,o?w:h);ctx.restore();}}',
 'else{ctx.save();ctx.fillStyle="#F1EFFE";ctx.strokeStyle="#8FB4FF";ctx.lineWidth=2;ctx.fillRect(x,y,w,h);ctx.strokeRect(x,y,w,h);ctx.restore();}return;}}',
 'function bg(b){ctx.fillStyle="#fff";ctx.fillRect(0,0,W,H);if(b==="blank")return;',
 'var st=40*scale;while(st<14)st*=2;while(st>150)st/=2;',

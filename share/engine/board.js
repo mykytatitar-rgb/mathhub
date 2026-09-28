@@ -3660,10 +3660,17 @@
     return true;
   };
 
+  /* Копіювання й дублювання беруть виділене тим самим шляхом, що й
+     перенесення на іншу дошку: разом із точками на фігурах і побудовами,
+     а в копії — нові номери й переписані звʼязки. Досі копія брала лише
+     виділене й зі старими номерами: точки копії «сиділи» на старій фігурі,
+     відрізки зʼєднували старі точки, а медіана не копіювалась зовсім. */
   Board.prototype.copySelection = function () {
-    if (!this.selection.length) return 0;
-    Board.clipboard = JSON.parse(JSON.stringify(this.selection));
-    return Board.clipboard.length;
+    var ex = this.exportSelection();
+    if (!ex) return 0;
+    Board.clipboard = ex.items;
+    Board.clipboardN = this.selection.length;
+    return Board.clipboardN;
   };
 
   Board.prototype.hasClipboard = function () {
@@ -3672,41 +3679,25 @@
 
   /** Вставити з внутрішнього буфера в центр видимої області. */
   Board.prototype.pasteClipboard = function (at) {
-    if (!this.hasClipboard() || !this.slide) return 0;
-    var copies = JSON.parse(JSON.stringify(Board.clipboard));
-    var b = unionBounds(copies);
+    if (!this.hasClipboard() || !this.slide || this.readOnly) return 0;
+    var items = Board.clipboard;
+    var b = this._scoped(items, function () { return unionBounds(items); });
+    var dx = 0, dy = 0;
     if (b) {
       var target = this.dropPoint(at);
-      var dx = target.x - (b.x1 + b.x2) / 2, dy = target.y - (b.y1 + b.y2) / 2;
-      copies.forEach(function (it) { moveItem(it, dx, dy); });
+      dx = target.x - (b.x1 + b.x2) / 2;
+      dy = target.y - (b.y1 + b.y2) / 2;
     }
-    this.snapshot();
-    var self = this;
-    copies.forEach(function (it) {
-      self.slide.items.push(reided(it));
-      if (it.t === 'i' && it.k && !imgCache[it.k]) loadImage(it.k, self.render.bind(self));
-    });
-    this.setTool('select');
-    this.setSelection(copies);
-    this.changed();
-    return copies.length;
+    return this.importItems(items, dx, dy).length ? (Board.clipboardN || items.length) : 0;
   };
 
   Board.prototype.duplicateSelection = function () {
-    if (!this.selection.length || !this.slide) return 0;
-    var copies = JSON.parse(JSON.stringify(this.selection));
+    if (!this.selection.length || !this.slide || this.readOnly) return 0;
+    var n = this.selection.length;
+    var ex = this.exportSelection();
+    if (!ex) return 0;
     var off = 24 / this.scale;
-    copies.forEach(function (it) { moveItem(it, off, off); });
-    this.snapshot();
-    var self = this;
-    copies.forEach(function (it) {
-      self.slide.items.push(reided(it));
-      if (it.t === 'i' && it.k && !imgCache[it.k]) loadImage(it.k, self.render.bind(self));
-    });
-    this.setTool('select');
-    this.setSelection(copies);
-    this.changed();
-    return copies.length;
+    return this.importItems(ex.items, off, off).length ? n : 0;
   };
 
   /* ---------- Перенесення на іншу дошку ---------- */
@@ -4492,6 +4483,7 @@
   };
 
   Board.clipboard = null;
+  Board.clipboardN = 0;     // скільки обʼєктів виділила людина (без точок і побудов, що їдуть слідом)
   Board.UNIT = UNIT;
   Board.fmtLen = fmtLen;
   Board.shapeMeasure = shapeMeasure;

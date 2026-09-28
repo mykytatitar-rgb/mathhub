@@ -969,18 +969,20 @@
      не одне велике поле, а рядки, у кожному ці три речі, і поруч видно,
      як формула справді виглядатиме. */
 
-  function rulesEditorHtml() {
+  function rulesEditorHtml(en) {
     return '<div data-rules>' +
       '<div data-rows></div>' +
       '<button type="button" class="btn btn--ghost btn--sm mt-2" data-rule-add>' +
-      icon('plus', 15) + 'Додати правило</button>' +
+      icon('plus', 15) + (en ? 'Add block' : 'Додати правило') + '</button>' +
       '</div>';
   }
 
-  function mountRulesEditor(root, rules) {
+  // en — редактор відкрито зі сторінки англійських шпаргалок
+  function mountRulesEditor(root, rules, en) {
     var box = root.querySelector('[data-rules]');
     if (!box) return;
     var rows = box.querySelector('[data-rows]');
+    function t(uk, eng) { return en ? eng : uk; }
 
     function preview(el, r) {
       var p = el.querySelector('[data-prev]');
@@ -988,20 +990,20 @@
 
       if (k === 'plot') {
         var svg = window.MathFmt ? MathFmt.plot((r.formula || '').trim()) : '';
-        p.innerHTML = svg || '<span class="muted small">назва схеми: ' +
+        p.innerHTML = svg || '<span class="muted small">' + t('назва схеми: ', 'graph name: ') +
           (window.MathFmt ? MathFmt.plots().join(', ') : '') + '</span>';
         return;
       }
       if (k === 'text' || k === 'warn' || k === 'item' || k === 'info') {
         p.innerHTML = r.note
           ? U.esc(r.note)
-          : '<span class="muted small">текст</span>';
+          : '<span class="muted small">' + t('текст', 'text') + '</span>';
         return;
       }
 
       var f = window.MathFmt ? MathFmt.render(r.formula) : '';
       var ex = window.MathFmt ? MathFmt.render(r.example) : '';
-      p.innerHTML = (f || '<span class="muted small">формула</span>') +
+      p.innerHTML = (f || '<span class="muted small">' + t('формула', 'formula') + '</span>') +
         (ex ? '<span class="muted" style="margin:0 8px">' + (k === 'pair' ? '→' : '·') + '</span>' + ex : '');
     }
 
@@ -1009,13 +1011,13 @@
        формулою, попередження, пункт списку, рядок таблиці похідних. Якби
        все було «правилом», довелося б підробляти одне під інше. */
     var KINDS = [
-      { value: 'rule', label: 'Правило' },
-      { value: 'text', label: 'Текст' },
-      { value: 'warn', label: 'Увага' },
-      { value: 'info', label: 'Довідка' },
-      { value: 'item', label: 'Пункт списку' },
-      { value: 'pair', label: 'Рядок таблиці' },
-      { value: 'plot', label: 'Схема графіка' }
+      { value: 'rule', label: t('Правило', 'Rule') },
+      { value: 'text', label: t('Текст', 'Text') },
+      { value: 'warn', label: t('Увага', 'Warning') },
+      { value: 'info', label: t('Довідка', 'Note') },
+      { value: 'item', label: t('Пункт списку', 'List item') },
+      { value: 'pair', label: t('Рядок таблиці', 'Table row') },
+      { value: 'plot', label: t('Схема графіка', 'Graph sketch') }
     ];
 
     function row(r, i) {
@@ -1023,13 +1025,16 @@
       el.className = 'rule-edit';
       el.innerHTML =
         '<div class="row" style="gap:8px;align-items:center">' +
-          '<input class="input" data-k="group" placeholder="Розділ (спільна шапка)" value="' +
-            U.esc(r.group || '') + '" style="flex:1.2">' +
+          '<input class="input" data-k="group" placeholder="' + t('Розділ (спільна шапка)', 'Section (shared heading)') +
+            '" value="' + U.esc(r.group || '') + '" style="flex:1.2">' +
           C.select('kind', r.kind || 'rule', KINDS, 'data-k="kind" style="flex:0 0 132px"') +
-          '<button type="button" class="icon-btn" data-rule-up title="Вище">' + icon('chevronL', 15) + '</button>' +
-          '<button type="button" class="icon-btn" data-rule-del title="Прибрати">' + icon('x', 15) + '</button>' +
+          '<button type="button" class="icon-btn" data-rule-up title="' + t('Вище', 'Move up') + '">' +
+            icon('chevronL', 15) + '</button>' +
+          '<button type="button" class="icon-btn" data-rule-del title="' + t('Прибрати', 'Remove') + '">' +
+            icon('x', 15) + '</button>' +
         '</div>' +
-        '<input class="input mt-2" data-k="title" placeholder="Підпис блока — необовʼязково" value="' +
+        '<input class="input mt-2" data-k="title" placeholder="' +
+          t('Підпис блока — необовʼязково', 'Block caption — optional') + '" value="' +
           U.esc(r.title || '') + '">' +
         '<div class="row" style="gap:8px;margin-top:7px">' +
           '<input class="input" data-k="formula" placeholder="a^m · a^n = a^{m+n}" value="' +
@@ -1037,7 +1042,8 @@
           '<input class="input" data-k="example" placeholder="5^2 · 5 = 125" value="' +
             U.esc(r.example || '') + '" style="flex:1">' +
         '</div>' +
-        '<input class="input mt-2" data-k="note" placeholder="Пояснення словами — воно ж текст попередження" value="' +
+        '<input class="input mt-2" data-k="note" placeholder="' +
+          t('Пояснення словами — воно ж текст попередження', 'Explanation in words — also the warning text') + '" value="' +
           U.esc(r.note || '') + '">' +
         '<div class="rule-edit__p" data-prev></div>';
 
@@ -1091,9 +1097,13 @@
      кнопку можна натиснути ще раз після оновлення довідника й не
      отримати двадцять дублів. */
 
+  /* Шпаргалки англомовні, і все, що з ними відбувається, — теж англійською:
+     ці дії запускаються лише зі сторінки шпаргалок. */
+  function plEn(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+
   F.importSheets = function () {
     var data = window.SHEETS_DATA || [];
-    if (!data.length) { U.toast('Довідник не завантажився', 'err'); return; }
+    if (!data.length) { U.toast('The cheat sheets did not load', 'err'); return; }
 
     var have = {};
     S.db().materials.forEach(function (m) {
@@ -1115,8 +1125,8 @@
       added++;
     });
 
-    if (!added) { U.toast('Усі теми вже є в бібліотеці', 'ok'); return; }
-    U.toast('Додано ' + U.pl(added, 'тему', 'теми', 'тем') + ' — правте під себе', 'ok');
+    if (!added) { U.toast('All topics are already here', 'ok'); return; }
+    U.toast('Added ' + plEn(added, 'topic', 'topics') + ' — edit them as you like', 'ok');
     /* Відкриваємо саме додане, а не перше в списку: людина натиснула
        «Додати», і показати їй треба те, що з'явилося. */
     if (first) { location.hash = '#/sheet/' + first; }
@@ -1154,18 +1164,18 @@
     var m = S.get('materials', id);
     if (!m) return;
     var sh = freshFor(m.title);
-    if (!sh) { U.toast('У готовому довіднику такої теми немає', 'err'); return; }
+    if (!sh) { U.toast('This topic is not in the built-in cheat sheets', 'err'); return; }
 
-    C.confirm('Оновити «' + m.title + '»?',
-      'Зміст теми буде замінено на готовий: стане ' +
-      U.pl(sh.rules.length, 'блок', 'блоки', 'блоків') + ' замість ' + (m.rules || []).length +
-      '. Якщо ви правили цю тему під себе — правки зникнуть.',
+    C.confirm('Update “' + m.title + '”?',
+      'The topic will be replaced with the built-in version: ' +
+      plEn(sh.rules.length, 'block', 'blocks') + ' instead of ' + (m.rules || []).length +
+      '. If you edited this topic yourself, your edits will be lost.',
       function () {
         applyFresh(m, sh);
-        U.toast('Тему оновлено', 'ok');
+        U.toast('Topic updated', 'ok');
         if (window.App && App.render) App.render();
       },
-      'Оновити');
+      'Update', 'Cancel');
   };
 
   /** Те саме для всіх тем, що відстали. */
@@ -1175,16 +1185,16 @@
       var sh = freshFor(m.title);
       return sh && sh.rules.length > (m.rules || []).length;
     });
-    if (!list.length) { U.toast('Усе вже свіже', 'ok'); return; }
+    if (!list.length) { U.toast('Everything is up to date', 'ok'); return; }
 
-    C.confirm('Оновити ' + U.pl(list.length, 'тему', 'теми', 'тем') + '?',
-      'Зміст цих тем буде замінено на готовий. Якщо ви правили їх під себе — правки зникнуть.',
+    C.confirm('Update ' + plEn(list.length, 'topic', 'topics') + '?',
+      'These topics will be replaced with the built-in versions. If you edited them yourself, your edits will be lost.',
       function () {
         list.forEach(function (m) { applyFresh(m, freshFor(m.title)); });
-        U.toast('Оновлено ' + U.pl(list.length, 'тему', 'теми', 'тем'), 'ok');
+        U.toast('Updated ' + plEn(list.length, 'topic', 'topics'), 'ok');
         if (window.App && App.render) App.render();
       },
-      'Оновити');
+      'Update', 'Cancel');
   };
 
   F.material = function (id) {
@@ -1202,6 +1212,47 @@
     S.db().materials.forEach(function (x) { if (x.topic && known.indexOf(x.topic) < 0) known.push(x.topic); });
     S.TOPICS.forEach(function (t) { if (known.indexOf(t) < 0) known.push(t); });
     if (known.indexOf('Загальне') < 0) known.unshift('Загальне');
+
+    /* Зі сторінки англійських шпаргалок — і форма англійською. Там правлять
+       лише зміст аркуша: тип, підтема й посилання лишаються як були
+       (підтема — українська категорія «Матеріалів», їй тут не місце). */
+    var en = /^#\/sheet(\/|\?|$)/.test(location.hash) && data.type === 'theory';
+    if (en) {
+      C.modal({
+        title: isNew ? 'New topic' : 'Edit topic',
+        body:
+          C.field('Title', C.input('title', data.title, 'placeholder="e.g. Logarithms"')) +
+          '<input type="hidden" name="type" value="theory">' +
+          '<input type="hidden" name="topic" value="' + U.esc(data.topic || 'Загальне') + '">' +
+          '<input type="hidden" name="url" value="' + U.esc(data.url || '') + '">' +
+          C.field('Blocks', rulesEditorHtml(true),
+            'Formulas are typed as text: a^2, a^{m+n}, \\frac{a}{b}, \\sqrt[3]{8}, \\cdot, \\le. ' +
+            'The preview under each block shows how it will look.') +
+          C.field('Note', C.textarea('note', data.note, 'placeholder="Shown above the topic"')),
+        buttons: [
+          !isNew ? { label: 'Delete topic', kind: 'btn--danger', act: 'del', onClick: function () {
+            S.remove('materials', id); S.gcImages(); U.toast('Topic deleted');
+            location.hash = '#/sheet';
+            refresh();
+          } } : null,
+          { label: 'Cancel', kind: 'btn--ghost', act: 'cancel' },
+          { label: 'Save', kind: 'btn--primary', act: 'save', icon: 'check',
+            onClick: function (root) {
+              var v = C.readForm(root);
+              if (!v.title) { U.toast('Enter a title', 'err'); return false; }
+              v.files = files.slice();
+              v.rules = rules.filter(function (r) {
+                return (r.title || '').trim() || (r.formula || '').trim() || (r.note || '').trim();
+              });
+              if (isNew) S.add('materials', v); else S.update('materials', id, v);
+              S.gcImages();
+              refresh();
+            } }
+        ].filter(Boolean),
+        onMount: function (root) { mountRulesEditor(root, rules, true); }
+      });
+      return;
+    }
 
     C.modal({
       title: isNew ? 'Новий матеріал' : 'Матеріал',
@@ -1221,8 +1272,8 @@
         '</div>' +
         '<div data-theory hidden>' +
           C.field('Правила', rulesEditorHtml(),
-            'Формули пишуться текстом: a^2, a^{m+n}, \frac{a}{b}, \sqrt[3]{8}, ' +
-            '\cdot, \le. Праворуч від полів одразу видно, як воно виглядатиме.') +
+            'Формули пишуться текстом: a^2, a^{m+n}, \\frac{a}{b}, \\sqrt[3]{8}, ' +
+            '\\cdot, \\le. Під кожним блоком одразу видно, як воно виглядатиме.') +
         '</div>' +
         C.field('Файли', fileStripHtml(),
           'PDF, документи, картинки, відео — усе, що роздаєте учням. ' +

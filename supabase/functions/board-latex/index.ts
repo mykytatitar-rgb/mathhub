@@ -1,17 +1,22 @@
 // Рукопис на дошці → друкований слайд LaTeX Beamer.
 //
-// Кабінет надсилає сюди картинку виділеного на дошці (PNG), Claude читає
-// рукописне й повертає зміст слайда: заголовок і блоки (текст, формули,
-// пункти). Сам слайд — картинку й файл .tex — збирає вже браузер.
+// Кабінет надсилає сюди картинку виділеного на дошці (PNG), розпізнавач
+// читає рукописне й повертає зміст слайда: заголовок і блоки (текст,
+// формули, пункти). Сам слайд — картинку й файл .tex — збирає вже браузер.
 //
-// Ключ Anthropic лежить лише тут, у секретах Supabase (ANTHROPIC_API_KEY),
-// і в браузер не потрапляє ніколи. Викликати функцію може тільки той, хто
-// увійшов у кабінет: токен входу перевіряємо самі, навіть якщо шлюз
-// Supabase перевірку JWT уже зробив.
+// Розпізнавач обирається за тим, який ключ лежить у секретах Supabase:
+//   ANTHROPIC_API_KEY — Claude (платно, найточніше читає почерк);
+//   GEMINI_API_KEY    — Gemini Flash від Google (безкоштовний рівень із
+//                       лімітами; Google може використовувати надіслане
+//                       для покращення своїх продуктів).
+// Лежать обидва — працює Claude, а якщо він не відповів (скажімо,
+// скінчились кошти), виручає Gemini.
+//
+// Ключі лежать лише тут і в браузер не потрапляють ніколи. Викликати
+// функцію може тільки той, хто увійшов у кабінет: токен входу перевіряємо
+// самі, навіть якщо шлюз Supabase перевірку JWT уже зробив.
 
 import Anthropic from "npm:@anthropic-ai/sdk";
-
-const client = new Anthropic(); // ANTHROPIC_API_KEY — із секретів функції
 
 const ALLOWED_ORIGINS = [
   "https://mathhub-7dw.pages.dev",
@@ -59,6 +64,8 @@ Return only a JSON object, no prose and no code fences, with this shape:
 - "figure": a hand-drawn graph, diagram or geometric drawing that cannot be written as text; "tex" is a short description of it in the board's language.
 - "drawings": true if there is at least one "figure" block.`;
 
+const PROMPT = "Transcribe this board selection into the slide JSON.";
+
 type Block = { kind: string; tex: string };
 type Slide = { lang: string; title: string; blocks: Block[]; drawings: boolean };
 
@@ -85,33 +92,15 @@ function parseSlide(text: string): Slide | null {
   }
 }
 
-Deno.serve(async (req) => {
-  const origin = req.headers.get("origin");
-  if (req.method === "OPTIONS") return new Response("ok", { headers: cors(origin) });
-  if (req.method !== "POST") return json({ error: "method" }, 405, origin);
-
-  // хто питає: лише той, хто увійшов у кабінет
-  const auth = req.headers.get("authorization") || "";
-  const apikey = req.headers.get("apikey") || Deno.env.get("SUPABASE_ANON_KEY") || "";
-  const who = await fetch(`${Deno.env.get("SUPABASE_URL")}/auth/v1/user`, {
-    headers: { Authorization: auth, apikey },
-  });
-  if (!who.ok) return json({ error: "auth" }, 401, origin);
-
-  if (!Deno.env.get("ANTHROPIC_API_KEY")) return json({ error: "no-key" }, 503, origin);
-
-  let image = "";
-  try {
-    const body = await req.json();
-    image = String(body.image || "");
-  } catch {
-    return json({ error: "body" }, 400, origin);
+// Помилка розпізнавача з кодом, який кабінет перекладає людською мовою.
+class RecognizerError extends Error {
+  constructor(public code: string, public status: number) {
+    super(code);
   }
-  // PNG у base64 без префікса data:, не більше ~6 МБ
-  if (!image || image.length > 8_000_000 || !/^[A-Za-z0-9+/=]+$/.test(image)) {
-    return json({ error: "image" }, 400, origin);
-  }
+}
 
+async function viaClaude(image: string): Promise<string> {
+  const client = new Anthropic(); // ANTHROPIC_API_KEY — із секретів функції
   try {
     const response = await client.beta.messages.create({
       model: "claude-opus-5",
@@ -127,27 +116,126 @@ Deno.serve(async (req) => {
         role: "user",
         content: [
           { type: "image", source: { type: "base64", media_type: "image/png", data: image } },
-          { type: "text", text: "Transcribe this board selection into the slide JSON." },
+          { type: "text", text: PROMPT },
         ],
       }],
     });
-
-    if (response.stop_reason === "refusal") return json({ error: "refusal" }, 422, origin);
-
-    const text = response.content
+    if (response.stop_reason === "refusal") throw new RecognizerError("refusal", 422);
+    return response.content
       .filter((b) => b.type === "text")
       .map((b) => (b as { text: string }).text)
       .join("\n");
+  } catch (error) {
+    if (error instanceof RecognizerError) throw error;
+    if (error instanceof Anthropic.AuthenticationError) throw new RecognizerError("bad-key", 503);
+    if (error instanceof Anthropic.RateLimitError) throw new RecognizerError("busy", 429);
+    if (error instanceof Anthropic.APIError) {
+      console.error("anthropic", error.status, error.message);
+      throw new RecognizerError("api", 502);
+    }
+    throw error;
+  }
+}
+
+// Найновіша стабільна Flash, а якщо Google її вже прибрав чи перейменував —
+// старша, що точно є на безкоштовному рівні. GEMINI_MODEL у секретах
+// дозволяє задати свою, не чіпаючи коду.
+const GEMINI_MODELS = [Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash", "gemini-2.5-flash"];
+const GEMINI_BLOCKED = ["SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "IMAGE_SAFETY", "RECITATION"];
+
+type GeminiPart = { text?: string; thought?: boolean };
+
+async function viaGemini(image: string, key: string): Promise<string> {
+  for (const model of GEMINI_MODELS) {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      {
+        method: "POST",
+        headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: SYSTEM }] },
+          contents: [{
+            role: "user",
+            parts: [
+              { inlineData: { mimeType: "image/png", data: image } },
+              { text: PROMPT },
+            ],
+          }],
+          generationConfig: { responseMimeType: "application/json" },
+        }),
+      },
+    );
+    if (res.status === 404) {             // такої моделі немає — пробуємо наступну
+      console.error("gemini", model, 404);
+      continue;
+    }
+    const body = await res.json().catch(() => ({}));
+    if (res.status === 429) throw new RecognizerError("busy", 429);
+    if (!res.ok) {
+      const msg = JSON.stringify(body).slice(0, 600);
+      console.error("gemini", model, res.status, msg);
+      if (/API[_ ]key/i.test(msg)) throw new RecognizerError("bad-key", 503);
+      throw new RecognizerError("api", 502);
+    }
+    if (body.promptFeedback?.blockReason) throw new RecognizerError("refusal", 422);
+    const cand = body.candidates?.[0];
+    if (!cand) throw new RecognizerError("empty", 422);
+    if (GEMINI_BLOCKED.includes(cand.finishReason)) throw new RecognizerError("refusal", 422);
+    return ((cand.content?.parts || []) as GeminiPart[])
+      .filter((p) => p.text && !p.thought)     // міркування моделі — не відповідь
+      .map((p) => p.text)
+      .join("\n");
+  }
+  throw new RecognizerError("api", 502);
+}
+
+Deno.serve(async (req) => {
+  const origin = req.headers.get("origin");
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors(origin) });
+  if (req.method !== "POST") return json({ error: "method" }, 405, origin);
+
+  // хто питає: лише той, хто увійшов у кабінет
+  const auth = req.headers.get("authorization") || "";
+  const apikey = req.headers.get("apikey") || Deno.env.get("SUPABASE_ANON_KEY") || "";
+  const who = await fetch(`${Deno.env.get("SUPABASE_URL")}/auth/v1/user`, {
+    headers: { Authorization: auth, apikey },
+  });
+  if (!who.ok) return json({ error: "auth" }, 401, origin);
+
+  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+  const geminiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!anthropicKey && !geminiKey) return json({ error: "no-key" }, 503, origin);
+
+  let image = "";
+  try {
+    const body = await req.json();
+    image = String(body.image || "");
+  } catch {
+    return json({ error: "body" }, 400, origin);
+  }
+  // PNG у base64 без префікса data:, не більше ~6 МБ
+  if (!image || image.length > 8_000_000 || !/^[A-Za-z0-9+/=]+$/.test(image)) {
+    return json({ error: "image" }, 400, origin);
+  }
+
+  try {
+    let text: string;
+    if (anthropicKey) {
+      try {
+        text = await viaClaude(image);
+      } catch (error) {
+        if (!geminiKey) throw error;
+        console.error("claude failed, trying gemini", error);
+        text = await viaGemini(image, geminiKey);
+      }
+    } else {
+      text = await viaGemini(image, geminiKey!);
+    }
     const slide = parseSlide(text);
     if (!slide || !slide.blocks.length) return json({ error: "empty" }, 422, origin);
     return json(slide, 200, origin);
   } catch (error) {
-    if (error instanceof Anthropic.AuthenticationError) return json({ error: "bad-key" }, 503, origin);
-    if (error instanceof Anthropic.RateLimitError) return json({ error: "busy" }, 429, origin);
-    if (error instanceof Anthropic.APIError) {
-      console.error("anthropic", error.status, error.message);
-      return json({ error: "api", status: error.status }, 502, origin);
-    }
+    if (error instanceof RecognizerError) return json({ error: error.code }, error.status, origin);
     console.error(error);
     return json({ error: "server" }, 500, origin);
   }

@@ -396,7 +396,24 @@
   };
 
   S.wipe = function () {
-    db = blank(); boardsDirty = true; S.save();
+    var R = window.RecSync;
+    var syncing = !!(R && window.Cloud && Cloud.available() && Cloud.signedIn());
+    var keepTutor = db && db.tutor;
+    if (syncing) {
+      /* З обміном «очистити» — отже, всюди. Досі база заміщувалась порожньою
+         лише тут: сервер про видалення не знав, і наступне читання
+         привозило все назад (або воно лишалось на інших пристроях). Кожен
+         запис — «видалено» поіменно, кожна дошка — повним шляхом. */
+      R.KINDS.forEach(function (kind) {
+        if (kind === 'meta') return;
+        (db[kind] || []).forEach(function (rec) { if (rec && rec.id) R.markDeleted(kind, rec.id); });
+      });
+      (db.boards || []).slice().forEach(function (b) { if (b && b.lessonId) S.removeBoard(b.lessonId); });
+    }
+    db = blank();
+    // профіль і налаштування — не «дані» учнів: порожній профіль затер би справжній на всіх пристроях
+    if (syncing && keepTutor) db.tutor = keepTutor;
+    boardsDirty = true; S.save();
     if (window.ImgStore && window.ImgStore.available()) window.ImgStore.gc([]);
   };
 
@@ -570,8 +587,10 @@
   S.removeStudent = function (id) {
     var lessonIds = db.lessons.filter(function (l) { return l.studentId === id; })
       .map(function (l) { return l.id; });
-    db.boards = db.boards.filter(function (b) { return lessonIds.indexOf(b.lessonId) < 0; });
-    boardsDirty = true;                 // інакше дошки зникали з пам'яті, але лишались у сховищі
+    /* Кожну дошку — повним шляхом: разом із журналом, історією й знімком на
+       сервері. Досі їх лише вирізали тут, і наступне читання з сервера
+       привозило всі дошки видаленого учня назад сиротами. */
+    lessonIds.forEach(function (lid) { S.removeBoard(lid); });
     ['lessons', 'homeworks', 'payments', 'progress', 'roadmap', 'notes', 'stumap'].forEach(function (name) {
       if (!Array.isArray(db[name])) return;
       var gone = db[name].filter(function (x) { return x.studentId === id; });
@@ -1256,6 +1275,11 @@
     board.updatedAt = new Date().toISOString();
     var i = db.boards.findIndex(function (b) { return b.id === board.id; });
     if (i < 0) db.boards.push(board);
+    /* Базу могли перечитати з диска (зміна з іншої вкладки) — тоді тут
+       лежить інший обʼєкт тієї самої дошки, а малюють у цьому. Без підміни
+       на диск ішла стара копія, і все намальоване після перечитування жило
+       лише в памʼяті. */
+    else if (db.boards[i] !== board) db.boards[i] = board;
     S.touchBoards(boardKey(board));
     S.save();
     if (window.BoardSync) BoardSync.mark(board.lessonId);

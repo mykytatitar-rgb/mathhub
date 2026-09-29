@@ -56,6 +56,8 @@ function freshStore() {
     icon: function () { return ''; }
   };
   ctx.window = ctx;
+  // вхід є — так перевіряється шлях «з обміном» (напр. «Очистити все»)
+  ctx.Cloud = { available: function () { return true; }, signedIn: function () { return true; } };
   ctx.RecSync = {
     KINDS: KINDS.concat('meta'),
     mark: function (k, id) { if (marks[k + '/' + id] !== 'del') marks[k + '/' + id] = 'mark'; },
@@ -176,6 +178,15 @@ var CASES = {
       },
       function (S, id) { S.setArchived(id, true); S.setArchived(id, false); }, true);
   },
+  wipe: function () {
+    check('S.wipe — «Очистити все» з увімкненим обміном',
+      function (S) { return 1; },
+      function (S) {
+        var tutor = JSON.stringify(S.db().tutor);
+        S.wipe();
+        ok(JSON.stringify(S.db().tutor) === tutor, 'профіль лишився');
+      }, true);
+  },
   pruneStudentTemplate: function () {
     check('S.pruneStudentTemplate — зайві уроки шаблону',
       function (S) {
@@ -198,8 +209,8 @@ var found = Object.keys(probe).filter(function (k) {
   return typeof probe[k] === 'function' && /^(remove|prune|purge|drop|delete|dedupe)/.test(k) &&
     k !== 'purgeUnusedImages';          // картинки — не записи бази
 });
-// прибирають і ті, що звуться інакше: архів чистить порожні уроки шаблону
-['setArchived'].forEach(function (k) { if (typeof probe[k] === 'function') found.push(k); });
+// прибирають і ті, що звуться інакше: архів чистить порожні уроки шаблону, «Очистити все» — усе
+['setArchived', 'wipe'].forEach(function (k) { if (typeof probe[k] === 'function') found.push(k); });
 
 found.forEach(function (fn) {
   if (!CASES[fn]) {

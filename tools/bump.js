@@ -49,8 +49,16 @@ sw = sw.replace(swFrom[0], "var VERSION = 'vektor-v" + to + "';");
 var n = 0;
 html = html.replace(/(\.(?:js|css))\?v=\d+"/g, function (_, ext) { n++; return ext + '?v=' + to + '"'; });
 
+/* Сторінка учня вантажить рушій сама, з номером ENGINE_V — той самий номер,
+   що й у кабінету, тоді service worker віддає файли однієї версії. */
+var share = read('share.html');
+var ev = /var ENGINE_V = (\d+);/.exec(share);
+if (!ev) { console.error('У share.html не знайшовся рядок ENGINE_V'); process.exit(1); }
+share = share.replace(ev[0], 'var ENGINE_V = ' + to + ';');
+
 write('assets/js/app.js', app);
 write('sw.js', sw);
 write('index.html', html);
+write('share.html', share);
 
 console.log('v' + from + ' → v' + to + ' (index.html: ' + n + ' адрес)');

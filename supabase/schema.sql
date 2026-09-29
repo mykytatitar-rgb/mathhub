@@ -712,8 +712,11 @@ security definer
 set search_path = public
 as $$
 begin
+  /* Невірний код — порожня відповідь, а не виняток. Виняток відкочував
+     усю транзакцію разом із update лічильника спроб у portal_ok, і після
+     десяти помилок портал так і не закривався: код можна було перебрати. */
   if not public.portal_ok(p_token, p_pin) then
-    raise exception 'Доступ закрито';
+    return;
   end if;
   return query
     select p.data, p.rev, p.updated_at
@@ -914,6 +917,11 @@ create policy records_own on public.records
   for all to authenticated
   using (owner = auth.uid())
   with check (owner = auth.uid());
+
+/* Читання — прямим запитом (RecSync.pull, heal). Без цього права, якщо в
+   проєкті вимкнено «Automatically expose new tables», кожен пристрій бачив
+   би лише своє: та сама пастка, що з дошками (див. нижче про boards). */
+grant select on public.records to authenticated;
 
 /**
  * Записати один запис. Повертає новий номер версії.

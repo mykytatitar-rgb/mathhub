@@ -101,6 +101,7 @@
 
   var pending = {};       // ключ → значення, що ще не лягло
   var writing = {};       // ключ → true, поки йде транзакція
+  var failing = {};       // ключ → коли запис почав падати (для «Чи все ціле»)
 
   function flushKey(key) {
     if (writing[key] || !(key in pending)) return;
@@ -109,9 +110,11 @@
     writing[key] = true;
     idbPut(key, value).then(function () {
       writing[key] = false;
+      delete failing[key];
       flushKey(key);
     }, function (e) {
       writing[key] = false;
+      if (!failing[key]) failing[key] = Date.now();
       console.warn('Disk: запис «' + key + '» не вдався:', e);
       // повторимо, якщо поки що не прийшло новішого значення
       if (!(key in pending)) pending[key] = value;
@@ -136,6 +139,13 @@
 
   /** Важкі записи переїхали, але прочитати їх не вдалося — писати поверх не можна. */
   D.broken = function () { return broken; };
+
+  /** Відколи запис у сховище браузера падає (найдавніший ключ) — або null. */
+  D.failing = function () {
+    var at = null;
+    Object.keys(failing).forEach(function (k) { if (!at || failing[k] < at) at = failing[k]; });
+    return at;
+  };
   D.usesIndexedDB = function () { return ready && !fallback; };
 
   D.get = function (key) {

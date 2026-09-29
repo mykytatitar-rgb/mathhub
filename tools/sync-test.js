@@ -45,6 +45,7 @@ function cmp(val, opv) {
   var m = opv.match(/^(eq|gt|lte|lt|gte|in)\.(.*)$/);
   if (!m) throw new Error('op? ' + opv);
   var o = m[1], v = m[2];
+  if (o !== 'in') v = v.replace(/^"(.*)"$/, '$1');     // значення в лапках, як їх шле обмін
   if (o === 'in') {
     var list = v.replace(/^\(|\)$/g, '').split(',').map(function (x) { return x.replace(/^"|"$/g, ''); });
     return list.indexOf(String(val)) >= 0;
@@ -160,8 +161,14 @@ Server.prototype.handle = function (who, url, opts) {
       if (f[0] === 'updated_at') recs = recs.filter(function (r) { return cmp(r.updated_at, f[1]); });
       if (f[0] === 'kind') recs = recs.filter(function (r) { return cmp(r.kind, f[1]); });
       if (f[0] === 'deleted') recs = recs.filter(function (r) { return cmp(String(!!r.deleted), f[1]); });
+      if (f[0] === 'or') { var ex = logic('or', f[1]); recs = recs.filter(function (r) { return ex(r); }); }
     });
-    recs.sort(function (a, b) { return a.updated_at < b.updated_at ? -1 : a.updated_at > b.updated_at ? 1 : 0; });
+    function key3(r) { return [r.updated_at, r.kind, r.id]; }
+    recs.sort(function (a, b) {
+      var x = key3(a), y = key3(b);
+      for (var i = 0; i < 3; i++) { if (x[i] < y[i]) return -1; if (x[i] > y[i]) return 1; }
+      return 0;
+    });
     var off = Number(get('offset')[0] || 0), l2 = Number(get('limit')[0] || 1000);
     return JSON.parse(JSON.stringify(recs.slice(off, off + l2)));
   }
@@ -580,6 +587,39 @@ scenario('Записи: різні учні з двох пристроїв, то
   }).then(function () { return RB.pull(); })
   .then(function () {
     same(B.db.students.map(function (s) { return s.id; }).join(), 's1', 'видалення дійшло');
+  });
+});
+
+scenario('Читання сторінками: запис, змінений під час читання, нічого не зсуває', function () {
+  var srv = new Server(), A = new Device('A', srv);
+  for (var i = 0; i < 1500; i++) {
+    var id = 'l' + ('000' + i).slice(-4);
+    srv.records['lessons/' + id] = { kind: 'lessons', id: id, rev: 1, deleted: false,
+      updated_at: srv.now(), data: { id: id, topic: 'T' + i } };
+  }
+  // поки йде перша сторінка, інший пристрій змінює перший запис — він «переїжджає» в кінець
+  var orig = srv.handle.bind(srv), hit = false, armed = false;
+  srv.handle = function (who, url, opts) {
+    var out = orig(who, url, opts);
+    if (armed && !hit && url.indexOf('/rest/v1/records') === 0 && (!opts || !opts.method || opts.method === 'GET') &&
+        Array.isArray(out) && out.length === 1000) {
+      hit = true;
+      var r = srv.records['lessons/l0000'];
+      r.data = { id: 'l0000', topic: 'змінено' }; r.rev++; r.updated_at = srv.now();
+    }
+    return out;
+  };
+  var RA = A.ctx.RecSync;
+  RA.start();
+  return wait(300).then(function () {
+    // пристрій починає з нуля, і саме під час цього читання приходить зміна
+    A.db.lessons.length = 0;
+    armed = true;
+    return RA.pull(true);
+  }).then(function () {
+    same(A.db.lessons.length, 1500, 'прочитано всі 1500 записів');
+    var l0 = A.db.lessons.filter(function (l) { return l.id === 'l0000'; })[0];
+    same(l0 && l0.topic, 'змінено', 'змінений під час читання — у свіжій версії');
   });
 });
 

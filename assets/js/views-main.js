@@ -1755,10 +1755,44 @@
           'Зміни залишаються тут і на сервер не їдуть. Учні свіжого не побачать. ' +
           'Увійдіть у картці «Акаунт» вище.');
       } else {
-        var s = Cloud.status();
-        out += healthRow('on', 'Усе на сервері',
-          'Кожна зміна їде сама, окремо, і не може затерти іншу' +
-          (s.dirty ? '. Кілька змін саме зараз у дорозі.' : '.'));
+        /* Раніше тут завжди було зелене «Усе на сервері» — навіть коли
+           браузер не записував зміни чи сервер днями їх відхиляв. Тепер
+           спершу збої, і лише без них — «усе на сервері». */
+        var trouble = false;
+        var hhmm = function (t) { var d = new Date(t); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); };
+        if (S.lastSaveFailed && S.lastSaveFailed()) {
+          trouble = true;
+          out += healthRow('off', 'Браузер не записує зміни',
+            'Сховище браузера переповнене або заблоковане. Зміни поки живуть у памʼяті ' +
+            'й їдуть на сервер — <b>не закривайте вкладку без інтернету</b>. Звільнити місце ' +
+            'допоможе «Копії в браузері» нижче: старі копії можна прибрати.');
+        }
+        var diskFail = window.Disk && Disk.failing && Disk.failing();
+        if (diskFail) {
+          trouble = true;
+          out += healthRow('off', 'Дошки не записуються в браузер',
+            'З ' + hhmm(diskFail) + ' запис у сховище браузера не проходить (програма повторює сама). ' +
+            'Дошки їдуть на сервер із памʼяті.');
+        }
+        var recErr = window.RecSync && RecSync.lastError && RecSync.lastError();
+        var waitFrom = window.RecSync && RecSync.pendingSince && RecSync.pendingSince();
+        if (recErr) {
+          trouble = true;
+          out += healthRow('warn', 'Сервер не прийняв частину змін',
+            'Остання відмова о ' + hhmm(recErr.at) + ': ' + U.esc(recErr.msg) + '. Зміни лишаються ' +
+            'в черзі й поїдуть самі, щойно сервер прийме.');
+        } else if (waitFrom && Date.now() - waitFrom > 5 * 60000) {
+          trouble = true;
+          out += healthRow('warn', U.pl(RecSync.pending(), 'зміна чекає', 'зміни чекають', 'змін чекають') +
+            ' на відправку', 'Черга не порожніє з ' + hhmm(waitFrom) + '. Найчастіше — немає інтернету; ' +
+            'поїде саме.');
+        }
+        if (!trouble) {
+          var s = Cloud.status();
+          out += healthRow('on', 'Усе на сервері',
+            'Кожна зміна їде сама, окремо, і не може затерти іншу' +
+            (s.dirty ? '. Кілька змін саме зараз у дорозі.' : '.'));
+        }
       }
 
       /* 1б. Скільки кого в базі.
@@ -2247,10 +2281,15 @@
           '<div class="card">' +
             '<div class="card-head"><div><h2 class="card-title">Небезпечна зона</h2></div></div>' +
             '<div class="row row--wrap" style="gap:10px">' +
-              '<button class="btn btn--ghost" data-act="reset-demo">' + icon('sparkles', 16) + 'Повернути демо-дані</button>' +
+              /* Демо-дані з входом поїхали б на сервер вигаданими учнями й
+                 оплатами — і змішалися б зі справжніми на всіх пристроях. */
+              (window.Cloud && Cloud.available() && Cloud.signedIn() ? '' :
+                '<button class="btn btn--ghost" data-act="reset-demo">' + icon('sparkles', 16) + 'Повернути демо-дані</button>') +
               '<button class="btn btn--danger" data-act="wipe">' + icon('trash', 16) + 'Очистити все</button>' +
             '</div>' +
-            '<div class="field__hint mt-2">«Очистити все» видаляє учнів, уроки, оплати й нотатки без можливості відновлення. Спершу зробіть експорт.</div>' +
+            '<div class="field__hint mt-2">«Очистити все» видаляє учнів, уроки, оплати й нотатки' +
+              (window.Cloud && Cloud.available() && Cloud.signedIn() ? ' на всіх ваших пристроях' : '') +
+              ' без можливості відновлення. Профіль і налаштування лишаються. Спершу зробіть експорт.</div>' +
           '</div>' +      '</div></div>';
   };
 

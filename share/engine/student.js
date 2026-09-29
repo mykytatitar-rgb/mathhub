@@ -426,25 +426,59 @@
       paintUndo();
     }
 
+    /* Пачка — не більше 150 дій і не більше ~300 тис. символів: база
+       відкидає запис довший за 400 тис. цілком. Після відмови пачка
+       меншає вдвічі, після успіху знову росте. */
+    var MAX_N = 150, MAX_CHARS = 300000, maxN = MAX_N;
+    function nextBatch() {
+      var out = [], size = 2;
+      for (var i = 0; i < queue.length && out.length < maxN; i++) {
+        var len = JSON.stringify(queue[i]).length + 1;
+        if (out.length && size + len > MAX_CHARS) break;
+        out.push(queue[i]);
+        size += len;
+      }
+      return out;
+    }
+
+    // відкинуте базою — не мовчки в консоль, а поруч, щоб його можна було знайти
+    function keepRejected(op, why) {
+      try {
+        var k = 'vektor.sb.rejected.' + token;
+        var list = JSON.parse(localStorage.getItem(k) || '[]') || [];
+        list.push({ at: new Date().toISOString(), why: String(why || '').slice(0, 300), op: op });
+        localStorage.setItem(k, JSON.stringify(list.slice(-50)));
+      } catch (e) {}
+    }
+
     function push() {
       if (sending || !queue.length) return;
       sending = true;
-      var batch = queue.slice(0, 150);
+      var batch = nextBatch();
 
       env.rpc('share_ops_write', { p_token: token, p_ops: batch }).then(function (res) {
         if (res.ok) return res.json().then(function (last) {
           queue = queue.slice(batch.length);
           keepQueue();
           retryMs = 800;
+          maxN = Math.min(MAX_N, maxN * 2);
           if (last > after) { /* свої дії назад не застосовуємо — вони вже тут */ }
           env.live.send('ops', { from: 'student' });
         });
-        /* Відмова бази — це не збій мережі: дія суперечить правилам (наприклад,
-           слайд щойно сховали). Повторювати таку безглуздо, тож відкидаємо. */
+        /* Відмова бази — не збій мережі: щось у пачці суперечить правилам
+           (слайд щойно сховали) або пачка завелика. Досі відкидалась уся
+           пачка — до 150 штрихів разом з однією поганою дією. Тепер пачка
+           ділиться навпіл, доки погану не знайдемо саму; лише її й
+           відкладаємо, решта їде. */
         if (res.status >= 400 && res.status < 500) {
           return res.text().then(function (t) {
+            if (batch.length > 1) {
+              maxN = Math.max(1, Math.floor(batch.length / 2));
+              return;
+            }
             console.warn('Дію учня не прийнято:', t);
-            queue = queue.slice(batch.length);
+            keepRejected(batch[0], t);
+            queue = queue.slice(1);
             keepQueue();
           });
         }
@@ -461,11 +495,22 @@
     window.addEventListener('pagehide', function () {
       flushSend();
       if (!queue.length) return;
+      /* Запит «на вихід» браузер приймає лише до 64 КБ — більший просто не
+         піде. Шлемо, скільки влазить; решта лишається в черзі на диску й
+         поїде при наступному відкритті (повтор дії безпечний). */
+      var out = [], size = 60;
+      for (var i = 0; i < queue.length && out.length < 150; i++) {
+        var len = JSON.stringify(queue[i]).length + 1;
+        if (size + len > 60000) break;
+        out.push(queue[i]);
+        size += len;
+      }
+      if (!out.length) return;
       try {
         fetch(env.API + '/rest/v1/rpc/share_ops_write', {
           method: 'POST', keepalive: true,
           headers: { apikey: env.KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ p_token: token, p_ops: queue.slice(0, 150) })
+          body: JSON.stringify({ p_token: token, p_ops: out })
         });
       } catch (e) {}
     });

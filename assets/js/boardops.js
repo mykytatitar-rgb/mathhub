@@ -823,10 +823,24 @@
       var local = {};
       (S.db().boards || []).forEach(function (b) { local[b.lessonId] = b; });
 
+      /* Дошка без уроку й без справи — сирота: власника видалили (можливо,
+         на іншому пристрої чи без мережі). Таку не везти. Судити можна лише
+         тоді, коли записи вже звірені з сервером — інакше новий пристрій,
+         що ще не бачив уроків, лишився б без жодної дошки. */
+      var judged = !!(window.RecSync && RecSync.hasPulled && RecSync.hasPulled());
+      var gone = {};
+      if (window.BoardSync && BoardSync.pendingDeletes) {
+        BoardSync.pendingDeletes().forEach(function (id) { gone[id] = 1; });
+      }
+      function orphan(id) {
+        if (gone[id]) return true;
+        return judged && !S.get('lessons', id) && !S.get('desk', id);
+      }
+
       var missing = [], stale = [];
       (rows || []).forEach(function (r) {
         var b = local[r.board_id];
-        if (!b) { missing.push(r.board_id); return; }
+        if (!b) { if (!orphan(r.board_id)) missing.push(r.board_id); return; }
         var s = b._sync;
         if (s && s.base) { if (r.rev !== s.snapRev) stale.push(r.board_id); }
         else if (!b.updatedAt || r.updated_at > b.updatedAt) stale.push(r.board_id);

@@ -87,13 +87,53 @@
     });
   };
 
-  /** Видалено урок — прибрати й знімок його дошки. Журнал лишається. */
-  B.remove = function (boardId) {
-    if (O()) O().drop(boardId);
-    if (!O() || !O().ready() || !boardId) return Promise.resolve(false);
+  /* Знімки дошок, які треба прибрати з сервера. Черга на диску: видалення
+     без мережі досі пропадало назавжди, і знімок видаленого уроку
+     повертався на кожен пристрій. */
+  var DEL_KEY = 'mathhub.board.del';
+  function delQueue() {
+    try { return JSON.parse(localStorage.getItem(DEL_KEY) || '[]') || []; } catch (e) { return []; }
+  }
+  function saveDelQueue(list) {
+    try {
+      if (list.length) localStorage.setItem(DEL_KEY, JSON.stringify(list));
+      else localStorage.removeItem(DEL_KEY);
+    } catch (e) {}
+  }
+  /** Дошки, чиє видалення ще не дійшло до сервера (їх не можна довантажувати). */
+  B.pendingDeletes = function () { return delQueue(); };
+
+  function sendDelete(boardId) {
     return Cloud.request('/rest/v1/boards?board_id=eq.' + encodeURIComponent(boardId),
       { method: 'DELETE' }).then(function (res) { return res.ok; })
       .catch(function () { return false; });
+  }
+
+  /** Спробувати ще раз усе, що не пішло. */
+  B.flushDeletes = function () {
+    var list = delQueue();
+    if (!list.length || !O() || !O().ready()) return Promise.resolve(0);
+    return list.reduce(function (chain, id) {
+      return chain.then(function (done) {
+        return sendDelete(id).then(function (ok) { return ok ? done.concat(id) : done; });
+      });
+    }, Promise.resolve([])).then(function (done) {
+      saveDelQueue(delQueue().filter(function (id) { return done.indexOf(id) < 0; }));
+      return done.length;
+    });
+  };
+
+  /** Видалено урок — прибрати й знімок його дошки. Журнал лишається. */
+  B.remove = function (boardId) {
+    if (O()) O().drop(boardId);
+    if (!boardId) return Promise.resolve(false);
+    var list = delQueue();
+    if (list.indexOf(boardId) < 0) { list.push(boardId); saveDelQueue(list); }
+    if (!O() || !O().ready()) return Promise.resolve(false);   // поїде, щойно зʼявиться вхід і мережа
+    return sendDelete(boardId).then(function (ok) {
+      if (ok) saveDelQueue(delQueue().filter(function (id) { return id !== boardId; }));
+      return ok;
+    });
   };
 
   /** Що про дошки знає сервер — для панелі «Чи все ціле». */
@@ -143,12 +183,17 @@
     started = true;
     // спершу віддаємо своє, потім забираємо чуже
     O().flush()
+      .then(function () { return B.flushDeletes(); })
       .then(function () { return B.pullAll(); })
       .then(function () { return B.syncMissing(); })
       .then(function () { sweepLater(20000); })
       .catch(function (e) { console.warn('Дошки:', e && e.message); });
 
-    window.addEventListener('online', function () { O().flush(); });
+    /* Щойно записи звірено з сервером, ще раз дивимось на дошки: тепер
+       відомо, які уроки справжні, і сиріт не довантажуємо (fetchMissing). */
+    if (window.RecSync && RecSync.afterFirstPull) RecSync.afterFirstPull(function () { B.pullAll(); });
+
+    window.addEventListener('online', function () { O().flush(); B.flushDeletes(); });
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'hidden') O().flush();
       else { B.pullAll(); sweepLater(15000); }

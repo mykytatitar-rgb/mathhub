@@ -7,7 +7,7 @@
 
    Версію треба піднімати щоразу, коли змінюється склад файлів. */
 
-var VERSION = 'vektor-v148';
+var VERSION = 'vektor-v149';
 
 /* Банк задач — окремий кеш: він не залежить від версії кабінету й не
    чиститься з кожним оновленням. Кожен файл банку приходить з відбитком
@@ -178,9 +178,10 @@ self.addEventListener('fetch', function (e) {
   if (isCode(url)) {
     e.respondWith(
       fromNetworkFirst(req).catch(function () {
-        return caches.match(req).then(function (r) {
-          return r || Response.error();
-        });
+        /* Кешу немає (перше відкриття на повільному інтернеті) — чекаємо
+           мережу, а не віддаємо помилку: інакше сторінка учня без жодної
+           причини падала на запасний, старий переглядач. */
+        return caches.match(req).then(function (r) { return r || fetch(req); });
       })
     );
     return;

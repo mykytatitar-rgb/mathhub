@@ -73,12 +73,36 @@
     try { hashes = JSON.parse(diskGet(HASH) || 'null'); } catch (e) { hashes = null; }
   }
 
+  /* Черга спільна для всіх вкладок цього браузера, а пам'ять у кожної своя.
+     Досі кожна вкладка записувала свою чергу поверх чужої: видалення,
+     зроблене в іншій вкладці без мережі, губилося, щойно ця щось зберігала.
+     Тепер перед записом чуже невідправлене підхоплюється; своє відправлене
+     (sentHere) — ні, інакше воно поверталось би в чергу вічно. Повторна
+     відправка запису безпечна: сервер просто отримає те саме ще раз. */
+  var sentHere = {};
+  function mergeStored() {
+    var stored;
+    try { stored = JSON.parse(localStorage.getItem(OUT) || '{}') || {}; } catch (e) { stored = {}; }
+    Object.keys(stored).forEach(function (k) {
+      if (!(k in outbox) && !sentHere[k]) outbox[k] = stored[k];
+    });
+  }
+
   function saveState() {
     try {
+      mergeStored();
+      sentHere = {};
       localStorage.setItem(OUT, JSON.stringify(outbox));
       if (since) localStorage.setItem(SINCE, since);
     } catch (e) { /* сховище повне — дані все одно в базі, черга відновиться */ }
   }
+
+  /* Для панелі «Чи все ціле»: остання відмова сервера й відколи черга не
+     порожніє. Досі відмова йшла лише в консоль, а панель казала «усе на
+     сервері». */
+  var lastErr = null, pendingSince = null;
+  R.lastError = function () { return lastErr; };
+  R.pendingSince = function () { return Object.keys(outbox).length ? pendingSince : null; };
 
   var hashTimer = null;
   function saveHashes() {
@@ -195,14 +219,42 @@
     return n;
   };
 
+  /**
+   * Базу щойно перечитали з диска — її змінила інша вкладка цього браузера.
+   * Нове там належить тій вкладці: вона сама його відправить (її чергу ця
+   * підхоплює, див. mergeStored). Тут лише запамʼятовуємо відбитки, щоб не
+   * прийняти чуже за власну правку й не відправити його поверх свіжішого.
+   * Своє невідправлене (є в черзі) не чіпаємо.
+   */
+  R.rebase = function () {
+    var db = S.db();
+    if (!db || !hashes) return;
+    mergeStored();
+    R.KINDS.forEach(function (kind) {
+      if (kind === 'meta') {
+        metaKeys(db).forEach(function (k) {
+          if (!outbox['meta/' + k]) hashes['meta/' + k] = fp(JSON.stringify({ v: db[k] }));
+        });
+        return;
+      }
+      (db[kind] || []).forEach(function (rec) {
+        if (rec && rec.id && !outbox[kind + '/' + rec.id]) hashes[kind + '/' + rec.id] = fp(JSON.stringify(rec));
+      });
+    });
+    lastScanned = S.lastDoc ? S.lastDoc() : null;
+    saveHashes();
+  };
+
   /** Відправити все, що чекає. По одному: так зрозуміло, що саме не пройшло. */
   R.flush = function () {
     if (sending || !ready()) return Promise.resolve(0);
+    mergeStored();                                // і те, що лишила інша вкладка
     var keys = Object.keys(outbox);
-    if (!keys.length) return Promise.resolve(0);
+    if (!keys.length) { pendingSince = null; return Promise.resolve(0); }
+    if (!pendingSince) pendingSince = Date.now();
 
     sending = true;
-    var ok = 0;
+    var ok = 0, failed = 0;
 
     return keys.reduce(function (chain, key) {
       return chain.then(function () {
@@ -212,26 +264,33 @@
 
         if (op === 'del') {
           return call('delete_record', { p_kind: kind, p_id: id, p_device: device() })
-            .then(function () { if (outbox[key] === 'del') delete outbox[key]; ok++; });
+            .then(function () {
+              if (outbox[key] === 'del') { delete outbox[key]; sentHere[key] = 1; }
+              ok++;
+            });
         }
 
         var rec = findLocal(kind, id);
-        if (!rec) { delete outbox[key]; return; }   // зник локально — нема чого слати
+        if (!rec) { delete outbox[key]; sentHere[key] = 1; return; }   // зник локально — нема чого слати
         var sent = JSON.stringify(rec);
 
         return call('save_record', { p_kind: kind, p_id: id, p_data: rec, p_device: device() })
           .then(function () {
             // поки летіло, запис могли змінити ще раз — тоді він лишається в черзі
             var now = findLocal(kind, id);
-            if (now && JSON.stringify(now) === sent) delete outbox[key];
+            if (now && JSON.stringify(now) === sent) { delete outbox[key]; sentHere[key] = 1; }
             ok++;
           });
       }).catch(function (e) {
         // лишаємо в черзі: поїде при наступній нагоді
+        failed++;
+        lastErr = { at: Date.now(), key: key, msg: (e && e.message) || 'помилка' };
         console.warn('Запис не поїхав (' + key + '):', e && e.message);
       });
     }, Promise.resolve()).then(function () {
       sending = false;
+      if (!failed) lastErr = null;
+      if (!Object.keys(outbox).length) pendingSince = null;
       saveState();
       if (Object.keys(outbox).length) setTimeout(function () { if (ready()) R.flush(); }, 15000);
       return ok;
@@ -279,6 +338,8 @@
     if (pulledOnce) { try { fn(); } catch (e) { console.warn('afterFirstPull:', e); } return; }
     afterPull.push(fn);
   };
+  /** Чи записи тут уже звірені з сервером хоч раз після відкриття. */
+  R.hasPulled = function () { return pulledOnce; };
   function firstPullDone() {
     if (pulledOnce) return;
     pulledOnce = true;
@@ -304,10 +365,23 @@
     }
 
     /* Сервер віддає не більше тисячі рядків за раз — тому сторінками.
-       Інакше новий пристрій отримав би лише частину учнів і уроків. */
+       Інакше новий пристрій отримав би лише частину учнів і уроків.
+
+       Наступна сторінка — «після останнього прочитаного рядка» (час, вид,
+       номер), а не «пропусти тисячу». Досі було друге: якщо під час читання
+       інший пристрій змінював запис із першої сторінки, той переїжджав у
+       кінець, решта зсувалась на одну позицію, і один запис не читався
+       зовсім — а мітка «прочитано до» вже стояла за ним. */
     var PAGE = 1000;
-    function page(offset, acc) {
-      return Cloud.request(path + '&limit=' + PAGE + '&offset=' + offset, { method: 'GET' })
+    function q(v) { return '"' + String(v).replace(/"/g, '\\"') + '"'; }
+    function page(last, acc) {
+      var url = path + '&limit=' + PAGE;
+      if (last) {
+        url += '&or=' + encodeURIComponent('(updated_at.gt.' + q(last.updated_at) +
+          ',and(updated_at.eq.' + q(last.updated_at) + ',kind.gt.' + q(last.kind) + ')' +
+          ',and(updated_at.eq.' + q(last.updated_at) + ',kind.eq.' + q(last.kind) + ',id.gt.' + q(last.id) + '))');
+      }
+      return Cloud.request(url, { method: 'GET' })
         .then(function (res) {
           if (!res.ok) throw new Error('Сервер відповів ' + res.status);
           return res.json();
@@ -315,14 +389,14 @@
         .then(function (rows) {
           rows = rows || [];
           acc = acc.concat(rows);
-          return rows.length < PAGE ? acc : page(offset + PAGE, acc);
+          return rows.length < PAGE ? acc : page(rows[rows.length - 1], acc);
         });
     }
 
     R.scan();                                   // спершу помітити своє, щоб його не перекрило
     var ok = false;
     pulling = R.flush().then(function () {
-      return page(0, []);
+      return page(null, []);
     }).then(function (rows) {
       ok = true;
 
@@ -455,6 +529,11 @@
       if (hashes) delete hashes[key];
       if (i < 0) return false;
       list.splice(i, 1);
+      /* Урок чи справу видалили на іншому пристрої — їхня дошка йде
+         разом із ними. Досі вона лишалась тут назавжди сиротою. */
+      if ((row.kind === 'lessons' || row.kind === 'desk') && S.getBoard(row.id)) {
+        try { S.removeBoard(row.id); } catch (e) { console.warn('removeBoard:', e); }
+      }
       return true;
     }
 

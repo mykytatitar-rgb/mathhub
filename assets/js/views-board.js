@@ -800,6 +800,8 @@
 
   V.boardMountedFor = function () { return cur ? cur.lessonId : null; };
   V.boardEngine = function () { return cur ? cur.engine : null; };
+  /** Обʼєкт відкритої дошки — той, у якому зараз малюють. */
+  V.boardCurrent = function () { return cur ? cur.board : null; };
 
   /**
    * Перечитати відкриту дошку після того, як дані оновилися з сервера.

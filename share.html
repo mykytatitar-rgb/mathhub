@@ -668,6 +668,10 @@
      посиланні не помічає. */
 
   var ENGINE = ['points', 'constructions', 'plot', 'solids', 'board', 'ops', 'student'];
+  /* Номер версії рушія — його піднімає tools/bump.js разом із кабінетом.
+     Без номера кожен файл брався окремо «мережа або кеш за 1,5 с», і на
+     повільному інтернеті рушій складався з файлів різних версій. */
+  var ENGINE_V = 149;
 
   function loadScript(src) {
     return new Promise(function (resolve, reject) {
@@ -681,7 +685,7 @@
 
   function loadEngine() {
     return ENGINE.reduce(function (chain, name) {
-      return chain.then(function () { return loadScript('share/engine/' + name + '.js'); });
+      return chain.then(function () { return loadScript('share/engine/' + name + '.js?v=' + ENGINE_V); });
     }, Promise.resolve());
   }
 
@@ -972,6 +976,16 @@
           inp.value = '';
           inp.focus();
           err.textContent = 'Код не підходить. Спробуй ще раз.';
+          // після десятої помилки портал закривається — кажемо про це одразу
+          rpc('portal_gate', { p_token: tok })
+            .then(function (res) { return res.ok ? res.json() : null; })
+            .then(function (rows) {
+              var g = rows && rows[0];
+              if (g && g.locked) {
+                fail('Вхід тимчасово закрито',
+                     'Код вводили неправильно забагато разів. Попроси репетитора задати новий.');
+              }
+            }).catch(function () {});
         });
       }
       btn.onclick = go;

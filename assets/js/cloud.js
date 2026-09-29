@@ -773,6 +773,9 @@
             if (!r2.ok) return { ok: false, why: 'pin', needsPin: g.needs_pin };
             return r2.json().then(function (rows2) {
               var row = rows2 && rows2[0];
+              /* Невірний код тепер — порожня відповідь, а не помилка (інакше
+                 база відкочувала лічильник спроб). */
+              if (!row && g.needs_pin) return { ok: false, why: 'pin', needsPin: true };
               if (!row || !row.data) return { ok: false, why: 'empty' };
 
               var raw = row.data;
@@ -1089,6 +1092,17 @@
       suppress++;
       try {
         S.load();
+        /* Відкрита тут дошка — правда цієї вкладки: у ній малюють, і її
+           журнал сам зведе зміни з іншими. Щойно прочитана з диска копія не
+           має її підмінити, інакше записи пішли б у стару. */
+        var open = window.V && V.boardCurrent && V.boardCurrent();
+        if (open) {
+          var list = S.db().boards || [];
+          var at = list.findIndex(function (b) { return b.lessonId === open.lessonId; });
+          if (at >= 0) list[at] = open; else list.push(open);
+        }
+        // змінене іншою вкладкою — не своя правка: відбитки й чергу звести
+        if (window.RecSync && RecSync.rebase) RecSync.rebase();
         if (window.App && window.App.render) {
           // відкриту дошку не чіпаємо: її вміст живе окремо
           if (!(window.V && V.boardMountedFor && V.boardMountedFor())) window.App.render();

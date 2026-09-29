@@ -1304,6 +1304,9 @@
     refreshEmpty();
     updateSlideName();
     updateHwCount();
+    // виділення лишилось (за номерами) — панель і кнопки кроку мають це знати
+    updateSelBar();
+    refreshUndo();
     // учень міг покласти на живу дошку фото — забираємо файл собі
     healStudentImages();
   }
@@ -1356,6 +1359,10 @@
 
     window.Cloud.shareContributions(cur.board.share.token).then(function (rows) {
       if (!cur || cur.lessonId !== lessonId || !rows || !rows.length) return;
+      /* Рука на дошці — чекаємо: перечитування слайда обірвало б лінію,
+         яку саме ведуть. Внески не позначені прийнятими, тож прийдуть із
+         наступною перевіркою, за кілька секунд. */
+      if (engineBusy()) return;
 
       var ink = rows.filter(function (r) { return r.kind === 'ink'; });
       var hw  = rows.filter(function (r) { return r.kind === 'homework'; });
@@ -1367,7 +1374,9 @@
           cur.engine.setSlide(cur.board.slides[cur.index], true);
           renderRail();
           refreshEmpty();
-          U.toast('Учень щось написав на дошці', 'ok');
+          updateSelBar();
+          refreshUndo();
+          // без повідомлення: написане учнем і так видно на дошці, а урок має бути тихим
         }
 
         return mergeHomework(hw).then(function (h) {
@@ -2340,6 +2349,8 @@
     if (!cur) return;
     var e = cur.engine;
     var touched = 0;
+    if (!e.selection.some(function (it) { return it.t === 'o'; })) return;
+    e.beginEdit('point-size');               // знімок — до зміни
 
     e.selection.forEach(function (it) {
       if (it.t !== 'o') return;
@@ -2355,7 +2366,6 @@
     if (last) e.setPointSize(last.r);
 
     holdSelBar();
-    e.snapshot();
     e.changed();
     renderOpts();
     updateSelBar();
@@ -2374,6 +2384,8 @@
     var touched = 0;
 
     holdSelBar();
+    if (!e.selection.some(function (it) { return it.t === 'c' && (it.k || 'seg') !== kind; })) return;
+    e.beginEdit(null);                        // знімок — до зміни
     e.selection.forEach(function (it) {
       if (it.t !== 'c') return;
       if ((it.k || 'seg') === kind) return;
@@ -2384,7 +2396,6 @@
 
     // наступна лінія проводиться така сама
     e.setLinkKind(kind);
-    e.snapshot();
     e.changed();
     updateSelBar();
   }
@@ -2398,9 +2409,9 @@
 
     var on = !lines.every(function (it) { return it.dash; });
     holdSelBar();
+    e.beginEdit(null);                        // знімок — до зміни
     lines.forEach(function (it) { if (on) it.dash = 1; else delete it.dash; });
     e.setLinkDash(on);
-    e.snapshot();
     e.changed();
     updateSelBar();
   }
@@ -2416,6 +2427,8 @@
     var touched = 0;
 
     holdSelBar();
+    if (!e.selection.some(function (it) { return it.t !== 'x' && it.t !== 'i' && it.t !== 'o'; })) return;
+    e.beginEdit('stroke');                    // знімок — до зміни
     e.selection.forEach(function (it) {
       if (it.t === 'x' || it.t === 'i' || it.t === 'o') return;
       var w = it.w || 3;
@@ -2434,7 +2447,6 @@
       else e.width = last.w;
     }
 
-    e.snapshot();
     e.changed();
     renderOpts();
     updateSelBar();
@@ -2653,6 +2665,12 @@
     var sel = cur.engine.selection;
     if (!sel.length) return;
     var touched = 0;
+    /* Знімок — ДО зміни (раніше робився після, і «крок назад» нічого не
+       повертав). Повзунок кличе це на кожен рух — одна правка поспіль
+       однієї властивості стає одним кроком. */
+    if (sel.some(function (it) { return it.t !== 'i' && (!onlyType || it.t === onlyType); })) {
+      cur.engine.beginEdit('style:' + Object.keys(patch).sort().join(',') + ':' + (onlyType || ''));
+    }
     sel.forEach(function (it) {
       if (onlyType && it.t !== onlyType) return;
       if (it.t === 'i') return;                         // у картинки немає кольору
@@ -2665,7 +2683,7 @@
       });
       touched++;
     });
-    if (touched) { cur.engine.snapshot(); cur.engine.changed(); }
+    if (touched) cur.engine.changed();
   }
 
   function fillFromColor(color) {

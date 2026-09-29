@@ -2409,15 +2409,22 @@
 
   Board.prototype.setSlide = function (slide, keepView) {
     // ідемо з цього слайда — закріплюємо, яким він був після останньої власної дії
-    if (this.slide && this.slide !== slide && this.history) {
-      var top = this.history[this.history.length - 1];
-      if (top && typeof top === 'object' && top.open) {
-        top.after = JSON.stringify(this.slide.items);
-        top.open = false;
-      }
+    if (this.slide && this.slide !== slide && this.history) this._closeTop();
+
+    /* Той самий слайд, перечитаний після чужої зміни, — виділення лишається.
+       Досі кожен штрих учня мовчки знімав його, а панель виділення висіла:
+       «Видалити» чи «Задати сторони» натискались по порожньому. */
+    var keepIds = null;
+    if (this.slide && slide && this.slide.id === slide.id && this.selection.length) {
+      keepIds = {};
+      this.selection.forEach(function (it) { if (it && it.id) keepIds[it.id] = 1; });
     }
     this.slide = slide;
-    this.clearSelection(true);
+    if (keepIds) {
+      this.selection = (slide.items || []).filter(function (it) { return it && keepIds[it.id]; });
+    } else {
+      this.clearSelection(true);
+    }
     this.draft = null;
     this.band = null;
 
@@ -2532,9 +2539,48 @@
 
   Board.prototype.snapshot = function () {
     if (this.readOnly || !this.slide) return;
+    /* Попередня дія на цю мить закінчилась — її «одразу після» саме зараз.
+       Досі вона лишалась незакритою, і «крок назад» до неї брав «зараз»
+       разом із тим, що тим часом написав учень, — і стирав його. */
+    this._closeTop();
     this.history.push({ before: JSON.stringify(this.slide.items), after: null, ext: this._ext || 0 });
     if (this.history.length > 40) this.history.shift();
     this.future.length = 0;
+  };
+
+  /**
+   * Правка вже наявних обʼєктів: колір, товщина, розмір точки, вид лінії.
+   * Кликати ДО зміни — інакше «до» вже містить нове, і крок назад нічого не
+   * повертає. Серія однакових правок підряд (повзунок, кілька «+»), поки
+   * не прийшло чуже, — один крок: інакше повзунок за секунду набивав
+   * десятки кроків і витісняв з історії справжні. key = null — без злиття.
+   */
+  Board.prototype.beginEdit = function (key) {
+    if (this.readOnly || !this.slide) return;
+    var top = this.history[this.history.length - 1];
+    var now = Date.now();
+    if (key && top && typeof top === 'object' && top.edit === key && top.ext === (this._ext || 0) &&
+        (top.after == null || top.open) && now - (top.at || 0) < 1500) {
+      top.at = now;
+      return;
+    }
+    this.snapshot();
+    var made = this.history[this.history.length - 1];
+    if (made && key) { made.edit = key; made.at = now; }
+  };
+
+  /* Закрити верхній крок, якщо він ще не закритий: стан «одразу після дії»
+     — теперішній. Крок, після якого нічого не змінилося (тап по фігурі без
+     руху, гумка повз, другий палець замість штриха), прибираємо: інакше
+     «крок назад» витрачався б на нього, а потім хапав би чуже. */
+  Board.prototype._closeTop = function () {
+    var top = this.history[this.history.length - 1];
+    if (!top || typeof top !== 'object' || !this.slide) return;
+    if (top.after != null && !top.open) return;
+    var now = JSON.stringify(this.slide.items);
+    if (top.before === now) { this.history.pop(); return; }
+    top.after = now;
+    top.open = false;
   };
 
   /* Перенести на items зміну, якою стан from став станом to. Обʼєкти, яких
@@ -2572,16 +2618,17 @@
    * «крок назад» вважав би чуже своїм.
    */
   Board.prototype.sealHistory = function () {
-    var top = this.history[this.history.length - 1];
-    if (top && typeof top === 'object' && top.open && this.slide) {
-      top.after = JSON.stringify(this.slide.items);
-      top.open = false;
-    }
+    /* Будь-який незакритий крок, а не лише позначений «відкритим»:
+       перетягування й зміна розміру закінчувались без позначки, і крок
+       назад після чужої зміни прибирав чуже. */
+    this._closeTop();
     this._ext = (this._ext || 0) + 1;
   };
 
   Board.prototype.undo = function () {
-    if (!this.history.length || !this.slide) return false;
+    if (!this.slide) return false;
+    this._closeTop();                          // порожній верхній крок — не крок
+    if (!this.history.length) return false;
     var now = JSON.stringify(this.slide.items);
     var e = stepOf(this.history.pop(), now);
     this._replay = true;
@@ -3461,19 +3508,22 @@
     }
 
     if (this._pan) { this._pan = null; this.canvas.style.cursor = ''; this.applyCursor(); return; }
-    if (this._erasing) { this._erasing = false; if (this.opts.onChange) this.opts.onChange(); return; }
+    /* Кінець дії — через changed(), як у решти: так крок історії знає, що
+       дія була, і закривається правильно. Досі тут кликали лише onChange,
+       і крок перетягування лишався «порожнім» назавжди. */
+    if (this._erasing) { this._erasing = false; this.changed(); return; }
     if (this._resize) {
       this._resize = null;
       svFit = null;                       // тягнення скінчилося — фіксація не потрібна
-      if (this.opts.onChange) this.opts.onChange();
+      this.changed();
       return;
     }
     if (this._gscale) {
       this._gscale = null;
-      if (this.opts.onChange) this.opts.onChange();
+      this.changed();
       return;
     }
-    if (this._drag) { this._drag = null; if (this.opts.onChange) this.opts.onChange(); return; }
+    if (this._drag) { this._drag = null; this.changed(); return; }
 
     if (this.band) {
       this.band = null;

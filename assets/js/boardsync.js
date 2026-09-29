@@ -27,10 +27,6 @@
   B.stats = function () { return O() ? O().stats() : { pending: 0, failed: 0, ids: [], why: '' }; };
   B.available = function () { return !!(O() && O().ready()); };
 
-  /* Раніше тут дозволяли дошці «схуднути». Тепер стирання — звичайна дія
-     в журналі, і дозволу воно не потребує. */
-  B.allow = function () {};
-
   /** Дошка змінилася — відправити, коли вщухне. */
   B.mark = function (boardId) {
     if (!boardId || !O()) return;

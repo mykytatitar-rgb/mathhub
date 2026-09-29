@@ -129,10 +129,6 @@
 
         '<div class="spacer row board-top__acts" style="gap:8px;flex-wrap:wrap">' +
           '<button class="board-top__saved" data-saved data-act="board-saved" hidden></button>' +
-          /* Стан копії учня. Досі перевидання відбувалося мовчки, і так само
-             мовчки падало: репетитор малював, а учень бачив старе — і жоден
-             з них не міг про це здогадатися. */
-          '<button class="board-top__pub" data-pub data-act="board-republish" hidden></button>' +
           // зустріч і поділитися — лише для уроку: власну справу нікому не шлють
           (lesson && S.meetUrlFor(lesson.studentId)
             ? '<a class="btn btn--ghost btn--sm" href="' + U.esc(S.meetUrlFor(lesson.studentId)) +
@@ -277,7 +273,6 @@
     var board = S.ensureBoard(lessonId);
     var engine = new window.Board(canvas, {
       onChange: function () { markDirty(); refreshUndo(); refreshEmpty(); scheduleThumb(); updateSelBar(); },
-      onShrink: function () { allowShrink(); },
       onViewChange: function () { updateZoom(); updateSelBar(); },
       onSelect: function () { refreshUndo(); updateSelBar(); },
       onToolChange: function (t) { syncToolButtons(t); renderOpts(); },
@@ -362,17 +357,10 @@
     /* Урок, опублікований старішою версією програми, оновлюємо мовчки: учень
        має бачити те саме, що й ми, а сам він на це вплинути не може — у нього
        збережений знімок сторінки. */
-    if (cur.board.share && cur.board.share.token) {
-      if (!(window.Cloud && Cloud.available() && Cloud.signedIn())) {
-        /* Без синхронізації відправляти нікуди. Кажемо це одразу, а не
-           показуємо зелене «учень бачить це», якого ніхто не перевіряв. */
-        scheduleRepublish();                       // сам виставить причину
-      } else if (cur.board.share.v !== VIEWER_VERSION) {
-        scheduleRepublish();
-      } else {
-        // урок уже свіжий — так і кажемо, щоб стан був видно з першої секунди
-        setPubState('ok');
-      }
+    // без синхронізації scheduleRepublish сам запише причину; застарілий урок — перевидає
+    if (cur.board.share && cur.board.share.token &&
+        (!(window.Cloud && Cloud.available() && Cloud.signedIn()) || cur.board.share.v !== VIEWER_VERSION)) {
+      scheduleRepublish();
     }
     applyRail();
     renderRail();
@@ -837,13 +825,6 @@
      Збереження
      ============================================================ */
 
-  /* Сказати синхронізації, що дошка схудла з волі власника, а не через
-     збій. Без цього захист від втрати відкочував би назад і стерте гумкою,
-     і видалений слайд. */
-  function allowShrink() {
-    if (cur && window.BoardSync && BoardSync.allow) BoardSync.allow(cur.lessonId);
-  }
-
   function markDirty() {
     if (!cur) return;
     cur.dirty = true;
@@ -949,23 +930,10 @@
      Підіймати щоразу, коли міняється VIEWER_SCRIPT або розмітка переглядача. */
   var VIEWER_VERSION = 9;
 
-  /**
-   * Стан копії учня.
-   *
-   * На дошці його більше не видно зовсім: написи «учень бачить це» і
-   * «учень бачить старе» на кожен штрих лише відволікали, а в Miro такого
-   * немає, бо там учень дивиться на ту саму дошку. Оновлення й далі
-   * повторюється само, а те, що справді застрягло, записується в журнал і
-   * видно в «Чи все ціле».
-   */
-  function setPubState(state, detail) {
-    var el = document.querySelector('[data-pub]');
-    if (el) el.hidden = true;
-    if (!cur) return;
-    if (state === 'ok') cur.lastPubFail = null;
-    else if (state === 'fail') cur.lastPubFail = detail || 'невідома причина';
-  }
-
+  /* Стан копії учня на дошці не показується: написи «учень бачить це» і
+     «учень бачить старе» на кожен штрих лише відволікали. Оновлення
+     повторюється само, а застрягле записується (publogSet) і видно в
+     «Чи все ціле». */
   function scheduleRepublish() {
     if (!cur || !cur.board.share) return;
 
@@ -974,12 +942,10 @@
        відправлялося взагалі. */
     if (!(window.Cloud && Cloud.available())) {
       publogSet(cur.lessonId, false, 'синхронізацію не налаштовано');
-      setPubState('fail', 'синхронізацію не налаштовано');
       return;
     }
     if (!Cloud.signedIn()) {
       publogSet(cur.lessonId, false, 'сесія скінчилася');
-      setPubState('fail', 'сесія скінчилася — увійдіть у Налаштуваннях');
       return;
     }
     /* Коли живий канал працює, звичайні штрихи учень уже бачить миттєво —
@@ -998,7 +964,6 @@
 
     var wait = Math.max(0, pause - (Date.now() - (cur.republishedAt || 0)));
     cur.republishUrgent = urgent;
-    setPubState('sending');
     cur.republishTimer = setTimeout(function () {
       cur.republishTimer = null;
       if (!cur || !cur.board.share) return;
@@ -1014,15 +979,12 @@
         }
         cur.board.share.v = VIEWER_VERSION;
         publogSet(lessonId, true);
-        setPubState('ok');
       }).catch(function (e) {
         if (cur && cur.lessonId === lessonId) cur.structural = true;   // спробуємо ще раз терміново
+        /* Не лише в консоль: застрягле видно в «Чи все ціле», інакше
+           репетитор упевнений, що учень бачить свіже, хоча в того старий знімок. */
         publogSet(lessonId, false, e && e.message ? e.message : 'немає звʼязку');
-        /* Раніше помилка йшла лише в консоль — тобто нікуди. Тепер вона
-           на видноті: інакше репетитор упевнений, що учень бачить свіже,
-           хоча в того досі старий знімок. */
         console.warn('Не вдалося оновити урок для учня:', e && e.message);
-        setPubState('fail', e && e.message ? e.message : 'немає звʼязку');
       });
     }, wait);
   }
@@ -1986,10 +1948,7 @@
    */
   function restoreVersion(snap) {
     snapshot(true);                             // щоб і сам відкат можна було відкотити
-    /* Відкат — теж воля людини, і він цілком може зробити дошку меншою.
-       Без цього дозволу сервер побачив би зменшення, вирішив, що це втрата,
-       і повернув би все назад: кнопка «Повернути» не працювала б. */
-    allowShrink();
+    // відкат, що зменшує дошку, — звичайні дії стирання в журналі, дозволу не треба
     cur.board.slides = snap.slides;
     cur.index = 0;
     cur.thumbs = {};
@@ -2119,7 +2078,6 @@
         cur.thumbs = {};
         // видаляє сама людина — захист «повернутого» більше не потрібен
         if (window.BoardOps && BoardOps.unkeep && gone) BoardOps.unkeep(gone.id);
-        allowShrink();
         markDirty();
         flushSave();
         selectSlide(Math.max(0, cur.index - 1));
@@ -2148,16 +2106,34 @@
     el.textContent = s.title || ('Слайд ' + (cur.index + 1));
   }
 
+  /* Відбиток вмісту слайда — дешевший за малювання й PNG у сотні разів. */
+  function slideSig(s) {
+    var str = (s.bg || '') + JSON.stringify(s.items || []);
+    var h = 2166136261;
+    for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = (h * 16777619) >>> 0; }
+    return h.toString(36) + ':' + str.length;
+  }
+
+  /* Мініатюра — окремо для кожного слайда, за відбитком вмісту. Досі кеш
+     тримав лише одну: кожне оновлення рейки перемальовувало й кодувало в
+     PNG усі слайди, а на живому уроці — після кожного штриха учня. Ще й
+     ключ брав лише кількість обʼєктів, і пересунуте мініатюра не бачила. */
   function thumbFor(i) {
     var s = cur.board.slides[i];
-    var key = s.id + ':' + (s.items || []).length + ':' + s.bg;
-    if (cur.thumbs[key]) return cur.thumbs[key];
     if (!(s.items || []).length) return null;
+    var sig = slideSig(s);
+    var got = cur.thumbs[s.id];
+    if (got && got.sig === sig) return got.url;
     var url;
     try { url = window.Board.renderToCanvas(s, 420).toDataURL('image/png'); }
     catch (e) { return null; }
-    cur.thumbs = {};
-    cur.thumbs[key] = url;
+    /* Фото ще вантажаться — на мініатюрі замість них заглушки. Таку не
+       запамʼятовуємо, а перемальовуємо, щойно фото приїдуть. */
+    if (window.Board.imagesReady && !window.Board.imagesReady([s])) {
+      if (window.Board.preloadImages) window.Board.preloadImages([s]).then(function () { scheduleThumb(); });
+      return url;
+    }
+    cur.thumbs[s.id] = { sig: sig, url: url };
     return url;
   }
 
@@ -3598,7 +3574,7 @@
     var kk = e.key.toLowerCase();
     if (map[kk]) { e.preventDefault(); setTool(map[kk]); return; }
     if (kk === 'r') { e.preventDefault(); eng.setShape('rect'); renderOpts(); return; }
-    if (kk === 'o') { e.preventDefault(); eng.setShape('circle'); renderOpts(); return; }
+    // «O» зайнята точкою (див. map вище) — коло обирається в панелі фігур
     if (kk === 'm') { e.preventDefault(); toggleMeasures(); return; }
 
     if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -4268,13 +4244,6 @@
     'board-redo': function () { cur.engine.redo(); refreshUndo(); refreshEmpty(); scheduleThumb(); },
     'board-image': function () { document.querySelector('[data-img-input]').click(); },
     'board-rail-toggle': function () { toggleRail(); },
-    /* Повторна спроба вручну. Потрібна, коли зв'язок пропав саме в мить
-       відправлення: сама собою вона не повториться, бо дошка не змінюється. */
-    'board-republish': function () {
-      if (!cur || !cur.board.share) return;
-      cur.republishedAt = 0;                 // не чекаємо паузу — людина попросила зараз
-      scheduleRepublish();
-    },
     'board-save-view': function () {
       if (cur.engine.saveCurrentView()) {
         flushSave();

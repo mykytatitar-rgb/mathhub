@@ -44,25 +44,6 @@
 .board-top__saved.is-warn { color: #8A5409; background: var(--amber-bg); border-color: var(--amber); }
 .board-top__saved.is-fail { color: var(--red); background: var(--red-bg); border-color: var(--red); }
 
-/* Стан копії учня. Мовчазна невдача тут найгірша: репетитор упевнений,
-   що учень бачить свіже, а той дивиться на старий знімок. */
-.board-top__pub {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 5px 11px;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  font-size: 12px; font-weight: 700;
-  background: none; cursor: pointer;
-  font-family: inherit;
-}
-.board-top__pub[hidden] { display: none; }
-.board-top__pub.is-sending { color: var(--muted); }
-.board-top__pub.is-ok { color: var(--green); }
-.board-top__pub.is-fail {
-  color: var(--red); background: var(--red-bg); border-color: var(--red);
-}
-.board-top__pub.is-fail:hover { background: #F9DADC; }
-
 /* ---------- Робоча область ---------- */
 
 .board-body { flex: 1; position: relative; overflow: hidden; min-height: 0; }

@@ -1281,9 +1281,33 @@
        лише в памʼяті. */
     else if (db.boards[i] !== board) db.boards[i] = board;
     S.touchBoards(boardKey(board));
-    S.save();
+    /* Лише дошки, а не вся база. Досі кожне збереження дошки (а на уроці —
+       після кожного штриха) ще й серіалізувало всю базу в localStorage і
+       будило календар та портали всіх учнів. Базу й хуки кличемо лише тоді,
+       коли дошка вперше отримала вміст: тоді в порталі учня зʼявляється
+       посилання на урок. */
+    var has = (board.slides || []).some(function (s) { return (s.items || []).length; });
+    if (has && !hadContent.get(board)) {
+      hadContent.set(board, true);
+      S.save();
+    } else {
+      if (has) hadContent.set(board, true);
+      saveBoardsOnly();
+    }
     if (window.BoardSync) BoardSync.mark(board.lessonId);
   };
+
+  var hadContent = new WeakMap();
+
+  function saveBoardsOnly() {
+    try {
+      if (readFailed.boards) { warnBlocked(); return; }
+      writeBoards();
+    } catch (e) {
+      lastSaveFailed = true;
+      console.warn('S.saveBoard (дошки не записались, на сервер ідуть з памʼяті):', e);
+    }
+  }
 
   /** Скільки слайдів і об'єктів на дошці уроку (для індикаторів у списках). */
   S.boardStats = function (lessonId) {

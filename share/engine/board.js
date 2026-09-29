@@ -3592,18 +3592,6 @@
     this.zoomAt(Math.pow(0.999, e.deltaY * (e.ctrlKey ? 2.4 : 1)), p.x, p.y);
   };
 
-  /**
-   * Користувач сам щось прибрав.
-   *
-   * Синхронізація боїться зменшення дошки — саме так виглядає втрата. Але
-   * гумка й «видалити» — теж зменшення, і без цього сигналу захист відкочував
-   * би назад стерте власною рукою. Тому дошка каже вголос, коли прибирання
-   * навмисне.
-   */
-  Board.prototype._shrank = function () {
-    if (this.opts && this.opts.onShrink) { try { this.opts.onShrink(); } catch (e) {} }
-  };
-
   /* Гумка стирає лише написане від руки — штрихи олівця, як у Miro.
      Досі вона прибирала все, чого торкнулась, і разом із позначками на
      фото ДЗ зникало саме фото. Фото, текст, фігури й графіки — окремі
@@ -3618,7 +3606,7 @@
       var it = items[i];
       if (ERASABLE[it.t] && this.editable(it) && hitItem(it, x, y, r)) items.splice(i, 1);
     }
-    if (items.length !== before) { this._shrank(); this.render(); }
+    if (items.length !== before) this.render();
   };
 
   /* ---------- Дії ---------- */
@@ -3705,7 +3693,6 @@
     });
 
     this.clearSelection();
-    this._shrank();
     this.changed();
     return true;
   };
@@ -3857,7 +3844,6 @@
     });
     var sel = this.slide.items;
     this.selection = this.selection.filter(function (it) { return sel.indexOf(it) >= 0; });
-    this._shrank();
     this.changed();
     return before - this.slide.items.length;
   };
@@ -4196,7 +4182,6 @@
     this.snapshot();
     this.slide.items = [];
     this.clearSelection();
-    this._shrank();
     this.changed();
     return true;
   };
@@ -4530,6 +4515,14 @@
         loadImage(k, function () { resolve(k); });
       });
     }));
+  };
+
+  /** Чи всі картинки слайдів уже завантажені (або точно не завантажаться). */
+  Board.imagesReady = function (slides) {
+    return imageKeysIn(slides).every(function (k) {
+      var e = imgCache[k];
+      return !!(e && e.state !== 'loading');
+    });
   };
 
   Board.clipboard = null;

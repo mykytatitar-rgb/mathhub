@@ -66,6 +66,7 @@ function freshStore(opts) {
     },
     isFresh: function () { return fresh; }
   };
+  if (opts.sourceOf) ctx.Rates.sourceOf = opts.sourceOf;
   vm.createContext(ctx);
   vm.runInContext(src('assets/js/utils.js'), ctx, { filename: 'utils.js' });
   vm.runInContext(src('assets/js/store.js'), ctx, { filename: 'store.js' });
@@ -275,6 +276,76 @@ scenario('Курс заморожується лише справжній кур
 
   var t3 = freshStore({ fresh: false });                             // сьогоднішній ще не оновлено
   same(t3.S.exactRate({ date: isoIn(0, '10:00') }, 'USD'), 0, 'сьогоднішній неоновлений курс не заморожується');
+
+  // валюта лише з ручним курсом: архіву не буде ніколи — заморожуємо ручний
+  var t4 = freshStore({
+    historic: function () { return false; },
+    sourceOf: function (c) { return c === 'EUR' ? 'manual' : 'nbu'; }
+  });
+  same(t4.S.exactRate({ date: isoIn(-4, '10:00') }, 'EUR'), 45, 'ручний курс заморожується');
+  same(t4.S.exactRate({ date: isoIn(-4, '10:00') }, 'USD'), 0, 'курс НБУ без архіву — як і досі, ні');
+});
+
+scenario('Баланс: однакові суми в одній валюті дають нуль, хоч курси записів різні', function () {
+  var S = freshStore().S;
+  var st = S.add('students', { name: 'Доларовий2', grade: '11 клас', price: 40, currency: 'USD', schedule: [] });
+  S.add('payments', { studentId: st.id, date: isoIn(-20, '00:00').slice(0, 10), amount: 80, currency: 'USD', rate: 41 });
+  S.add('lessons', { studentId: st.id, date: isoIn(-15, '10:00'), status: 'done', price: 40, currency: 'USD', rate: 42 });
+  S.add('lessons', { studentId: st.id, date: isoIn(-8, '10:00'), status: 'done', price: 40, currency: 'USD', rate: 43 });
+  S.setStudentCurrency(st.id, 'UAH');
+  S.update('students', st.id, { currency: 'UAH', price: 1600 });
+  same(S.balance(st.id), 0, 'сплачено $80 за два уроки по $40 — нікому нічого не винен');
+  same(S.creditOf(st.id), 0, 'запас теж нуль');
+
+  // залишок у доларах — за нинішнім курсом, один раз
+  S.add('payments', { studentId: st.id, date: isoIn(-1, '00:00').slice(0, 10), amount: 10, currency: 'USD', rate: 39 });
+  same(S.balance(st.id), 10 * USD, 'аванс $10 = $10 × нинішній курс');
+  S.add('lessons', { studentId: st.id, date: isoIn(-1, '12:00'), status: 'done', price: 100, currency: 'UAH' });
+  same(S.balance(st.id), 10 * USD - 100, 'гривневий урок віднімається точно');
+
+  // валюти, якої немає в нинішніх курсах, — за курсом самого запису
+  var S2 = freshStore().S;
+  var st2 = S2.add('students', { name: 'Фунтовий', grade: '11 клас', price: 500, currency: 'UAH', schedule: [] });
+  S2.add('payments', { studentId: st2.id, date: isoIn(-3, '00:00').slice(0, 10), amount: 10, currency: 'GBP', rate: 50 });
+  same(S2.balance(st2.id), 500, 'без нинішнього курсу — за курсом запису');
+});
+
+scenario('Повернення з архіву: межа — сама мить архівації', function () {
+  var S = freshStore().S;
+  var x = studentWithSlot(S, 3, '17:43');
+  S.setArchived(x.st.id, true);
+  ok(String(S.get('students', x.st.id).archivedAt).length > 10, 'запамʼятовано мить, а не лише день');
+
+  var m = new Date(); m.setDate(m.getDate() - 2); m.setHours(12, 0, 0, 0);
+  S.get('students', x.st.id).archivedAt = m.toISOString();
+  var before = S.add('lessons', { studentId: x.st.id, date: isoIn(-2, '09:00'), status: 'planned', fromTemplate: 1 });
+  var during = S.add('lessons', { studentId: x.st.id, date: isoIn(-2, '15:00'), status: 'planned', fromTemplate: 1 });
+  S.setArchived(x.st.id, false);
+  ok(!!S.get('lessons', before.id), 'урок того ж дня до архівації лишився');
+  ok(!S.get('lessons', during.id), 'урок після архівації прибрано');
+
+  // стара позначка — лише день: той день цілком лишається
+  var y = studentWithSlot(S, 3, '17:47');
+  S.update('students', y.st.id, { archived: true, archivedAt: isoIn(-2, '00:00').slice(0, 10) });
+  var sameDay = S.add('lessons', { studentId: y.st.id, date: isoIn(-2, '15:00'), status: 'planned', fromTemplate: 1 });
+  var next = S.add('lessons', { studentId: y.st.id, date: isoIn(-1, '15:00'), status: 'planned', fromTemplate: 1 });
+  S.setArchived(y.st.id, false);
+  ok(!!S.get('lessons', sameDay.id), 'за старою позначкою день архівації не чіпається');
+  ok(!S.get('lessons', next.id), 'наступний день — прибрано');
+});
+
+scenario('Нова ціна учня — лише урокам зі старою ціною', function () {
+  var S = freshStore().S;
+  var st = S.add('students', { name: 'Ціна', grade: '9 клас', price: 500, currency: 'UAH', schedule: [] });
+  var plain = S.add('lessons', { studentId: st.id, date: isoIn(2, '10:00'), status: 'planned', price: 500, currency: 'UAH' });
+  var discount = S.add('lessons', { studentId: st.id, date: isoIn(3, '10:00'), status: 'planned', price: 400, currency: 'UAH' });
+  var prepaid = S.add('lessons', { studentId: st.id, date: isoIn(4, '10:00'), status: 'planned', price: 500, currency: 'UAH' });
+  S.setLessonPaid(prepaid.id, true);
+  var past = S.add('lessons', { studentId: st.id, date: isoIn(-2, '10:00'), status: 'planned', price: 500, currency: 'UAH' });
+  var list = S.plannedToReprice(st.id, 500, 'UAH').map(function (l) { return l.id; });
+  same(list.join(','), plain.id, 'лише звичайний майбутній урок');
+  ok(list.indexOf(discount.id) < 0 && list.indexOf(prepaid.id) < 0 && list.indexOf(past.id) < 0,
+    'знижка, оплачений наперед і минулий — не чіпаються');
 });
 
 console.log('\n' + passes + ' пройдено, ' + fails + ' не пройдено');

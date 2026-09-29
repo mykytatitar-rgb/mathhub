@@ -817,11 +817,24 @@
    * освіжити ті, що змінювались деінде. Новий пристрій після входу
    * бачить усе одразу.
    */
+  /* Дошки, що є на сервері (з останнього fetchMissing). null — ще не
+     читали. Знімок на сервері пишеться з дій, тож є знімок — дошку
+     відкривали й, найпевніше, на ній щось є. */
+  var serverIds = null;
+  O.serverHas = function (id) { return serverIds ? !!serverIds[id] : null; };
+  var skipped = [];
+  /** Дошки, пропущені як сироти (уроку тут ще не було) — перевірити знову. */
+  O.skippedOrphans = function () { return skipped.slice(); };
+
   O.fetchMissing = function () {
     if (!ready()) return Promise.resolve({ added: 0, stale: [] });
     return req('/rest/v1/boards?select=board_id,rev,updated_at').then(function (rows) {
       var local = {};
       (S.db().boards || []).forEach(function (b) { local[b.lessonId] = b; });
+
+      // які дошки є на сервері — щоб урок не вважали «порожнім», поки його дошка ще в дорозі
+      serverIds = {};
+      (rows || []).forEach(function (r) { serverIds[r.board_id] = 1; });
 
       /* Дошка без уроку й без справи — сирота: власника видалили (можливо,
          на іншому пристрої чи без мережі). Таку не везти. Судити можна лише
@@ -838,9 +851,14 @@
       }
 
       var missing = [], stale = [];
+      skipped = [];
       (rows || []).forEach(function (r) {
         var b = local[r.board_id];
-        if (!b) { if (!orphan(r.board_id)) missing.push(r.board_id); return; }
+        if (!b) {
+          if (!orphan(r.board_id)) missing.push(r.board_id);
+          else if (!gone[r.board_id]) skipped.push(r.board_id);
+          return;
+        }
         var s = b._sync;
         if (s && s.base) { if (r.rev !== s.snapRev) stale.push(r.board_id); }
         else if (!b.updatedAt || r.updated_at > b.updatedAt) stale.push(r.board_id);

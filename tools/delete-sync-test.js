@@ -61,7 +61,8 @@ function freshStore() {
   ctx.RecSync = {
     KINDS: KINDS.concat('meta'),
     mark: function (k, id) { if (marks[k + '/' + id] !== 'del') marks[k + '/' + id] = 'mark'; },
-    markDeleted: function (k, id) { marks[k + '/' + id] = 'del'; }
+    markDeleted: function (k, id) { marks[k + '/' + id] = 'del'; },
+    markDeletedMany: function (list) { list.forEach(function (x) { marks[x[0] + '/' + x[1]] = 'del'; }); }
   };
   vm.createContext(ctx);
   vm.runInContext(src('assets/js/utils.js'), ctx, { filename: 'utils.js' });
@@ -150,6 +151,18 @@ var CASES = {
     check('S.removeBoard — дошка уроку',
       function (S) { var id = first(S, 'lessons'); S.ensureBoard(id); return id; },
       function (S, id) { S.removeBoard(id); }, false);
+  },
+  removeBoards: function () {
+    check('S.removeBoards — кілька дошок одним записом',
+      function (S) {
+        var list = S.db().lessons.slice(0, 3).map(function (l) { S.ensureBoard(l.id); return l.id; });
+        return list.length ? list : null;
+      },
+      function (S, list) {
+        var n = S.removeBoards(list.concat('немає-такого'));
+        ok(n === list.length, 'прибрано рівно ' + list.length + ' (' + n + ')');
+        ok(list.every(function (id) { return !S.getBoard(id); }), 'дошок більше немає');
+      }, false);
   },
   dedupeTemplateLessons: function () {
     check('S.dedupeTemplateLessons — двійники уроків шаблону',

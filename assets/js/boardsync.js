@@ -27,9 +27,18 @@
   B.stats = function () { return O() ? O().stats() : { pending: 0, failed: 0, ids: [], why: '' }; };
   B.available = function () { return !!(O() && O().ready()); };
 
+  /* Дошка знову жива (той самий номер уроку повернувся — у шаблону він
+     сталий): її видалення в черзі вже не актуальне, інакше воно стерло б
+     свіжий знімок. */
+  function revive(boardId) {
+    var list = delQueue();
+    if (list.indexOf(boardId) >= 0) saveDelQueue(list.filter(function (id) { return id !== boardId; }));
+  }
+
   /** Дошка змінилася — відправити, коли вщухне. */
   B.mark = function (boardId) {
     if (!boardId || !O()) return;
+    revive(boardId);
     var b = S.getBoard(boardId);
     if (b) O().prepare(b);
     if (timers[boardId]) clearTimeout(timers[boardId]);
@@ -45,6 +54,7 @@
      запис у браузер: вона бере дошку просто з памʼяті. */
   B.soon = function (boardId) {
     if (!boardId || !O()) return;
+    revive(boardId);
     var b = S.getBoard(boardId);
     if (b) O().prepare(b);
     if (timers[boardId]) clearTimeout(timers[boardId]);
@@ -117,6 +127,16 @@
       saveDelQueue(delQueue().filter(function (id) { return done.indexOf(id) < 0; }));
       return done.length;
     });
+  };
+
+  /* Дошки, пропущені як сироти, бо їхнього уроку тут ще не було: читання
+     дошок і записів ідуть паралельно. Щойно урок приїхав — довантажити. */
+  var recheckTimer = null;
+  B.recheckOrphans = function () {
+    if (!O() || !O().skippedOrphans || recheckTimer) return;
+    var ids = O().skippedOrphans();
+    if (!ids.some(function (id) { return S.get('lessons', id) || S.get('desk', id); })) return;
+    recheckTimer = setTimeout(function () { recheckTimer = null; B.pullAll(); }, 300);
   };
 
   /** Видалено урок — прибрати й знімок його дошки. Журнал лишається. */

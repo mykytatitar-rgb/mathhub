@@ -80,11 +80,22 @@
      (sentHere) — ні, інакше воно поверталось би в чергу вічно. Повторна
      відправка запису безпечна: сервер просто отримає те саме ще раз. */
   var sentHere = {};
+  /* Перейняте від іншої вкладки. Щойно та вкладка своє відправила (ключа
+     в спільній черзі вже немає), перейняте тут прибирається: інакше фонова
+     вкладка годинами тримала б застаріле «видалено» й потім стерла б ним
+     урок, який тим часом повернули (у шаблону номер уроку сталий). */
+  var adopted = {};
   function mergeStored() {
     var stored;
     try { stored = JSON.parse(localStorage.getItem(OUT) || '{}') || {}; } catch (e) { stored = {}; }
+    Object.keys(adopted).forEach(function (k) {
+      if (!(k in stored) || stored[k] !== adopted[k]) {
+        if (outbox[k] === adopted[k]) delete outbox[k];
+        delete adopted[k];
+      }
+    });
     Object.keys(stored).forEach(function (k) {
-      if (!(k in outbox) && !sentHere[k]) outbox[k] = stored[k];
+      if (!(k in outbox) && !sentHere[k]) { outbox[k] = stored[k]; adopted[k] = stored[k]; }
     });
   }
 
@@ -148,15 +159,29 @@
   R.mark = function (kind, id) {
     if (!kind || !id || R.KINDS.indexOf(kind) < 0) return;
     outbox[kind + '/' + id] = 1;
+    delete adopted[kind + '/' + id];          // тепер це своя зміна
     saveState();
     schedule();
   };
 
   /** Запис видалено. На сервері це позначка, а не стирання. */
   R.markDeleted = function (kind, id) {
-    if (!kind || !id || R.KINDS.indexOf(kind) < 0) return;
-    outbox[kind + '/' + id] = 'del';
-    if (hashes) { delete hashes[kind + '/' + id]; saveHashes(); }
+    R.markDeletedMany([[kind, id]]);
+  };
+
+  /** Багато видалень — один запис черги (кожне окремо перезаписувало всю чергу). */
+  R.markDeletedMany = function (list) {
+    var any = false;
+    (list || []).forEach(function (x) {
+      var kind = x[0], id = x[1];
+      if (!kind || !id || R.KINDS.indexOf(kind) < 0) return;
+      outbox[kind + '/' + id] = 'del';
+      delete adopted[kind + '/' + id];
+      if (hashes) delete hashes[kind + '/' + id];
+      any = true;
+    });
+    if (!any) return;
+    if (hashes) saveHashes();
     saveState();
     schedule();
   };
@@ -412,6 +437,14 @@
         if (outbox[row.kind + '/' + row.id]) return;
         if (apply(row)) changed++;
       });
+      if (boardsToDrop.length) {
+        var drop = boardsToDrop.splice(0);
+        try { S.removeBoards(drop); } catch (e) { console.warn('removeBoards:', e); }
+      }
+      // зʼявились нові уроки чи справи — дошки, пропущені як сироти, можуть бути вже їхні
+      if (changed && window.BoardSync && BoardSync.recheckOrphans) {
+        setTimeout(function () { BoardSync.recheckOrphans(); }, 0);
+      }
 
       /* Налаштування вперше їдуть окремими записами. Якщо сервер їх ще не
          має — наші стають першими. */
@@ -491,6 +524,14 @@
     return true;
   }
 
+  var boardsToDrop = [];
+  function unsentBoard(id) {
+    var O = window.BoardOps;
+    if (!O || !O.state) return false;
+    var st = O.state(id) || {};
+    return st.mode === 'queue' || st.mode === 'fail' || !!st.pending;
+  }
+
   function apply(row) {
     var db = S.db();
     var key = row.kind + '/' + row.id;
@@ -530,9 +571,13 @@
       if (i < 0) return false;
       list.splice(i, 1);
       /* Урок чи справу видалили на іншому пристрої — їхня дошка йде
-         разом із ними. Досі вона лишалась тут назавжди сиротою. */
+         разом із ними (усі разом, одним записом після читання). Досі вона
+         лишалась тут назавжди сиротою. Але дошку з невідправленими діями
+         не чіпаємо: намальоване тут ще не доїхало, і прибрати її — стерти
+         роботу. Вона лишається тут, а дії поїдуть на сервер. */
       if ((row.kind === 'lessons' || row.kind === 'desk') && S.getBoard(row.id)) {
-        try { S.removeBoard(row.id); } catch (e) { console.warn('removeBoard:', e); }
+        if (unsentBoard(row.id)) console.warn('Урок видалено деінде, але на його дошці є невідправлене — дошку лишаю:', row.id);
+        else boardsToDrop.push(row.id);
       }
       return true;
     }

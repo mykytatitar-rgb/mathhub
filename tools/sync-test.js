@@ -179,8 +179,9 @@ Server.prototype.handle = function (who, url, opts) {
    Пристрій
    ============================================================ */
 
-function Device(name, server) {
-  var ls = {};
+// sharedLs — сховище іншої вкладки того самого браузера (спільне), інакше своє
+function Device(name, server, sharedLs) {
+  var ls = sharedLs || {};
   var ctx = {
     console: { log: console.log, warn: function () {}, info: function () {}, error: console.error },
     setTimeout: setTimeout, clearTimeout: clearTimeout, setInterval: setInterval, clearInterval: clearInterval,
@@ -587,6 +588,61 @@ scenario('Записи: різні учні з двох пристроїв, то
   }).then(function () { return RB.pull(); })
   .then(function () {
     same(B.db.students.map(function (s) { return s.id; }).join(), 's1', 'видалення дійшло');
+  });
+});
+
+scenario('Дві вкладки: відправлене іншою «видалено» не стирає урок, який тим часом повернули', function () {
+  var srv = new Server();
+  var T1 = new Device('A', srv), T2 = new Device('A', srv, T1.ls), B = new Device('B', srv);
+  var R1 = T1.ctx.RecSync, R2 = T2.ctx.RecSync, RB = B.ctx.RecSync;
+  srv.records['lessons/tpl_1'] = { kind: 'lessons', id: 'tpl_1', rev: 1, deleted: false,
+    updated_at: srv.now(), data: { id: 'tpl_1', date: '2030-01-07T10:00' } };
+  T1.setOnline(false); T2.setOnline(false);
+  // вкладка 1 без мережі видаляє урок
+  R1.markDeleted('lessons', 'tpl_1');
+  // вкладка 2 щось зберігає — і підхоплює чуже «видалено» зі спільної черги
+  T2.db.students.push({ id: 's9', name: 'Нова' });
+  R2.mark('students', 's9');
+  return wait(30).then(function () {
+    T1.setOnline(true);
+    return R1.flush();                               // вкладка 1 відправила своє
+  }).then(function () {
+    same(srv.records['lessons/tpl_1'].deleted, true, 'видалення дійшло');
+    // той самий урок шаблону повернули на іншому пристрої
+    B.db.lessons.push({ id: 'tpl_1', date: '2030-01-07T10:00' });
+    RB.mark('lessons', 'tpl_1');
+    return RB.flush();
+  }).then(function () {
+    same(srv.records['lessons/tpl_1'].deleted, false, 'урок знову живий');
+    T2.setOnline(true);
+    return R2.flush();                               // вкладка 2 нарешті в мережі
+  }).then(function () {
+    same(srv.records['lessons/tpl_1'].deleted, false, 'застаріле «видалено» з вкладки 2 його не стерло');
+    ok(!!srv.records['students/s9'], 'своє вкладка 2 відправила');
+  });
+});
+
+scenario('Видалене тут, поки видалення не дійшло, не повертається з сервера', function () {
+  var srv = new Server(), A = new Device('A', srv);
+  var RA = A.ctx.RecSync;
+  srv.records['lessons/l5'] = { kind: 'lessons', id: 'l5', rev: 1, deleted: false,
+    updated_at: srv.now(), data: { id: 'l5', topic: 'Вектори' } };
+  var orig = srv.handle.bind(srv), refuse = true;
+  srv.handle = function (who, url, opts) {
+    if (refuse && url.indexOf('/rest/v1/rpc/delete_record') === 0) throw new Error('сервер зайнятий');
+    return orig(who, url, opts);
+  };
+  return RA.pull(true).then(function () {
+    same(A.db.lessons.length, 1, 'урок прочитано');
+    A.db.lessons.length = 0;
+    RA.markDeleted('lessons', 'l5');
+    return RA.pull(true);                            // видалення не пройшло, а читання — так
+  }).then(function () {
+    same(A.db.lessons.length, 0, 'урок не воскрес із сервера');
+    refuse = false;
+    return RA.flush();
+  }).then(function () {
+    same(srv.records['lessons/l5'].deleted, true, 'видалення дійшло пізніше');
   });
 });
 

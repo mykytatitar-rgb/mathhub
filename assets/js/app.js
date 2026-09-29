@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v151';
+  App.BUILD = 'v152';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -1368,7 +1368,13 @@
      заповнював би ті самі дні вдруге. Без обміну чекати нема на що. */
   if (window.Cloud && Cloud.available() && Cloud.signedIn() && window.RecSync && RecSync.afterFirstPull) {
     RecSync.afterFirstPull(function () {
-      if (fillAhead() && !(window.V && V.boardMountedFor && V.boardMountedFor())) App.render();
+      var go = function () {
+        if (fillAhead() && !(window.V && V.boardMountedFor && V.boardMountedFor())) App.render();
+      };
+      /* І після дошок: прибирання двійників судить, чи урок порожній, а
+         дошку, намальовану на іншому пристрої, треба спершу побачити. */
+      if (window.BoardSync && BoardSync.pullAll) BoardSync.pullAll().then(go, go);
+      else go();
     });
   } else {
     fillAhead();

@@ -404,11 +404,15 @@
          лише тут: сервер про видалення не знав, і наступне читання
          привозило все назад (або воно лишалось на інших пристроях). Кожен
          запис — «видалено» поіменно, кожна дошка — повним шляхом. */
+      var gone = [];
       R.KINDS.forEach(function (kind) {
         if (kind === 'meta') return;
-        (db[kind] || []).forEach(function (rec) { if (rec && rec.id) R.markDeleted(kind, rec.id); });
+        (db[kind] || []).forEach(function (rec) { if (rec && rec.id) gone.push([kind, rec.id]); });
       });
-      (db.boards || []).slice().forEach(function (b) { if (b && b.lessonId) S.removeBoard(b.lessonId); });
+      // одним записом черги, а не тисячею: кожен окремий перезаписував усю чергу
+      if (R.markDeletedMany) R.markDeletedMany(gone);
+      else gone.forEach(function (x) { R.markDeleted(x[0], x[1]); });
+      S.removeBoards((db.boards || []).map(function (b) { return b && b.lessonId; }).filter(Boolean));
     }
     db = blank();
     // профіль і налаштування — не «дані» учнів: порожній профіль затер би справжній на всіх пристроях
@@ -590,7 +594,7 @@
     /* Кожну дошку — повним шляхом: разом із журналом, історією й знімком на
        сервері. Досі їх лише вирізали тут, і наступне читання з сервера
        привозило всі дошки видаленого учня назад сиротами. */
-    lessonIds.forEach(function (lid) { S.removeBoard(lid); });
+    S.removeBoards(lessonIds);
     ['lessons', 'homeworks', 'payments', 'progress', 'roadmap', 'notes', 'stumap'].forEach(function (name) {
       if (!Array.isArray(db[name])) return;
       var gone = db[name].filter(function (x) { return x.studentId === id; });
@@ -812,12 +816,18 @@
       dropLessons(db.lessons.filter(function (l) {
         return l.studentId === studentId && isBareTemplate(l) && U.toDate(l.date) >= now;
       }));
-      return S.update('students', studentId, { archived: true, archivedAt: U.ymd(U.today()) });
+      // сама мить, а не день: уроки того ж дня до архівації лишились і можуть бути справжніми
+      return S.update('students', studentId, { archived: true, archivedAt: now.toISOString() });
     }
-    /* Відколи учня не було. Для заархівованих раніше дати немає — тоді від
+    /* Відколи учня не було. Архівовані до цього зберігали лише день — тоді
+       від кінця того дня. Для заархівованих ще раніше дати немає — тоді від
        останнього проведеного чи пропущеного уроку: до нього учень ходив,
        і невідмічене там може бути справжнім. Без жодного — минуле не чіпаємо. */
-    var from = st.archivedAt ? U.toDate(st.archivedAt) : null;
+    var from = null, at = String(st.archivedAt || '');
+    if (at.length > 10) from = new Date(at);
+    else if (at) { var day = U.toDate(at); from = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1); }
+    if (from && isNaN(from.getTime())) from = null;
+    var after = !!from;                                      // від миті архівації — включно
     if (!from) {
       db.lessons.forEach(function (l) {
         if (l.studentId !== studentId || !ARCHIVE_KEEP[l.status]) return;
@@ -829,7 +839,7 @@
       dropLessons(db.lessons.filter(function (l) {
         if (l.studentId !== studentId || !isBareTemplate(l)) return false;
         var d = U.toDate(l.date);
-        return d > from && d < now;
+        return (after ? d >= from : d > from) && d < now;
       }));
     }
     var rec = S.update('students', studentId, { archived: false, archivedAt: undefined });
@@ -890,6 +900,24 @@
     return true;
   };
 
+  /**
+   * Заплановані наперед уроки, яким можна поставити нову ціну учня: лише ті,
+   * що досі мають його стару ціну й валюту. Урок зі своєю ціною (знижка,
+   * подвійне заняття) чи вже оплачений наперед не чіпаємо: там сума
+   * домовлена окремо, а оплата за урок — на стару.
+   */
+  S.plannedToReprice = function (studentId, oldPrice, oldCur) {
+    var now = new Date();
+    var linked = {};
+    db.payments.forEach(function (p) { if (p.lessonId) linked[p.lessonId] = 1; });
+    oldPrice = Number(oldPrice) || 0;
+    return db.lessons.filter(function (l) {
+      return l.studentId === studentId && l.status === 'planned' && U.toDate(l.date) >= now &&
+        !l.paid && !linked[l.id] &&
+        (Number(l.price) || 0) === oldPrice && S.lessonCur(l) === oldCur;
+    });
+  };
+
   /* Сума запису у валюті учня. У тій самій валюті — як є, без жодних
      округлень. В іншій (учень колись платив у доларах, тепер у гривнях) —
      через гривні: за курсом самого запису, а в валюту учня — за нинішнім. */
@@ -932,9 +960,45 @@
 
   /* ---------- Фінанси ---------- */
 
+  /* Сплачено мінус нараховано — у валюті учня. Спершу окремо в кожній
+     валюті записів, і лише залишок чужої валюти переводиться, один раз, за
+     нинішнім курсом. Досі кожен запис переводився за власним курсом:
+     доларові оплата й урок на ту саму суму давали в гривнях не нуль, а
+     «борг» чи «аванс» на різницю курсів — у учня, який нічого не винен.
+     extra — ще нараховане: [валюта, сума, запис]. */
+  function netOf(studentId, extra) {
+    var cur = S.curOf(studentId);
+    var by = {};
+    function add(c, amount, rec) {
+      amount = Number(amount) || 0;
+      if (!amount) return;
+      var g = by[c] || (by[c] = { net: 0, recs: [] });
+      g.net += amount;
+      g.recs.push([rec, amount]);
+    }
+    S.paymentsOf(studentId).forEach(function (p) { add(S.paymentCur(p), p.amount, p); });
+    db.lessons.forEach(function (l) {
+      if (l.studentId === studentId && l.status === 'done') add(S.lessonCur(l), -(l.price || 0), l);
+    });
+    (extra || []).forEach(function (x) { add(x[0], -x[1], x[2]); });
+
+    var total = 0;
+    Object.keys(by).forEach(function (c) {
+      var g = by[c];
+      if (c === cur) { total += g.net; return; }
+      if (Math.abs(g.net) < 0.005) return;
+      var from = c === 'UAH' ? 1 : ((window.Rates && Rates.get(c)) || 0);
+      var to = cur === 'UAH' ? 1 : ((window.Rates && Rates.get(cur)) || 0);
+      if (from > 0 && to > 0) { total += g.net * from / to; return; }
+      // нинішнього курсу ще немає — хоч за курсами самих записів
+      g.recs.forEach(function (x) { total += inStudentCur(x[0], x[1], c, cur); });
+    });
+    return cents(total);
+  }
+
   /** Баланс учня: сплачено мінус вартість проведених уроків. Мінус = борг. */
   S.balance = function (studentId) {
-    return cents(S.paidOf(studentId) - S.chargedOf(studentId));
+    return netOf(studentId);
   };
 
   /** Скільки оплачених уроків лишилось (за поточною ціною). */
@@ -966,10 +1030,9 @@
     var st = S.get('students', studentId);
     var price = (st && st.price) || db.tutor.defaultPrice || 0;
     var cur = S.curOf(studentId);
-    var hidden = U.sum(S.unmarkedOf(studentId), function (l) {
-      return l.price ? inStudentCur(l, l.price, S.lessonCur(l), cur) : price;
-    });
-    return cents(S.balance(studentId) - hidden);
+    return netOf(studentId, S.unmarkedOf(studentId).map(function (l) {
+      return l.price ? [S.lessonCur(l), l.price, l] : [cur, price, l];
+    }));
   };
 
   /** Оплати за період. Якщо вказано code — лише в цій валюті. */
@@ -1199,6 +1262,14 @@
   S.exactRate = function (rec, cur) {
     var R = window.Rates;
     if (!cur || cur === 'UAH' || !R || !R.isHistoric) return 0;
+    /* Валюта лише з ручним курсом: архіву для неї не буде ніколи, тож
+       незаморожений запис щоразу перераховувався б за нинішнім ручним — і
+       минулий дохід мінявся б із кожною його правкою. Ручний курс і є
+       курсом дня, коли гроші стали фактом. */
+    if (R.sourceOf && R.sourceOf(cur) === 'manual') {
+      var own = R.get(cur);
+      return own > 0 ? own : 0;
+    }
     var when = rec && (rec.date || rec.createdAt);
     if (!R.isHistoric(cur, when)) return 0;
     var day = String(when || '').slice(0, 10);
@@ -1379,7 +1450,17 @@
     if (db.payments.some(function (p) { return p.lessonId === l.id; })) return false;
     if (db.homeworks.some(function (h) { return h.lessonId === l.id; })) return false;
     var b = db.boards.filter(function (x) { return x.lessonId === l.id; })[0];
-    return !(b && (b.slides || []).some(function (s) { return (s.items || []).length; }));
+    if (b && (b.slides || []).some(function (s) { return (s.items || []).length; })) return false;
+    /* Тутешньої копії дошки може ще не бути: її малювали на іншому
+       пристрої, а сюди вона не доїхала. Дошка є на сервері — урок не
+       порожній. Список сервера ще невідомий (а обмін увімкнено) — теж не
+       чіпаємо: краще лишити зайвий урок, ніж стерти чужу роботу. */
+    if (window.BoardOps && BoardOps.serverHas && window.Cloud && Cloud.available && Cloud.available() &&
+        Cloud.signedIn && Cloud.signedIn()) {
+      var onServer = BoardOps.serverHas(l.id);
+      if (onServer !== false) return false;
+    }
+    return true;
   }
 
   /* Прибрати уроки всюди — разом із їхніми (порожніми) дошками. Без
@@ -1389,7 +1470,7 @@
     if (!list || !list.length) return 0;
     var gone = {};
     list.forEach(function (l) { gone[l.id] = 1; });
-    Object.keys(gone).forEach(function (id) { S.removeBoard(id); });
+    S.removeBoards(Object.keys(gone));
     db.lessons = db.lessons.filter(function (l) { return !gone[l.id]; });
     Object.keys(gone).forEach(function (id) { syncDel('lessons', id); });
     S.save();
@@ -1404,8 +1485,11 @@
    */
   S.dedupeTemplateLessons = function () {
     var groups = {};
+    var now = new Date();
     db.lessons.forEach(function (l) {
       if (!l || !l.fromTemplate || l.status !== 'planned') return;
+      // лише майбутні: у минулих могла вже бути робота, про яку тут ще не знають
+      if (!(U.toDate(l.date) > now)) return;
       var k = l.studentId + '|' + l.date;
       (groups[k] = groups[k] || []).push(l);
     });
@@ -1903,16 +1987,33 @@
     return S.remove('lessons', lessonId);
   };
 
-  S.removeBoard = function (lessonId) {
+  /* Прибрати одну дошку без запису на диск. Позначається лише ця дошка
+     (dirtyIds), а не «переписати всі»: досі кожне видалення перезаписувало
+     всі дошки, і видалення учня з сотнями дошок морозило вкладку. */
+  function dropBoard(lessonId) {
     var i = db.boards.findIndex(function (b) { return b.lessonId === lessonId; });
-    if (i >= 0) {
-      db.boards.splice(i, 1); boardsDirty = true; S.save(); S.gcImages();
-      if (window.BoardHistory) BoardHistory.drop(lessonId);
-      if (window.BoardOps) BoardOps.drop(lessonId);
-      if (window.BoardSync) BoardSync.remove(lessonId);
-      return true;
-    }
-    return false;
+    if (i < 0) return false;
+    var key = boardKey(db.boards[i]);
+    db.boards.splice(i, 1);
+    dirtyIds[key] = 1;                    // writeBoards прибере запис цієї дошки з диска
+    if (window.BoardHistory) BoardHistory.drop(lessonId);
+    if (window.BoardOps) BoardOps.drop(lessonId);
+    if (window.BoardSync) BoardSync.remove(lessonId);
+    return true;
+  }
+
+  S.removeBoard = function (lessonId) {
+    if (!dropBoard(lessonId)) return false;
+    S.save(); S.gcImages();
+    return true;
+  };
+
+  /** Кілька дошок разом — один запис на диск і одне прибирання картинок. */
+  S.removeBoards = function (lessonIds) {
+    var n = 0;
+    (lessonIds || []).forEach(function (id) { if (dropBoard(id)) n++; });
+    if (n) { S.save(); S.gcImages(); }
+    return n;
   };
 
   /* ============================================================

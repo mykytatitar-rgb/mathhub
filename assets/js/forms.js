@@ -180,11 +180,7 @@
                  Без питання «Проведено й оплачено» ще місяць записувало б
                  старі гроші, а виправити можна було лише кожен урок окремо. */
               if (newPrice !== oldPrice || newCur !== oldCur) {
-                var nowTs = new Date();
-                var ahead = S.lessonsOf(id).filter(function (l) {
-                  return l.status === 'planned' && U.toDate(l.date) >= nowTs &&
-                    ((Number(l.price) || 0) !== newPrice || S.lessonCur(l) !== newCur);
-                });
+                var ahead = S.plannedToReprice(id, oldPrice, oldCur);
                 if (ahead.length) {
                   setTimeout(function () {
                     C.confirm('Оновити ' + U.pl(ahead.length, 'запланований урок', 'заплановані уроки',
@@ -733,7 +729,14 @@
       (st ? '<div class="card card--flat" style="padding:14px 16px">' +
         '<div class="row small"><span class="muted">Баланс зараз</span>' +
         '<span class="spacer bold" data-balance style="color:' + (S.balance(sid) < 0 ? 'var(--red)' : 'var(--green)') + '">' +
-        U.money(S.balance(sid), payCur) + '</span></div></div>' : '');
+        U.money(S.balance(sid), S.curOf(sid)) + '</span></div></div>' : '');
+
+    /* Валюта оплати: нова чи перенесена на іншого учня — у валюті учня;
+       наявна лишається у своїй (гроші отримано саме в ній), навіть якщо
+       учень відтоді перейшов на іншу. */
+    function curFor(studentId) {
+      return (isNew || studentId !== p.studentId) ? S.curOf(studentId) : S.paymentCur(p);
+    }
 
     C.modal({
       title: isNew ? 'Записати оплату' : 'Редагувати оплату',
@@ -751,13 +754,13 @@
             var v = C.readForm(root);
             if (!v.amount) { U.toast('Вкажіть суму', 'err'); return false; }
             if (preset.lockStudent) v.studentId = data.studentId;
-            /* Нова оплата — у валюті учня. Наявна лишається у своїй: гроші
-               отримано саме в ній, навіть якщо учень відтоді перейшов на іншу. */
-            v.currency = isNew ? S.curOf(v.studentId) : S.paymentCur(p);
+            if (!v.studentId) v.studentId = data.studentId;
+            v.currency = curFor(v.studentId);
             /* Курс на дату оплати — щоб сума в гривнях більше не мінялась
                разом із сьогоднішнім курсом. Лише справжній курс того дня;
-               поки його немає, лишаємо порожнім (див. S.exactRate). */
-            if (isNew || v.date !== p.date) {
+               поки його немає, лишаємо порожнім (див. S.exactRate). Курс
+               старої валюти до нової не пасує — тоді теж наново. */
+            if (isNew || v.date !== p.date || v.currency !== S.paymentCur(p)) {
               var pr = v.currency === 'UAH' ? 0 : S.exactRate({ date: v.date }, v.currency);
               v.rate = pr > 0 ? pr : undefined;
             }
@@ -771,13 +774,13 @@
         var current = st;
 
         function sync() {
-          var code = current ? (current.currency || 'UAH') : 'UAH';
+          var code = current ? curFor(current.id) : 'UAH';
           root.querySelector('[data-cur-tag]').textContent = U.symbol(code) + ' ' + code;
           root.querySelector('[data-quick]').innerHTML = quickHtml(current);
           var bal = root.querySelector('[data-balance]');
           if (bal && current) {
             var b = S.balance(current.id);
-            bal.textContent = U.money(b, code);
+            bal.textContent = U.money(b, S.curOf(current.id));
             bal.style.color = b < 0 ? 'var(--red)' : 'var(--green)';
           }
         }

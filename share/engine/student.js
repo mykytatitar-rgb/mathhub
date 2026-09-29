@@ -88,6 +88,7 @@
     '.mf{font-family:"Source Serif 4","Cambria Math",Georgia,serif;font-weight:600}.mf .mf-v{font-style:italic}.mf sup,.mf sub{font-size:.66em;line-height:1}' +
     '.mf-frac{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;margin:0 .2em;line-height:1.08}.mf-den{border-top:2px solid currentColor}' +
     '.sb-tin{position:absolute;z-index:6;min-width:170px;min-height:34px;border:2px solid #4B3FDB;border-radius:8px;padding:5px 8px;font-family:inherit;font-weight:500;line-height:1.25;background:rgba(255,255,255,.97);outline:none;resize:none;overflow:hidden}' +
+    '.sb-del{position:absolute;right:14px;top:12px;z-index:4;color:#C62828;border-color:#F3C4C4;box-shadow:0 4px 14px rgba(23,22,58,.1)}.sb-del[hidden]{display:none}' +
     '.sb-toast{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);background:#17163A;color:#fff;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}.sb-toast.show{opacity:1}' +
     '@media(max-width:640px){.sb-top{padding:8px 10px}.sb-sp{width:100%;justify-content:space-between}.sb-tl{width:34px;height:34px;font-size:15px}.sb-opts{left:56px;max-width:calc(100% - 70px)}.sb-name{left:56px}}';
 
@@ -132,7 +133,10 @@
                 '<label class="sb-tl" title="Додати фото або скріншот (можна Ctrl+V)">🖼' +
                   '<input type="file" accept="image/*" multiple hidden id="sb-pic"></label>' +
               '</div>' +
-              '<div class="sb-opts" id="sb-opts"></div>'
+              '<div class="sb-opts" id="sb-opts"></div>' +
+              /* На телефоні клавіші Delete немає, а гумка бере лише штрихи:
+                 зайве фото, фігуру чи текст інакше було не прибрати. */
+              '<button class="sb-btn sb-del" id="sb-del" hidden>🗑 Видалити</button>'
             : '') +
           '<div class="sb-zoom"><button id="sb-zo" title="Віддалити">−</button><span class="sb-zv" id="sb-zv">100%</span>' +
             '<button id="sb-zi" title="Наблизити">+</button><button id="sb-zf" title="Вмістити" style="font-size:13px">⤢</button></div>' +
@@ -212,6 +216,10 @@
         return !!(base && cur && !findItem(base, cur.id, it.id));
       },
       onChange: function () { scheduleSend(); },
+      onSelect: function (sel) {
+        var d = el('sb-del');
+        if (d) d.hidden = !(sel && sel.length);
+      },
       onViewChange: paintZoom,
       onToolChange: paintTools,
       onTextPlace: placeText
@@ -522,6 +530,11 @@
     if (canWrite) {
       el('sb-undo').onclick = undo;
       el('sb-redo').onclick = redo;
+      // те саме, що клавіша Delete: прибрати виділене своє
+      el('sb-del').onclick = function () {
+        if (engine.selection.length) engine.deleteSelection();
+        el('sb-del').hidden = true;
+      };
     }
 
     window.addEventListener('keydown', function (e) {

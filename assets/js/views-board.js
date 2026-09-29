@@ -281,15 +281,15 @@
       onViewChange: function () { updateZoom(); updateSelBar(); },
       onSelect: function () { refreshUndo(); updateSelBar(); },
       onToolChange: function (t) { syncToolButtons(t); renderOpts(); },
-      /* Точку підвели до місця дотику — про це треба сказати вголос.
-         Мовчки зрушити чуже креслення не можна: людина має бачити, що
-         саме змінилося, і знати, що це скасовується. */
+      /* Точку підвели до місця дотику — про це треба сказати. Але тихо:
+         підказкою внизу дошки, а не повідомленням поверх креслення посеред
+         уроку. Скасовується, як і все, кроком назад. */
       onTangent: function (info) {
         if (!info) return;
         var n = info.name && info.name !== '·' ? 'точка ' + info.name : 'точку';
-        U.toast(info.kind === 'center'
+        hint(info.kind === 'center'
           ? 'Привʼязано до центра кола: ' + n + ' тепер рухається разом із ним'
-          : 'Дотичну вирівняно: ' + n + ' стала точкою дотику', 'ok');
+          : 'Дотичну вирівняно: ' + n + ' стала точкою дотику');
       },
       onTextPlace: function (world, screen) { openTextInput(world, screen); }
     });
@@ -436,6 +436,26 @@
       var wb = wrap.getBoundingClientRect();
       var bb = el.getBoundingClientRect();
       var rb = rail.getBoundingClientRect();
+
+      /* Телефон і планшет: рейка лежить смугою знизу на всю ширину, і
+         праворуч від неї — вже за краєм екрана. Панель «Геометрія» чи
+         «Алгебра» ставала невидимою, а з нею — фігури, точки, лінії,
+         координатна площина. Тут її місце — над кнопкою, у межах дошки. */
+      var horizontal = getComputedStyle(rail).flexDirection === 'row';
+      box.style.transform = horizontal ? 'none' : '';
+      if (horizontal) {
+        var area = (box.offsetParent || wrap).getBoundingClientRect();
+        box.style.left = '0px';
+        box.style.top = '0px';
+        var g0 = box.getBoundingClientRect();         // де стоїть «нуль» і який розмір
+        var left = bb.left + bb.width / 2 - g0.width / 2;
+        left = Math.max(area.left + 8, Math.min(area.right - 8 - g0.width, left));
+        var top = Math.max(area.top + 8, rb.top - 10 - g0.height);
+        box.style.left = (left - g0.left) + 'px';
+        box.style.top = (top - g0.top) + 'px';
+        return;
+      }
+
       box.style.left = (rb.right - wb.left + 10) + 'px';
       box.style.top = (bb.top - wb.top + bb.height / 2) + 'px';
 
@@ -621,8 +641,7 @@
 
     U.onClick(root, '[data-smooth]', function () {
       engine.smoothing = ((engine.smoothing || 0) + 1) % 3;
-      renderOpts();
-      U.toast('Почерк: ' + SMOOTH_LABELS[engine.smoothing]);
+      renderOpts();                          // рівень видно на самій кнопці — без повідомлення
     });
 
     U.onClick(root, '[data-measures]', function () {
@@ -643,13 +662,11 @@
       if (selF.length) {
         engine.snapshot();
         selF.forEach(function (i) { i.fx = i.fx ? 0 : 1; });
-        engine.changed();
-        U.toast('Відзеркалено');
+        engine.changed();                     // відзеркалене видно одразу — без повідомлення
         return;
       }
       engine.flipX = !engine.flipX;
       renderOpts();
-      U.toast(engine.flipX ? 'Наступна фігура — дзеркальна' : 'Звичайна орієнтація');
     });
 
     U.onClick(root, '[data-labels]', function () {
@@ -661,7 +678,6 @@
         selL.forEach(function (i) { i.lb = engine.showLabels ? 1 : 0; });
         engine.changed();
       }
-      U.toast(engine.showLabels ? 'Вершини підписуються' : 'Підписи вершин вимкнено');
     });
 
     U.onClick(root, '[data-facts]', function (el) { factsModal(el.dataset.facts); });
@@ -702,8 +718,7 @@
       // картинки в буфері немає — вставляємо скопійовані об'єкти дошки
       if (cur.engine.hasClipboard()) {
         e.preventDefault();
-        var n = cur.engine.pasteClipboard();
-        if (n) U.toast('Вставлено ' + U.pl(n, 'об’єкт', 'об’єкти', 'об’єктів'), 'ok');
+        cur.engine.pasteClipboard();           // вставлене одразу виділене — видно й так
       }
     };
     window.addEventListener('paste', cur.pasteHandler);
@@ -1347,8 +1362,7 @@
       cur.engine.render();
       markDirty();
       flushSave();
-      if (got) U.toast(U.pl(got, 'фото учня повернулося', 'фото учня повернулися',
-                            'фото учня повернулося'), 'ok');
+      // фото просто зʼявляється на дошці — без повідомлення посеред уроку
     });
   }
 
@@ -1382,8 +1396,7 @@
         return mergeHomework(hw).then(function (h) {
           if (h.n) {
             S.save();
-            updateHwCount();
-            U.toast('Учень надіслав ' + U.pl(h.n, 'фото', 'фото', 'фото') + ' розв\'язання', 'ok');
+            updateHwCount();                     // лічильник на кнопці «ДЗ» — без повідомлення
           }
 
           /* Позначаємо прийнятими лише те, що справді прийнято. Решта
@@ -2311,15 +2324,14 @@
     if (sel.length) {
       var on = !sel[0].m;
       sel.forEach(function (i) { i.m = on ? 1 : 0; });
-      U.toast(on ? 'Розміри показано' : 'Розміри сховано');
     } else {
       var shapes = e.items().filter(function (i) { return i.t === 'g'; });
       var anyOn = shapes.some(function (i) { return i.m; });
       var next = !anyOn;
       shapes.forEach(function (i) { i.m = next ? 1 : 0; });
       e.showMeasures = next;
-      U.toast(next ? 'Розміри показано для всіх фігур' : 'Розміри сховано');
     }
+    // розміри зʼявляються чи зникають на кресленні — повідомлення зайве
     e.changed();
     renderOpts();
     updateSelBar();
@@ -2844,8 +2856,18 @@
         : '') +
       (hasInk || hasTx ? '<span class="sel-bar__sep"></span>' : '');
 
+    var delBtn =
+      '<button class="sel-bar__btn sel-bar__btn--danger" data-act="board-delete" title="Видалити (Delete)">' +
+        icon('trash', 16) + '</button>';
+    /* На телефоні клавіші Delete немає, а гумка бере лише штрихи. Кнопка
+       «Видалити» стояла останньою, і на 375 px панель вилазила за край —
+       фігуру, текст чи фото було не прибрати. Тут вона одразу після
+       лічильника, а панель переноситься в кілька рядків (board.css). */
+    var narrow = e.cssW < 560;
+    bar.classList.toggle('sel-bar--narrow', narrow);
     bar.innerHTML =
       '<span class="sel-bar__count">' + U.pl(n, 'об’єкт', 'об’єкти', 'об’єктів') + '</span>' +
+      (narrow ? delBtn + '<span class="sel-bar__sep"></span>' : '') +
       sizeBtns +
       rotBtns +
       extra +
@@ -2856,8 +2878,7 @@
         icon('layers', 16) + '</button>' +
       '<button class="sel-bar__btn" data-act="board-transfer" title="Перенести на іншу дошку">' +
         icon('moveOut', 16) + '</button>' +
-      '<button class="sel-bar__btn sel-bar__btn--danger" data-act="board-delete" title="Видалити (Delete)">' +
-        icon('trash', 16) + '</button>';
+      (narrow ? '' : delBtn);
 
     var tl = e.toScreen(b.x1, b.y1);
     var tr = e.toScreen(b.x2, b.y1);
@@ -3556,15 +3577,14 @@
       if (k === 'a' || k === 'ф') { e.preventDefault(); eng.selectAll(); return; }
       if (e.key === ']' || e.key === '}') { e.preventDefault(); stepFont(1); return; }
       if (e.key === '[' || e.key === '{') { e.preventDefault(); stepFont(-1); return; }
+      // копіювання й дублювання — мовчки, як скрізь: дубль і так видно виділеним
       if (k === 'c' || k === 'с') {
-        var n = eng.copySelection();
-        if (n) { e.preventDefault(); U.toast('Скопійовано ' + U.pl(n, 'об’єкт', 'об’єкти', 'об’єктів'), 'ok'); }
+        if (eng.copySelection()) e.preventDefault();
         return;
       }
       if (k === 'd' || k === 'в') {
         e.preventDefault();
-        var m = eng.duplicateSelection();
-        if (m) U.toast('Дубльовано ' + U.pl(m, 'об’єкт', 'об’єкти', 'об’єктів'), 'ok');
+        eng.duplicateSelection();
         return;
       }
       return;   // Ctrl+V ловить обробник paste
@@ -4285,16 +4305,17 @@
     },
     'board-history': function () { historyDialog(); },
     'board-measures': function () { toggleMeasures(); },
-    'board-copy': function () {
-      var n = cur.engine.copySelection();
-      if (n) U.toast('Скопійовано ' + U.pl(n, 'об’єкт', 'об’єкти', 'об’єктів'), 'ok');
+    'board-copy': function (_a, el) {
+      // на телефоні клавіш немає — коротко підсвічуємо саму кнопку, без повідомлення
+      if (cur.engine.copySelection() && el) {
+        holdSelBar();
+        el.classList.add('is-on');
+        setTimeout(function () { el.classList.remove('is-on'); }, 700);
+      }
     },
     'board-typeset': function () { typesetSelection(); },
     'board-tex': function () { downloadTex(); },
-    'board-duplicate': function () {
-      var n = cur.engine.duplicateSelection();
-      if (n) U.toast('Дубльовано ' + U.pl(n, 'об’єкт', 'об’єкти', 'об’єктів'), 'ok');
-    },
+    'board-duplicate': function () { cur.engine.duplicateSelection(); },
     'board-delete': function () { cur.engine.deleteSelection(); },
     'board-link-kind': function (arg) { setLinkKindOf(arg); },
     'board-link-dash': function () { toggleLinkDash(); },

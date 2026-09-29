@@ -2548,6 +2548,42 @@
     this.future.length = 0;
   };
 
+  /** Рука на дошці: жест почався, а його результат ще не лягав на слайд. */
+  Board.prototype._gesture = function () {
+    return !!(this.draft || this._drag || this._resize || this._gscale || this._erasing);
+  };
+
+  /**
+   * Кінець жесту, посеред якого лягло чуже. «До» кроку — стан перед жестом,
+   * але без чужого, і «крок назад» від нього прибрав би чуже. Тож «до»
+   * перераховуємо: теперішній стан (з чужим), у якому лише зачеплене самим
+   * жестом повернуто таким, яким воно було перед ним. touched — номери
+   * обʼєктів, які жест створив, змінив чи стер.
+   */
+  Board.prototype._rebaseTop = function (touched) {
+    var top = this.history[this.history.length - 1];
+    if (!top || typeof top !== 'object' || !top.rebase) return;
+    top.rebase = false;
+    var was = {};
+    JSON.parse(top.before).forEach(function (it) { if (it && it.id) was[it.id] = it; });
+    var hit = {};
+    (touched || []).forEach(function (id) { if (id) hit[id] = 1; });
+    var out = [], met = {};
+    this.items().forEach(function (it) {
+      if (!it) return;
+      if (it.id && hit[it.id]) {
+        met[it.id] = 1;
+        if (was[it.id]) out.push(was[it.id]);        // змінене жестом — як було; створене — у «до» немає
+        return;
+      }
+      out.push(it);                                   // решта — як зараз, разом із чужим
+    });
+    // стерте жестом (гумка) у «до» було
+    Object.keys(hit).forEach(function (id) { if (!met[id] && was[id]) out.push(was[id]); });
+    top.before = JSON.stringify(out);
+    top.ext = this._ext || 0;                          // крок знову свій: changed() його відкриє
+  };
+
   /**
    * Правка вже наявних обʼєктів: колір, товщина, розмір точки, вид лінії.
    * Кликати ДО зміни — інакше «до» вже містить нове, і крок назад нічого не
@@ -2577,6 +2613,11 @@
     var top = this.history[this.history.length - 1];
     if (!top || typeof top !== 'object' || !this.slide) return;
     if (top.after != null && !top.open) return;
+    /* Жест ще триває (штрих, перетягування, гумка): його крок не закривати й
+       не викидати — інакше чуже, що прийшло посеред штриха, забирало б у
+       штриха «крок назад». Позначаємо: наприкінці жесту «до» перерахується
+       з урахуванням чужого (див. _rebaseTop). */
+    if (this._gesture()) { top.rebase = true; return; }
     var now = JSON.stringify(this.slide.items);
     if (top.before === now) { this.history.pop(); return; }
     top.after = now;
@@ -3188,6 +3229,7 @@
     if (this.tool === 'eraser') {
       this.snapshot();
       this._erasing = true;
+      this._erasedIds = [];                 // що стерла саме ця гумка (для _rebaseTop)
       this._erase(w.x, w.y);
       return;
     }
@@ -3511,19 +3553,37 @@
     /* Кінець дії — через changed(), як у решти: так крок історії знає, що
        дія була, і закривається правильно. Досі тут кликали лише onChange,
        і крок перетягування лишався «порожнім» назавжди. */
-    if (this._erasing) { this._erasing = false; this.changed(); return; }
+    // ids — чого торкнувся жест: якщо посеред нього лягло чуже, крок перераховується
+    function idsOf(list) { return (list || []).map(function (it) { return it && it.id; }); }
+    if (this._erasing) {
+      this._erasing = false;
+      this._rebaseTop(this._erasedIds);
+      this._erasedIds = null;
+      this.changed();
+      return;
+    }
     if (this._resize) {
+      var rs = this._resize;
       this._resize = null;
       svFit = null;                       // тягнення скінчилося — фіксація не потрібна
+      this._rebaseTop(idsOf([rs.item]));
       this.changed();
       return;
     }
     if (this._gscale) {
+      var gsl = this._gscale;
       this._gscale = null;
+      this._rebaseTop(idsOf(gsl.items));
       this.changed();
       return;
     }
-    if (this._drag) { this._drag = null; this.changed(); return; }
+    if (this._drag) {
+      var dr = this._drag;
+      this._drag = null;
+      this._rebaseTop(idsOf(dr.items));
+      this.changed();
+      return;
+    }
 
     if (this.band) {
       this.band = null;
@@ -3554,9 +3614,10 @@
       if (keep) {
         if (d.t === 'p' && this.smoothing) d.d = smoothStroke(d.d, d.w, this.smoothing);
         this.slide.items.push(ided(d));
+        this._rebaseTop([d.id]);            // посеред штриха могло лягти чуже
         this.rememberInitialView();
       } else {
-        this.history.pop();
+        this.history.pop();                  // крок цього жесту: посеред жесту його не закривають
       }
       this.draft = null;
       this.changed();
@@ -3604,7 +3665,10 @@
     var before = items.length;
     for (var i = items.length - 1; i >= 0; i--) {
       var it = items[i];
-      if (ERASABLE[it.t] && this.editable(it) && hitItem(it, x, y, r)) items.splice(i, 1);
+      if (ERASABLE[it.t] && this.editable(it) && hitItem(it, x, y, r)) {
+        if (this._erasedIds && it.id) this._erasedIds.push(it.id);
+        items.splice(i, 1);
+      }
     }
     if (items.length !== before) this.render();
   };
@@ -4517,11 +4581,19 @@
     }));
   };
 
-  /** Чи всі картинки слайдів уже завантажені (або точно не завантажаться). */
+  /** Чи всі картинки слайдів уже не вантажаться (лягли або не змогли). */
   Board.imagesReady = function (slides) {
     return imageKeysIn(slides).every(function (k) {
       var e = imgCache[k];
       return !!(e && e.state !== 'loading');
+    });
+  };
+
+  /** Чи якась картинка слайдів не завантажилась (її ще спробують знову). */
+  Board.imagesFailed = function (slides) {
+    return imageKeysIn(slides).some(function (k) {
+      var e = imgCache[k];
+      return !!(e && e.state === 'fail');
     });
   };
 

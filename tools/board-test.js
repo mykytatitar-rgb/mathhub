@@ -238,6 +238,72 @@ scenario('Видалення точки прибирає її відрізок',
   ok(b.items().some(function (i) { return i.t === 'c'; }), 'крок назад повертає і точку, і відрізок');
 });
 
+/* Чуже, що лягає ПОСЕРЕД жесту: живий урок, учень пише безперервно, а
+   читання журналу закінчується саме тоді, коли репетитор веде лінію. */
+scenario('Учень написав посеред мого штриха — крок назад прибирає саме мій штрих', function () {
+  var b = engine().b;
+  stroke(b, 100, 100);                              // A
+  var a = b.items()[0].id;
+  b.setTool('pen'); pid++;
+  b._pointerDown(ev(100, 300));                     // B почався
+  b._pointerMove(ev(130, 310));
+  remote(b, REMOTE());                              // посеред штриха
+  b._pointerMove(ev(160, 300));
+  b._pointerUp(ev(160, 300));
+  same(b.items().length, 3, 'на дошці A, B і учнівське');
+  b.undo();
+  ok(b.items().some(function (i) { return i.id === a; }), 'A лишився');
+  ok(b.items().some(function (i) { return i.id === 'remote-T'; }), 'учнівське лишилось');
+  same(b.items().length, 2, 'прибрано лише B');
+  b.undo();
+  same(ids(b), 'remote-T', 'другий крок назад прибрав A, учнівське на місці');
+});
+
+scenario('Учень написав посеред перетягування — своє вернулось, чуже лишилось', function () {
+  var b = engine().b;
+  stroke(b, 100, 100);
+  var x0 = b.items()[0].d[0];
+  b.setTool('select'); pid++;
+  b._pointerDown(ev(130, 110));
+  b._pointerMove(ev(200, 110));
+  remote(b, REMOTE());
+  b._pointerMove(ev(300, 110));
+  b._pointerUp(ev(300, 110));
+  b.undo();
+  same(b.items().filter(function (i) { return i.id !== 'remote-T'; })[0].d[0], x0, 'штрих на старому місці');
+  ok(b.items().some(function (i) { return i.id === 'remote-T'; }), 'учнівське на місці');
+});
+
+scenario('Учень написав посеред гумки — стерте вертається, чуже лишається', function () {
+  var b = engine().b;
+  stroke(b, 100, 100);
+  stroke(b, 100, 300);
+  var gone = b.items()[1].id;
+  b.setTool('eraser'); pid++;
+  b._pointerDown(ev(130, 310));
+  remote(b, REMOTE());
+  b._pointerMove(ev(140, 305));
+  b._pointerUp(ev(140, 305));
+  ok(!b.items().some(function (i) { return i.id === gone; }), 'гумка стерла другий штрих');
+  b.undo();
+  ok(b.items().some(function (i) { return i.id === gone; }), 'крок назад повернув стерте');
+  ok(b.items().some(function (i) { return i.id === 'remote-T'; }), 'учнівське на місці');
+});
+
+scenario('Відкинута крихітна лінія посеред чужого не зʼїдає попередній крок', function () {
+  var b = engine().b;
+  stroke(b, 100, 100);
+  stroke(b, 100, 300);
+  b.setTool('line'); pid++;
+  b._pointerDown(ev(500, 100));
+  remote(b, REMOTE());
+  b._pointerUp(ev(501, 100));                       // 1 пиксель — лінію відкинуто
+  same(b.items().length, 3, 'лінії немає, два штрихи й учнівське');
+  b.undo();
+  same(b.items().length, 2, 'крок назад прибрав останній штрих, а не «нічого»');
+  ok(b.items().some(function (i) { return i.id === 'remote-T'; }), 'учнівське на місці');
+});
+
 scenario('Порожній крок не зʼїдає «крок назад»', function () {
   var b = engine().b;
   stroke(b, 100, 100);

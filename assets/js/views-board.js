@@ -351,6 +351,7 @@
       if (cur && window.Board && Board.retryFailedImages && Board.retryFailedImages(20000)) {
         cur.engine.ensureImages();
         cur.engine.render();
+        scheduleThumb();                     // і мініатюри — фото могли доїхати й на інших слайдах
       }
     }, PULL_MS);
 
@@ -1346,15 +1347,14 @@
       var hw  = rows.filter(function (r) { return r.kind === 'homework'; });
 
       return mergeContributions(ink).then(function (res) {
-        if (res.changed) {
+        if (res.changed && cur) {
           markDirty();
           flushSave();
-          cur.engine.setSlide(cur.board.slides[cur.index], true);
-          renderRail();
-          refreshEmpty();
-          updateSelBar();
-          refreshUndo();
-          // без повідомлення: написане учнем і так видно на дошці, а урок має бути тихим
+          /* Перечитати слайд — через refreshFromSync: він чекає, поки рука
+             не на дошці. Поки вантажилось фото учня, репетитор міг почати
+             лінію, і пряме перечитування обірвало б її. Без повідомлення:
+             написане учнем і так видно, а урок має бути тихим. */
+          refreshFromSync();
         }
 
         return mergeHomework(hw).then(function (h) {
@@ -2133,6 +2133,10 @@
       if (window.Board.preloadImages) window.Board.preloadImages([s]).then(function () { scheduleThumb(); });
       return url;
     }
+    /* Фото не завантажилось (ще не доїхало на сервер) — теж не
+       запамʼятовуємо: повтор (retryFailedImages) його підтягне, і мініатюра
+       має показати фото, а не лишитися з заглушкою до наступної правки. */
+    if (window.Board.imagesFailed && window.Board.imagesFailed([s])) return url;
     cur.thumbs[s.id] = { sig: sig, url: url };
     return url;
   }
@@ -2843,7 +2847,7 @@
        лічильника, а панель переноситься в кілька рядків (board.css). */
     var narrow = e.cssW < 560;
     bar.classList.toggle('sel-bar--narrow', narrow);
-    bar.innerHTML =
+    var barHtml =
       '<span class="sel-bar__count">' + U.pl(n, 'об’єкт', 'об’єкти', 'об’єктів') + '</span>' +
       (narrow ? delBtn + '<span class="sel-bar__sep"></span>' : '') +
       sizeBtns +
@@ -2857,6 +2861,13 @@
       '<button class="sel-bar__btn" data-act="board-transfer" title="Перенести на іншу дошку">' +
         icon('moveOut', 16) + '</button>' +
       (narrow ? '' : delBtn);
+    /* Той самий вміст — кнопки не перебудовуємо. На живому уроці чуже
+       приходить щосекунди, і кнопка, підмінена між натисканням і
+       відпусканням, «ковтала» дотик: «Видалити» не спрацьовувало. */
+    if (bar._html !== barHtml) {
+      bar.innerHTML = barHtml;
+      bar._html = barHtml;
+    }
 
     var tl = e.toScreen(b.x1, b.y1);
     var tr = e.toScreen(b.x2, b.y1);

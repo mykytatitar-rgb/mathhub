@@ -813,9 +813,7 @@
     if (!st) return null;
     var now = new Date();
     if (on) {
-      dropLessons(db.lessons.filter(function (l) {
-        return l.studentId === studentId && isBareTemplate(l) && U.toDate(l.date) >= now;
-      }));
+      tidyArchived(studentId);
       // сама мить, а не день: уроки того ж дня до архівації лишились і можуть бути справжніми
       return S.update('students', studentId, { archived: true, archivedAt: now.toISOString() });
     }
@@ -835,13 +833,8 @@
         if (!from || d > from) from = d;
       });
     }
-    if (from) {
-      dropLessons(db.lessons.filter(function (l) {
-        if (l.studentId !== studentId || !isBareTemplate(l)) return false;
-        var d = U.toDate(l.date);
-        return (after ? d >= from : d > from) && d < now;
-      }));
-    }
+    noteTidy({ k: 'archive', s: studentId }, false);       // учень повернувся — майбутнє вже не прибирати
+    if (from) tidyGap(studentId, from, now, !after);
     var rec = S.update('students', studentId, { archived: false, archivedAt: undefined });
     S.fillStudentTemplate(studentId);
     return rec;
@@ -881,7 +874,7 @@
    * сорок разів. Тепер кожен запис, що досі брав валюту з учня (поля
    * currency в ньому не було), отримує її явно — стару. Нова валюта діє
    * лише на те, що створюватиметься далі; баланс зводить обидві
-   * (див. inStudentCur). Повертає true, якщо валюта справді змінилась.
+   * (див. S.balance). Повертає true, якщо валюта справді змінилась.
    */
   S.setStudentCurrency = function (studentId, code) {
     var st = S.get('students', studentId);
@@ -918,34 +911,74 @@
     });
   };
 
-  /* Сума запису у валюті учня. У тій самій валюті — як є, без жодних
-     округлень. В іншій (учень колись платив у доларах, тепер у гривнях) —
-     через гривні: за курсом самого запису, а в валюту учня — за нинішнім. */
-  function inStudentCur(rec, amount, recCur, stCur) {
-    amount = Number(amount) || 0;
-    if (!amount || recCur === stCur) return amount;
-    var uah = S.uahOf(rec, amount, recCur);
-    if (uah == null) return 0;                    // курсу ще немає — не вигадуємо
-    if (stCur === 'UAH') return uah;
-    var r = (window.Rates && Rates.get(stCur)) || 0;
-    return r > 0 ? uah / r : 0;
-  }
   function cents(x) { return Math.round(x * 100) / 100; }
+
+  /* ---------- Гроші учня у його валюті ----------
+     Сплачене, нараховане й баланс рахуються за одним правилом, тож на
+     картці учня «сплачено − нараховано» завжди дорівнює балансу.
+
+     Суми спершу складаються окремо в кожній валюті записів. Своя валюта
+     учня — як є, без жодних округлень. Чужа (учень колись платив у
+     доларах, тепер у гривнях) — одним підсумком за нинішнім курсом. Досі
+     кожен запис переводився за власним курсом: доларові оплата й урок на
+     ту саму суму давали в гривнях не нуль, а «борг» чи «аванс» на різницю
+     курсів — у учня, який нічого не винен.
+
+     groups — {валюта: {net: сума, recs: [[запис, сума], …]}}. */
+  function addTo(groups, c, amount, rec) {
+    amount = Number(amount) || 0;
+    if (!amount) return;
+    var g = groups[c] || (groups[c] = { net: 0, recs: [] });
+    g.net += amount;
+    g.recs.push([rec, amount]);
+  }
+
+  function inStudentCur(studentId, groups) {
+    var cur = S.curOf(studentId);
+    var total = 0;
+    Object.keys(groups).forEach(function (c) {
+      var g = groups[c];
+      if (c === cur) { total += g.net; return; }
+      if (Math.abs(g.net) < 0.005) return;
+      var to = cur === 'UAH' ? 1 : ((window.Rates && Rates.get(cur)) || 0);
+      if (!(to > 0)) return;                        // курсу валюти учня ще немає — не вигадуємо
+      var from = c === 'UAH' ? 1 : ((window.Rates && Rates.get(c)) || 0);
+      if (!(from > 0)) {
+        /* Нинішнього курсу цієї валюти ще немає (НБУ не відповідав) — тоді
+           за курсами самих записів, середнім, зваженим на суму. Досі такий
+           запис без замороженого курсу рахувався як нуль. */
+        var w = 0, sum = 0;
+        g.recs.forEach(function (x) {
+          var r = S.rateFor(x[0], c);
+          if (r > 0) { var a = Math.abs(x[1]); w += a; sum += a * r; }
+        });
+        if (!w) return;
+        from = sum / w;
+      }
+      total += g.net * from / to;
+    });
+    return cents(total);
+  }
+
+  function paidGroups(studentId, groups) {
+    S.paymentsOf(studentId).forEach(function (p) { addTo(groups, S.paymentCur(p), p.amount, p); });
+    return groups;
+  }
+  function chargedGroups(studentId, groups, sign) {
+    db.lessons.forEach(function (l) {
+      if (l.studentId === studentId && l.status === 'done') addTo(groups, S.lessonCur(l), sign * (l.price || 0), l);
+    });
+    return groups;
+  }
 
   /** Скільки учень сплатив — у його валюті. */
   S.paidOf = function (studentId) {
-    var cur = S.curOf(studentId);
-    return cents(U.sum(S.paymentsOf(studentId), function (p) {
-      return inStudentCur(p, p.amount, S.paymentCur(p), cur);
-    }));
+    return inStudentCur(studentId, paidGroups(studentId, {}));
   };
 
   /** Вартість проведених уроків — у валюті учня. */
   S.chargedOf = function (studentId) {
-    var cur = S.curOf(studentId);
-    return cents(U.sum(db.lessons.filter(function (l) {
-      return l.studentId === studentId && l.status === 'done';
-    }), function (l) { return inStudentCur(l, l.price || 0, S.lessonCur(l), cur); }));
+    return inStudentCur(studentId, chargedGroups(studentId, {}, 1));
   };
 
   /** Згрупувати суми за валютами: {UAH: 12500, USD: 180}. */
@@ -960,40 +993,12 @@
 
   /* ---------- Фінанси ---------- */
 
-  /* Сплачено мінус нараховано — у валюті учня. Спершу окремо в кожній
-     валюті записів, і лише залишок чужої валюти переводиться, один раз, за
-     нинішнім курсом. Досі кожен запис переводився за власним курсом:
-     доларові оплата й урок на ту саму суму давали в гривнях не нуль, а
-     «борг» чи «аванс» на різницю курсів — у учня, який нічого не винен.
+  /* Сплачено мінус нараховано — у валюті учня (див. вище).
      extra — ще нараховане: [валюта, сума, запис]. */
   function netOf(studentId, extra) {
-    var cur = S.curOf(studentId);
-    var by = {};
-    function add(c, amount, rec) {
-      amount = Number(amount) || 0;
-      if (!amount) return;
-      var g = by[c] || (by[c] = { net: 0, recs: [] });
-      g.net += amount;
-      g.recs.push([rec, amount]);
-    }
-    S.paymentsOf(studentId).forEach(function (p) { add(S.paymentCur(p), p.amount, p); });
-    db.lessons.forEach(function (l) {
-      if (l.studentId === studentId && l.status === 'done') add(S.lessonCur(l), -(l.price || 0), l);
-    });
-    (extra || []).forEach(function (x) { add(x[0], -x[1], x[2]); });
-
-    var total = 0;
-    Object.keys(by).forEach(function (c) {
-      var g = by[c];
-      if (c === cur) { total += g.net; return; }
-      if (Math.abs(g.net) < 0.005) return;
-      var from = c === 'UAH' ? 1 : ((window.Rates && Rates.get(c)) || 0);
-      var to = cur === 'UAH' ? 1 : ((window.Rates && Rates.get(cur)) || 0);
-      if (from > 0 && to > 0) { total += g.net * from / to; return; }
-      // нинішнього курсу ще немає — хоч за курсами самих записів
-      g.recs.forEach(function (x) { total += inStudentCur(x[0], x[1], c, cur); });
-    });
-    return cents(total);
+    var groups = chargedGroups(studentId, paidGroups(studentId, {}), -1);
+    (extra || []).forEach(function (x) { addTo(groups, x[0], -x[1], x[2]); });
+    return inStudentCur(studentId, groups);
   }
 
   /** Баланс учня: сплачено мінус вартість проведених уроків. Мінус = борг. */
@@ -1265,8 +1270,11 @@
     /* Валюта лише з ручним курсом: архіву для неї не буде ніколи, тож
        незаморожений запис щоразу перераховувався б за нинішнім ручним — і
        минулий дохід мінявся б із кожною його правкою. Ручний курс і є
-       курсом дня, коли гроші стали фактом. */
-    if (R.sourceOf && R.sourceOf(cur) === 'manual') {
+       курсом дня, коли гроші стали фактом. Але лише коли НБУ вже відповідав
+       і цієї валюти не має: на пристрої, куди курс НБУ ще жодного разу не
+       приїхав, «ручний» долар — лише запасний, а справжній архівний прийде. */
+    var nbu = R.state && R.state();
+    if (R.sourceOf && R.sourceOf(cur) === 'manual' && nbu && nbu.map && Object.keys(nbu.map).length) {
       var own = R.get(cur);
       return own > 0 ? own : 0;
     }
@@ -1360,6 +1368,7 @@
     var has = (board.slides || []).some(function (s) { return (s.items || []).length; });
     if (has && !hadContent.get(board)) {
       hadContent.set(board, true);
+      markDrawn(board.lessonId);
       S.save();
     } else {
       if (has) hadContent.set(board, true);
@@ -1369,6 +1378,37 @@
   };
 
   var hadContent = new WeakMap();
+
+  /* Обмін увімкнено, а записи ще не звірені з сервером: тутешня копія
+     уроку може бути давньою, і правка в ній поїхала б поверх свіжішої. */
+  function recordsUnsettled() {
+    return !!(window.RecSync && RecSync.hasPulled && !RecSync.hasPulled() &&
+      window.Cloud && Cloud.available && Cloud.available() && Cloud.signedIn && Cloud.signedIn());
+  }
+
+  /* Урок, на дошці якого щось є, несе про це позначку в самому записі.
+     Запис уроку доходить до всіх пристроїв, а дошка — окремо й не завжди
+     встигає (буває, на сервері вона лише в журналі, без знімка). Без
+     позначки інший пристрій вважав урок порожнім і прибирав його разом
+     із роботою: архів, зміна розкладу, двійники. */
+  function markDrawn(lessonId) {
+    if (recordsUnsettled()) return false;           // позначить S.markDrawnLessons після читання
+    var l = S.get('lessons', lessonId);
+    if (!l || l.hasBoard) return false;
+    l.hasBoard = 1;
+    l.updatedAt = new Date().toISOString();
+    return true;
+  }
+
+  /** Позначити всі уроки з непорожніми дошками — і ті, що намальовані до позначки. */
+  S.markDrawnLessons = function () {
+    var n = 0;
+    db.boards.forEach(function (b) {
+      if ((b.slides || []).some(function (s) { return (s.items || []).length; }) && markDrawn(b.lessonId)) n++;
+    });
+    if (n) S.save();
+    return n;
+  };
 
   function saveBoardsOnly() {
     try {
@@ -1444,24 +1484,104 @@
   /* Урок постійного розкладу, у якому ще нічого немає: ні теми, ні
      конспекту, ні оплати, ні ДЗ, ні записів на дошці. Лише такий програма
      має право прибрати сама — усе інше вже робота. */
-  function isBareTemplate(l) {
-    if (!l || !l.fromTemplate || l.status !== 'planned') return false;
-    if (l.topic || l.notes || l.paid) return false;
-    if (db.payments.some(function (p) { return p.lessonId === l.id; })) return false;
-    if (db.homeworks.some(function (h) { return h.lessonId === l.id; })) return false;
+  function isBareTemplate(l) { return bareState(l) === 'bare'; }
+
+  /* 'bare' — порожній; 'work' — у ньому робота; 'unknown' — порожній, якщо
+     не рахувати дошки на сервері, а список дошок сервера ще невідомий. */
+  function bareState(l) {
+    if (!l || !l.fromTemplate || l.status !== 'planned') return 'work';
+    if (l.topic || l.notes || l.paid || l.hasBoard) return 'work';
+    if (db.payments.some(function (p) { return p.lessonId === l.id; })) return 'work';
+    if (db.homeworks.some(function (h) { return h.lessonId === l.id; })) return 'work';
     var b = db.boards.filter(function (x) { return x.lessonId === l.id; })[0];
-    if (b && (b.slides || []).some(function (s) { return (s.items || []).length; })) return false;
+    if (b && (b.slides || []).some(function (s) { return (s.items || []).length; })) return 'work';
     /* Тутешньої копії дошки може ще не бути: її малювали на іншому
-       пристрої, а сюди вона не доїхала. Дошка є на сервері — урок не
-       порожній. Список сервера ще невідомий (а обмін увімкнено) — теж не
-       чіпаємо: краще лишити зайвий урок, ніж стерти чужу роботу. */
+       пристрої (ще до позначки hasBoard), а сюди вона не доїхала. Дошка є
+       на сервері — урок не порожній. Список сервера ще невідомий (а обмін
+       увімкнено) — вирішимо пізніше (див. S.runTidy): краще почекати, ніж
+       стерти чужу роботу. */
     if (window.BoardOps && BoardOps.serverHas && window.Cloud && Cloud.available && Cloud.available() &&
         Cloud.signedIn && Cloud.signedIn()) {
       var onServer = BoardOps.serverHas(l.id);
-      if (onServer !== false) return false;
+      if (onServer === null) return 'unknown';
+      if (onServer) return 'work';
     }
-    return true;
+    return 'bare';
   }
+
+  /* ---------- Відкладене прибирання ----------
+     Архів, повернення з архіву й зміна розкладу прибирають порожні уроки
+     шаблону. Коли про частину з них ще не можна сказати, чи вони порожні
+     (без мережі дошки сервера невідомі), досі їх просто лишали — назавжди:
+     після повернення з архіву «не відмічені» уроки часу відсутності
+     зʼїдали запас учня, а після зміни розкладу старі дні лишались. Тепер
+     така робота запамʼятовується (у цьому браузері) й доробляється, щойно
+     дошки сервера прочитано (S.runTidy). */
+  var TIDY = 'mathhub.tidy';
+  function tidyList() {
+    try { return JSON.parse(localStorage.getItem(TIDY) || '[]') || []; } catch (e) { return []; }
+  }
+  function saveTidy(list) {
+    try {
+      if (list.length) localStorage.setItem(TIDY, JSON.stringify(list));
+      else localStorage.removeItem(TIDY);
+    } catch (e) {}
+  }
+  function sameTask(a, b) { return a.k === b.k && a.s === b.s && a.from === b.from && a.to === b.to; }
+  function noteTidy(task, open) {
+    var list = tidyList().filter(function (x) { return !sameTask(x, task); });
+    if (open) list.push(task);
+    saveTidy(list);
+  }
+
+  /* Порожні уроки учня, що підходять під fits, — прибрати зараз;
+     невизначені — лишити до наступного разу (task). */
+  function sweepBare(studentId, fits, task) {
+    var drop = [], undecided = 0;
+    db.lessons.forEach(function (l) {
+      if (l.studentId !== studentId || !fits(l)) return;
+      var s = bareState(l);
+      if (s === 'bare') drop.push(l);
+      else if (s === 'unknown') undecided++;
+    });
+    noteTidy(task, undecided > 0);
+    return drop;
+  }
+
+  // в архіві: усе майбутнє порожнє з шаблону
+  function tidyArchived(studentId) {
+    var now = new Date();
+    return dropLessons(sweepBare(studentId, function (l) { return U.toDate(l.date) >= now; },
+      { k: 'archive', s: studentId }));
+  }
+  // час відсутності [from, to): порожнє з шаблону, що припало на нього
+  function tidyGap(studentId, from, to, strict) {
+    var a = new Date(from), b = new Date(to);
+    return dropLessons(sweepBare(studentId, function (l) {
+      var d = U.toDate(l.date);
+      return (strict ? d > a : d >= a) && d < b;
+    }, { k: 'gap', s: studentId, from: a.toISOString(), to: b.toISOString(), strict: strict ? 1 : 0 }));
+  }
+
+  /** Доробити відкладене прибирання. Кличеться, коли дошки сервера вже прочитано. */
+  S.runTidy = function () {
+    if (recordsUnsettled()) return 0;
+    var list = tidyList();
+    if (!list.length) return 0;
+    var n = 0;
+    list.forEach(function (t) {
+      var st = S.get('students', t.s);
+      if (!st) { noteTidy(t, false); return; }
+      if (t.k === 'archive') {
+        if (st.archived) n += tidyArchived(st.id); else noteTidy(t, false);
+      } else if (t.k === 'prune') {
+        if (!st.archived) n += S.pruneStudentTemplate(st.id); else noteTidy(t, false);
+      } else if (t.k === 'gap') {
+        n += tidyGap(st.id, t.from, t.to, !!t.strict);
+      } else noteTidy(t, false);
+    });
+    return n;
+  };
 
   /* Прибрати уроки всюди — разом із їхніми (порожніми) дошками. Без
      позначки «місце звільнено»: це прибирання програми, а не рішення
@@ -1558,16 +1678,15 @@
     var slots = {};
     (st.schedule || []).forEach(function (s) { slots[s.day + '@' + s.time] = true; });
 
-    var doomed = db.lessons.filter(function (l) {
-      if (l.studentId !== studentId) return false;
-      if (!isBareTemplate(l)) return false;              // вручну, проведене, з темою, оплатою…
+    // лише порожні з шаблону (sweepBare): вручну, проведене, з темою, оплатою… лишаються
+    var doomed = sweepBare(studentId, function (l) {
       var d = U.toDate(l.date);
       if (!(d > now)) return false;                      // минуле лишається як історія
 
       var wd = d.getDay() === 0 ? 7 : d.getDay();
       var hhmm = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
       return !slots[wd + '@' + hhmm];                    // цей день і час досі в розкладі — лишаємо
-    });
+    }, { k: 'prune', s: studentId });
 
     doomed.forEach(function (l) { S.removeLesson(l.id); });
     return doomed.length;

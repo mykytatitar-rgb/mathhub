@@ -68,7 +68,7 @@ function freshStore() {
   vm.runInContext(src('assets/js/utils.js'), ctx, { filename: 'utils.js' });
   vm.runInContext(src('assets/js/store.js'), ctx, { filename: 'store.js' });
   ctx.S.load();
-  return { S: ctx.S, marks: marks, reset: function () { Object.keys(marks).forEach(function (k) { delete marks[k]; }); } };
+  return { S: ctx.S, ctx: ctx, marks: marks, reset: function () { Object.keys(marks).forEach(function (k) { delete marks[k]; }); } };
 }
 
 function ids(S) {
@@ -88,7 +88,7 @@ function ok(cond, msg) {
 function check(name, prepare, act, expectSome) {
   console.log('\n• ' + name);
   var st = freshStore();
-  var arg = prepare(st.S);
+  var arg = prepare(st.S, st.ctx);
   if (arg === null) { ok(false, 'демо-дані не мають потрібного запису'); return; }
   st.reset();
   var before = ids(st.S);
@@ -191,6 +191,23 @@ var CASES = {
       },
       function (S, id) { S.setArchived(id, true); S.setArchived(id, false); }, true);
   },
+  runTidy: function () {
+    check('S.runTidy — прибирання, відкладене без мережі',
+      function (S, ctx) {
+        var st = S.db().students[0];
+        if (!st) return null;
+        var d = new Date(); d.setDate(d.getDate() + 4);
+        var iso = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
+          ('0' + d.getDate()).slice(-2) + 'T08:11';
+        S.add('lessons', { studentId: st.id, date: iso, status: 'planned', fromTemplate: 1 });
+        var known = null;                                  // дошки сервера ще невідомі
+        ctx.BoardOps = { serverHas: function () { return known; } };
+        S.setArchived(st.id, true);
+        known = false;                                     // тепер відомі
+        return st.id;
+      },
+      function (S) { S.runTidy(); }, true);
+  },
   wipe: function () {
     check('S.wipe — «Очистити все» з увімкненим обміном',
       function (S) { return 1; },
@@ -223,7 +240,7 @@ var found = Object.keys(probe).filter(function (k) {
     k !== 'purgeUnusedImages';          // картинки — не записи бази
 });
 // прибирають і ті, що звуться інакше: архів чистить порожні уроки шаблону, «Очистити все» — усе
-['setArchived', 'wipe'].forEach(function (k) { if (typeof probe[k] === 'function') found.push(k); });
+['setArchived', 'wipe', 'runTidy'].forEach(function (k) { if (typeof probe[k] === 'function') found.push(k); });
 
 found.forEach(function (fn) {
   if (!CASES[fn]) {

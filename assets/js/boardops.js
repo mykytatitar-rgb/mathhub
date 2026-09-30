@@ -170,6 +170,28 @@
     return { mode: 'idle' };
   };
 
+  /**
+   * Чи є на дошці щось, чого сервер ще не має, — з погляду будь-якої
+   * вкладки цього браузера. Стан (O.state) — памʼять лише цієї вкладки:
+   * намальоване в іншій (чи в уже закритій) вкладці він не бачить, тож
+   * дивимось ще спільну позначку на диску й сам вміст дошки.
+   */
+  O.unsent = function (id) {
+    var st = O.state(id);
+    if (st.mode === 'queue' || st.mode === 'fail' || st.pending) return true;
+    var shared;
+    try { shared = JSON.parse(localStorage.getItem(PENDING) || '{}') || {}; } catch (e) { shared = {}; }
+    if (shared[id]) return true;
+    var b = S.getBoard(id);
+    if (!b) return false;
+    try {
+      var s = b._sync;
+      if (!s) return (b.slides || []).some(function (sl) { return (sl.items || []).length; });
+      var from = s.base ? known(b) : (s.ref || { slides: [] });
+      return K().diff(from, K().strip(b)).length > 0;
+    } catch (e) { return true; }                  // не змогли порівняти — краще вважати невідправленим
+  };
+
   O.stats = function () {
     return {
       pending: Object.keys(pending).length,
@@ -422,7 +444,7 @@
         used.push(r);
         if (r.id > last) last = r.id;
       }
-      return { T: T, rows: used, from: from, last: last, row: row };
+      return { T: T, rows: used, from: from, last: last, row: row, young: rows.length > used.length };
     });
   }
 
@@ -754,6 +776,17 @@
       .catch(function (e) { console.warn('Знімок дошки не записався:', id, e && e.message); });
   }
 
+  function snapshotLater(id) {
+    if (snapTimers[id]) return;
+    snapTimers[id] = setTimeout(function () {
+      snapTimers[id] = null;
+      var b = S.getBoard(id);
+      if (!b || !ready()) return;
+      lock(id, function () { return writeSnapshot(b, false); })
+        .catch(function (e) { console.warn('Знімок дошки не записався:', id, e && e.message); });
+    }, MATURE_MS + 2000);
+  }
+
   /* Знімок — попередній знімок плюс журнал після нього, і нічого з памʼяті
      пристрою. Раніше писався base пристрою: якщо та памʼять колись розійшлася
      з журналом, знімок переносив розбіжність на кожен новий пристрій і на
@@ -763,6 +796,11 @@
     if (!s || !s.base) return Promise.resolve(false);
 
     return serverTruth(board.lessonId, true).then(function (res) {
+      /* Є дії, ще не досить старі для знімка. Досі їх просто пропускали й
+         більше не поверталися: дошку, намальовану й закриту за пів хвилини,
+         сервер знав лише з журналу, без знімка, — і інший пристрій вважав
+         її уроком без дошки. Повертаємось, щойно вони дозріють. */
+      if (res.young) snapshotLater(board.lessonId);
       if (res.last <= res.from) {                 // нового після знімка немає
         if (res.row) { s.snapRev = res.row.rev; s.snapSeen = res.from; }
         s.snapAt = Date.now();

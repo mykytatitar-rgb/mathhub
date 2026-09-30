@@ -67,12 +67,15 @@ function freshStore(opts) {
     isFresh: function () { return fresh; }
   };
   if (opts.sourceOf) ctx.Rates.sourceOf = opts.sourceOf;
+  // курс НБУ на цьому пристрої вже бував (за замовчуванням так)
+  var nbuMap = opts.nbuNever ? {} : { USD: USD };
+  ctx.Rates.state = function () { return { map: nbuMap, manual: {} }; };
   vm.createContext(ctx);
   vm.runInContext(src('assets/js/utils.js'), ctx, { filename: 'utils.js' });
   vm.runInContext(src('assets/js/store.js'), ctx, { filename: 'store.js' });
   vm.runInContext(src('assets/js/components.js'), ctx, { filename: 'components.js' });
   ctx.S.load();
-  return { S: ctx.S, C: ctx.C, U: ctx.U, marks: marks };
+  return { S: ctx.S, C: ctx.C, U: ctx.U, marks: marks, ctx: ctx, ls: ls };
 }
 
 var fails = 0, passes = 0;
@@ -284,6 +287,12 @@ scenario('Курс заморожується лише справжній кур
   });
   same(t4.S.exactRate({ date: isoIn(-4, '10:00') }, 'EUR'), 45, 'ручний курс заморожується');
   same(t4.S.exactRate({ date: isoIn(-4, '10:00') }, 'USD'), 0, 'курс НБУ без архіву — як і досі, ні');
+  // НБУ тут ще жодного разу не відповідав — «ручний» лише запасний, не заморожуємо
+  var t5 = freshStore({
+    historic: function () { return false; }, nbuNever: true,
+    sourceOf: function () { return 'manual'; }
+  });
+  same(t5.S.exactRate({ date: isoIn(-4, '10:00') }, 'USD'), 0, 'без жодної відповіді НБУ ручний курс не заморожується');
 });
 
 scenario('Баланс: однакові суми в одній валюті дають нуль, хоч курси записів різні', function () {
@@ -332,6 +341,89 @@ scenario('Повернення з архіву: межа — сама мить �
   S.setArchived(y.st.id, false);
   ok(!!S.get('lessons', sameDay.id), 'за старою позначкою день архівації не чіпається');
   ok(!S.get('lessons', next.id), 'наступний день — прибрано');
+});
+
+scenario('Урок із дошкою несе позначку, і порожнім його не вважає жоден пристрій', function () {
+  var S = freshStore().S;
+  var x = studentWithSlot(S, 3, '17:51');
+  S.fillStudentTemplate(x.st.id, 7);
+  var l = lessonsAt(S, x.st.id, x.iso)[0];
+  var b = S.ensureBoard(l.id);
+  b.slides[0].items.push({ id: 'i1', t: 'p', d: [1, 2, 3] });
+  S.saveBoard(b);
+  same(S.get('lessons', l.id).hasBoard, 1, 'намальоване — урок позначено');
+
+  // інший пристрій: урок із позначкою, а дошка сюди ще не доїхала
+  var y = studentWithSlot(S, 4, '17:53');
+  S.fillStudentTemplate(y.st.id, 7);
+  var far = lessonsAt(S, y.st.id, y.iso)[0];
+  S.update('lessons', far.id, { hasBoard: 1 });
+  S.setArchived(y.st.id, true);
+  ok(!!S.get('lessons', far.id), 'архів не прибрав урок, дошка якого є деінде');
+
+  // дошки, намальовані ще до позначки
+  var z = studentWithSlot(S, 5, '17:55');
+  S.fillStudentTemplate(z.st.id, 7);
+  var old = lessonsAt(S, z.st.id, z.iso)[0];
+  S.db().boards.push({ id: 'bold', lessonId: old.id, slides: [{ id: 's0', items: [{ id: 'q', t: 'p', d: [1] }] }] });
+  ok(S.markDrawnLessons() >= 1 && S.get('lessons', old.id).hasBoard === 1, 'давня дошка — урок позначено при перевірці');
+});
+
+scenario('Прибирання, відкладене без мережі, доробляється, щойно дошки сервера відомі', function () {
+  var t = freshStore();
+  var S = t.S, ctx = t.ctx;
+  var server = null;                                  // список дошок сервера ще невідомий
+  ctx.Cloud = { available: function () { return true; }, signedIn: function () { return true; } };
+  ctx.BoardOps = { serverHas: function () { return server; } };
+
+  // зміна розкладу
+  var x = studentWithSlot(S, 3, '17:57');
+  S.fillStudentTemplate(x.st.id, 7);
+  var oldSlot = lessonsAt(S, x.st.id, x.iso)[0];
+  S.update('students', x.st.id, { schedule: [{ day: weekday(isoIn(4, '18:00')), time: '18:00' }] });
+  same(S.pruneStudentTemplate(x.st.id), 0, 'без знання дошок сервера нічого не прибрано');
+  ok(!!S.get('lessons', oldSlot.id), 'старий день поки лишився');
+
+  // архів
+  var y = studentWithSlot(S, 3, '17:59');
+  S.fillStudentTemplate(y.st.id, 7);
+  var ahead = lessonsAt(S, y.st.id, y.iso)[0];
+  S.setArchived(y.st.id, true);
+  ok(!!S.get('lessons', ahead.id), 'майбутній урок архівного поки лишився');
+
+  // повернення з архіву: урок часу відсутності
+  var z = studentWithSlot(S, 3, '18:03');
+  var m = new Date(); m.setDate(m.getDate() - 3);
+  S.update('students', z.st.id, { archived: true, archivedAt: m.toISOString() });
+  var gap = S.add('lessons', { studentId: z.st.id, date: isoIn(-1, '18:03'), status: 'planned', fromTemplate: 1 });
+  S.setArchived(z.st.id, false);
+  ok(!!S.get('lessons', gap.id), 'урок часу відсутності поки лишився');
+  ok(!!t.ls['mathhub.tidy'], 'усе це запамʼятовано на потім');
+
+  server = false;                                     // дошки сервера прочитано: цих уроків там немає
+  ok(S.runTidy() >= 3, 'доробилось');
+  ok(!S.get('lessons', oldSlot.id), 'старий день розкладу прибрано');
+  ok(!S.get('lessons', ahead.id), 'майбутній урок архівного прибрано');
+  ok(!S.get('lessons', gap.id), 'урок часу відсутності прибрано');
+  ok(!t.ls['mathhub.tidy'], 'список відкладеного порожній');
+});
+
+scenario('Картка учня: сплачено − нараховано = баланс, і без нинішнього курсу — середній курс записів', function () {
+  var S = freshStore().S;
+  var st = S.add('students', { name: 'Змішаний', grade: '11 клас', price: 40, currency: 'USD', schedule: [] });
+  S.add('payments', { studentId: st.id, date: isoIn(-20, '00:00').slice(0, 10), amount: 90, currency: 'USD', rate: 41 });
+  S.add('lessons', { studentId: st.id, date: isoIn(-15, '10:00'), status: 'done', price: 40, currency: 'USD', rate: 42 });
+  S.setStudentCurrency(st.id, 'UAH');
+  S.update('students', st.id, { currency: 'UAH', price: 1600 });
+  S.add('lessons', { studentId: st.id, date: isoIn(-2, '10:00'), status: 'done', price: 700, currency: 'UAH' });
+  same(Math.round((S.paidOf(st.id) - S.chargedOf(st.id)) * 100) / 100, S.balance(st.id), 'сплачено − нараховано = баланс');
+  same(S.balance(st.id), 50 * USD - 700, 'залишок $50 за нинішнім курсом мінус гривневий урок');
+
+  var S2 = freshStore().S;
+  var st2 = S2.add('students', { name: 'Фунтовий2', grade: '11 клас', price: 500, currency: 'UAH', schedule: [] });
+  S2.add('payments', { studentId: st2.id, date: isoIn(-9, '00:00').slice(0, 10), amount: 10, currency: 'GBP', rate: 50 });
+  S2.add('payments', { studentId: st2.id, date: isoIn(-3, '00:00').slice(0, 10), amount: 10, currency: 'GBP' });
+  same(S2.balance(st2.id), 1000, 'запис без курсу рахується за середнім курсом інших, а не як нуль');
 });
 
 scenario('Нова ціна учня — лише урокам зі старою ціною', function () {

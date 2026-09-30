@@ -86,6 +86,14 @@
     if (!O() || !O().ready()) return Promise.resolve(0);
     return O().fetchMissing().then(function (r) {
       if (r.stale.length) O().refresh(r.stale);
+      /* Тепер відомо, які дошки є на сервері: позначити уроки з дошками й
+         доробити прибирання, відкладене без цього знання. Обидва самі
+         чекають, поки записи звірено з сервером. */
+      try {
+        if (S.markDrawnLessons) S.markDrawnLessons();
+        if (S.runTidy && S.runTidy() && window.App && App.render &&
+            !(window.V && V.boardMountedFor && V.boardMountedFor())) App.render();
+      } catch (e) { console.warn('Прибирання після дошок:', e); }
       return r.added;
     }).catch(function (e) {
       console.warn('Дошки не вдалося прочитати:', e && e.message);

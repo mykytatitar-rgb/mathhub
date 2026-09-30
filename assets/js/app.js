@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v152';
+  App.BUILD = 'v153';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -1356,8 +1356,12 @@
   function fillAhead() {
     var made = 0;
     try {
+      // уроки з дошками, намальованими ще до позначки hasBoard, — позначити, щоб їх не вважали порожніми
+      if (S.markDrawnLessons) S.markDrawnLessons();
       // двійники, що лишилися з часів, коли пристрої заповнювали розклад наосліп
       made += S.dedupeTemplateLessons();
+      // прибирання, відкладене, поки дошки сервера були невідомі
+      if (S.runTidy) made += S.runTidy();
       made += (window.Cloud && Cloud.housekeeping)
         ? Cloud.housekeeping(S.autoFillTemplates) : S.autoFillTemplates();
     } catch (e) { console.warn('autoFill:', e); }

@@ -85,6 +85,13 @@
      вкладка годинами тримала б застаріле «видалено» й потім стерла б ним
      урок, який тим часом повернули (у шаблону номер уроку сталий). */
   var adopted = {};
+  /* Цю зміну помітила сама вкладка (правка, злиття, перегляд змін) — вона
+     вже своя, навіть якщо ключ колись було перейнято. Інакше, щойно інша
+     вкладка відправила б свою версію, своя свіжа правка випала б із черги. */
+  function own(key) {
+    outbox[key] = 1;
+    delete adopted[key];
+  }
   function mergeStored() {
     var stored;
     try { stored = JSON.parse(localStorage.getItem(OUT) || '{}') || {}; } catch (e) { stored = {}; }
@@ -158,8 +165,7 @@
   /** Запис змінився. */
   R.mark = function (kind, id) {
     if (!kind || !id || R.KINDS.indexOf(kind) < 0) return;
-    outbox[kind + '/' + id] = 1;
-    delete adopted[kind + '/' + id];          // тепер це своя зміна
+    own(kind + '/' + id);
     saveState();
     schedule();
   };
@@ -227,7 +233,7 @@
       if (hashes[key] === h) return;
       hashes[key] = h;
       if (first) return;
-      if (outbox[key] !== 'del') outbox[key] = 1;
+      if (outbox[key] !== 'del') own(key);
       n++;
     }
 
@@ -449,7 +455,7 @@
       /* Налаштування вперше їдуть окремими записами. Якщо сервер їх ще не
          має — наші стають першими. */
       if (full && !sawMeta) {
-        metaKeys(S.db()).forEach(function (k) { outbox['meta/' + k] = 1; });
+        metaKeys(S.db()).forEach(function (k) { own('meta/' + k); });
         schedule();
       }
 
@@ -520,13 +526,14 @@
   function dirtyHere(key, data) {
     if (!hashes || !(key in hashes) || data === undefined) return false;
     if (hashes[key] === fp(JSON.stringify(data))) return false;
-    outbox[key] = 1;
+    own(key);
     return true;
   }
 
   var boardsToDrop = [];
   function unsentBoard(id) {
     var O = window.BoardOps;
+    if (O && O.unsent) return O.unsent(id);
     if (!O || !O.state) return false;
     var st = O.state(id) || {};
     return st.mode === 'queue' || st.mode === 'fail' || !!st.pending;
@@ -544,7 +551,7 @@
       if (transition() && v && db[row.id] && typeof v === 'object' && typeof db[row.id] === 'object' &&
           !Array.isArray(v) && !same(db[row.id], v)) {
         v = mergeBoth(db[row.id], v, row.updated_at);
-        if (!same(v, row.data.v)) outbox[key] = 1;
+        if (!same(v, row.data.v)) own(key);
       }
       if (same(db[row.id], v)) {
         if (hashes) hashes[key] = fp(JSON.stringify({ v: db[row.id] }));
@@ -592,7 +599,7 @@
     if (i >= 0 && transition()) {
       var merged = mergeBoth(list[i], rec, row.updated_at);
       merged.id = row.id;
-      if (!same(merged, rec)) outbox[key] = 1;       // злите — новіше за серверне
+      if (!same(merged, rec)) own(key);       // злите — новіше за серверне
       rec = merged;
     }
     if (i >= 0) list[i] = rec; else list.push(rec);
@@ -616,7 +623,7 @@
     R.KINDS.forEach(function (kind) {
       if (kind === 'meta') return;                // налаштування — див. R.pull(full)
       (db[kind] || []).forEach(function (rec) {
-        if (rec && rec.id) outbox[kind + '/' + rec.id] = 1;
+        if (rec && rec.id) own(kind + '/' + rec.id);
       });
     });
     saveState();

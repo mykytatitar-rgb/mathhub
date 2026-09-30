@@ -311,9 +311,10 @@
                лишається у своїй: учень міг відтоді перейти на іншу валюту,
                а історія не перемічується. */
             v.currency = (isNew || v.studentId !== ls.studentId) ? S.curOf(v.studentId) : S.lessonCur(ls);
-            // заморожений курс належить дню уроку; день змінився — курс теж
-            if (!isNew && ls.rate > 0 && v.date.slice(0, 10) !== String(ls.date).slice(0, 10)) {
-              var lr = S.exactRate({ date: v.date }, v.currency);
+            // заморожений курс належить дню уроку й валюті; змінився день чи валюта — курс теж
+            if (!isNew && ls.rate > 0 && (v.date.slice(0, 10) !== String(ls.date).slice(0, 10) ||
+                v.currency !== S.lessonCur(ls))) {
+              var lr = v.currency === 'UAH' ? 0 : S.exactRate({ date: v.date }, v.currency);
               v.rate = lr > 0 ? lr : undefined;
             }
             if (isNew) { S.add('lessons', v); U.toast('Урок додано', 'ok'); }
@@ -702,9 +703,13 @@
 
     var payCur = p ? S.paymentCur(p) : S.curOf(sid);
 
+    /* Швидкі суми — ціна учня в його валюті. Давню оплату в іншій валюті
+       (учень відтоді перейшов на гривню) ними не заповнити: «4 × 1 600 ₴»
+       записалось би як 6 400 $. Тоді їх немає. */
     function quickHtml(student) {
       var price = student ? student.price : 500;
-      var code = student ? (student.currency || 'UAH') : 'UAH';
+      var code = student ? S.curOf(student.id) : 'UAH';
+      if (student && curFor(student.id) !== code) return '';
       return [1, 4, 8, 10].map(function (n) {
         return '<button type="button" class="chip" data-pack="' + n + '">' +
           n + ' × ' + U.money(price, code) + '</button>';
@@ -773,10 +778,18 @@
         var sel = root.querySelector('[name=studentId]');
         var current = st;
 
+        function showQuick() {
+          var q = root.querySelector('[data-quick]');
+          var box = q.closest('.field') || q.parentElement;
+          box.style.display = q.innerHTML ? '' : 'none';
+        }
+        showQuick();
+
         function sync() {
           var code = current ? curFor(current.id) : 'UAH';
           root.querySelector('[data-cur-tag]').textContent = U.symbol(code) + ' ' + code;
           root.querySelector('[data-quick]').innerHTML = quickHtml(current);
+          showQuick();
           var bal = root.querySelector('[data-balance]');
           if (bal && current) {
             var b = S.balance(current.id);

@@ -223,7 +223,15 @@ function Device(name, server, sharedLs) {
     onSave: function (f) { hooks.push(f); },
     newSlide: function () { return { id: ctx.U.uid('sl'), title: '', bg: 'grid', items: [], kind: 'lesson', hidden: 0 }; },
     ensureItemIds: function () { return false; },
-    saveBoard: function (b) { ctx.BoardSync.mark(b.lessonId); }
+    saveBoard: function (b) { ctx.BoardSync.mark(b.lessonId); },
+    removeBoards: function (ids) {
+      var n = 0;
+      (ids || []).forEach(function (id) {
+        var i = db.boards.findIndex(function (b) { return b.lessonId === id; });
+        if (i >= 0) { db.boards.splice(i, 1); n++; }
+      });
+      return n;
+    }
   };
   ctx.Cloud = {
     available: function () { return true; },
@@ -619,6 +627,89 @@ scenario('Дві вкладки: відправлене іншою «видал�
   }).then(function () {
     same(srv.records['lessons/tpl_1'].deleted, false, 'застаріле «видалено» з вкладки 2 його не стерло');
     ok(!!srv.records['students/s9'], 'своє вкладка 2 відправила');
+  });
+});
+
+scenario('Дві вкладки: своя правка запису, перейнятого від іншої вкладки, не випадає з черги', function () {
+  var srv = new Server();
+  var T1 = new Device('A', srv), T2 = new Device('A', srv, T1.ls);
+  var R1 = T1.ctx.RecSync, R2 = T2.ctx.RecSync;
+  function L(dev) { return dev.db.lessons.filter(function (l) { return l.id === 'L'; })[0]; }
+  srv.records['lessons/L'] = { kind: 'lessons', id: 'L', rev: 1, deleted: false,
+    updated_at: srv.now(), data: { id: 'L', status: 'planned', date: '2030-01-07T10:00' } };
+  return R1.pull(true).then(function () { return R2.pull(true); })
+  .then(function () {
+    // вкладка 1 відмічає урок проведеним
+    L(T1).status = 'done'; L(T1).updatedAt = '2030-01-07T11:00:00Z';
+    T1.ctx.S.save(); R1.mark('lessons', 'L');
+    // вкладка 2 отримує подію сховища: перевірка змін, перечитування, зведення відбитків
+    R2.scan();
+    L(T2).status = 'done'; L(T2).updatedAt = '2030-01-07T11:00:00Z';
+    T2.ctx.S.save(); R2.rebase();
+    return R1.flush();                               // вкладка 1 відправила своє
+  }).then(function () {
+    same(srv.records['lessons/L'].data.status, 'done', 'відмітка вкладки 1 дійшла');
+    // вкладка 2 знімає відмітку — зміну знаходить перегляд змін, а не R.mark
+    L(T2).status = 'planned'; L(T2).updatedAt = '2030-01-07T11:05:00Z';
+    T2.ctx.S.save(); R2.scan();
+    return R2.flush();
+  }).then(function () {
+    same(srv.records['lessons/L'].data.status, 'planned', 'правка вкладки 2 теж дійшла, а не випала з черги');
+  });
+});
+
+scenario('Дві вкладки: дошку з невідправленим в іншій вкладці не прибирає видалення уроку деінде', function () {
+  var srv = new Server();
+  var T1 = new Device('A', srv), T2 = new Device('A', srv, T1.ls);
+  var lesson = { id: 'L', studentId: 's1', date: '2030-01-07T10:00', status: 'planned', fromTemplate: 1 };
+  T1.db.lessons.push(JSON.parse(JSON.stringify(lesson)));
+  T2.db.lessons.push(JSON.parse(JSON.stringify(lesson)));
+  T1.newBoard('L');
+  T1.setOnline(false);
+  T1.draw('L', 0, 'a1');
+  return T1.ctx.BoardOps.record('L').then(function () {
+    // у вкладці 2 — копія тієї ж дошки з диска; її власна памʼять про відправку порожня
+    T2.db.boards.push(JSON.parse(JSON.stringify(T1.board('L'))));
+    // урок видалили на іншому пристрої
+    srv.records['lessons/L'] = { kind: 'lessons', id: 'L', rev: 2, deleted: true, updated_at: srv.now(), data: lesson };
+    return T2.ctx.RecSync.pull(true);
+  }).then(function () {
+    ok(!!T2.board('L'), 'дошка з невідправленим лишилась');
+  });
+});
+
+scenario('Дошка, відправлена у фоні одразу після малювання, згодом отримує знімок на сервері', function () {
+  // годинник, який можна перевести вперед: знімок бере лише дії, старші за 30 с
+  var offset = 0, RealDate = Date;
+  function FakeDate() {
+    if (!(this instanceof FakeDate)) return new RealDate(RealDate.now() + offset).toString();
+    return arguments.length
+      ? new (Function.prototype.bind.apply(RealDate, [null].concat([].slice.call(arguments))))()
+      : new RealDate(RealDate.now() + offset);
+  }
+  FakeDate.now = function () { return RealDate.now() + offset; };
+  FakeDate.parse = RealDate.parse; FakeDate.UTC = RealDate.UTC; FakeDate.prototype = RealDate.prototype;
+
+  var srv = new Server();
+  srv.now = function () { return new RealDate(RealDate.now() + offset).toISOString(); };
+  var A = new Device('A', srv);
+  A.ctx.Date = FakeDate;
+  // довге очікування (≥ 30 с) не чекаємо — переводимо годинник і виконуємо одразу
+  A.ctx.setTimeout = function (fn, ms) {
+    if (ms >= 30000) return setTimeout(function () { offset += ms; fn(); }, 20);
+    return setTimeout(fn, ms);
+  };
+  var OA = A.ctx.BoardOps;
+  A.newBoard('L');
+  A.setOnline(false);
+  A.draw('L', 0, 'a1'); A.draw('L', 0, 'a2');
+  return OA.record('L').then(function () {
+    A.setOnline(true);
+    return OA.flush();                               // мережа повернулась, дошка закрита
+  }).then(function () { return wait(400); })
+  .then(function () {
+    ok(srv.ops.filter(function (o) { return o.board === 'L'; }).length > 0, 'дії в журналі');
+    ok(!!srv.boards.L, 'і знімок дошки на сервері — інший пристрій знає, що дошка є');
   });
 });
 

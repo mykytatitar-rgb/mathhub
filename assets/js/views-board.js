@@ -148,6 +148,8 @@
             ? '<button class="btn btn--ghost btn--sm" data-act="board-hw" title="Домашнє завдання цього уроку">' +
               icon('note', 15) + 'ДЗ<span data-hw-count></span></button>'
             : '') +
+          '<button class="btn btn--ghost btn--sm" data-act="board-mats" ' +
+            'title="Файли й посилання з бібліотеки матеріалів">' + icon('folder', 15) + 'Матеріали</button>' +
           '<button class="btn btn--ghost btn--sm" data-act="board-png" title="Зберегти слайд картинкою">' + icon('image', 15) + 'PNG</button>' +
           (lesson
             ? '<button class="btn btn--primary btn--sm" data-act="board-share" title="Надіслати учню">' +
@@ -4362,6 +4364,7 @@
     'board-bg': function () { changeBg(); },
     'board-png': function () { exportPNG(); },
     'board-hw': function () { homeworkDialog(); },
+    'board-mats': function () { materialsDialog(); },
     'board-hw-edit': function (hwId) {
       F.homework(hwId, {}, function () { afterHomeworkChange(); homeworkDialog(); });
     },
@@ -5011,6 +5014,243 @@
               function () { afterHomeworkChange(); });
           } }
       ]
+    });
+  }
+
+  /* ============================================================
+     Матеріали — просто з дошки
+     ============================================================
+
+     Учень на своїй сторінці відкриває лише те, що репетитор позначив для
+     уроку. Репетиторові ж на дошці доступна вся бібліотека: знайти файл
+     посеред уроку, не виходячи з дошки. Файли лежать у сховищі браузера,
+     а яких тут немає (додані на іншому пристрої) — тихо доїжджають із
+     сервера (ImgStore.get, див. cloudimages.js). */
+
+  var MAT_EXT_TYPE = {
+    pdf: 'application/pdf', txt: 'text/plain;charset=utf-8',
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
+    bmp: 'image/bmp', avif: 'image/avif',
+    mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
+    mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', m4a: 'audio/mp4'
+  };
+
+  function matExt(name) {
+    var m = /\.([a-z0-9]+)$/i.exec(String(name || ''));
+    return m ? m[1].toLowerCase() : '';
+  }
+
+  /* Що браузер покаже сам. SVG і HTML — ні, лише завантаженням: відкриті з
+     кабінету, вони виконали б вписаний у них код від імені кабінету. */
+  function matViewKind(type, name) {
+    type = String(type || '').toLowerCase().split(';')[0];
+    var ext = matExt(name);
+    if (type === 'image/svg+xml' || ext === 'svg' || /html|xml/.test(type)) return '';
+    // PDF — лише там, де браузер сам його показує (Chrome на Android, напр., ні: там — завантаження)
+    if (type === 'application/pdf' || ext === 'pdf') return navigator.pdfViewerEnabled === false ? '' : 'pdf';
+    if (/^image\//.test(type) || /^(png|jpe?g|gif|webp|bmp|avif)$/.test(ext)) return 'img';
+    if (/^video\//.test(type) || /^(mp4|m4v|webm|mov)$/.test(ext)) return 'video';
+    if (/^audio\//.test(type) || /^(mp3|wav|ogg|m4a)$/.test(ext)) return 'audio';
+    if (type === 'text/plain' || ext === 'txt') return 'text';
+    return '';
+  }
+
+  function findMatFile(key) {
+    var out = null;
+    S.db().materials.forEach(function (m) {
+      (m.files || []).forEach(function (f) { if (f.key === key) out = f; });
+    });
+    return out;
+  }
+
+  function downloadBlob(blob, name) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name || 'файл';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+
+  /* Файл — у вкладці, яку відкрито заздалегідь. Сторінка в ній проста:
+     назва файлу в заголовку й сам файл на весь екран. */
+  function showInTab(w, blob, f, kind) {
+    var type = (kind === 'text' ? MAT_EXT_TYPE.txt : '') || blob.type || f.type || MAT_EXT_TYPE[matExt(f.name)] || '';
+    if (type && blob.type !== type) blob = new Blob([blob], { type: type });
+    var url;
+    // адресу створюємо в самій вкладці: тоді вона живе, доки відкрита вкладка, а не дошка
+    try { url = w.URL.createObjectURL(blob); } catch (e) { url = URL.createObjectURL(blob); }
+    var d = w.document;
+    d.title = f.name || 'Файл';
+    d.documentElement.style.height = '100%';
+    var b = d.body;
+    b.textContent = '';
+    b.style.cssText = 'margin:0;height:100%;display:flex;align-items:center;justify-content:center;background:' +
+      (kind === 'img' || kind === 'video' ? '#1d1d22' : '#fff');
+    var el;
+    if (kind === 'img') {
+      el = d.createElement('img');
+      el.alt = f.name || '';
+      el.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain';
+    } else if (kind === 'video') {
+      el = d.createElement('video');
+      el.controls = true;
+      el.style.cssText = 'max-width:100%;max-height:100%';
+    } else if (kind === 'audio') {
+      el = d.createElement('audio');
+      el.controls = true;
+    } else {
+      el = d.createElement('iframe');
+      el.title = f.name || 'Файл';
+      el.style.cssText = 'border:0;width:100%;height:100%;display:block';
+    }
+    el.src = url;
+    b.appendChild(el);
+  }
+
+  function openMatFile(f) {
+    if (!f) { U.toast('Файл не знайдено — можливо, його прибрали з матеріалу', 'err'); return; }
+    if (!window.ImgStore || !window.ImgStore.available()) { U.toast('Сховище файлів недоступне', 'err'); return; }
+    var kind = matViewKind(f.type, f.name);
+    /* Вкладку відкриваємо одразу, ще в самому натисканні: якби вона
+       відкривалась після читання файла, браузер заблокував би її як спливне
+       вікно. Поки файл читається, у ній — лише назва. */
+    var w = kind ? window.open('', '_blank') : null;
+    if (w) {
+      try {
+        w.document.title = f.name || 'Файл';
+        w.document.body.style.cssText = 'margin:0;padding:28px;font:15px system-ui,sans-serif;color:#7e90ae';
+        w.document.body.textContent = 'Відкриваю «' + (f.name || 'файл') + '»…';
+      } catch (e) {}
+    }
+    window.ImgStore.get(f.key).then(function (blob) {
+      if (!blob) {
+        if (w) w.close();
+        U.toast('Файлу «' + (f.name || 'файл') + '» немає ні тут, ні на сервері', 'err');
+        return;
+      }
+      if (w && !w.closed) {
+        try { showInTab(w, blob, f, kind); return; } catch (e) { w.close(); }
+      }
+      downloadBlob(blob, f.name);
+    }).catch(function (e) {
+      if (w) w.close();
+      U.toast('Не вдалося відкрити файл: ' + ((e && e.message) || e), 'err');
+    });
+  }
+
+  function matSize(n) {
+    if (!n) return '';
+    return n < 1024 ? n + ' Б' : n < 1048576 ? Math.round(n / 1024) + ' КБ' : (n / 1048576).toFixed(1) + ' МБ';
+  }
+  function matUrlText(u) {
+    var s = String(u || '');
+    try { s = decodeURI(s); } catch (e) { /* зіпсоване кодування — як є */ }
+    return s.replace(/^https?:\/\/(www\.)?/, '');
+  }
+
+  function materialRow(m) {
+    var files = m.files || [];
+    var rules = (m.type === 'theory' && m.rules) || [];
+    var typeIcon = { link: 'link', file: 'file', note: 'note', theory: 'book' };
+    var find = [m.title, m.topic, m.note, m.url].concat(files.map(function (f) { return f.name; }))
+      .concat(rules.map(function (r) { return r.title; })).join(' ').toLowerCase();
+
+    return '<div class="bm-item" data-find="' + U.esc(find) + '">' +
+      '<div class="bm-item__h">' + icon(typeIcon[m.type] || 'file', 16) +
+        '<span class="bm-item__t">' + U.esc(m.title || 'Без назви') + '</span></div>' +
+      (m.note ? '<div class="bm-item__note">' + U.esc(m.note) + '</div>' : '') +
+      (files.length || m.url
+        ? '<div class="file-list">' +
+          files.map(function (f) {
+            var view = !!matViewKind(f.type, f.name);
+            return '<button type="button" class="file-row" data-mf="' + U.esc(f.key) + '" ' +
+              'title="' + (view ? 'Відкрити в новій вкладці' : 'Завантажити') + '">' +
+              '<span class="file-row__i">' + icon('file', 15) + '</span>' +
+              '<span class="file-row__n">' + U.esc(f.name || 'файл') + '</span>' +
+              '<span class="small muted spacer">' + matSize(f.size) + '</span>' +
+              '<span class="file-row__d">' + icon(view ? 'eye' : 'download', 15) + '</span></button>';
+          }).join('') +
+          (m.url
+            ? '<a class="file-row" href="' + U.esc(m.url) + '" target="_blank" rel="noopener">' +
+              '<span class="file-row__i">' + icon('link', 15) + '</span>' +
+              '<span class="file-row__n">' + U.esc(matUrlText(m.url)) + '</span></a>'
+            : '') +
+          '</div>'
+        : '') +
+      (rules.length && window.MathFmt
+        ? '<details class="bm-rules"><summary>' + U.pl(rules.length, 'правило', 'правила', 'правил') + '</summary>' +
+          rules.map(function (r) {
+            var f = r.kind === 'plot' ? MathFmt.plot((r.formula || '').trim()) : MathFmt.render(r.formula);
+            return '<div class="bm-rule">' +
+              (r.title ? '<div class="bm-rule__h">' + U.esc(r.title) + '</div>' : '') +
+              (f ? '<div>' + f + '</div>' : '') +
+              (r.example ? '<div class="bm-rule__e">' + MathFmt.render(r.example) + '</div>' : '') +
+            '</div>';
+          }).join('') + '</details>'
+        : '') +
+    '</div>';
+  }
+
+  function materialsDialog() {
+    flushSave();
+    var all = S.db().materials || [];
+    // відкрите учневі на цьому уроці — першим: найчастіше шукають саме його
+    var forLesson = (cur.board && cur.board.share && cur.board.share.materials) || [];
+    var groups = [];
+    function group(title, items) { if (items.length) groups.push({ title: title, items: items }); }
+
+    group('Відкрито учневі на цьому уроці', forLesson.map(function (id) { return S.get('materials', id); }).filter(Boolean));
+    var byTopic = {};
+    all.forEach(function (m) {
+      if (forLesson.indexOf(m.id) >= 0) return;
+      var t = m.topic || 'Загальне';
+      (byTopic[t] = byTopic[t] || []).push(m);
+    });
+    Object.keys(byTopic).sort(function (a, b) { return a.localeCompare(b, 'uk'); })
+      .forEach(function (t) { group(t, byTopic[t]); });
+
+    var body = all.length
+      ? '<input class="input bm-search" type="search" data-bm-q placeholder="Пошук: назва, тема, файл" aria-label="Пошук матеріалів">' +
+        '<div class="bm-list">' +
+        groups.map(function (g) {
+          return '<div class="bm-group"><div class="bm-group__h">' + U.esc(g.title) + '</div>' +
+            g.items.map(materialRow).join('') + '</div>';
+        }).join('') +
+        '<div class="field__hint" data-bm-none hidden>Нічого не знайдено.</div>' +
+        '</div>'
+      : '<div class="field__hint">Бібліотека матеріалів порожня. Файли й посилання додаються в розділі «Матеріали».</div>';
+
+    C.modal({
+      title: 'Матеріали',
+      sub: 'уся бібліотека · файли відкриваються в новій вкладці',
+      wide: true,
+      body: body,
+      buttons: [{ label: 'Закрити', kind: 'btn--ghost', act: 'cancel' }],
+      onMount: function (root) {
+        root.addEventListener('click', function (e) {
+          var b = e.target.closest('[data-mf]');
+          if (b) openMatFile(findMatFile(b.getAttribute('data-mf')));
+        });
+        var q = root.querySelector('[data-bm-q]');
+        if (!q) return;
+        q.addEventListener('input', function () {
+          var words = q.value.toLowerCase().split(/\s+/).filter(Boolean);
+          var shown = 0;
+          U.$$('.bm-group', root).forEach(function (g) {
+            var n = 0;
+            U.$$('.bm-item', g).forEach(function (it) {
+              var hay = it.getAttribute('data-find') || '';
+              var ok = words.every(function (w) { return hay.indexOf(w) >= 0; });
+              it.style.display = ok ? '' : 'none';
+              if (ok) n++;
+            });
+            g.style.display = n ? '' : 'none';
+            shown += n;
+          });
+          root.querySelector('[data-bm-none]').hidden = shown > 0;
+        });
+      }
     });
   }
 

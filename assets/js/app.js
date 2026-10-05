@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v153';
+  App.BUILD = 'v155';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -1461,6 +1461,16 @@
     try { if (window.RecSync && RecSync.flush) jobs.push(RecSync.flush()); } catch (e) {}
     try { if (window.BoardSync && BoardSync.flush) jobs.push(BoardSync.flush()); } catch (e) {}
     if (reloadHard) {
+      /* Запамʼятати, через яку розбіжність перезавантажуємось: якщо й після
+         цього вона лишиться, справа не в кеші, і по колу не підемо (див.
+         checkVersion у cloud.js). */
+      if (staleInfo) {
+        try {
+          localStorage.setItem('mathhub.hardReload', JSON.stringify({
+            here: staleInfo.here, there: staleInfo.there, at: Date.now()
+          }));
+        } catch (e) {}
+      }
       // код на сервері новіший за кеш — кеш прибираємо, інакше знову відкрився б старий
       if (window.caches && caches.keys) {
         jobs.push(caches.keys().then(function (ks) {
@@ -1491,7 +1501,11 @@
   };
 
   // старі виклики лишаються сумісними: замість смуги — тихе оновлення
-  App.staleCodeBar = function () { App.autoReload(true); };
+  var staleInfo = null;
+  App.staleCodeBar = function (here, there) {
+    if (here != null && there != null) staleInfo = { here: here, there: there };
+    App.autoReload(true);
+  };
 
   setInterval(maybeReload, 5000);
   document.addEventListener('visibilitychange', maybeReload);

@@ -176,6 +176,9 @@
     return blockedDetail;
   };
 
+  // {here, there, at}: перезавантаження повз кеш через розбіжність версій (пише app.js)
+  var HARD_RELOAD = 'mathhub.hardReload';
+
   function versionNumber(v) {
     var m = String(v || '').match(/v(\d+)/);
     return m ? Number(m[1]) : null;
@@ -189,7 +192,23 @@
       .then(function (r) { return r.ok ? r.text() : ''; })
       .then(function (t) {
         var there = versionNumber((t.match(/vektor-v\d+/) || [])[0]);
-        if (there == null || there <= here) return;
+        if (there == null || there <= here) {
+          try { localStorage.removeItem(HARD_RELOAD); } catch (e) {}
+          return;
+        }
+
+        /* Повз кеш уже перезавантажувались саме через цю розбіжність — і
+           вона лишилась. Отже, справа не в кеші: сервер сам віддає код,
+           старший за номер у sw.js (версію виклали не всю). Ще одне
+           перезавантаження нічого не змінить, а по колу воно робило
+           кабінет непридатним: сторінка оновлювалась раз на хвилину, а
+           відправка на сервер стояла. Тоді працюємо на тому, що є. */
+        var last = null;
+        try { last = JSON.parse(localStorage.getItem(HARD_RELOAD) || 'null'); } catch (e) { last = null; }
+        if (last && last.here === here && last.there === there && Date.now() - (last.at || 0) < 6 * 3600000) {
+          console.warn('На сервері sw.js — v' + there + ', а код — v' + here + '. Перезавантаження не допоможе, працюю далі.');
+          return;
+        }
 
         blocked = true;
         blockedDetail = 'ця вкладка працює на v' + here + ', на сервері вже v' + there;

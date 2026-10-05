@@ -62,3 +62,7 @@ write('index.html', html);
 write('share.html', share);
 
 console.log('v' + from + ' → v' + to + ' (index.html: ' + n + ' адрес)');
+/* Усі чотири мусять поїхати разом. v154 поїхала без app.js — і кожна
+   вкладка перезавантажувалась по колу (див. tools/check-live.js). */
+console.log('У коміт — усі чотири: assets/js/app.js sw.js index.html share.html');
+console.log('Після викладки: node tools/check-live.js ' + to);

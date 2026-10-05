@@ -50,8 +50,8 @@ var tries = 0;
   once().then(function (v) {
     var line = 'sw.js v' + v.sw + ' · index.html v' + v.html + ' · App.BUILD v' + v.build + ' · share.html v' + v.engine;
     if (same(v) && (!want || v.sw === want)) { console.log('Гаразд: ' + line); process.exit(0); }
-    // сайт ще віддає попередню версію цілком — розгортання ще йде, чекаємо
-    if (want && tries < 30 && (v.sw < want || (v.sw !== want && same(v)))) {
+    // розгортання ще йде (сайт віддає частини різних версій) — чекаємо до 5 хв
+    if (want && tries < 30) {
       tries++;
       return setTimeout(loop, 10000);
     }

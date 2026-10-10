@@ -92,6 +92,8 @@
     var to = U.addDays(U.today(), AHEAD_DAYS);
     var list = (S.db().lessons || []).filter(function (l) {
       if (l.status === 'cancelled' || l.status === 'moved') return false;
+      // учень в архіві: його заплановане кабінет не показує — і календар теж
+      if (S.isArchived && S.isArchived(l.studentId) && l.status !== 'done' && l.status !== 'missed') return false;
       var d = new Date(l.date);
       return !isNaN(d.getTime()) && d >= from && d <= to;
     });
@@ -127,11 +129,13 @@
       return res.text();
     }).then(function (t) {
       var j;
-      try { j = JSON.parse(t); } catch (e) { throw new Error('Скрипт відповів не тим — перевірте адресу (має закінчуватись на /exec)'); }
+      /* Не JSON — це сторінка Google, а не наш скрипт: адреса не та, або
+         розгорнуто без доступу «усі», або доступ до календаря не дозволено. */
+      try { j = JSON.parse(t); } catch (e) { throw new Error('Скрипт відповів не тим — перевірте адресу (/exec) і що доступ розгортання — «усі»'); }
       if (!j || !j.ok) {
         throw new Error(j && j.error === 'secret'
           ? 'Скрипт не впізнав секрет — скопіюйте код ще раз і перерозгорніть'
-          : (j && j.error) || 'Скрипт повернув помилку');
+          : 'Google: ' + ((j && j.error) || 'невідома помилка'));
       }
       return j;
     });
@@ -143,9 +147,11 @@
   };
 
   var sending = null, again = false, retry = null;
+  var backoff = 30000;          // Google просить почекати — чекаємо щоразу вдвічі довше, до 10 хв
 
-  /** Привести календар у Google до розкладу. force — навіть якщо нічого не змінилось. */
-  G.push = function (force) {
+  /** Привести календар у Google до розкладу. force — навіть якщо нічого не змінилось;
+      check — ще й перевірити, що незмінені події справді є (їх могли видалити в Google). */
+  G.push = function (force, check) {
     var c = conf();
     if (!c || !c.url || !c.secret) return Promise.resolve(null);
     if (sending) { again = true; return sending; }
@@ -156,17 +162,21 @@
     if (!force && sig === last) return Promise.resolve({ ok: true, same: true });
 
     if (retry) { clearTimeout(retry); retry = null; }
-    sending = call(c.url, { secret: c.secret, action: 'sync', from: b.from, to: b.to, events: b.events })
+    sending = call(c.url, { secret: c.secret, action: 'sync', from: b.from, to: b.to, events: b.events, check: !!check })
       .then(function (j) {
-        state = { at: Date.now(), ok: true, err: '', n: b.events.length,
-                  created: j.created || 0, updated: j.updated || 0, deleted: j.deleted || 0 };
+        // зроблено частину, бо Google попросив почекати, — це не «працює», а «чекаю»
+        state = { at: Date.now(), ok: !j.note, err: j.note ? 'Google просить почекати (' + j.note + ')' : '',
+                  n: b.events.length, created: j.created || 0, updated: j.updated || 0, deleted: j.deleted || 0 };
         if (j.more) {
           /* Скрипт зробив частину (Google обмежує, скільки подій можна
              створити поспіль) — наступну порцію шлемо одразу, а якщо Google
              попросив почекати, то за пів хвилини. Відбиток «уже надіслано»
              не ставимо, поки все не ляже. */
-          retry = setTimeout(function () { retry = null; G.push(true); }, j.note ? 30000 : 1500);
+          var wait = j.note ? backoff : 1500;
+          if (j.note) backoff = Math.min(backoff * 2, 600000);
+          retry = setTimeout(function () { retry = null; G.push(true, check); }, wait);
         } else {
+          backoff = 30000;
           try { localStorage.setItem(SIG, sig); } catch (e) {}
         }
         return j;
@@ -195,7 +205,7 @@
       t.updatedAt = new Date().toISOString();
       S.save();
       try { localStorage.removeItem(SIG); } catch (e) {}
-      return G.push(true);
+      return G.push(true, true);
     });
   };
 
@@ -232,114 +242,142 @@
   /* ---------- Скрипт для Google ----------
      Те, що репетитор вставляє в script.google.com. Секрет уже вписаний. */
   G.scriptCode = function () {
-    var secret = G.secret();
+    /* Текст скрипта для script.google.com. Секрет вписується тут. */
     return [
-      '/* Вектор → Google Календар.',
-      '   Вставте цей код у новий проєкт на script.google.com повністю,',
-      '   нічого не змінюючи, і розгорніть як вебзастосунок',
-      '   (виконувати від імені: я; доступ: усі). Секрет нижче знає лише ваш кабінет. */',
-      '',
-      "var SECRET = '" + secret + "';",
+      "/* Вектор → Google Календар.",
+      "   Вставте цей код у новий проєкт на script.google.com повністю,",
+      "   нічого не змінюючи, і розгорніть як вебзастосунок",
+      "   (виконувати від імені: я; доступ: усі). Секрет нижче знає лише ваш кабінет. */",
+      "",
+      "var SECRET = '@@SECRET@@';",
       "var CAL_NAME = 'Уроки · Вектор';",
-      '',
-      'function doGet() {',
+      "var LIMIT = 60;            // змін за один запит: сотні подій поспіль Google не любить",
+      "var KEEP_DAYS = 60;        // записи про давні уроки (до вікна) — забуваємо, події лишаються",
+      "",
+      "function doGet() {",
       "  return out({ ok: true, hint: 'Вектор: звʼязок із календарем працює' });",
-      '}',
-      '',
-      'function doPost(e) {',
-      '  var req;',
-      '  try { req = JSON.parse(e.postData.contents); } catch (x) { return out({ ok: false, error: "bad-json" }); }',
-      '  if (!req || req.secret !== SECRET) return out({ ok: false, error: "secret" });',
-      '  if (req.action === "ping") return out({ ok: true, calendar: cal().getName() });',
-      '  var lock = LockService.getScriptLock();',
-      '  lock.waitLock(60000);',
-      '  try { return out(sync(req)); } finally { lock.releaseLock(); }',
-      '}',
-      '',
-      '// окремий календар, щоб нічого свого в основному не чіпати',
-      'function cal() {',
-      '  var props = PropertiesService.getScriptProperties();',
-      '  var id = props.getProperty("calId");',
-      '  var c = id ? CalendarApp.getCalendarById(id) : null;',
-      '  if (!c) {',
-      '    c = CalendarApp.createCalendar(CAL_NAME, { timeZone: "Europe/Kyiv" });',
-      '    props.setProperty("calId", c.getId());',
-      '  }',
-      '  return c;',
-      '}',
-      '',
-      '/* Привести календар до розкладу. Для кожного уроку памʼятаємо подію й',
-      '   відбиток її вмісту: незмінене не чіпаємо. Прибираємо лише те, що в',
-      '   межах надісланого вікна: давніша історія лишається. */',
-      'function sync(req) {',
-      '  var c = cal();',
-      '  var props = PropertiesService.getScriptProperties();',
-      '  var all = props.getProperties();',
-      '  var from = new Date(req.from).getTime(), to = new Date(req.to).getTime();',
-      '  var want = {};',
-      '  (req.events || []).forEach(function (w) { want[w.id] = w; });',
-      '  var created = 0, updated = 0, deleted = 0;',
-      '',
-      '  Object.keys(all).forEach(function (k) {',
-      '    if (k.indexOf("e:") !== 0) return;',
-      '    var id = k.slice(2);',
-      '    if (want[id]) return;',
-      '    var rec = all[k].split("|");',
-      '    var at = Number(rec[2]);',
-      '    if (at && (at < from || at > to)) return;',
-      '    var ev = find(c, rec[0]);',
-      '    if (ev) ev.deleteEvent();',
-      '    props.deleteProperty(k);',
-      '    deleted++;',
-      '  });',
-      '',
-      '  /* Не більше LIMIT змін за раз: Google не любить сотні подій поспіль.',
-      '     Решту кабінет надішле одразу наступним запитом (more). Зроблене',
-      '     записується одразу, тож обрив посередині нічого не губить. */',
-      '  var LIMIT = 60, more = false, err = "";',
-      '  var ids = Object.keys(want);',
-      '  for (var i = 0; i < ids.length; i++) {',
-      '    var id = ids[i], w = want[id], k = "e:" + id, h = digest(w);',
-      '    var rec = all[k] ? all[k].split("|") : null;',
-      '    if (rec && rec[1] === h) continue;',
-      '    if (created + updated >= LIMIT) { more = true; break; }',
-      '    var s = new Date(w.start), en = new Date(w.end);',
-      '    try {',
-      '      var ev = rec ? find(c, rec[0]) : null;',
-      '      if (ev) {',
-      '        ev.setTime(s, en);',
-      '        ev.setTitle(w.title);',
-      '        ev.setDescription(w.desc || "");',
-      '        ev.setLocation(w.location || "");',
-      '        updated++;',
-      '      } else {',
-      '        ev = c.createEvent(w.title, s, en, { description: w.desc || "", location: w.location || "" });',
-      '        created++;',
-      '      }',
-      '      props.setProperty(k, ev.getId() + "|" + h + "|" + s.getTime());',
-      '    } catch (x) {',
-      '      // Google просить почекати — зупиняємось, решта наступним заходом',
-      '      more = true; err = String(x && x.message || x); break;',
-      '    }',
-      '  }',
-      '',
-      '  return { ok: true, created: created, updated: updated, deleted: deleted, more: more, note: err };',
-      '}',
-      '',
-      'function find(c, id) {',
-      '  try { return id ? c.getEventById(id) : null; } catch (x) { return null; }',
-      '}',
-      '',
-      'function digest(w) {',
-      '  var s = JSON.stringify([w.start, w.end, w.title, w.desc || "", w.location || ""]);',
-      '  return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, s, Utilities.Charset.UTF_8));',
-      '}',
-      '',
-      'function out(o) {',
-      '  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);',
-      '}',
-      ''
-    ].join('\n');
+      "}",
+      "",
+      "/* Будь-яка помилка — відповіддю, а не сторінкою помилки: інакше кабінет",
+      "   не відрізнив би «Google просить почекати» від неправильної адреси. */",
+      "function doPost(e) {",
+      "  try {",
+      "    var req = JSON.parse(e.postData.contents);",
+      "    if (!req || req.secret !== SECRET) return out({ ok: false, error: 'secret' });",
+      "    if (req.action === 'ping') return out({ ok: true, calendar: cal().getName() });",
+      "    var lock = LockService.getScriptLock();",
+      "    lock.waitLock(60000);",
+      "    try { return out(sync(req)); } finally { lock.releaseLock(); }",
+      "  } catch (x) {",
+      "    return out({ ok: false, error: String((x && x.message) || x) });",
+      "  }",
+      "}",
+      "",
+      "/* Окремий календар, щоб нічого свого в основному не чіпати. Якщо його",
+      "   видалили в Google, створюємо наново — і забуваємо всі записи про події:",
+      "   їх більше немає, і все має лягти знову. */",
+      "function cal() {",
+      "  var props = PropertiesService.getScriptProperties();",
+      "  var id = props.getProperty('calId');",
+      "  var c = id ? CalendarApp.getCalendarById(id) : null;",
+      "  if (c) return c;",
+      "  try { c = CalendarApp.createCalendar(CAL_NAME, { timeZone: 'Europe/Kyiv' }); }",
+      "  catch (x) { c = CalendarApp.createCalendar(CAL_NAME); }",
+      "  var all = props.getProperties();",
+      "  Object.keys(all).forEach(function (k) { if (k.indexOf('e:') === 0) props.deleteProperty(k); });",
+      "  props.setProperty('calId', c.getId());",
+      "  return c;",
+      "}",
+      "",
+      "/* Привести календар до розкладу. Для кожного уроку памʼятаємо подію й",
+      "   відбиток її вмісту: незмінене не чіпаємо. Прибираємо лише те, що в",
+      "   межах надісланого вікна: давніша історія лишається.",
+      "   check — ще й перевірити, чи незмінені події справді є (їх могли",
+      "   видалити руками), і повернути зниклі. */",
+      "function sync(req) {",
+      "  var c = cal();",
+      "  var props = PropertiesService.getScriptProperties();",
+      "  var all = props.getProperties();",
+      "  var from = new Date(req.from).getTime(), to = new Date(req.to).getTime();",
+      "  var forget = from - KEEP_DAYS * 86400000;",
+      "  var want = {};",
+      "  (req.events || []).forEach(function (w) { want[w.id] = w; });",
+      "  var created = 0, updated = 0, deleted = 0, more = false, note = '';",
+      "  function busy() { return created + updated + deleted >= LIMIT; }",
+      "",
+      "  try {",
+      "    var keys = Object.keys(all);",
+      "    for (var i = 0; i < keys.length; i++) {",
+      "      var k = keys[i];",
+      "      if (k.indexOf('e:') !== 0) continue;",
+      "      var id = k.slice(2);",
+      "      if (want[id]) continue;",
+      "      var rec = all[k].split('|');",
+      "      var at = Number(rec[2]);",
+      "      if (at && at < forget) { props.deleteProperty(k); continue; }",
+      "      if (at && (at < from || at > to)) continue;",
+      "      if (busy()) { more = true; break; }",
+      "      var old = find(c, rec[0]);",
+      "      if (old) old.deleteEvent();",
+      "      props.deleteProperty(k);",
+      "      deleted++;",
+      "    }",
+      "",
+      "    var ids = more ? [] : Object.keys(want);",
+      "    for (var j = 0; j < ids.length; j++) {",
+      "      var wid = ids[j], w = want[wid], wk = 'e:' + wid, h = digest(w);",
+      "      var r = all[wk] ? all[wk].split('|') : null;",
+      "      var ev = null;",
+      "      if (r && r[1] === h) {",
+      "        if (!req.check) continue;",
+      "        ev = find(c, r[0]);",
+      "        if (ev) continue;                 // на місці — як і має бути",
+      "        r = null;                         // зникла — створимо знову",
+      "      }",
+      "      if (busy()) { more = true; break; }",
+      "      var s = new Date(w.start), en = new Date(w.end);",
+      "      ev = r ? find(c, r[0]) : null;",
+      "      if (ev) {",
+      "        ev.setTime(s, en);",
+      "        ev.setTitle(w.title);",
+      "        ev.setDescription(w.desc || '');",
+      "        ev.setLocation(w.location || '');",
+      "        updated++;",
+      "      } else {",
+      "        ev = c.createEvent(w.title, s, en, { description: w.desc || '', location: w.location || '' });",
+      "        created++;",
+      "      }",
+      "      /* Подію й запис про неї — разом: якщо запис не ліг, щойно створену",
+      "         подію прибираємо, інакше наступний захід створив би її вдруге. */",
+      "      try {",
+      "        props.setProperty(wk, ev.getId() + '|' + h + '|' + s.getTime());",
+      "      } catch (x) {",
+      "        if (!r) { try { ev.deleteEvent(); created--; } catch (y) {} }",
+      "        throw x;",
+      "      }",
+      "    }",
+      "  } catch (x) {",
+      "    // Google просить почекати (чи інша тимчасова відмова) — зроблене лишається, решта наступним заходом",
+      "    more = true;",
+      "    note = String((x && x.message) || x);",
+      "  }",
+      "",
+      "  return { ok: true, created: created, updated: updated, deleted: deleted, more: more, note: note };",
+      "}",
+      "",
+      "function find(c, id) {",
+      "  try { return id ? c.getEventById(id) : null; } catch (x) { return null; }",
+      "}",
+      "",
+      "function digest(w) {",
+      "  var s = JSON.stringify([w.start, w.end, w.title, w.desc || '', w.location || '']);",
+      "  return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, s, Utilities.Charset.UTF_8));",
+      "}",
+      "",
+      "function out(o) {",
+      "  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);",
+      "}"
+    ].join('\n').replace('@@SECRET@@', G.secret()) + '\n';
   };
 
   window.GCal = G;

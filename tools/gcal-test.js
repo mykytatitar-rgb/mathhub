@@ -260,6 +260,97 @@ scenario('Скрипт не чіпає незмінене й не прибира
   same(events(g).length, 2, 'обидві події на місці');
 });
 
+function drainAll(c, first) {
+  var n = 0;
+  function step(r) { return (r && r.more && n++ < 15) ? c.GCal.push(true).then(step) : r; }
+  return Promise.resolve(first).then(step);
+}
+
+scenario('Календар видалили в Google — після «Оновити зараз» усе на місці знову', function () {
+  var c = cabinet();
+  var g = appsScript();
+  wire(c, deploy(c.GCal.scriptCode(), g));
+  var total = 0;
+  return drainAll(c, c.GCal.connect(URL)).then(function () {
+    total = events(g).length;
+    ok(total > 0, 'спершу події є (' + total + ')');
+    Object.keys(g.cals).forEach(function (id) { delete g.cals[id]; });     // календар прибрали в Google
+    return drainAll(c, c.GCal.push(true, true));
+  }).then(function () {
+    same(events(g).length, total, 'новий календар — з усіма подіями');
+    // одну подію видалили руками
+    var cal0 = g.cals[Object.keys(g.cals)[0]];
+    delete cal0.events[Object.keys(cal0.events)[0]];
+    return c.GCal.push(true).then(function () {
+      same(events(g).length, total - 1, 'звичайна відправка зниклу не бачить (і не мусить — це дорого)');
+      return drainAll(c, c.GCal.push(true, true));
+    });
+  }).then(function () {
+    same(events(g).length, total, '«Оновити зараз» повертає видалену руками');
+  });
+});
+
+scenario('Збій запису про подію не плодить копій', function () {
+  var c = cabinet(), S = c.S;
+  var g = appsScript();
+  var script = deploy(c.GCal.scriptCode(), g);
+  wire(c, script);
+  var props = g.PropertiesService.getScriptProperties();
+  var real = g.PropertiesService.getScriptProperties;
+  var failOnce = true;
+  g.PropertiesService.getScriptProperties = function () {
+    var p = real();
+    var set = p.setProperty;
+    p.setProperty = function (k, v) {
+      if (failOnce && k.indexOf('e:') === 0) { failOnce = false; throw new Error('Service invoked too many times'); }
+      return set(k, v);
+    };
+    return p;
+  };
+  return drainAll(c, c.GCal.connect(URL)).then(function () {
+    var titles = events(g).map(function (e) { return e.title + '@' + e.start.getTime(); });
+    var dup = titles.filter(function (t, i) { return titles.indexOf(t) !== i; });
+    same(dup.length, 0, 'жодної події двічі');
+    same(events(g).length, c.GCal.build().events.length, 'і всі на місці');
+    void props;
+  });
+});
+
+scenario('Урок, створений руками на час слота й перенесений, не лишає фантома на старому місці', function () {
+  var c = cabinet(), S = c.S;
+  var iso = isoIn(3, '16:40');
+  var st = S.add('students', { name: 'Ручний', grade: '9 клас', price: 500, currency: 'UAH', schedule: [] });
+  var l = S.add('lessons', { studentId: st.id, date: iso, status: 'planned' });     // без fromTemplate
+  S.update('students', st.id, { schedule: [{ day: weekday(iso), time: '16:40' }] });
+  S.db().fillUntil = undefined;
+  S.autoFillTemplates();                                                            // межа заповнення
+  S.update('lessons', l.id, { date: isoIn(4, '17:00') });                           // перетягнули
+  var at = c.GCal.build().events.filter(function (e) { return e.start === new Date(iso).toISOString(); });
+  same(at.length, 0, 'на старому місці в календарі нічого');
+});
+
+scenario('Заплановане архівного учня в календар не йде', function () {
+  var c = cabinet(), S = c.S;
+  var st = S.add('students', { name: 'Архівний', grade: '9 клас', price: 500, currency: 'UAH', schedule: [] });
+  var l = S.add('lessons', { studentId: st.id, date: isoIn(5, '10:00'), status: 'planned', topic: 'Тема' });
+  S.update('students', st.id, { archived: true });
+  ok(c.GCal.build().events.every(function (e) { return e.id !== l.id; }), 'урок архівного — не в календарі');
+});
+
+scenario('Помилка Google — зрозумілим текстом, а не «перевірте адресу»', function () {
+  var c = cabinet();
+  var g = appsScript();
+  g.LockService = { getScriptLock: function () { return { waitLock: function () { throw new Error('Lock timeout'); }, releaseLock: function () {} }; } };
+  wire(c, deploy(c.GCal.scriptCode(), g));
+  return c.GCal.ping(URL).then(function () {
+    var t = c.S.db().tutor; t.gcal = { secret: c.GCal.secret(), url: URL };
+    return c.GCal.push(true);
+  }).then(function (r) {
+    same(r, null, 'відправка не вдалась');
+    ok(/Google: .*Lock timeout/.test(c.GCal.state().err), 'причина — як є: ' + c.GCal.state().err);
+  });
+});
+
 /* ============================================================ */
 
 queue.reduce(function (chain, s) {

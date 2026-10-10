@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v159';
+  App.BUILD = 'v160';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -1085,8 +1085,9 @@
     'gcal-now': function (_a, el) {
       if (!window.GCal) return;
       if (el) el.disabled = true;
-      GCal.push(true).then(function (r) {
-        if (r) U.toast('Google Календар оновлено', 'ok');
+      // і перевірити, чи події справді на місці: їх могли видалити в самому Google
+      GCal.push(true, true).then(function (r) {
+        if (r && GCal.state().ok) U.toast('Google Календар оновлено', 'ok');
         else U.toast('Не вийшло: ' + (GCal.state().err || 'немає звʼязку'), 'err');
         App.render();
       });

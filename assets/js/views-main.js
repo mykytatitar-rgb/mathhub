@@ -1636,7 +1636,7 @@
         ? '<div class="guard guard--off"><span class="guard__dot"></span><span>Не оновився: ' + U.esc(st.err) +
           '. Спробую ще раз за хвилину.</span></div>'
         : '<div class="guard guard--on"><span class="guard__dot"></span><span>Працює. ' +
-          (st.at ? 'Востаннє оновлено о ' + U.fmtTime(new Date(st.at).toISOString()) + ' · ' +
+          (st.at ? 'Востаннє оновлено о ' + U.fmtTime(new Date(st.at)) + ' · ' +
             U.pl(st.n, 'урок', 'уроки', 'уроків') + ' у календарі'
                  : 'Зміни розкладу потрапляють у Google за кілька секунд') + '.</span></div>';
       body = line +

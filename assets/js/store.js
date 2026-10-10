@@ -1669,6 +1669,16 @@
   S.slotOccurrences = function (from, to) {
     var out = [];
     var now = new Date();
+    /* Лише за межею заповнення. До неї розклад уже заповнено уроками, і
+       кабінет — єдина правда: урок, створений руками на час слота, могли
+       перенести чи видалити, а позначки «місце звільнено» в нього немає
+       (вона лише для уроків шаблону). Без цієї межі на старому місці в
+       Google лишався фантом. */
+    var mark = db.fillUntil || (db.tutor && db.tutor.filledUntil);
+    if (mark) {
+      var after = U.addDays(U.toDate(mark), 1);
+      if (!isNaN(after.getTime()) && after > from) from = after;
+    }
     S.students().forEach(function (st) {
       if (!st.schedule || !st.schedule.length) return;
       var gone = {};

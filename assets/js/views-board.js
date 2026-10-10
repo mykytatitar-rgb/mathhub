@@ -5119,7 +5119,13 @@
         w.document.body.textContent = 'Відкриваю «' + (f.name || 'файл') + '»…';
       } catch (e) {}
     }
-    var signed = (w && window.Cloud && Cloud.signedFileUrl) ? Cloud.signedFileUrl(f.key) : Promise.resolve(null);
+    /* Сховище віддає файл із тим типом, з яким його вивантажили. Лише коли
+       цей тип браузер покаже сам; текст — завжди з копії тут (там ми
+       задаємо кодування, інакше українське бувало кракозябрами). */
+    var srvType = String(f.type || '').toLowerCase();
+    var viaServer = w && kind !== 'text' &&
+      /^(application\/pdf|image\/(png|jpe?g|gif|webp|bmp|avif)|video\/|audio\/)/.test(srvType);
+    var signed = (viaServer && window.Cloud && Cloud.signedFileUrl) ? Cloud.signedFileUrl(f.key) : Promise.resolve(null);
     signed.then(function (url) {
       if (url && w && !w.closed) { w.location.href = url; return; }
       return window.ImgStore.get(f.key).then(function (blob) {

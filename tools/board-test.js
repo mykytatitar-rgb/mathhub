@@ -315,5 +315,85 @@ scenario('Порожній крок не зʼїдає «крок назад»', 
   same(b.items().length, 0, 'перший же крок назад прибрав штрих');
 });
 
+/* ---------- Перо ---------- */
+
+function penEv(id, x, y, kind, between) {
+  var e = ev(x, y, { pointerId: id, pointerType: kind || 'pen' });
+  if (between) {
+    e.getCoalescedEvents = function () {
+      return between.map(function (q) { return { clientX: q[0], clientY: q[1] }; }).concat([{ clientX: x, clientY: y }]);
+    };
+  }
+  return e;
+}
+
+scenario('Перо: беруться всі проміжні точки, а не одна на кадр', function () {
+  var b = engine().b;
+  b.setTool('pen');
+  b._pointerDown(penEv(70, 0, 0));
+  b._pointerMove(penEv(70, 40, 10, 'pen', [[10, 0], [20, 5], [30, 10]]));
+  b._pointerUp(penEv(70, 40, 10));
+  same(b.items().length, 1, 'штрих на дошці');
+  same(b.items()[0].d.length / 2, 5, 'усі 5 точок: перша й чотири з одного кадру');
+});
+
+scenario('Перо: штрих отримує крок назад лише коли перо піднялось', function () {
+  var b = engine().b;
+  stroke(b, 100, 100);
+  var steps = b.history.length;
+  b.setTool('pen');
+  b._pointerDown(penEv(71, 10, 400));
+  same(b.history.length, steps, 'перо торкнулось — слайд не переписується в історію');
+  b._pointerMove(penEv(71, 60, 420));
+  b._pointerUp(penEv(71, 60, 420));
+  same(b.history.length, steps + 1, 'перо піднялось — рівно один новий крок');
+  b.undo();
+  same(b.items().length, 1, 'крок назад прибрав саме цей штрих');
+});
+
+scenario('Долоня поруч зі стилусом не обриває штрих і не масштабує', function () {
+  var b = engine().b;
+  b.setTool('pen');
+  var scale0 = b.scale;
+  b._pointerDown(penEv(80, 100, 100));
+  b._pointerDown(penEv(81, 400, 500, 'touch'));            // долоня лягла на екран
+  b._pointerMove(penEv(81, 420, 520, 'touch'));
+  b._pointerMove(penEv(80, 160, 120));
+  b._pointerUp(penEv(81, 420, 520, 'touch'));              // долоню прибрали
+  b._pointerMove(penEv(80, 200, 100));
+  b._pointerUp(penEv(80, 200, 100));
+  same(b.items().length, 1, 'штрих дописано до кінця');
+  same(b.items()[0].d.length / 2, 3, 'усі три точки пера, жодної від долоні');
+  same(b.scale, scale0, 'масштаб не змінився');
+});
+
+scenario('Долоня, що лягла раніше за перо, — не штрих і не масштаб', function () {
+  var b = engine().b;
+  b.setTool('pen');
+  b._pointerDown(penEv(90, 400, 500, 'touch'));            // спершу долоня
+  b._pointerMove(penEv(90, 410, 505, 'touch'));
+  b._pointerDown(penEv(91, 100, 100));                     // потім перо
+  b._pointerMove(penEv(91, 150, 110));
+  b._pointerMove(penEv(90, 430, 520, 'touch'));            // долоня ворухнулась
+  b._pointerUp(penEv(91, 150, 110));
+  b._pointerUp(penEv(90, 430, 520, 'touch'));
+  same(b.items().length, 1, 'на дошці лише штрих пера');
+  same(b.items()[0].d[0], 100, 'і почався він там, де торкнулось перо');
+});
+
+scenario('Після стилуса один палець рухає полотно, а не пише', function () {
+  var b = engine().b;
+  stroke(b, 100, 100);
+  b.setTool('pen');
+  b._pointerDown(penEv(95, 10, 10));
+  b._pointerUp(penEv(95, 10, 10));                         // стилус на цьому пристрої вже був
+  var n = b.items().length, cx = b.cam.x;
+  b._pointerDown(penEv(96, 300, 300, 'touch'));
+  b._pointerMove(penEv(96, 250, 300, 'touch'));
+  b._pointerUp(penEv(96, 250, 300, 'touch'));
+  same(b.items().length, n, 'пальцем нічого не написано');
+  same(b.cam.x, cx + 50, 'полотно зсунулось за пальцем');
+});
+
 console.log('\n' + passes + ' пройдено, ' + fails + ' не пройдено');
 process.exit(fails ? 1 : 0);

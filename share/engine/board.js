@@ -2348,7 +2348,11 @@
 
     this._raf = null;
     this._pointers = {};
+    this._kinds = {};          // pointerId → 'pen' | 'touch' | 'mouse'
+    this._penSeen = false;     // на цьому пристрої вже писали стилусом
     this._pinch = null;
+    this._ink = null;          // шар слайда для письма пером (див. renderInk)
+    this._inkOk = false;
 
     this._onDown = function (e) { self._pointerDown(e); };
     this._onMove = function (e) { self._pointerMove(e); };
@@ -2377,6 +2381,7 @@
     this.canvas.removeEventListener('contextmenu', this._onCtx);
     window.removeEventListener('resize', this._onResize);
     if (this._raf) cancelAnimationFrame(this._raf);
+    this._ink = null;                    // шар — це кілька мегабайтів памʼяті
   };
 
   /* ---------- Координати ---------- */
@@ -2387,6 +2392,12 @@
 
   Board.prototype.toScreen = function (wx, wy) {
     return { x: (wx - this.cam.x) * this.scale, y: (wy - this.cam.y) * this.scale };
+  };
+
+  /** Перо зараз торкається екрана. */
+  Board.prototype._penDown = function () {
+    for (var id in this._pointers) if (this._kinds[id] === 'pen') return true;
+    return false;
   };
 
   Board.prototype.eventPos = function (e) {
@@ -2542,15 +2553,18 @@
     /* Попередня дія на цю мить закінчилась — її «одразу після» саме зараз.
        Досі вона лишалась незакритою, і «крок назад» до неї брав «зараз»
        разом із тим, що тим часом написав учень, — і стирав його. */
-    this._closeTop();
-    this.history.push({ before: JSON.stringify(this.slide.items), after: null, ext: this._ext || 0 });
+    // слайд у тексті вже порахований, щоб закрити попередній крок, — той самий і є «до»
+    var now = this._closeTop();
+    this.history.push({ before: now != null ? now : JSON.stringify(this.slide.items), after: null, ext: this._ext || 0 });
     if (this.history.length > 40) this.history.shift();
     this.future.length = 0;
   };
 
-  /** Рука на дошці: жест почався, а його результат ще не лягав на слайд. */
+  /** Рука на дошці: жест почався, а його результат ще не лягав на слайд.
+      Штрих пера сюди не входить: його крок записується, лише коли перо
+      піднялось (див. _pointerUp), тож перераховувати посеред нього нічого. */
   Board.prototype._gesture = function () {
-    return !!(this.draft || this._drag || this._resize || this._gscale || this._erasing);
+    return !!((this.draft && this.draft.t !== 'p') || this._drag || this._resize || this._gscale || this._erasing);
   };
 
   /**
@@ -2609,19 +2623,22 @@
      — теперішній. Крок, після якого нічого не змінилося (тап по фігурі без
      руху, гумка повз, другий палець замість штриха), прибираємо: інакше
      «крок назад» витрачався б на нього, а потім хапав би чуже. */
+  /* Повертає слайд у тексті, якщо довелося його порахувати (snapshot бере
+     його ж за «до» наступного кроку), інакше null. */
   Board.prototype._closeTop = function () {
     var top = this.history[this.history.length - 1];
-    if (!top || typeof top !== 'object' || !this.slide) return;
-    if (top.after != null && !top.open) return;
-    /* Жест ще триває (штрих, перетягування, гумка): його крок не закривати й
-       не викидати — інакше чуже, що прийшло посеред штриха, забирало б у
-       штриха «крок назад». Позначаємо: наприкінці жесту «до» перерахується
+    if (!top || typeof top !== 'object' || !this.slide) return null;
+    if (top.after != null && !top.open) return null;
+    /* Жест ще триває (перетягування, гумка, фігура): його крок не закривати
+       й не викидати — інакше чуже, що прийшло посеред жесту, забирало б у
+       нього «крок назад». Позначаємо: наприкінці жесту «до» перерахується
        з урахуванням чужого (див. _rebaseTop). */
-    if (this._gesture()) { top.rebase = true; return; }
+    if (this._gesture()) { top.rebase = true; return null; }
     var now = JSON.stringify(this.slide.items);
-    if (top.before === now) { this.history.pop(); return; }
+    if (top.before === now) { this.history.pop(); return now; }
     top.after = now;
     top.open = false;
+    return now;
   };
 
   /* Перенести на items зміну, якою стан from став станом to. Обʼєкти, яких
@@ -3195,8 +3212,28 @@
       return;
     }
 
+    /* Стилус і долоня. Пишучи стилусом, руку кладуть на екран — і досі
+       долоня ставала другим «пальцем»: штрих обривався, а дошка
+       масштабувалась. Як у Miro: поки перо на склі, дотики — це долоня й
+       не діють; долоня, що лягла раніше за перо, прибирається, щойно перо
+       торкнулось. Відколи на цьому пристрої писали стилусом, один палець
+       рухає полотно, а не пише (два — як і досі, масштаб). */
+    var kind = e.pointerType || 'mouse';
+    var self0 = this;
+    if (kind === 'pen') {
+      this._penSeen = true;
+      Object.keys(this._pointers).forEach(function (id) {
+        if (self0._kinds[id] === 'touch') { delete self0._pointers[id]; delete self0._kinds[id]; }
+      });
+      this._pinch = null;
+      if (this._pan && this._pan.touch) { this._pan = null; this.applyCursor(); }
+    } else if (kind === 'touch' && this._penDown()) {
+      return;
+    }
+
     try { this.canvas.setPointerCapture(e.pointerId); } catch (err) { /* синтетичні події */ }
     this._pointers[e.pointerId] = p;
+    this._kinds[e.pointerId] = kind;
 
     var ids = Object.keys(this._pointers);
     if (ids.length === 2) {
@@ -3208,8 +3245,9 @@
       return;
     }
 
-    if (e.button === 1 || e.button === 2 || this.tool === 'hand' || this.spaceDown) {
-      this._pan = { sx: p.x, sy: p.y, camx: this.cam.x, camy: this.cam.y };
+    var fingerPans = kind === 'touch' && this._penSeen && this.tool !== 'select' && this.tool !== 'text';
+    if (e.button === 1 || e.button === 2 || this.tool === 'hand' || this.spaceDown || fingerPans) {
+      this._pan = { sx: p.x, sy: p.y, camx: this.cam.x, camy: this.cam.y, touch: kind === 'touch' };
       this.canvas.style.cursor = 'grabbing';
       return;
     }
@@ -3280,9 +3318,14 @@
       return;
     }
 
+    /* Крок «назад» для штриха записується, коли перо піднялось (див.
+       _pointerUp), а не тут: запамʼятати слайд — це перевести його весь у
+       текст, на списаному слайді — мілісекунди саме в ту мить, коли перо
+       торкнулось, і початок літери відставав. */
     if (this.tool === 'pen') {
-      this.snapshot();
       this.draft = { t: 'p', c: this.color, w: this.width, d: [round(w.x), round(w.y)] };
+      this._draftBy = e.pointerId;
+      this.renderInk();
       return;
     }
 
@@ -3426,6 +3469,8 @@
 
   Board.prototype._pointerMove = function (e) {
     if (!this.slide) return;
+    // дотик, відкинутий як долоня, нічого не рухає й не пише
+    if (e.pointerType === 'touch' && !this._pointers[e.pointerId]) return;
     var p = this.eventPos(e);
     this.lastPointer = p;
     if (this._pointers[e.pointerId]) this._pointers[e.pointerId] = p;
@@ -3507,10 +3552,27 @@
     }
 
     if (this.draft.t === 'p') {
+      if (this._draftBy != null && e.pointerId !== this._draftBy) return;   // штрих пише лише те, що його почало
+      /* Усі точки, а не одна на кадр. Браузер зводить рух пера в одну
+         подію на кадр (60 разів на секунду), а перо й миша дають у кілька
+         разів більше. Досі бралась лише остання — і швидко написана буква
+         ставала ламаною з відрізків, а дрібний почерк губив деталі.
+         Проміжні точки віддає getCoalescedEvents — їх і беремо. */
       var d2 = this.draft.d;
-      var lx = d2[d2.length - 2], ly = d2[d2.length - 1];
-      if (Math.hypot(w.x - lx, w.y - ly) * this.scale < 2) return;
-      d2.push(round(w.x), round(w.y));
+      var evs = (e.getCoalescedEvents && e.getCoalescedEvents()) || [];
+      if (!evs.length) evs = [e];
+      var rect = this.canvas.getBoundingClientRect();
+      var minD = 0.75 / this.scale;            // менше ніж ¾ пікселя на екрані — та сама точка
+      var added = false;
+      for (var ci = 0; ci < evs.length; ci++) {
+        var cw = this.toWorld(evs[ci].clientX - rect.left, evs[ci].clientY - rect.top);
+        var lx = d2[d2.length - 2], ly = d2[d2.length - 1];
+        if (Math.hypot(cw.x - lx, cw.y - ly) < minD) continue;
+        d2.push(round(cw.x), round(cw.y));
+        added = true;
+      }
+      if (added) this.renderInk();
+      return;
     } else {
       var pos = { x: w.x, y: w.y };
       var dsh = this.draft.t === 'g' ? SHAPES[this.draft.sh] : null;
@@ -3536,7 +3598,10 @@
   };
 
   Board.prototype._pointerUp = function (e) {
+    // дотик, відкинутий як долоня (у _pointers його немає), нічого не закінчує
+    if (!this._pointers[e.pointerId] && e.pointerType === 'touch') return;
     delete this._pointers[e.pointerId];
+    delete this._kinds[e.pointerId];
     if (Object.keys(this._pointers).length < 2) this._pinch = null;
 
     if (this._placeDown) {
@@ -3592,6 +3657,25 @@
       return;
     }
 
+    if (this.draft && this.draft.t === 'p') {
+      if (this._draftBy != null && e.pointerId !== this._draftBy) return;   // піднялось не те, що пише
+      var pd2 = this.draft;
+      this.draft = null;
+      this._draftBy = null;
+      /* Без корекції почерку штрих лягає точно таким, яким його бачили під
+         пером: жодного «доведення» після відпускання — від нього буква
+         помітно змінювала форму. */
+      if (this.smoothing) pd2.d = smoothStroke(pd2.d, pd2.w, this.smoothing);
+      /* Крок назад — зараз, коли перо піднялось: «до» — це слайд таким,
+         яким він є в цю мить без штриха, разом із чужим, що могло лягти
+         посеред нього. Тож і перераховувати нічого не треба. */
+      this.snapshot();
+      this.slide.items.push(ided(pd2));
+      this.rememberInitialView();
+      this.changed();
+      return;
+    }
+
     if (this.draft) {
       var d = this.draft;
       var keep = true;
@@ -3612,7 +3696,6 @@
         keep = true;
       }
       if (keep) {
-        if (d.t === 'p' && this.smoothing) d.d = smoothStroke(d.d, d.w, this.smoothing);
         this.slide.items.push(ided(d));
         this._rebaseTop([d.id]);            // посеред штриха могло лягти чуже
         this.rememberInitialView();
@@ -4368,16 +4451,90 @@
   /* ---------- Рендер ---------- */
 
   Board.prototype.render = function () {
+    this._inkOk = false;             // змінилось щось, крім самого штриха: шар слайда — наново
+    this._schedule();
+  };
+
+  /* Поки пишуть пером, змінюється лише сам штрих. Перемальовувати заради
+     нього весь слайд (фон, картинки, сотні штрихів) — це кілька
+     мілісекунд щокадру, а на списаному слайді й більше: лінія відставала
+     від пера й смикалась. Тому на початку штриха слайд один раз
+     малюється в окремий шар, а далі щокадру — лише шар і поверх нього
+     штрих. Будь-яка інша зміна (чуже, масштаб) кличе render() і шар
+     малюється заново. */
+  Board.prototype.renderInk = function () { this._schedule(); };
+
+  Board.prototype._schedule = function () {
     var self = this;
     if (this._raf) return;
     this._raf = requestAnimationFrame(function () {
       self._raf = null;
-      self._draw();
+      self._frame();
     });
   };
 
-  Board.prototype._draw = function () {
-    var ctx = this.ctx;
+  Board.prototype._frame = function () {
+    if (this.draft && this.draft.t === 'p' && this._inkLayer()) {
+      if (!this._inkOk) {
+        this._draw(this._ink.getContext('2d'), true);
+        this._inkOk = true;
+      }
+      var ctx = this.ctx;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(this._ink, 0, 0);
+      ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      ctx.save();
+      ctx.scale(this.scale, this.scale);
+      ctx.translate(-this.cam.x, -this.cam.y);
+      drawItem(ctx, this.draft, this.scale);
+      ctx.restore();
+      return;
+    }
+    this._draw();
+    this._inkSoon();
+  };
+
+  /* Перо в руці — намальований слайд стає й шаром для наступного штриха:
+     копія готового полотна, а не ще одне малювання, тож і перший кадр
+     штриха нічого не перемальовує. Копіюємо в паузі, а не щокадру (тоді
+     сповільнилися б масштаб і рух полотна), і лише якщо відтоді нічого не
+     змінилось і поверх слайда нічого немає (виділення, набір під
+     вказівником). */
+  Board.prototype._inkSoon = function () {
+    var self = this;
+    var seq = this._inkSeq = (this._inkSeq || 0) + 1;
+    if (this.tool !== 'pen' || this.readOnly) return;
+    setTimeout(function () {
+      if (seq !== self._inkSeq || self._raf || self.draft || self._inkOk || self.tool !== 'pen') return;
+      if (self.selection.length || self.placing || self.band || !self._inkLayer()) return;
+      try {
+        var lc = self._ink.getContext('2d');
+        lc.setTransform(1, 0, 0, 1, 0, 0);
+        lc.drawImage(self.canvas, 0, 0);
+        self._inkOk = true;
+      } catch (e) { self._inkOk = false; }
+    }, 150);
+  };
+
+  /** Шар слайда для письма — того самого розміру, що й полотно. null — не вийшло. */
+  Board.prototype._inkLayer = function () {
+    var w = this.canvas.width, h = this.canvas.height;
+    if (this._ink && this._ink.width === w && this._ink.height === h) return this._ink;
+    try {
+      if (typeof document === 'undefined' || !document.createElement) return null;
+      var c = document.createElement('canvas');
+      if (!c || !c.getContext || !c.getContext('2d') || !this.ctx.drawImage) return null;
+      c.width = w; c.height = h;
+      this._ink = c;
+      this._inkOk = false;
+      return c;
+    } catch (e) { return null; }
+  };
+
+  /* target — куди малювати (за замовчуванням — саме полотно);
+     noDraft — без штриха, що зараз пишеться (для шару слайда). */
+  Board.prototype._draw = function (target, noDraft) {
+    var ctx = target || this.ctx;
     var w = this.cssW, h = this.cssH;
     if (!w || !h) return;
 
@@ -4393,7 +4550,7 @@
     setDrawScope(items);
     var self0 = this;
     for (var i = 0; i < items.length; i++) drawItem(ctx, items[i], this.scale);
-    if (this.draft) drawItem(ctx, this.draft, this.scale);
+    if (this.draft && !noDraft) drawItem(ctx, this.draft, this.scale);
 
     // набір, який переносять з іншої дошки, — напівпрозорий під вказівником
     if (this.placing && this.placing.at) {

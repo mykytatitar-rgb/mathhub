@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v155';
+  App.BUILD = 'v159';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -436,13 +436,13 @@
   }
 
   function renderSidebar(route) {
-    var students = S.students();
     var activeStudent = route.parts[0] === 'student' ? route.parts[1] : null;
     var path = '#' + (route.path === '/' ? '/' : route.path);
 
     var nav = navOrder().map(function (n) {
       var active = n.hash === '#/' ? (path === '#/' || path === '#') : path.indexOf(n.hash) === 0;
-      if (n.hash === '#/students' && activeStudent) active = false;
+      // сторінка учня — частина розділу «Учні» (окремого списку учнів у панелі більше немає)
+      if (n.hash === '#/students' && activeStudent) active = true;
       // англійські шпаргалки — частина бази формул, пункт той самий
       if (n.hash === '#/reference' && path.indexOf('#/sheet') === 0) active = true;
       var cnt = n.count ? n.count() : 0;
@@ -450,21 +450,6 @@
         '" aria-label="' + U.esc(n.label) + '" title="' + U.esc(n.label) + ' · перетягніть, щоб переставити">' +
         icon(n.icon, 19) + '<span>' + n.label + '</span>' +
         (cnt ? '<span class="nav-item__count">' + cnt + '</span>' : '') + '</button>';
-    }).join('');
-
-    var stuList = students.map(function (s) {
-      var stat = S.studentStats(s.id);
-      var dot = stat.balance < 0 ? 'var(--red)' : stat.hwPending ? 'var(--amber)' : 'transparent';
-      var next = stat.nextLesson;
-      return '<button class="stu-item' + (activeStudent === s.id ? ' is-active' : '') +
-        '" data-act="student-open" data-arg="' + s.id + '" title="' + U.esc(s.name + ' · ' + s.grade) + '">' +
-        C.avatar(s, 32) +
-        '<div style="min-width:0;flex:1">' +
-        '<div class="stu-item__name truncate">' + U.esc(s.name) + '</div>' +
-        '<div class="stu-item__sub truncate">' +
-        (next ? U.fmtDate(next.date) + ' · ' + U.fmtTime(next.date) : s.grade) + '</div></div>' +
-        '<span class="stu-item__dot" style="background:' + dot + '"></span>' +
-        '</button>';
     }).join('');
 
     return '<button class="sidebar__toggle" data-act="sidebar-toggle" ' +
@@ -479,10 +464,6 @@
 
       '<div class="side-scroll">' +
         nav +
-        '<div class="side-label"><span>Мої учні</span>' +
-        '<button data-act="student-add" title="Додати учня">' + icon('plus', 14) + '</button></div>' +
-        (stuList || '<div class="small muted" style="padding:6px 14px 12px;line-height:1.5">' +
-          'Ще нікого немає.<br>Натисніть «+», щоб додати.</div>') +
       '</div>' +
 
       '<div class="side-foot">' +
@@ -1075,6 +1056,50 @@
       }
     },
 
+    /* Google Календар напряму (gcal.js). Код скрипта — уже з секретом. */
+    'gcal-code': function () {
+      if (!window.GCal) return;
+      var code = GCal.scriptCode();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code)
+          .then(function () { U.toast('Код скопійовано — вставте його в новий проєкт Apps Script', 'ok'); })
+          .catch(function () { U.toast('Не вдалося скопіювати — браузер не дозволив', 'err'); });
+      } else {
+        U.toast('Браузер не вміє копіювати — оновіть його', 'err');
+      }
+    },
+
+    'gcal-connect': function (_a, el) {
+      var inp = document.querySelector('[data-gcal-url]');
+      if (!inp || !window.GCal) return;
+      if (el) { el.disabled = true; el.textContent = 'Перевіряю…'; }
+      GCal.connect(inp.value).then(function () {
+        U.toast('Підключено — розклад іде в Google', 'ok');
+        App.render();
+      }).catch(function (e) {
+        if (el) { el.disabled = false; el.textContent = 'Підключити'; }
+        U.toast((e && e.message) || 'Не вдалося підключити', 'err');
+      });
+    },
+
+    'gcal-now': function (_a, el) {
+      if (!window.GCal) return;
+      if (el) el.disabled = true;
+      GCal.push(true).then(function (r) {
+        if (r) U.toast('Google Календар оновлено', 'ok');
+        else U.toast('Не вийшло: ' + (GCal.state().err || 'немає звʼязку'), 'err');
+        App.render();
+      });
+    },
+
+    'gcal-off': function () {
+      C.confirm('Вимкнути запис у Google?',
+        'Кабінет перестане оновлювати календар «Уроки · Вектор». Події, що вже там, лишаться — ' +
+        'календар можна прибрати в самому Google.',
+        function () { GCal.disconnect(); U.toast('Вимкнено'); App.render(); },
+        'Вимкнути');
+    },
+
     'cal-now': function () {
       ICS.publish(true).then(function () { U.toast('Календар оновлено', 'ok'); App.render(); })
         .catch(function (e) { U.toast('Не вийшло: ' + (e && e.message ? e.message : e), 'err'); });
@@ -1397,6 +1422,8 @@
      днів — коли трьох копій «перед синхронізацією» вже давно немає. */
   try {
     if (window.ICS && ICS.watch) ICS.watch();
+    // Google Календар напряму: перенесений урок — у календарі за кілька секунд
+    if (window.GCal && GCal.start) GCal.start();
 
     if (window.Vault && Vault.available()) {
       Vault.persist();

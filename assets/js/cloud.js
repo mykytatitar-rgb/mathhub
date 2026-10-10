@@ -513,6 +513,28 @@
   /** Запит із авторизацією й автоматичним поновленням токена — для модуля картинок. */
   Cloud.request = function (path, opts) { return api(path, opts); };
 
+  /**
+   * Тимчасове посилання на свій файл у сховищі (вкладення матеріалів) —
+   * щоб відкрити його звичайною вкладкою, як відкриває учень. Вкладка з
+   * адресою сховища живе за власними правилами, а не за правилами
+   * кабінету, які не дають показати PDF усередині. null — файлу на
+   * сервері ще немає або немає входу.
+   */
+  Cloud.signedFileUrl = function (key, seconds) {
+    if (!Cloud.available() || !Cloud.signedIn() || !Cloud.userId() || !key) return Promise.resolve(null);
+    return api('/storage/v1/object/sign/boards/' + encodeURIComponent(Cloud.userId()) + '/' + encodeURIComponent(key), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expiresIn: seconds || 3600 })
+    }).then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (j) {
+        var u = j && (j.signedURL || j.signedUrl);
+        if (!u) return null;
+        return /^https?:/.test(u) ? u : Cloud.base() + '/storage/v1' + (u.charAt(0) === '/' ? '' : '/') + u;
+      })
+      .catch(function () { return null; });
+  };
+
   /* ============================================================
      Публікація уроку для учня
      ============================================================

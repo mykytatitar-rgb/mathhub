@@ -1660,6 +1660,41 @@
   };
 
   /**
+   * Уроки постійного розкладу між from і to, яких ще не створено (далі за
+   * межу заповнення), — з тими самими номерами, які вони отримають, коли
+   * їх створять (templateId). Для календаря: розклад триває й далі, ніж
+   * заповнено, а коли урок справді створиться, це буде та сама подія, а не
+   * друга. Звільнені рукою місця й зайняті вже уроком — пропускаються.
+   */
+  S.slotOccurrences = function (from, to) {
+    var out = [];
+    var now = new Date();
+    S.students().forEach(function (st) {
+      if (!st.schedule || !st.schedule.length) return;
+      var gone = {};
+      (st.slotGone || []).forEach(function (x) { gone[x] = 1; });
+      var weekStart = U.startOfWeek(from);
+      while (weekStart <= to) {
+        /* eslint-disable no-loop-func */
+        st.schedule.forEach(function (slot) {
+          var iso = slotIso(0, slot, weekStart);
+          var d = U.toDate(iso);
+          if (isNaN(d.getTime()) || d < from || d > to || d < now) return;
+          if (gone[iso] || hasLessonAt(st.id, iso)) return;
+          var id = templateId(st.id, iso);
+          if (S.get('lessons', id)) return;               // урок цього слота є, лише перенесений
+          out.push({
+            id: id, studentId: st.id, date: iso, duration: st.duration || 60,
+            price: st.price, currency: st.currency || 'UAH', topic: '', status: 'planned', fromTemplate: 1
+          });
+        });
+        weekStart = U.addDays(weekStart, 7);
+      }
+    });
+    return out;
+  };
+
+  /**
    * Прибрати майбутні уроки, що лишилися від попереднього постійного розкладу.
    *
    * Без цього зміна розкладу лише ДОДАВАЛА нові дні, а старі лишалися в

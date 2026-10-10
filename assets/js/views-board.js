@@ -830,12 +830,27 @@
 
   function markDirty() {
     if (!cur) return;
+    if (!cur.dirty) cur.dirtyAt = Date.now();
     cur.dirty = true;
     paintSaved();
     if (cur.saveTimer) clearTimeout(cur.saveTimer);
-    cur.saveTimer = setTimeout(flushSave, 700);
+    cur.saveTimer = setTimeout(saveWhenQuiet, 700);
     // на сервер — не чекаючи запису в браузер
     if (window.BoardSync && BoardSync.soon) BoardSync.soon(cur.lessonId);
+  }
+
+  /* Запис у браузер — у паузі між штрихами, а не посеред наступного: на
+     списаній дошці це мілісекунди, і посеред лінії вони були помітні
+     ривком. Але не довше за 5 с від першої незаписаної зміни — щоб
+     безперервне письмо не лишало дошку незаписаною. */
+  function saveWhenQuiet() {
+    if (!cur) return;
+    cur.saveTimer = null;
+    if (engineBusy() && Date.now() - (cur.dirtyAt || 0) < 5000) {
+      cur.saveTimer = setTimeout(saveWhenQuiet, 200);
+      return;
+    }
+    flushSave();
   }
 
   /* ============================================================
@@ -2247,7 +2262,13 @@
   function scheduleThumb() {
     if (!cur) return;
     if (cur.thumbTimer) clearTimeout(cur.thumbTimer);
-    cur.thumbTimer = setTimeout(function () { renderRail(); }, 1200);
+    // мініатюра — малювання цілого слайда; не посеред штриха
+    cur.thumbTimer = setTimeout(function later() {
+      if (!cur) return;
+      if (engineBusy()) { cur.thumbTimer = setTimeout(later, 400); return; }
+      cur.thumbTimer = null;
+      renderRail();
+    }, 1200);
   }
 
   /* ============================================================
@@ -5072,67 +5093,52 @@
     setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   }
 
-  /* Файл — у вкладці, яку відкрито заздалегідь. Сторінка в ній проста:
-     назва файлу в заголовку й сам файл на весь екран. */
-  function showInTab(w, blob, f, kind) {
-    var type = (kind === 'text' ? MAT_EXT_TYPE.txt : '') || blob.type || f.type || MAT_EXT_TYPE[matExt(f.name)] || '';
-    if (type && blob.type !== type) blob = new Blob([blob], { type: type });
-    var url;
-    // адресу створюємо в самій вкладці: тоді вона живе, доки відкрита вкладка, а не дошка
-    try { url = w.URL.createObjectURL(blob); } catch (e) { url = URL.createObjectURL(blob); }
-    var d = w.document;
-    d.title = f.name || 'Файл';
-    d.documentElement.style.height = '100%';
-    var b = d.body;
-    b.textContent = '';
-    b.style.cssText = 'margin:0;height:100%;display:flex;align-items:center;justify-content:center;background:' +
-      (kind === 'img' || kind === 'video' ? '#1d1d22' : '#fff');
-    var el;
-    if (kind === 'img') {
-      el = d.createElement('img');
-      el.alt = f.name || '';
-      el.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain';
-    } else if (kind === 'video') {
-      el = d.createElement('video');
-      el.controls = true;
-      el.style.cssText = 'max-width:100%;max-height:100%';
-    } else if (kind === 'audio') {
-      el = d.createElement('audio');
-      el.controls = true;
-    } else {
-      el = d.createElement('iframe');
-      el.title = f.name || 'Файл';
-      el.style.cssText = 'border:0;width:100%;height:100%;display:block';
-    }
-    el.src = url;
-    b.appendChild(el);
-  }
+  /* Як відкривається файл.
 
+     Найкраще — так само, як в учня: звичайна вкладка з адресою файлу в
+     сховищі (тимчасове посилання). Така вкладка живе за власними правилами,
+     а не за правилами захисту кабінету, — а ті (frame-src, object-src) не
+     дали б браузеру показати PDF у вкладці, відкритій із кабінету.
+
+     Без сервера (немає входу, файл ще не вивантажився) — копія з цього
+     браузера: картинку, відео, звук і текст вкладка покаже сама, PDF —
+     завантаженням (див. вище). */
   function openMatFile(f) {
     if (!f) { U.toast('Файл не знайдено — можливо, його прибрали з матеріалу', 'err'); return; }
     if (!window.ImgStore || !window.ImgStore.available()) { U.toast('Сховище файлів недоступне', 'err'); return; }
     var kind = matViewKind(f.type, f.name);
     /* Вкладку відкриваємо одразу, ще в самому натисканні: якби вона
-       відкривалась після читання файла, браузер заблокував би її як спливне
-       вікно. Поки файл читається, у ній — лише назва. */
+       відкривалась після запиту до сервера, браузер заблокував би її як
+       спливне вікно. Поки шукаємо файл, у ній — лише назва. */
     var w = kind ? window.open('', '_blank') : null;
     if (w) {
       try {
+        w.opener = null;                          // відкрита сторінка не дістане до кабінету
         w.document.title = f.name || 'Файл';
         w.document.body.style.cssText = 'margin:0;padding:28px;font:15px system-ui,sans-serif;color:#7e90ae';
         w.document.body.textContent = 'Відкриваю «' + (f.name || 'файл') + '»…';
       } catch (e) {}
     }
-    window.ImgStore.get(f.key).then(function (blob) {
-      if (!blob) {
+    var signed = (w && window.Cloud && Cloud.signedFileUrl) ? Cloud.signedFileUrl(f.key) : Promise.resolve(null);
+    signed.then(function (url) {
+      if (url && w && !w.closed) { w.location.href = url; return; }
+      return window.ImgStore.get(f.key).then(function (blob) {
+        if (!blob) {
+          if (w) w.close();
+          U.toast('Файлу «' + (f.name || 'файл') + '» немає ні тут, ні на сервері', 'err');
+          return;
+        }
+        if (w && !w.closed && kind !== 'pdf') {
+          var type = (kind === 'text' ? MAT_EXT_TYPE.txt : '') || blob.type || f.type || MAT_EXT_TYPE[matExt(f.name)] || '';
+          if (type && blob.type !== type) blob = new Blob([blob], { type: type });
+          var local = URL.createObjectURL(blob);
+          w.location.href = local;
+          setTimeout(function () { URL.revokeObjectURL(local); }, 5 * 60000);
+          return;
+        }
         if (w) w.close();
-        U.toast('Файлу «' + (f.name || 'файл') + '» немає ні тут, ні на сервері', 'err');
-        return;
-      }
-      if (w && !w.closed) {
-        try { showInTab(w, blob, f, kind); return; } catch (e) { w.close(); }
-      }
-      downloadBlob(blob, f.name);
+        downloadBlob(blob, f.name);
+      });
     }).catch(function (e) {
       if (w) w.close();
       U.toast('Не вдалося відкрити файл: ' + ((e && e.message) || e), 'err');

@@ -1603,6 +1603,57 @@
       '</div>';
   };
 
+  /* Google Календар напряму (gcal.js). Підписка вище оновлюється, коли
+     захоче Google; тут — за кілька секунд після зміни. Підключення — один
+     раз: скрипт у власному акаунті Google, без ключів і проєктів. */
+  V.gcalCard = function () {
+    if (!window.GCal) return '';
+    var on = GCal.enabled();
+    var st = GCal.state();
+    var body;
+    if (!on) {
+      body =
+        '<ol class="gcal-steps">' +
+          '<li><button class="btn btn--primary btn--sm" data-act="gcal-code">' + icon('link', 15) +
+            'Скопіювати код</button></li>' +
+          '<li>Відкрийте <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">' +
+            'новий проєкт Apps Script</a> (тим акаунтом Google, де ваш календар), зітріть усе в редакторі ' +
+            'й вставте код.</li>' +
+          '<li>Угорі <b>«Розгорнути» → «Нове розгортання»</b>, тип — <b>«Вебзастосунок»</b>. ' +
+            '«Виконувати як» — <b>я</b>, «Хто має доступ» — <b>усі</b> → «Розгорнути». Google попросить ' +
+            'дозволу на календар; якщо напише, що застосунок не перевірено, — «Додатково» → ' +
+            '«Перейти до проєкту»: це ваш власний скрипт.</li>' +
+          '<li>Скопіюйте <b>URL вебзастосунку</b> сюди:' +
+            '<div class="row mt-1" style="gap:8px">' +
+            '<input class="input" data-gcal-url placeholder="https://script.google.com/macros/s/…/exec" ' +
+            'style="flex:1;font-size:12.5px">' +
+            '<button class="btn btn--primary btn--sm" data-act="gcal-connect">Підключити</button></div></li>' +
+        '</ol>' +
+        '<div class="field__hint mt-2">У Google зʼявиться окремий календар «Уроки · Вектор». ' +
+        'Підписку посиланням (картка вище) після цього в Google приберіть — інакше уроки двоїтимуться.</div>';
+    } else {
+      var line = st.ok === false
+        ? '<div class="guard guard--off"><span class="guard__dot"></span><span>Не оновився: ' + U.esc(st.err) +
+          '. Спробую ще раз за хвилину.</span></div>'
+        : '<div class="guard guard--on"><span class="guard__dot"></span><span>Працює. ' +
+          (st.at ? 'Востаннє оновлено о ' + U.fmtTime(new Date(st.at).toISOString()) + ' · ' +
+            U.pl(st.n, 'урок', 'уроки', 'уроків') + ' у календарі'
+                 : 'Зміни розкладу потрапляють у Google за кілька секунд') + '.</span></div>';
+      body = line +
+        '<div class="row row--wrap mt-2" style="gap:8px">' +
+          '<button class="btn btn--ghost btn--sm" data-act="gcal-now">' + icon('refresh', 15) + 'Оновити зараз</button>' +
+          '<button class="btn btn--ghost btn--sm" data-act="gcal-code">' + icon('link', 15) + 'Скопіювати код ще раз</button>' +
+          '<button class="btn btn--ghost btn--sm" data-act="gcal-off">Вимкнути</button>' +
+        '</div>' +
+        '<div class="field__hint mt-2">Календар «Уроки · Вектор» — від тижня тому на 12 тижнів уперед, ' +
+        'разом із постійним розкладом. Скасоване й перенесене з нього зникає.</div>';
+    }
+    return '<div class="card mt-3">' +
+      '<div class="card-head"><div><h2 class="card-title">Google Календар — одразу</h2>' +
+      '<div class="card-sub">перенесений урок — у календарі за кілька секунд</div></div></div>' +
+      body + '</div>';
+  };
+
   V.telegramCard = function () {
     return '<div class="card mt-3">' +
       '<div class="card-head"><div><h2 class="card-title">Нагадування в Telegram</h2>' +
@@ -2223,6 +2274,7 @@
           V.accountCard() +
           V.telegramCard() +
           V.calendarCard() +
+          V.gcalCard() +
         '</div>' +
       '</div>' +
     '</div>';

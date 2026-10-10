@@ -7,7 +7,7 @@
 
    Версію треба піднімати щоразу, коли змінюється склад файлів. */
 
-var VERSION = 'vektor-v155';
+var VERSION = 'vektor-v159';
 
 /* Банк задач — окремий кеш: він не залежить від версії кабінету й не
    чиститься з кожним оновленням. Кожен файл банку приходить з відбитком
@@ -40,6 +40,7 @@ var CODE = [
   './assets/js/forms.js',
   './assets/js/rates.js',
   './assets/js/ics.js',
+  './assets/js/gcal.js',
   './assets/js/mathfmt.js',
   './assets/js/sheets-data.js',
   './assets/js/imagestore.js',

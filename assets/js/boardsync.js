@@ -35,17 +35,35 @@
     if (list.indexOf(boardId) >= 0) saveDelQueue(list.filter(function (id) { return id !== boardId; }));
   }
 
+  /* Відправка — це порівняння всієї дошки з відомим серверу: на списаній
+     дошці десятки мілісекунд. Таймер спрацьовував посеред наступного
+     штриха, і лінія під пером смикалась. Тепер, поки на відкритій дошці
+     триває жест, відправка чекає паузи між штрихами — але не довше за
+     1,5 с від першої невідправленої зміни: учень на живій дошці не має
+     чекати, поки репетитор допише все речення. */
+  var waitingSince = {};
+  function busyNow(id) {
+    var v = O() && O().view;
+    try { return !!(v && v.id === id && v.busy && v.busy()); } catch (e) { return false; }
+  }
+  function sendLater(boardId, delay) {
+    if (!waitingSince[boardId]) waitingSince[boardId] = Date.now();
+    if (timers[boardId]) clearTimeout(timers[boardId]);
+    timers[boardId] = setTimeout(function () {
+      timers[boardId] = null;
+      if (busyNow(boardId) && Date.now() - waitingSince[boardId] < 1500) { sendLater(boardId, 120); return; }
+      delete waitingSince[boardId];
+      O().record(boardId);
+    }, delay);
+  }
+
   /** Дошка змінилася — відправити, коли вщухне. */
   B.mark = function (boardId) {
     if (!boardId || !O()) return;
     revive(boardId);
     var b = S.getBoard(boardId);
     if (b) O().prepare(b);
-    if (timers[boardId]) clearTimeout(timers[boardId]);
-    timers[boardId] = setTimeout(function () {
-      timers[boardId] = null;
-      O().record(boardId);
-    }, PUSH_DELAY);
+    sendLater(boardId, PUSH_DELAY);
   };
 
   /* Відкрита дошка — відправити майже одразу. Досі штрих чекав двічі:
@@ -57,11 +75,7 @@
     revive(boardId);
     var b = S.getBoard(boardId);
     if (b) O().prepare(b);
-    if (timers[boardId]) clearTimeout(timers[boardId]);
-    timers[boardId] = setTimeout(function () {
-      timers[boardId] = null;
-      O().record(boardId);
-    }, FAST_DELAY);
+    sendLater(boardId, FAST_DELAY);
   };
 
   /** Відправити одну дошку зараз. true — дошка на сервері й збігається. */

@@ -1996,6 +1996,10 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 .mat-pick__r.is-empty span { color: var(--muted); }
 .mat-pick__empty { color: var(--amber-ink); font-weight: 650; }
 
+/* Google Календар — кроки підключення */
+.gcal-steps { margin: 4px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; }
+.gcal-steps li { font-size: 13.5px; line-height: 1.55; }
+
 /* Матеріали просто з дошки */
 .bm-search { width: 100%; margin-bottom: 12px; }
 .bm-list { display: flex; flex-direction: column; gap: 16px; }

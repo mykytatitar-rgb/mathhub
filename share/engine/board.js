@@ -2394,6 +2394,49 @@
     return { x: (wx - this.cam.x) * this.scale, y: (wy - this.cam.y) * this.scale };
   };
 
+  /**
+   * Перо торкнулось, а долоня вже лежала й устигла щось почати: потягнути
+   * обʼєкт, стерти, виділити рамкою, почати фігуру. Це не дія людини — її
+   * скасовуємо цілком, разом із кроком історії. Досі дотики долоні просто
+   * забувались, а почате нею лишалось: перетягування «перехоплювало» перо,
+   * рамка виділення висіла назавжди, а незакритий крок історії потім
+   * забирав із собою чуже під час «кроку назад».
+   */
+  Board.prototype._dropPalm = function (ids) {
+    var self = this;
+    function idsOf(list) { return (list || []).map(function (it) { return it && it.id; }); }
+    var touched = null;
+    if (this.draft) {
+      if (this.draft.t !== 'p') this.history.pop();   // крок фігури — верхній, сама фігура ще не лягла
+      this.draft = null;
+      this._draftBy = null;
+    }
+    if (this._drag) touched = idsOf(this._drag.items);
+    else if (this._resize) touched = idsOf([this._resize.item]);
+    else if (this._gscale) touched = idsOf(this._gscale.items);
+    else if (this._erasing) touched = (this._erasedIds || []).slice();
+    this._drag = this._resize = this._gscale = null;
+    this._erasing = false;
+    this._erasedIds = null;
+    svFit = null;
+    this.band = null;
+    this._placeDown = null;
+    ids.forEach(function (id) { delete self._pointers[id]; delete self._kinds[id]; });
+    if (!touched) return;
+
+    // повернути зроблене долонею; чуже, що лягло тим часом, лишається (див. _rebaseTop)
+    this._rebaseTop(touched);
+    var top = this.history[this.history.length - 1];
+    if (top && typeof top === 'object' && top.after == null) {
+      var now = JSON.stringify(this.slide.items);
+      if (top.before !== now) this.slide.items = carry(this.slide.items, JSON.parse(now), JSON.parse(top.before));
+      this.history.pop();
+      this._replay = true;
+      this.changed();
+      this._replay = false;
+    }
+  };
+
   /** Перо зараз торкається екрана. */
   Board.prototype._penDown = function () {
     for (var id in this._pointers) if (this._kinds[id] === 'pen') return true;
@@ -3222,11 +3265,19 @@
     var self0 = this;
     if (kind === 'pen') {
       this._penSeen = true;
-      Object.keys(this._pointers).forEach(function (id) {
-        if (self0._kinds[id] === 'touch') { delete self0._pointers[id]; delete self0._kinds[id]; }
-      });
+      var palms = Object.keys(this._pointers).filter(function (id) { return self0._kinds[id] === 'touch'; });
+      if (palms.length) this._dropPalm(palms);
       this._pinch = null;
-      if (this._pan && this._pan.touch) { this._pan = null; this.applyCursor(); }
+      /* Долоня встигла посунути полотно, поки лягала, — повертаємо, як
+         було: інакше дошка зсувалася щоразу, коли кладуть руку. */
+      if (this._pan && this._pan.touch) {
+        this.cam.x = this._pan.camx;
+        this.cam.y = this._pan.camy;
+        this._pan = null;
+        this.applyCursor();
+        this.viewChanged();
+        w = this.toWorld(p.x, p.y);
+      }
     } else if (kind === 'touch' && this._penDown()) {
       return;
     }
@@ -3562,7 +3613,12 @@
       var evs = (e.getCoalescedEvents && e.getCoalescedEvents()) || [];
       if (!evs.length) evs = [e];
       var rect = this.canvas.getBoundingClientRect();
-      var minD = 0.75 / this.scale;            // менше ніж ¾ пікселя на екрані — та сама точка
+      /* Ближче за 1¼ пікселя на екрані — та сама точка. Частіші нічого не
+         додають до форми (кут букви відхиляється менше ніж на третину
+         пікселя), а штрих від них важчав у кілька разів — і запис, і
+         відправка, і «крок назад». Проріджувати ж готовий штрих не можна:
+         кути букв заокруглювались. */
+      var minD = 1.25 / this.scale;
       var added = false;
       for (var ci = 0; ci < evs.length; ci++) {
         var cw = this.toWorld(evs[ci].clientX - rect.left, evs[ci].clientY - rect.top);

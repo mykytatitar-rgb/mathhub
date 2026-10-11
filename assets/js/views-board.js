@@ -834,7 +834,8 @@
     cur.dirty = true;
     paintSaved();
     if (cur.saveTimer) clearTimeout(cur.saveTimer);
-    cur.saveTimer = setTimeout(saveWhenQuiet, 700);
+    // кожен штрих переносить запис — але не далі, ніж на 5 с від першої незаписаної зміни
+    cur.saveTimer = setTimeout(saveWhenQuiet, Math.min(700, Math.max(0, cur.dirtyAt + 5000 - Date.now())));
     // на сервер — не чекаючи запису в браузер
     if (window.BoardSync && BoardSync.soon) BoardSync.soon(cur.lessonId);
   }

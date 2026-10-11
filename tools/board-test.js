@@ -395,5 +395,52 @@ scenario('Після стилуса один палець рухає полот�
   same(b.cam.x, cx + 50, 'полотно зсунулось за пальцем');
 });
 
+scenario('Долоня потягнула обʼєкт, потім торкнулось перо: потягнуте вертається, чуже після «кроку назад» лишається', function () {
+  var b = engine().b;
+  stroke(b, 100, 100);                                    // A
+  var a = b.items()[0], ax = a.d[0];
+  stroke(b, 100, 300);                                    // B
+  b.setTool('select');
+  b._pointerDown(penEv(200, 130, 105, 'touch'));          // долоня лягла на A
+  b._pointerMove(penEv(200, 150, 115, 'touch'));          // і посунула його
+  b._pointerDown(penEv(201, 700, 600));                   // перо
+  b._pointerUp(penEv(201, 700, 600));
+  b._pointerUp(penEv(200, 150, 115, 'touch'));
+  same(b.items()[0].d[0], ax, 'A на своєму місці');
+  ok(!b._drag && !b.band, 'жодного незакінченого жесту');
+  remote(b, REMOTE());                                    // учень написав
+  b.undo(); b.undo();
+  ok(b.items().some(function (i) { return i.id === 'remote-T'; }), 'два кроки назад не стерли учнівського');
+});
+
+scenario('Рамка виділення від долоні не висить після того, як торкнулось перо', function () {
+  var b = engine().b;
+  stroke(b, 100, 100);
+  b.setTool('select');
+  b._pointerDown(penEv(210, 600, 500, 'touch'));          // долоня на порожньому — рамка
+  b._pointerMove(penEv(210, 620, 520, 'touch'));
+  b._pointerDown(penEv(211, 130, 105));                   // перо на обʼєкті
+  b._pointerUp(penEv(211, 130, 105));
+  b._pointerUp(penEv(210, 620, 520, 'touch'));
+  same(b.band, null, 'рамки немає');
+  same(Object.keys(b._pointers).length, 0, 'дотиків, що «висять», немає');
+});
+
+scenario('Долоня, що посунула полотно, поки лягала, — полотно вертається', function () {
+  var b = engine().b;
+  b.setTool('pen');
+  b._pointerDown(penEv(220, 10, 10));
+  b._pointerUp(penEv(220, 10, 10));                       // стилус на пристрої вже був
+  var cx = b.cam.x, cy = b.cam.y;
+  b._pointerDown(penEv(221, 600, 500, 'touch'));          // долоня
+  b._pointerMove(penEv(221, 612, 507, 'touch'));          // ковзнула
+  b._pointerDown(penEv(222, 300, 300));                   // перо
+  b._pointerMove(penEv(222, 340, 310));
+  b._pointerUp(penEv(222, 340, 310));
+  same(b.cam.x + ',' + b.cam.y, cx + ',' + cy, 'полотно на місці');
+  var last = b.items()[b.items().length - 1];
+  same(last.d[0] + ',' + last.d[1], '300,300', 'штрих почався там, де торкнулось перо');
+});
+
 console.log('\n' + passes + ' пройдено, ' + fails + ' не пройдено');
 process.exit(fails ? 1 : 0);

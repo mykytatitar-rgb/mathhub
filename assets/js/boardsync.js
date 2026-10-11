@@ -48,6 +48,8 @@
   }
   function sendLater(boardId, delay) {
     if (!waitingSince[boardId]) waitingSince[boardId] = Date.now();
+    // межу 1,5 с тримаємо й тоді, коли кожен новий штрих переносить таймер
+    delay = Math.max(0, Math.min(delay, waitingSince[boardId] + 1500 - Date.now()));
     if (timers[boardId]) clearTimeout(timers[boardId]);
     timers[boardId] = setTimeout(function () {
       timers[boardId] = null;
@@ -75,7 +77,10 @@
     revive(boardId);
     var b = S.getBoard(boardId);
     if (b) O().prepare(b);
-    sendLater(boardId, FAST_DELAY);
+    /* Перо щойно піднялось — це й є пауза між штрихами: відправляємо зараз
+       же, поки не почався наступний. Чекати 0,25 с означало потрапити
+       якраз на середину наступної літери. */
+    sendLater(boardId, busyNow(boardId) ? FAST_DELAY : 30);
   };
 
   /** Відправити одну дошку зараз. true — дошка на сервері й збігається. */

@@ -78,6 +78,10 @@ html, body {
   font-size: 15px;
   -webkit-font-smoothing: antialiased;
 }
+/* Застосунок на весь екран (viewport-fit=cover): вміст не має лізти під
+   «чубчик» і вирізи збоку в горизонтальному положенні. Верх і низ
+   беруть на себе верхня смуга й нижня панель. */
+body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
 
 /* Цифри однакової ширини: суми й дати в стовпчиках не стрибають,
    коли змінюється значення. */
@@ -696,6 +700,15 @@ a { color: inherit; text-decoration: none; }
   font-size: 14px; font-weight: 500;
   transition: border-color .14s, background .14s, box-shadow .14s;
 }
+/* Телефон: поле дрібніше за 16 px iPhone при дотику збільшує всю сторінку
+   — і її доводиться відводити назад пальцями, як на сайті, а не в
+   застосунку. Тому на сенсорних екранах усі поля — 16 px. Поле тексту на
+   дошці не чіпаємо: його розмір — розмір самого тексту на полотні. */
+@media (max-width: 640px), (pointer: coarse) {
+  .input, .select, .textarea,
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not(.board-text-input),
+  select, textarea:not(.board-text-input) { font-size: 16px !important; }
+}
 .input:focus, .select:focus, .textarea:focus {
   border-color: var(--blue-500); background: #fff;
   box-shadow: 0 0 0 3.5px var(--blue-50);
@@ -736,7 +749,8 @@ a { color: inherit; text-decoration: none; }
    Модалка
    ============================================================ */
 
-.modal-root { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px; }
+.modal-root { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px;
+  padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
 .modal-root[hidden] { display: none; }
 .modal-wrap { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; }
 .modal__scrim { position: absolute; inset: 0; background: rgba(23, 22, 58, .42); backdrop-filter: blur(3px); animation: fade .16s ease; }
@@ -810,10 +824,11 @@ a { color: inherit; text-decoration: none; }
    Тости
    ============================================================ */
 
-.toast-root { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 10px; align-items: center; pointer-events: none; }
+.toast-root { position: fixed; bottom: 24px; left: 16px; right: 16px; z-index: 200; display: flex; flex-direction: column; gap: 10px; align-items: center; pointer-events: none; }
 .toast {
   background: var(--ink); color: #fff;
-  padding: 12px 20px; border-radius: 999px;
+  padding: 12px 20px; border-radius: 14px;
+  max-width: min(520px, 100%); line-height: 1.35;
   font-size: 14px; font-weight: 600;
   box-shadow: var(--shadow-lg);
   display: flex; align-items: center; gap: 10px;
@@ -1308,7 +1323,9 @@ a { color: inherit; text-decoration: none; }
     height: 100%; width: min(86vw, 300px); flex: none;
     transform: translateX(-100%);
     z-index: 60;
+    padding-top: env(safe-area-inset-top);
   }
+  .side-foot { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
   .app:not(.is-resizing) .sidebar { transition: transform .22s ease; }
   .app.is-menu .sidebar { transform: none; box-shadow: var(--shadow-lg); }
   .app.is-menu::after {
@@ -1325,7 +1342,9 @@ a { color: inherit; text-decoration: none; }
 
 /* --- Телефон: назва сторінки у верхній смузі (див. renderTopBar в app.js) --- */
 @media (max-width: 640px) {
-  .m-bar { position: sticky; top: 0; z-index: 40; gap: 4px; padding: 0 8px; }
+  .m-bar { position: sticky; top: 0; z-index: 40; gap: 4px; padding: 0 8px;
+    /* під смугою стану телефона, коли застосунок на весь екран */
+    padding-top: env(safe-area-inset-top); height: calc(54px + env(safe-area-inset-top)); }
   .m-bar__t { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
   .m-bar__t--pad { padding-left: 8px; }
   .m-bar__title {
@@ -1368,6 +1387,7 @@ a { color: inherit; text-decoration: none; }
     display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 45;
     height: calc(58px + env(safe-area-inset-bottom));
     padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right);
     background: rgba(255, 255, 255, .96);
     -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
     border-top: 1px solid var(--line);
@@ -1386,9 +1406,7 @@ a { color: inherit; text-decoration: none; }
   /* Сторінка не ховається під панеллю */
   .main { padding-bottom: calc(58px + env(safe-area-inset-bottom)); }
   .app.is-board .main { padding-bottom: 0; }
-  .ag-fab { bottom: calc(58px + 14px + env(safe-area-inset-bottom)); }
   .toast-root { bottom: calc(70px + env(safe-area-inset-bottom)); }
-  body:has(.ag-fab) .toast-root { bottom: calc(136px + env(safe-area-inset-bottom)); }
 }
 
 /* --- Телефон: ущільнення ---
@@ -1884,6 +1902,13 @@ body.is-navdrag .nav-item { touch-action: none; }
 .app.is-menu .ag-fab { display: none; }
 /* повідомлення — над кнопкою, а не поверх неї */
 body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom)); }
+/* Телефон: кнопка — над нижньою панеллю. Ці правила мусять стояти ПІСЛЯ
+   базових вище: вага однакова, і раніше базові перемагали — «+ Урок»
+   ховався під панеллю, видно було лише смужку. */
+@media (max-width: 640px) {
+  .ag-fab { bottom: calc(58px + 14px + env(safe-area-inset-bottom)); right: max(18px, env(safe-area-inset-right)); }
+  body:has(.ag-fab) .toast-root { bottom: calc(136px + env(safe-area-inset-bottom)); }
+}
 
 /* ============================================================
    Синхронізація
@@ -2826,6 +2851,10 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 }
 .mm-undo button { background: rgba(255, 255, 255, .14); color: #fff; border: 0; border-radius: var(--r-sm); padding: 6px 11px; font: inherit; font-weight: 650; cursor: pointer; }
 .mm-undo button:hover { background: rgba(255, 255, 255, .24); }
+@media (max-width: 640px) {
+  .mm-undo { bottom: calc(58px + 12px + env(safe-area-inset-bottom)); left: 12px; right: 12px; transform: none; justify-content: space-between; }
+  .mm-undo button { min-height: 40px; }
+}
 
 @media (max-width: 1100px) {
   .mm-hero { grid-template-columns: minmax(0, 1fr); }

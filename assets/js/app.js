@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v161';
+  App.BUILD = 'v162';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -482,6 +482,15 @@
     if (!S.db()) return;
     closeMenu();
     var route = parseRoute();
+
+    /* Ярлик «Новий урок» на іконці застосунку (довге натискання): розклад і
+       одразу шторка нового уроку. Позначку з адреси прибираємо, щоб
+       оновлення сторінки не відкривало шторку вдруге. */
+    if (route.query.new && route.parts[0] === 'schedule') {
+      try { history.replaceState(history.state, '', location.pathname + location.search + '#/schedule'); } catch (e) {}
+      route = parseRoute();
+      setTimeout(function () { if (window.F && F.lesson) F.lesson(null, {}); }, 0);
+    }
 
     /* Посилання з ключем банку задач (#/bank-key/…): ключ іде в базу — а з
        нею на всі пристрої, — а з адреси й історії браузера зникає одразу. */
@@ -1475,13 +1484,20 @@
     document.addEventListener(ev, function () { lastInput = Date.now(); }, { passive: true, capture: true });
   });
 
+  /* Відкрита шторка, поле з текстом, дошка — не тиха мить, навіть коли
+     застосунок у фоні. На телефоні «у фоні» — це щохвилини: перемкнулись у
+     Telegram чи на зустріч, і досі напівзаповнену шторку перезавантаження
+     стирало. Тепер — лише коли нічого не почато. */
   function quietMoment() {
-    if (document.hidden) return true;
+    if (document.querySelector('.modal-backdrop, .modal')) return false;
     var ae = document.activeElement;
     if (ae && (/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) || ae.isContentEditable)) return false;
-    if (document.querySelector('.modal-backdrop, .modal')) return false;
+    if (window.V && V.boardMountedFor && V.boardMountedFor()) return false;
+    if (document.hidden) return true;
     return Date.now() - lastInput > 60000;
   }
+  // повернулись у застосунок — це теж дія: не перезавантажувати під пальцем
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) lastInput = Date.now(); });
 
   function reloadNow() {
     var jobs = [];

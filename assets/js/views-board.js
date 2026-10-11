@@ -738,11 +738,23 @@
     cur.beforeUnload = function () { flushSave(); };
     window.addEventListener('beforeunload', cur.beforeUnload);
 
+    pinchLock(true);
     hint('Колесо — масштаб · пробіл або права кнопка — рух по полотну');
   };
 
+  /* На дошці сторінка не масштабується: масштаб — справа полотна, а поле
+     тексту на ньому буває дрібним (розмір самого тексту), і iPhone при
+     дотику до нього збільшував би всю сторінку. Поза дошкою — як звичайно:
+     сторінку можна збільшити пальцями. */
+  var VIEWPORT = 'width=device-width, initial-scale=1, viewport-fit=cover';
+  function pinchLock(on) {
+    var m = document.querySelector('meta[name=viewport]');
+    if (m) m.setAttribute('content', on ? VIEWPORT + ', maximum-scale=1' : VIEWPORT);
+  }
+
   V.unmountBoard = function () {
     if (!cur) return;
+    pinchLock(false);
     flushSave();
     snapshot(true);           // підсумок уроку — в історію обов'язково
     if (cur.keyHandler) window.removeEventListener('keydown', cur.keyHandler);

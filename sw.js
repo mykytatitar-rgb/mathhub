@@ -7,7 +7,7 @@
 
    Версію треба піднімати щоразу, коли змінюється склад файлів. */
 
-var VERSION = 'vektor-v161';
+var VERSION = 'vektor-v162';
 
 /* Банк задач — окремий кеш: він не залежить від версії кабінету й не
    чиститься з кожним оновленням. Кожен файл банку приходить з відбитком
@@ -18,11 +18,17 @@ var BANK = 'vektor-bank';
    самий номер, що в index.html і App.BUILD; піднімає всі три tools/bump.js. */
 var V = VERSION.replace(/\D/g, '');
 
+/* './index.html' тут немає: Cloudflare переадресовує його на './', і в кеш
+   лягала б переадресація — а її браузер не віддає як сторінку, тож запуск
+   без мережі показав би помилку замість кабінету. */
 var PAGES = [
   './',
-  './index.html',
   './manifest.webmanifest',
-  './assets/icon.svg'
+  './assets/icon.svg',
+  './assets/icon-192.png',
+  './assets/icon-512.png',
+  './assets/icon-maskable-512.png',
+  './assets/apple-touch-icon.png'
 ];
 
 var CODE = [
@@ -131,17 +137,31 @@ self.addEventListener('fetch', function (e) {
   }
 
   // Сторінка й покажчик банку: свіжа версія важливіша за швидкість, кеш — запасний варіант
+  /* Відкриття застосунку з іконки: свіжа сторінка важливіша, але не ціною
+     порожнього екрана. Досі на слабкому сигналі кабінет стояв білим, поки
+     мережа не відповість, — 10–30 с. Тепер чекаємо мережу 2,5 с, далі —
+     збережена копія (її код — у тому самому кеші, і стара версія сама
+     оновиться пізніше). У кеш кладемо лише справжню сторінку: не помилку,
+     не переадресацію. */
   if (req.mode === 'navigate' || url.pathname.endsWith('.html') ||
       url.pathname.endsWith('/assets/bank/manifest.json')) {
-    e.respondWith(
-      fetch(req)
-        .then(function (res) {
+    e.respondWith(new Promise(function (resolve) {
+      var done = false;
+      function fromCache() {
+        caches.match(req)
+          .then(function (r) { return r || (req.mode === 'navigate' ? caches.match('./') : null); })
+          .then(function (r) { if (!done) { done = true; resolve(r || fetch(req)); } });
+      }
+      var timer = setTimeout(fromCache, 2500);
+      fetch(req).then(function (res) {
+        clearTimeout(timer);
+        if (res && res.ok && res.type === 'basic' && !res.redirected) {
           var copy = res.clone();
           caches.open(VERSION).then(function (c) { c.put(req, copy); });
-          return res;
-        })
-        .catch(function () { return caches.match(req).then(function (r) { return r || caches.match('./index.html'); }); })
-    );
+        }
+        if (!done) { done = true; resolve(res); }
+      }).catch(function () { clearTimeout(timer); fromCache(); });
+    }));
     return;
   }
 

@@ -12,6 +12,8 @@
   flex-direction: column;
   background: var(--bg);
   z-index: 40;
+  /* дошка на весь екран: панелі й інструменти — поза «чубчиком» і смужкою жестів */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
 /* Мить, поки підвантажується рушій дошки: те саме тло, без написів */

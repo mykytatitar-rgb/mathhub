@@ -681,14 +681,29 @@
     if (tm) tm.textContent = U.pad(Math.floor(mins2 / 60)) + ':' + U.pad(mins2 % 60);
   }
 
+  // урок, узятий затриманням (drag.touch), веде обробник дотику нижче —
+  // перо на планшеті шле і pointer-, і touch-події, двічі вести не треба
   document.addEventListener('pointermove', function (e) {
-    if (e.pointerType === 'touch') return;
+    if (e.pointerType === 'touch' || (drag && drag.touch)) return;
     moveDrag(e.clientX, e.clientY);
   });
 
   document.addEventListener('pointerup', function (e) {
-    if (e.pointerType === 'touch') return;
+    if (e.pointerType === 'touch' || (drag && drag.touch)) return;
     endDrag();
+  });
+
+  /* Перо на планшеті без дотикових подій: рух по уроку тут — прокрутка
+     (touch-action: pan-y), і браузер, забравши його собі, шле pointercancel
+     замість pointerup. Без цього урок лишався «у руці» до наступного
+     дотику. Повертаємо його на місце. */
+  document.addEventListener('pointercancel', function (e) {
+    if (e.pointerType === 'touch' || !drag || drag.touch) return;
+    var moved = drag.moved;
+    stopAutoScroll();
+    drag.el.classList.remove('is-dragging');
+    drag = null;
+    if (moved && window.App) window.App.refresh();
   });
 
   /* ---------- Край сітки гортає години ----------
@@ -793,6 +808,14 @@
     if (e.touches.length !== 1) { cancelTouch(); return; }
     var ev = e.target.closest && e.target.closest('[data-ev]');
     if (!ev || e.target.closest('[data-act]')) return;
+    /* Перо на планшеті приходить і сюди, і в pointerdown вище, — а там урок
+       уже взято одразу. Але на дотиковому екрані рух по уроку — прокрутка,
+       тож перо поводиться як палець: торкнутись — відкрити, потримати —
+       перенести. Заодно торкання пером не відкриває картку двічі. */
+    if (drag && !drag.touch && !drag.moved && isTouchy()) {
+      drag.el.classList.remove('is-dragging');
+      drag = null;
+    }
     var t = e.touches[0];
     touch = {
       ev: ev,

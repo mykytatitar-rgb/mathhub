@@ -26,6 +26,11 @@
     return d.getHours() * 60 + d.getMinutes();
   }
 
+  /** Головний вказівник — палець (телефон, планшет), а не миша. */
+  function isTouchy() {
+    try { return window.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; }
+  }
+
   function iso(day, minutes) {
     var h = Math.floor(minutes / 60), m = Math.round(minutes % 60);
     return U.ymd(day) + 'T' + U.pad(h) + ':' + U.pad(m);
@@ -484,8 +489,10 @@
                 'background-size:100% ' + HOUR_PX + 'px">' + cols + '</div>' +
             '</div>' +
           '</div>' +
-          '<div class="cal-hint">' + icon('info', 14) +
-            ' Клік по вільному місцю — новий урок. Урок можна перетягнути, а за нижній край — змінити тривалість.' +
+          // пальцем урок не тягнуть, а тримають — і підказка каже саме це
+          '<div class="cal-hint">' + icon('info', 14) + (isTouchy()
+            ? ' Торкніться вільного місця — новий урок. Потримайте урок, щоб перенести; потримайте нижній край — змінити тривалість.'
+            : ' Клік по вільному місцю — новий урок. Урок можна перетягнути, а за нижній край — змінити тривалість.') +
           '</div>' +
         '</div>' +
 
@@ -517,8 +524,40 @@
    * перемальовування смикало б сітку назад.
    */
   var agPlacedFor = null;
+
+  /* Де стояла сітка годин. Кожне перемальовування (перенесли урок, приїхали
+     зміни, відмітили проведеним) будує сітку наново — і вона відскакувала
+     до першого уроку. Особливо прикро після перенесення в пізні години:
+     щойно поставив урок на 20:00, а сітка вже показує ранок. Тож на тій
+     самій сторінці лишаємо сітку там, де її гортали, — як App.render лишає
+     саму сторінку. Порожній тиждень не запамʼятовуємо: поки уроки ще не
+     приїхали, сітка стоїть на робочих годинах і має стати на перший урок. */
+  var calKeep = null;
+
+  function keepCal(body) {
+    if (body.querySelector('.cal-ev')) calKeep = { hash: location.hash, top: body.scrollTop };
+  }
+
   window.addEventListener('hashchange', function () {
-    if (!/^#\/schedule/.test(location.hash)) agPlacedFor = null;
+    if (!/^#\/schedule/.test(location.hash)) { agPlacedFor = null; calKeep = null; }
+  });
+
+  /* Телефон: сітка — на весь екран між шапкою і нижньою панеллю розділів.
+     Із висотою «на око» (100vh мінус запас) низ сітки ховався під
+     панеллю, і гортати доводилося двічі: спершу сторінку, потім сітку. */
+  function fitCalToScreen(body) {
+    if (window.innerWidth > 640) { body.style.maxHeight = ''; return; }
+    var vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    var tabs = document.querySelector('.m-tabs');
+    var tabsH = tabs && tabs.offsetHeight ? tabs.offsetHeight : 58;
+    var top = body.getBoundingClientRect().top + window.scrollY;
+    body.style.maxHeight = Math.max(300, Math.round(vh - tabsH - top - 8)) + 'px';
+  }
+
+  // повернули телефон чи сховалась смуга браузера — висота сітки слідом
+  window.addEventListener('resize', function () {
+    var body = document.querySelector('.cal-body');
+    if (body) fitCalToScreen(body);
   });
 
   V.scrollScheduleToWork = function () {
@@ -535,6 +574,13 @@
     var body = document.querySelector('.cal-body');
     if (!body || body.dataset.placed) return;
     body.dataset.placed = '1';
+    fitCalToScreen(body);
+    body.addEventListener('scroll', function () { keepCal(body); }, { passive: true });
+
+    if (calKeep && calKeep.hash === location.hash) {
+      body.scrollTop = calKeep.top;
+      return;
+    }
 
     var first = null;
     U.$$('.cal-ev', body).forEach(function (el) {
@@ -546,6 +592,7 @@
       ? Math.max(0, first - HOUR_PX / 2)
       : WORK_FROM * HOUR_PX;
     body.scrollTop = target;
+    keepCal(body);
   };
 
   /* ============================================================
@@ -597,13 +644,16 @@
   function moveDrag(clientX, clientY) {
     if (!drag) return;
     drag.moved = true;
+    // де палець зараз — з цього місця сітку гортає край (див. autoScrollTick)
+    drag.lastX = clientX;
+    drag.lastY = clientY;
 
     if (drag.mode === 'resize') {
       var top = drag.el.getBoundingClientRect().top;
       var h = Math.max(HOUR_PX / 4, clientY - top);
-      // прилипання до 15 хвилин
+      // прилипання до 15 хвилин; не довше, ніж дозволяє форма уроку
       var mins = Math.round((h / HOUR_PX * 60) / SNAP_MIN) * SNAP_MIN;
-      drag.newDuration = Math.max(SNAP_MIN, mins);
+      drag.newDuration = Math.min(480, Math.max(SNAP_MIN, mins));
       drag.el.style.height = (drag.newDuration / 60 * HOUR_PX - 2) + 'px';
       return;
     }
@@ -618,7 +668,10 @@
 
     var tr = target.getBoundingClientRect();
     var y = clientY - tr.top - drag.grabDy;
-    var mins2 = timeFromY(Math.max(0, y), drag.from);
+    /* Не нижче за кінець доби: протягнутий за низ сітки урок отримував
+       час «24:15» — такої години немає, і урок опинявся вгорі, опівночі. */
+    var dayEnd = Math.min(24 * 60, drag.from * 60 + Math.round(target.offsetHeight / HOUR_PX * 60));
+    var mins2 = Math.min(dayEnd - SNAP_MIN, timeFromY(Math.max(0, y), drag.from));
     drag.newDay = target.dataset.day;
     drag.newMinutes = mins2;
 
@@ -638,7 +691,48 @@
     endDrag();
   });
 
+  /* ---------- Край сітки гортає години ----------
+
+     Сітка показує кілька годин, решта доби — за краєм. Урок у пальці
+     інакше не перенести далі видимого: палець зайнятий уроком, гортати
+     нічим. Тож поки урок у пальці біля верхнього чи нижнього краю сітки,
+     вона гортається сама — що ближче до краю, то швидше, — а урок їде
+     разом із нею. Лише для пальця: мишею на компʼютері все як було. */
+  var EDGE_PX = 44;          // смуга біля краю, де сітка починає гортатись
+  var EDGE_STEP = 14;        // найбільший крок за кадр, px
+  var autoRaf = 0;
+
+  function autoScrollTick() {
+    autoRaf = 0;
+    if (!drag || !drag.touch) return;
+    var body = drag.lastY != null && drag.el.closest('.cal-body');
+    if (body) {
+      var b = body.getBoundingClientRect();
+      var into = 0;                               // наскільки палець заїхав у смугу краю
+      if (drag.lastY < b.top + EDGE_PX) into = -(b.top + EDGE_PX - drag.lastY);
+      else if (drag.lastY > b.bottom - EDGE_PX) into = drag.lastY - (b.bottom - EDGE_PX);
+      if (into) {
+        var step = Math.max(-EDGE_STEP, Math.min(EDGE_STEP, Math.round(into / EDGE_PX * EDGE_STEP) || (into > 0 ? 1 : -1)));
+        var before = body.scrollTop;
+        body.scrollTop = before + step;
+        // сітка зрушила під нерухомим пальцем — час уроку теж
+        if (body.scrollTop !== before) moveDrag(drag.lastX, drag.lastY);
+      }
+    }
+    autoRaf = requestAnimationFrame(autoScrollTick);
+  }
+
+  function startAutoScroll() {
+    if (!autoRaf && window.requestAnimationFrame) autoRaf = requestAnimationFrame(autoScrollTick);
+  }
+
+  function stopAutoScroll() {
+    if (autoRaf) cancelAnimationFrame(autoRaf);
+    autoRaf = 0;
+  }
+
   function endDrag() {
+    stopAutoScroll();
     if (!drag) return;
     var d = drag;
     drag = null;
@@ -657,7 +751,9 @@
       var newIso = d.newDay + 'T' + U.pad(Math.floor(d.newMinutes / 60)) + ':' + U.pad(d.newMinutes % 60);
       var lesson = S.get('lessons', d.id);
       if (lesson && lesson.date !== newIso) {
-        S.update('lessons', d.id, { date: newIso });
+        // те саме, що «Перенести» в картці уроку: інший день — і курс того дня
+        S.update('lessons', d.id, window.F && window.F.lessonMovePatch
+          ? window.F.lessonMovePatch(lesson, newIso) : { date: newIso });
         U.toast('Перенесено на ' + U.fmtDateTime(newIso), 'ok');
       }
     }
@@ -709,6 +805,8 @@
       if (!touch) return;
       if (!startDrag(touch.ev, touch.grip, touch.y)) { cancelTouch(); return; }
       touch.held = true;
+      drag.touch = true;
+      startAutoScroll();
       try { if (navigator.vibrate) navigator.vibrate(12); } catch (x) { /* не всі вміють */ }
     }, HOLD_MS);
   }, { passive: true });
@@ -742,6 +840,7 @@
     if (touch) note('телефон перервав дотик (touchcancel)', touch);
     var held = touch && touch.held;
     cancelTouch();
+    stopAutoScroll();
     if (held && drag) {
       drag.el.classList.remove('is-dragging');
       drag = null;

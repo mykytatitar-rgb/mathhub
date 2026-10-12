@@ -13,6 +13,12 @@
     return U.fmtTime(d);
   }
 
+  /** Телефон чи інший екран, де працюють пальцем. */
+  function phoneLike() {
+    try { return window.matchMedia('(max-width: 640px), (pointer: coarse)').matches; }
+    catch (e) { return window.innerWidth <= 640; }
+  }
+
   /** Звична тривалість уроку: спершу в учня, потім загальна, потім година. */
   function defaultDuration(studentId) {
     var st = studentId ? S.get('students', studentId) : null;
@@ -403,6 +409,13 @@
           onClick: function () { setTimeout(function () { F.lesson(id); }, 60); } },
         { label: 'Дошка', kind: 'btn--soft', act: 'board', icon: 'board',
           onClick: function () { location.hash = '#/board/' + id; } },
+        /* На телефоні урок інакше не перенести: у списку тягнути нічого, а
+           повна форма заради дня й години — задовга. На великому екрані урок
+           перетягують у сітці, і нижній ряд кнопок лишається як був. */
+        (ls.status === 'planned' && phoneLike())
+          ? { label: 'Перенести', kind: 'btn--ghost', act: 'move', icon: 'calendar',
+              onClick: function () { setTimeout(function () { F.moveLesson(id); }, 60); } }
+          : null,
         // скасувати — з картки, а не через форму, але в меню «⋯»:
         // поруч із «Проведено й оплачено» це запрошення промахнутися
         ls.status === 'planned'
@@ -444,6 +457,91 @@
             // перевідкриваємо, щоб позначки й кнопка показували новий стан
             close();
             setTimeout(function () { F.lessonView(id); }, 60);
+          });
+        });
+      }
+    });
+  };
+
+  /**
+   * Латка для уроку, що переїхав на when ('YYYY-MM-DDTHH:MM').
+   * Заморожений курс належить дню уроку: переїхав урок на інший день —
+   * беремо курс нового дня, як і форма уроку. Спільна для «Перенести» й
+   * перетягування в розкладі, щоб обидва шляхи рахували гроші однаково.
+   */
+  F.lessonMovePatch = function (ls, when) {
+    var patch = { date: when };
+    if (ls && ls.rate > 0 && String(when).slice(0, 10) !== String(ls.date).slice(0, 10)) {
+      var cur = S.lessonCur(ls);
+      var r = cur === 'UAH' ? 0 : S.exactRate({ date: when }, cur);
+      patch.rate = r > 0 ? r : undefined;
+    }
+    return patch;
+  };
+
+  /* Перенести урок — лише день і година, шторкою знизу. Найчастіше
+     переносять «на завтра» чи «на той самий час наступного тижня», тож
+     для цього є дві кнопки; решта — звичайні поля дати й часу. Під ними
+     день тижня словами: поле дати на телефоні його не показує, а без нього
+     легко поставити урок на неділю. */
+  F.moveLesson = function (id) {
+    var ls = S.get('lessons', id);
+    if (!ls) return;
+    var st = S.get('students', ls.studentId);
+    var was = U.toDate(ls.date);
+
+    function whenText(day, time) {
+      var d = U.toDate(day + 'T' + (time || '00:00'));
+      if (isNaN(d.getTime())) return '';
+      return U.DAYS_FULL[d.getDay()] + ', ' + U.fmtDateLong(d) + ' о ' + U.fmtTime(d);
+    }
+
+    var body =
+      '<div class="field-row">' +
+        C.field('Дата', C.input('_date', ls.date.slice(0, 10), 'type="date"')) +
+        C.field('Час', C.input('_time', ls.date.slice(11, 16) || U.fmtTime(was), 'type="time"')) +
+      '</div>' +
+      '<div class="row row--wrap" style="gap:8px;margin:2px 0 12px">' +
+        '<button type="button" class="chip" data-shift="1">+1 день</button>' +
+        '<button type="button" class="chip" data-shift="7">+1 тиждень</button>' +
+      '</div>' +
+      '<div class="small muted" data-move-when style="font-weight:650;margin-bottom:6px">' +
+        U.esc(whenText(ls.date.slice(0, 10), ls.date.slice(11, 16))) + '</div>';
+
+    C.modal({
+      title: 'Перенести урок',
+      sub: (st ? st.name + ' · ' : '') + 'зараз ' + U.DAYS_SHORT[was.getDay()] + ', ' + U.fmtDateTime(was),
+      body: body,
+      buttons: [
+        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+        { label: 'Зберегти', kind: 'btn--primary', act: 'save', icon: 'check',
+          onClick: function (root) {
+            var v = C.readForm(root);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(v._date || '')) { U.toast('Вкажіть дату', 'err'); return false; }
+            var when = v._date + 'T' + (/^\d{2}:\d{2}/.test(v._time || '') ? v._time.slice(0, 5) : U.fmtTime(was));
+            var cur = S.get('lessons', id);
+            if (!cur || when === cur.date) return;          // нічого не змінилось
+            S.update('lessons', id, F.lessonMovePatch(cur, when));
+            U.toast('Перенесено на ' + U.fmtDateTime(when), 'ok');
+            refresh();
+          } }
+      ],
+      onMount: function (root) {
+        var dateIn = root.querySelector('[name=_date]');
+        var timeIn = root.querySelector('[name=_time]');
+        var out = root.querySelector('[data-move-when]');
+        function show() { out.textContent = whenText(dateIn.value, timeIn.value); }
+        // деякі вибирачі дати на телефоні шлють лише change, без input
+        ['input', 'change'].forEach(function (t) {
+          dateIn.addEventListener(t, show);
+          timeIn.addEventListener(t, show);
+        });
+        // зсув від того, що вже стоїть у полі: двічі «+1 день» — післязавтра
+        U.$$('[data-shift]', root).forEach(function (b) {
+          b.addEventListener('click', function () {
+            var base = /^\d{4}-\d{2}-\d{2}$/.test(dateIn.value) ? dateIn.value : ls.date.slice(0, 10);
+            dateIn.value = U.ymd(U.addDays(base, +b.dataset.shift));
+            show();
           });
         });
       }

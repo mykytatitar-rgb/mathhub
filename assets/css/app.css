@@ -1666,9 +1666,15 @@ a { color: inherit; text-decoration: none; }
   overflow: hidden;
   cursor: grab;
   user-select: none;
-  touch-action: none;
+  /* Палець, що веде по уроку вгору чи вниз, гортає години: з «none» сітка
+     стояла, якщо рух починався на уроці, а на телефоні уроки займають пів
+     екрана. Узяти урок це не заважає — після затримання сторінку тримає
+     сам обробник дотику (див. views-schedule.js). */
+  touch-action: pan-y;
   transition: box-shadow .14s;
 }
+/* Миша й перо беруть урок одразу, без затримання, — їм прокрутка не потрібна */
+@media (pointer: fine) { .cal-ev { touch-action: none; } }
 .cal-ev:hover { box-shadow: var(--shadow); z-index: 2; }
 .cal-ev.is-dragging { opacity: .85; cursor: grabbing; box-shadow: var(--shadow-lg); z-index: 6; }
 .cal-ev.is-cancelled { opacity: .55; }
@@ -1701,6 +1707,9 @@ a { color: inherit; text-decoration: none; }
 .cal-ev__grip:hover::after { opacity: .8; }
 /* на дотику наведення не буває — там ручка помітна завжди */
 @media (hover: none) { .cal-ev__grip::after { opacity: .35; } }
+/* Смужку у 8 px пальцем не влучити. Але й не більше двох пʼятих уроку:
+   у короткому уроці інакше лишилось би нічого, за що його перенести. */
+@media (pointer: coarse) { .cal-ev__grip { height: min(18px, 40%); } }
 
 .cal-now { position: absolute; left: 0; right: 0; height: 2px; background: var(--red); z-index: 4; }
 .cal-now::before {
@@ -1782,6 +1791,8 @@ body.is-navdrag .nav-item { touch-action: none; }
   .cal:not(.cal--day) .cal-dayhead__money { font-size: 9.5px; letter-spacing: -.2px; line-height: 1.25; }
   .cal:not(.cal--day) .cal-dayhead__usd { display: block; }
   .cal:not(.cal--day) .cal-dayhead__sep { display: none; }
+  /* Догорнули години до краю — сторінка під сіткою не їде слідом */
+  .cal-body { overscroll-behavior: contain; }
 }
 
 /* Урок пальцем тримають і тягнуть — без виділення тексту й меню «копіювати» */

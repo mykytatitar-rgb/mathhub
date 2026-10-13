@@ -19,6 +19,13 @@
     { id: 'notes',    label: 'Нотатки' }
   ];
 
+  /* Номер телефону з довільного тексту («Мама — +380 67 123 45 67») як
+     посилання tel:. Номера немає — порожньо. */
+  function telOf(text) {
+    var m = /(\+?\d[\d\s()-]{8,}\d)/.exec(String(text || ''));
+    return m ? 'tel:' + m[1].replace(/[^\d+]/g, '') : '';
+  }
+
   V.student = function (id, tab) {
     var st = S.get('students', id);
     if (!st) {
@@ -63,11 +70,16 @@
       title: st.name,
       // архівного учня видно одразу, інакше незрозуміло, чому його немає в розкладі
       sub: st.grade + ' · ' + st.goal + (st.archived ? ' · в архіві' : ''),
+      /* На телефоні рядок кнопок гортається, і видно лише перші дві-три.
+         Тож там першими — щоденні: записати урок і оплату (без неї оплату
+         учня доводилось шукати у вкладках); «Редагувати» — останнім і не
+         виділеним. На компʼютері все як було (див. m у C.hero). */
       actions: [
-        { label: 'Контакти', icon: 'phone', act: 'contacts', arg: id },
-        { label: 'Портал учня', icon: 'share', act: 'student-portal', arg: id },
-        { label: 'Записати урок', icon: 'plus', act: 'lesson-add-for', arg: id },
-        { label: 'Редагувати', icon: 'edit', act: 'student-edit', arg: id, solid: true }
+        { label: 'Контакти', icon: 'phone', act: 'contacts', arg: id, m: { order: 3 } },
+        { label: 'Портал учня', icon: 'share', act: 'student-portal', arg: id, m: { order: 4 } },
+        { label: 'Записати урок', icon: 'plus', act: 'lesson-add-for', arg: id, m: { order: 1, solid: true } },
+        { label: 'Оплата', icon: 'wallet', act: 'pay-add', arg: id, m: { order: 2, only: true } },
+        { label: 'Редагувати', icon: 'edit', act: 'student-edit', arg: id, solid: true, m: { order: 5, solid: false } }
       ]
     }) +
 
@@ -115,10 +127,16 @@
     var weak = prog.slice(-3).reverse();
     var strong = prog.slice(0, 3);
 
+    /* На телефоні контакт — одразу дзвінок чи чат: номер — посилання tel:,
+       Telegram — t.me. На компʼютері, як і було, просто текст. */
+    var touch = C.touchy();
+    var tg = (st.telegram || '').trim().replace(/^@/, '').replace(/^https?:\/\/t\.me\//i, '');
+    var parentTel = st.parent && telOf(st.parent);
     var contacts = [
-      st.phone ? { i: 'phone', l: 'Учень', v: st.phone } : null,
-      st.parent ? { i: 'users', l: 'Батьки', v: st.parent } : null,
-      st.telegram ? { i: 'send', l: 'Telegram', v: st.telegram } : null
+      st.phone ? { i: 'phone', l: 'Учень', v: st.phone, href: touch && telOf(st.phone) } : null,
+      st.parent ? { i: 'users', l: 'Батьки', v: st.parent, href: touch && parentTel } : null,
+      st.telegram ? { i: 'send', l: 'Telegram', v: st.telegram,
+        href: touch && /^[\w.]{3,}$/.test(tg) ? 'https://t.me/' + tg : '' } : null
     ].filter(Boolean);
 
     return '<div class="grid grid--main">' +
@@ -221,10 +239,14 @@
         (contacts.length ? '<div class="card">' +
           '<div class="card-head"><div><h2 class="card-title">Контакти</h2></div></div>' +
           contacts.map(function (c) {
+            var v = c.href
+              ? '<a href="' + U.esc(c.href) + '"' + (/^https?:/.test(c.href) ? ' target="_blank" rel="noopener"' : '') +
+                ' style="color:var(--blue-600)">' + U.esc(c.v) + '</a>'
+              : U.esc(c.v);
             return '<div class="row" style="gap:11px;padding:9px 0;border-bottom:1px solid var(--line)">' +
               '<span style="color:var(--muted)">' + icon(c.i, 17) + '</span>' +
               '<div style="min-width:0"><div class="small muted">' + c.l + '</div>' +
-              '<div style="font-weight:600;font-size:13.5px">' + U.esc(c.v) + '</div></div></div>';
+              '<div style="font-weight:600;font-size:13.5px">' + v + '</div></div></div>';
           }).join('') + '</div>' : '') +
 
         '<div class="card">' +
@@ -405,9 +427,10 @@
 
     function line(iconName, label, value, href) {
       if (!value) return '';
+      // нова вкладка — лише для сайтів; tel: у новій вкладці лишав по собі порожню сторінку
       var inner = href
-        ? '<a href="' + U.esc(href) + '" target="_blank" rel="noopener" style="color:var(--blue-600);font-weight:650">' +
-          U.esc(value) + '</a>'
+        ? '<a href="' + U.esc(href) + '"' + (/^https?:/.test(href) ? ' target="_blank" rel="noopener"' : '') +
+          ' style="color:var(--blue-600);font-weight:650">' + U.esc(value) + '</a>'
         : '<span style="font-weight:650">' + U.esc(value) + '</span>';
       return '<div class="row" style="gap:12px;padding:13px 0;border-bottom:1px solid var(--line)">' +
         '<span style="color:var(--blue-600)">' + icon(iconName, 18) + '</span>' +
@@ -421,7 +444,8 @@
       '<div><div style="font-weight:750;font-size:16px">' + U.esc(st.name) + '</div>' +
       '<div class="small muted">' + U.esc(st.grade + ' · ' + st.goal) + '</div></div></div>' +
       line('phone', 'Телефон учня', st.phone, st.phone ? 'tel:' + st.phone.replace(/[^\d+]/g, '') : '') +
-      line('users', 'Батьки', st.parent, '') +
+      // у полі батьків — імʼя разом із номером; посиланням робимо, лише якщо номер там є
+      line('users', 'Батьки', st.parent, telOf(st.parent)) +
       line('send', 'Telegram', st.telegram, tgHandle ? 'https://t.me/' + tgHandle : '') +
       (!st.phone && !st.parent && !st.telegram
         ? '<div class="field__hint mt-2">Контакти не заповнені. Додайте їх у картці учня.</div>' : '');

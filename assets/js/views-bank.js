@@ -360,7 +360,8 @@
     if (f.sort) q.sort = f.sort;
     LISTS.forEach(function (k) { if (f[k].length) q[k] = f[k].join(','); });
     var s = Object.keys(q).map(function (k) { return k + '=' + encodeURIComponent(q[k]); }).join('&');
-    try { history.replaceState(null, '', '#/bank' + (s ? '?' + s : '')); } catch (e) { /* адреса — зручність */ }
+    // стан запису (його глибину для «Назад») лишаємо — міняється лише адреса
+    try { history.replaceState(history.state, '', '#/bank' + (s ? '?' + s : '')); } catch (e) { /* адреса — зручність */ }
     draw();
   }
 

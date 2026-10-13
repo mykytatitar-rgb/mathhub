@@ -3274,7 +3274,9 @@
       if (t.to === cur.lessonId) { setTimeout(function () { beginPlacing(t); }, 0); return; }
       flushSave();
       pendingTransfer = t;
-      location.hash = '#/board/' + t.to;
+      // зі шторки — замість її запису в історії (див. App.go)
+      if (window.App && App.go) App.go('#/board/' + t.to);
+      else location.hash = '#/board/' + t.to;
     }
 
     C.modal({
@@ -4281,11 +4283,17 @@
   }
 
   V.boardActions = {
+    /* Вихід — туди, звідки прийшли (розклад, учень, «Моє»), тією ж
+       історією, що й «Назад» телефона: досі ← додавала новий запис сторінки
+       учня, і «Назад» після неї вертав на дошку. Коли позаду нічого
+       нашого (дошку відкрили посиланням) — на уроки учня, як було. */
     'board-exit': function () {
       var lid = cur ? cur.lessonId : null;
       var lesson = lid ? S.get('lessons', lid) : null;
       V.unmountBoard();
-      location.hash = lesson ? '#/student/' + lesson.studentId + '/lessons' : '#/';
+      var fallback = lesson ? '#/student/' + lesson.studentId + '/lessons' : '#/';
+      if (window.App && App.back) App.back(fallback);
+      else location.hash = fallback;
     },
     'board-undo': function () { cur.engine.undo(); refreshUndo(); refreshEmpty(); scheduleThumb(); },
     'board-redo': function () { cur.engine.redo(); refreshUndo(); refreshEmpty(); scheduleThumb(); },

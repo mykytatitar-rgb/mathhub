@@ -117,6 +117,40 @@
   }
 
 
+  /* Телефон: найближчий урок першим на Огляді — хто, о котрій, за скільки,
+     і одразу «Дошка» та «Приєднатися». У кишені шукають саме це; на
+     компʼютері те саме видно в «Сьогодні» поруч, тож там картки немає (CSS). */
+  function dashNext() {
+    var now = new Date();
+    var next = S.upcoming().filter(function (l) {
+      var end = U.toDate(l.date).getTime() + (Number(l.duration) || 60) * 60000;
+      return end > now.getTime();
+    })[0];
+    if (!next) return '';
+    var st = S.get('students', next.studentId);
+    var at = U.toDate(next.date);
+    var mins = Math.round((at.getTime() - now.getTime()) / 60000);
+    var when = mins <= 0 ? 'вже йде'
+      : mins < 60 ? 'через ' + mins + ' хв'
+      : U.isSameDay(at, now) ? 'сьогодні о ' + U.fmtTime(at)
+      : U.fmtRelative(at) + ', ' + U.DAYS_FULL[at.getDay()].toLowerCase() + ' о ' + U.fmtTime(at);
+    var meet = S.meetUrlFor(next.studentId);
+    return '<div class="card dash-next">' +
+      '<button class="dash-next__who" data-act="lesson-open" data-arg="' + next.id + '">' +
+        C.avatar(st, 40) +
+        '<span class="dash-next__t"><span class="dash-next__k">Наступний урок · ' + U.esc(when) + '</span>' +
+        '<b>' + U.esc(st ? st.name : '—') + '</b>' +
+        '<span class="small muted truncate">' + U.esc(U.fmtTime(at) + ' · ' + (next.topic || 'тема не вказана')) +
+        '</span></span>' +
+      '</button>' +
+      '<div class="dash-next__acts">' +
+        '<button class="btn btn--soft" data-act="board-open" data-arg="' + next.id + '">' + icon('board', 16) + 'Дошка</button>' +
+        (meet ? '<a class="btn btn--primary" href="' + U.esc(meet) + '" target="_blank" rel="noopener">' +
+          icon('present', 16) + 'Приєднатися</a>' : '') +
+      '</div>' +
+    '</div>';
+  }
+
   V.dashboard = function () {
     var db = S.db();
     var today = U.today();
@@ -205,13 +239,16 @@
     return C.hero({
       title: greet + ', ' + (db.tutor.name ? U.vocative(db.tutor.name) : 'колего'),
       sub: U.DAYS_FULL[today.getDay()] + ', ' + U.fmtDateLong(today),
+      /* У смузі телефона головна кнопка — «Записати урок»: це щоденна дія,
+         а нового учня додають раз на місяць. Банер на компʼютері — як був. */
       actions: [
-        { label: 'Записати урок', icon: 'plus', act: 'lesson-add' },
-        { label: 'Новий учень', icon: 'user', act: 'student-add', solid: true }
+        { label: 'Записати урок', icon: 'plus', act: 'lesson-add', bar: 'solid' },
+        { label: 'Новий учень', icon: 'user', act: 'student-add', solid: true, bar: 'plain' }
       ]
     }) +
 
     '<div class="page page--overlap dash">' +
+      dashNext() +
       // на телефоні плитки ховаються: те саме нижче показують «Сьогодні» й «Дохід»
       '<div class="quick-row quick-row--dash mb-3">' +
         '<button class="quick" data-act="nav" data-arg="#/schedule">' +
@@ -413,8 +450,10 @@
         '<div class="stu-filters__q" style="position:relative;min-width:250px">' +
           '<span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted)">' +
           icon('search', 17) + '</span>' +
+          // клавіатура телефона — пошукова, з кнопкою «Знайти»; імена без автовиправлень
           '<input class="input" id="stu-search" placeholder="Пошук за іменем…" value="' + U.esc(query.q || '') +
-          '" style="padding-left:40px;border-radius:999px;background:#fff">' +
+          '" inputmode="search" enterkeyhint="search" autocorrect="off" autocapitalize="words"' +
+          ' style="padding-left:40px;border-radius:999px;background:#fff">' +
         '</div>' +
         '<div class="row row--wrap chip-row" style="gap:10px">' + chips + '</div>' +
       '</div>' +
@@ -2222,15 +2261,16 @@
             C.field('Ім\'я', C.input('name', t.name)) +
             C.field('Предмет', C.input('subject', t.subject)) +
             '<div class="field-row field-row--3">' +
-              C.field('Ціна за урок', C.input('defaultPrice', t.defaultPrice, 'type="number" step="any"')) +
+              C.field('Ціна за урок', C.input('defaultPrice', t.defaultPrice, C.numAttrs('type="number" step="any"'))) +
               C.field('Валюта', C.select('currency', t.currency || 'UAH',
                 U.CURRENCY_CODES.map(function (c) { return { value: c, label: U.symbol(c) + '  ' + c }; }))) +
-              C.field('Тривалість, хв', C.input('defaultDuration', t.defaultDuration, 'type="number" step="15"')) +
+              C.field('Тривалість, хв', C.input('defaultDuration', t.defaultDuration, 'type="number" step="15" inputmode="numeric"')) +
             '</div>' +
             '<div class="field__hint mb-2">Ці значення підставляються в картку нового учня. ' +
             'У кожного учня валюту можна змінити окремо.</div>' +
             C.field('Постійне посилання на зустріч',
-              C.input('meetUrl', t.meetUrl, 'placeholder="https://meet.google.com/abc-defg-hij"'),
+              C.input('meetUrl', t.meetUrl, 'type="url" autocapitalize="off" autocorrect="off" spellcheck="false" ' +
+                'placeholder="https://meet.google.com/abc-defg-hij"'),
               'Одне посилання на всі уроки — кнопка «Приєднатися» з’явиться в уроці й на дошці. ' +
               'У окремого учня можна вказати своє в його картці.') +
             '<button class="btn btn--primary" data-act="tutor-save">' + icon('check', 16) + 'Зберегти</button>' +
@@ -2260,7 +2300,7 @@
                   codes.slice(0, 2).map(function (c) {
                     var auto = st.map[c];
                     return C.field(U.symbol(c) + ' ' + c + ' → ₴',
-                      C.input('rate_' + c, R.manual()[c] || '', 'type="number" step="0.01" min="0" ' +
+                      C.input('rate_' + c, R.manual()[c] || '', C.numAttrs('type="number" step="0.01" min="0"') + ' ' +
                         'placeholder="' + (auto ? U.num(auto, 2) : 'напр. 42') + '"'));
                   }).join('') +
                 '</div>' +
@@ -2275,6 +2315,16 @@
           V.telegramCard() +
           V.calendarCard() +
           V.gcalCard() +
+          (window.App && App.installCard ? App.installCard() : '') +
+          /* У встановленому застосунку немає адресного рядка, і службову
+             сторінку за адресою вже не відкрити — а там копії, «Чи все
+             ціле», експорт і оновлення на свіжий код. Тому лише там —
+             згорнутий вхід; у браузері на компʼютері, як і було, нічого. */
+          (window.App && App.standalone && App.standalone()
+            ? '<details class="tech-zone"><summary>Службове: копії, перевірки, експорт</summary>' +
+                '<button class="btn btn--ghost btn--block" data-act="nav" data-arg="#/settings/tech">Відкрити</button>' +
+              '</details>'
+            : '') +
         '</div>' +
       '</div>' +
     '</div>';
@@ -2286,7 +2336,8 @@
      йдуть тільки якщо колись доведеться щось повернути вручну. */
   V.settingsTech = function () {
     var db = S.db();
-    return C.hero({ short: true, title: 'Службове', sub: 'копії, перевірки, експорт' }) +
+    return C.hero({ short: true, title: 'Службове', sub: 'копії, перевірки, експорт',
+      back: { act: 'nav', arg: '#/settings', label: 'Налаштування', phone: true } }) +
       '<div class="page"><div class="stack" style="max-width:760px">' +
           '<div class="card">' +
             '<div class="card-head"><div><h2 class="card-title">Дані</h2>' +

@@ -136,6 +136,10 @@
 
   App.setQuery = function (patch) { setQuery(patch); };
 
+  /* Фільтр, пошук, тиждень, вигляд — це та сама сторінка, а не новий крок.
+     Адреса змінюється на місці (replaceState), без нового запису в історії:
+     інакше «Назад» після пошуку прокручував би «Ол», «Олек», «Олекс», а не
+     повертав на попередню сторінку. */
   function setQuery(patch) {
     var r = parseRoute();
     Object.keys(patch).forEach(function (k) {
@@ -145,8 +149,48 @@
     var qs = Object.keys(r.query).map(function (k) {
       return encodeURIComponent(k) + '=' + encodeURIComponent(r.query[k]);
     }).join('&');
-    location.hash = '#' + r.path + (qs ? '?' + qs : '');
+    var h = '#' + r.path + (qs ? '?' + qs : '');
+    if (h === location.hash) return;
+    try {
+      history.replaceState(history.state, '', h);
+    } catch (e) {
+      location.replace(h);               // без історії — хоча б не новий запис
+      return;
+    }
+    C.hist.note();
+    App.render();
   }
+
+  /** Той самий розділ, що вже відкритий («#/» і порожня адреса — одне й те саме). */
+  function samePlace(hash) {
+    var cur = location.hash;
+    if (!cur || cur === '#') cur = '#/';
+    return cur === hash;
+  }
+
+  /* Перехід усередині кабінету.
+     Зі шторки (відкрите вікно має свій запис в історії) — замість її запису,
+     а не поверх: інакше під новою сторінкою лишався б «порожній» запис, і
+     перше «Назад» звідти нічого не робило б. replace — замінити поточну
+     сторінку (вкладки нижньої панелі не накопичуються в історії). */
+  App.go = function (hash, replace) {
+    if (samePlace(hash)) { C.closeAll(); return; }
+    var st = history.state;
+    if (replace || (st && st.ov)) {
+      C.hist.replacing(hash);
+      location.replace(hash);
+    } else {
+      location.hash = hash;
+    }
+  };
+
+  /* Стрілка «назад»: туди, звідки прийшли, якщо це наша сторінка; інакше —
+     на батьківську (fallback). Досі ← додавала новий запис «Учні», і після
+     неї «Назад» телефона вертав до того самого учня — по колу. */
+  App.back = function (fallback) {
+    if (C.hist.depth() > 0) history.back();
+    else App.go(fallback || '#/', true);
+  };
 
   /* ============================================================
      Ширина сайдбара: згортання та перетягування
@@ -384,11 +428,81 @@
     }
     var any = TABS.some(function (t) { return on(t.hash); });
     el.innerHTML = TABS.map(function (t) {
-      return '<button class="m-tab' + (on(t.hash) ? ' is-on' : '') + '" data-act="nav" data-arg="' + t.hash + '">' +
+      return '<button class="m-tab' + (on(t.hash) ? ' is-on' : '') + '" data-act="tabnav" data-arg="' + t.hash + '">' +
         icon(t.icon, 22) + '<span>' + t.label + '</span></button>';
     }).join('') +
     '<button class="m-tab' + (any ? '' : ' is-on') + '" data-act="menu">' + icon('menu', 22) + '<span>Ще</span></button>';
   }
+
+  /* «Ще» на телефоні — шторка знизу з плитками, а не бічне меню з лівого
+     краю: кнопка «Ще» внизу праворуч, і рука тягнеться туди ж. Тут лише ті
+     розділи, яких немає в нижній панелі, плюс налаштування. Закривається
+     як будь-яка шторка — «Назад», хрестиком, донизу пальцем. */
+  function moreSheet() {
+    var path = parseRoute().path;
+    var items = navOrder().filter(function (n) {
+      return !TABS.some(function (t) { return t.hash === n.hash; });
+    }).concat([{ hash: '#/settings', icon: 'settings', label: 'Налаштування' }]);
+
+    C.modal({
+      title: 'Ще',
+      body: '<div class="more-grid">' + items.map(function (n) {
+        var on = path === n.hash.replace(/^#/, '') || path.indexOf(n.hash.replace(/^#/, '') + '/') === 0;
+        var cnt = n.count ? n.count() : 0;
+        return '<button class="more-tile' + (on ? ' is-on' : '') + '" data-act="nav" data-arg="' + n.hash + '">' +
+          '<span class="more-tile__top">' + icon(n.icon, 22) +
+          (cnt ? '<span class="more-tile__n">' + cnt + '</span>' : '') + '</span>' +
+          '<span class="more-tile__l">' + U.esc(n.label) + '</span></button>';
+      }).join('') + '</div>' + installCard()
+    });
+  }
+
+  /* ---------- Встановлення на телефон ----------
+
+     Без адресного рядка й зі своєю іконкою кабінет відкривається як
+     застосунок. Chrome на Android пропонує це сам (подія
+     beforeinstallprompt) — ловимо її й показуємо тиху картку в «Ще» й у
+     налаштуваннях, без смуг і спливних підказок. iPhone такої події не має:
+     там лише через «Поділитися», тож картка це й підказує. */
+  var installEvt = null;
+
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    installEvt = e;
+  });
+  window.addEventListener('appinstalled', function () {
+    installEvt = null;
+    if (S.db()) App.render();
+  });
+
+  /** Відкрито як встановлений застосунок, а не у вкладці браузера. */
+  App.standalone = function () {
+    try {
+      if (window.matchMedia('(display-mode: standalone)').matches) return true;
+    } catch (e) {}
+    return window.navigator.standalone === true;
+  };
+
+  function isIOS() {
+    var n = window.navigator;
+    return /iPhone|iPad|iPod/.test(n.userAgent) || (n.platform === 'MacIntel' && n.maxTouchPoints > 1);
+  }
+
+  function installCard() {
+    if (App.standalone() || !C.touchy()) return '';
+    var ios = isIOS();
+    if (!installEvt && !ios) return '';
+    return '<div class="install-card">' +
+      '<span class="install-card__i">' + icon('download', 20) + '</span>' +
+      '<div class="install-card__t"><b>Застосунок на телефоні</b>' +
+      '<span>' + (installEvt
+        ? 'Своя іконка на екрані й повний екран без адресного рядка.'
+        : 'Поділитися → «На початковий екран». Після встановлення увійдіть ще раз — у застосунку окреме сховище.') +
+      '</span></div>' +
+      (installEvt ? '<button class="btn btn--primary btn--sm" data-act="app-install">Встановити</button>' : '') +
+    '</div>';
+  }
+  App.installCard = installCard;
 
   /* Телефон: назва сторінки — у верхній смузі, як у звичайних застосунках.
      Банер із великою назвою на телефоні ховається (див. app.css), а все,
@@ -401,14 +515,20 @@
     olymp: 'Олімпіади', desk: 'Моє', mathmap: 'Карта математики', settings: 'Налаштування'
   };
 
+  /* Дії смуги, що сховались під «⋯»: значки без підпису на дотиковому
+     екрані не пояснюють себе, тож коли їх більше одного — список з назвами. */
+  var barMore = [];
+
   function renderTopBar(route) {
     var bar = document.querySelector('.m-bar');
     if (!bar) return;
     var hero = document.querySelector('#main .hero');
     var person = hero && hero.querySelector('.avatar');
     var t = hero && hero.querySelector('.hero__title');
-    // база формул двомовна — і назва в смузі тією мовою, що вибрана в ній
+    // база формул двомовна — і назва в смузі тією мовою, що вибрана в ній;
+    // на сторінці учня — його імʼя: банер із ним прокручується геть
     var title = route.parts[0] === 'reference' && V.formulasTitle ? V.formulasTitle()
+      : route.parts[0] === 'student' && t ? t.textContent
       : TITLES[route.parts[0] || ''] || (t ? t.textContent : 'Вектор');
     var subEl = hero && !person && hero.querySelector('.hero__sub');
     var back = hero && hero.querySelector('.hero__back');
@@ -418,21 +538,42 @@
       return ' data-act="' + U.esc(el.getAttribute('data-act') || '') + '"' +
         (el.getAttribute('data-arg') ? ' data-arg="' + U.esc(el.getAttribute('data-arg')) + '"' : '');
     }
+    // смуга може показувати кнопку інакше, ніж банер (data-bar у C.hero)
+    function solidOf(b) {
+      var mode = b.getAttribute('data-bar');
+      return mode ? mode === 'solid' : b.classList.contains('hero-btn--solid');
+    }
+    /* ← веде назад історією, а не додає новий запис «Учні» (див. App.back);
+       куди йти, коли позаду нічого нашого, — з банера */
+    var backAttrs = !back ? ''
+      : back.getAttribute('data-act') === 'nav'
+        ? ' data-act="back" data-arg="' + U.esc(back.getAttribute('data-arg') || '#/') + '"'
+        : attrs(back);
+
+    var plain = acts.filter(function (b) { return !solidOf(b); });
+    barMore = plain.length > 1 ? plain.map(function (b) {
+      var svg = b.querySelector('svg');
+      return { act: b.getAttribute('data-act') || '', arg: b.getAttribute('data-arg') || '',
+               label: b.textContent.trim(), svg: svg ? svg.outerHTML : '' };
+    }) : [];
 
     bar.innerHTML =
-      (back ? '<button class="m-bar__btn"' + attrs(back) + ' aria-label="Назад">' + icon('arrowLeft', 22) + '</button>' : '') +
+      (back ? '<button class="m-bar__btn"' + backAttrs + ' aria-label="Назад">' + icon('arrowLeft', 22) + '</button>' : '') +
       '<div class="m-bar__t' + (back ? '' : ' m-bar__t--pad') + '">' +
         '<div class="m-bar__title">' + U.esc(title) + '</div>' +
         (subEl && subEl.textContent.trim() ? '<div class="m-bar__sub">' + U.esc(subEl.textContent.trim()) + '</div>' : '') +
       '</div>' +
-      acts.map(function (b) {
-        var solid = b.classList.contains('hero-btn--solid');
+      acts.filter(function (b) { return solidOf(b) || !barMore.length; }).map(function (b) {
+        var solid = solidOf(b);
         var label = b.textContent.trim();
         var svg = b.querySelector('svg');
         return '<button class="m-act' + (solid ? ' m-act--solid' : '') + '"' + attrs(b) +
           ' aria-label="' + U.esc(label) + '" title="' + U.esc(label) + '">' +
           (svg ? svg.outerHTML : '') + (solid ? '<span>' + U.esc(label) + '</span>' : '') + '</button>';
-      }).join('');
+      }).join('') +
+      (barMore.length
+        ? '<button class="m-act" data-act="bar-more" aria-label="Ще дії" title="Ще дії">' + icon('dots', 21) + '</button>'
+        : '');
   }
 
   function renderSidebar(route) {
@@ -480,14 +621,20 @@
   App.render = function () {
     // база ще не прочитана (disk.js підтягує дошки) — малювати нічого
     if (!S.db()) return;
-    closeMenu();
+    // перемальовування тієї самої сторінки (приїхали зміни, курс НБУ) меню не згортає
+    if (lastRendered !== location.hash) closeMenu();
     var route = parseRoute();
+
+    /* Прокрутка кожної сторінки, з якої пішли, — щоб «Назад» повертав туди
+       ж, де гортали (розклад → урок → дошка → назад), а не на початок. */
+    var popped = C.hist.popped();
+    if (lastRendered !== null && lastPath !== route.path) scrollByHash[lastRendered] = window.scrollY;
 
     /* Ярлик «Новий урок» на іконці застосунку (довге натискання): розклад і
        одразу шторка нового уроку. Позначку з адреси прибираємо, щоб
        оновлення сторінки не відкривало шторку вдруге. */
     if (route.query.new && route.parts[0] === 'schedule') {
-      try { history.replaceState(history.state, '', location.pathname + location.search + '#/schedule'); } catch (e) {}
+      try { history.replaceState(history.state, '', location.pathname + location.search + '#/schedule'); C.hist.note(); } catch (e) {}
       route = parseRoute();
       setTimeout(function () { if (window.F && F.lesson) F.lesson(null, {}); }, 0);
     }
@@ -497,7 +644,9 @@
     if (route.parts[0] === 'bank-key') {
       if (window.BankSeal) BankSeal.setKey(route.parts[1] || '');
       try {
-        history.replaceState(null, '', location.pathname + location.search + '#/bank');
+        // стан запису (його глибину) лишаємо — міняється лише адреса
+        history.replaceState(history.state, '', location.pathname + location.search + '#/bank');
+        C.hist.note();
       } catch (e) {
         location.replace('#/bank');
         return;
@@ -512,6 +661,9 @@
        означало б знищити полотно разом із незбереженим малюнком. */
     if (route.parts[0] === 'board') {
       if (V.boardMountedFor() === route.parts[1]) return;
+      // уже тут, навіть поки рушій вантажиться: прокрутку попередньої сторінки записано вище
+      lastRendered = location.hash;
+      lastPath = route.path;
       V.unmountBoard();
       app.classList.add('is-board');
       if (!window.Board) {
@@ -548,7 +700,10 @@
     if (!document.body.classList.contains('is-navdrag')) {
       side.innerHTML = renderSidebar(route);
       var navBox = side.querySelector('.side-scroll');
-      if (navBox) bindNavDrag(navBox);
+      /* На телефоні бічної панелі не видно (розділи — у «Ще»), а
+         перетягування там підхоплювало пункт раніше, ніж браузер розумів,
+         що це прокрутка, і гортання переставляло розділи. */
+      if (navBox && !C.phone()) bindNavDrag(navBox);
     }
 
     var html;
@@ -595,14 +750,21 @@
 
     /* Нагору — лише коли відкрили іншу сторінку. Перемальовування тієї самої
        (приїхали зміни, відмітили урок) лишає сторінку там, де її гортали:
-       інакше після кожної галочки список уроків відлітав на початок. */
-    var sameRoute = lastRendered === location.hash;
+       інакше після кожної галочки список уроків відлітав на початок. Те
+       саме — пошук і фільтри списку учнів: літера в пошуку не кидає нагору.
+       Повернулись «Назад» — туди, де сторінку залишили. */
+    var sameRoute = lastRendered === location.hash ||
+      (lastPath === route.path && (route.parts[0] === 'students' || onlySearchChanged(lastRendered, location.hash)));
     var keepY = window.scrollY;
+    var backY = !sameRoute && popped ? scrollByHash[location.hash] : null;
     main.innerHTML = html;
     renderTopBar(route);
-    if (route.parts[0] !== 'students') window.scrollTo(0, sameRoute ? keepY : 0);
+    window.scrollTo(0, sameRoute ? keepY : backY != null ? backY : 0);
+    App.scrollRestored = backY != null;
     lastRendered = location.hash;
+    lastPath = route.path;
     if (V.afterRender) V.afterRender(route);
+    App.scrollRestored = false;
 
     if (restore) {
       var el = document.getElementById(restore.id);
@@ -611,6 +773,16 @@
   };
 
   var lastRendered = null;
+  var lastPath = null;
+  var scrollByHash = {};
+
+  /** Між двома адресами тієї самої сторінки змінився лише пошук (q). */
+  function onlySearchChanged(a, b) {
+    function rest(h) {
+      return String(h || '').replace(/([?&])q=[^&]*/, '$1').replace(/[?&]+$/, '').replace('?&', '?');
+    }
+    return rest(a) === rest(b);
+  }
 
   App.refresh = function () { App.render(); };
 
@@ -619,13 +791,67 @@
      ============================================================ */
 
   var ACTIONS = {
-    'nav': function (arg) { closeMenu(); location.hash = arg; },
+    'nav': function (arg) { closeMenu(); App.go(arg); },
+
+    /* Нижня панель телефона. Вкладки не накопичуються в історії: з Огляду —
+       новий запис, з іншої вкладки — замість поточної. Тож «Назад» із
+       будь-якої вкладки веде на Огляд, а звідти — із застосунку, як заведено
+       на Android. Якщо цей розділ уже лежить позаду (учень → «Учні»), —
+       повертаємось до нього, разом із прокруткою. Ще раз на свою ж вкладку —
+       нагору сторінки, у розкладі — до лінії «Зараз». */
+    'tabnav': function (arg) {
+      closeMenu();
+      var path = parseRoute().path;
+      var target = arg.replace(/^#/, '') || '/';
+      if (path === target) {
+        var now = document.querySelector('[data-ag-now]');
+        if (now && now.scrollIntoView) now.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        else window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      var steps = C.hist.find(target);
+      if (steps) { history.go(steps); return; }
+      App.go(arg, path !== '/');
+    },
+
+    'back': function (arg) { App.back(arg); },
 
     'board-retry': function () { App.render(); },
 
     'menu': function () {
+      if (window.innerWidth <= PHONE) { moreSheet(); return; }
       var app = document.querySelector('.app');
       if (app) app.classList.toggle('is-menu');
+    },
+
+    'bar-more': function () {
+      if (!barMore.length) return;
+      C.modal({
+        title: 'Дії',
+        body: '<div class="act-list">' + barMore.map(function (b) {
+          return '<button class="act-list__i" data-act="' + U.esc(b.act) + '"' +
+            (b.arg ? ' data-arg="' + U.esc(b.arg) + '"' : '') + '>' + b.svg +
+            '<span>' + U.esc(b.label) + '</span></button>';
+        }).join('') + '</div>',
+        onMount: function (wrap, close) {
+          // спершу закрити список, потім виконати дію: вона часто відкриває свою шторку
+          wrap.addEventListener('click', function (e) {
+            if (e.target.closest && e.target.closest('[data-act]')) close();
+          });
+        }
+      });
+    },
+
+    'app-install': function () {
+      if (!installEvt) return;
+      var ev = installEvt;
+      ev.prompt();
+      ev.userChoice.then(function () {
+        installEvt = null;
+        // картка могла лишитися у відкритій шторці «Ще» — пропозиція вже використана
+        U.$$('.install-card').forEach(function (el) { el.remove(); });
+        App.render();
+      }, function () {});
     },
 
     'sidebar-toggle': function () {
@@ -634,7 +860,7 @@
       applySidebar();
     },
 
-    'student-open': function (arg) { closeMenu(); location.hash = '#/student/' + arg; },
+    'student-open': function (arg) { closeMenu(); App.go('#/student/' + arg); },
     'student-add': function () { F.student(null); },
     'student-edit': function (arg) { F.student(arg); },
     // через S.setArchived: той прибирає уроки часу відсутності й заповнює розклад
@@ -657,7 +883,7 @@
       App.render();
     },
     'lesson-edit': function (arg) { F.lesson(arg); },
-    'board-open': function (arg) { location.hash = '#/board/' + arg; },
+    'board-open': function (arg) { App.go('#/board/' + arg); },
 
     'hw-add': function (arg) { F.homework(null, { studentId: arg, lockStudent: true }); },
     'hw-edit': function (arg) { F.homework(arg); },
@@ -713,14 +939,15 @@
     'desk-open':   function (arg) {
       // дошка створюється на місці: справа без неї сенсу не має
       S.ensureBoard(arg);
-      location.hash = '#/board/' + arg;
+      App.go('#/board/' + arg);
     },
     'desk-status': function (arg) { V.deskCycle(arg); },
     'gen-week': function () { F.generateWeek(); },
 
+    // вкладки учня — та сама сторінка, тож без нового запису в історії
     'tab': function (arg) {
       var r = parseRoute();
-      if (r.parts[0] === 'student') location.hash = '#/student/' + r.parts[1] + '/' + arg;
+      if (r.parts[0] === 'student') App.go('#/student/' + r.parts[1] + '/' + arg, true);
     },
     'filter-goal': function (arg) { setQuery({ goal: arg }); },
     'filter-topic': function (arg) { setQuery({ topic: arg }); },
@@ -802,7 +1029,7 @@
           S.importBundle(String(reader.result)).then(function (imgCount) {
             U.toast(imgCount ? 'Дані та ' + U.pl(imgCount, 'картинку', 'картинки', 'картинок') + ' імпортовано'
                              : 'Дані імпортовано', 'ok');
-            location.hash = '#/';
+            App.go('#/');
             App.render();
           }).catch(function (e) {
             U.toast('Не вдалося прочитати файл: ' + (e && e.message ? e.message : e), 'err');
@@ -888,7 +1115,7 @@
               'погодьтеся: тоді на телефоні він підставиться сам.</div>' +
           '</form>',
         buttons: [
-          { label: 'Скасувати', kind: 'btn--ghost' },
+          { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
           {
             label: 'Зберегти', kind: 'btn--primary', act: 'save',
             onClick: function (wrap, close) {
@@ -934,7 +1161,7 @@
           U.toast('Повертаю…');
           window.Cloud.restoreBackup(Number(i)).then(function () {
             U.toast('Дані повернуто', 'ok');
-            location.hash = '#/';
+            App.go('#/');
             App.render();
           }).catch(function (e) {
             U.toast('Не вдалося повернути: ' + (e && e.message ? e.message : e), 'err');
@@ -1028,7 +1255,7 @@
 
     /* Відкрити вкладення справи. Файл лежить у сховищі браузера, тож
        спершу дістаємо його, і лише потім віддаємо системі. */
-    'sheet-open': function (id) { location.hash = '#/sheet/' + id; },
+    'sheet-open': function (id) { App.go('#/sheet/' + id); },
 
     /* Видалення теми питає підтвердження й називає її поіменно: у довіднику
        теми схожі, і «ви впевнені?» без назви тут нічого не означає. */
@@ -1138,7 +1365,7 @@
         function () {
           S.remove('materials', id);
           U.toast('Topic deleted');
-          location.hash = '#/sheet';
+          App.go('#/sheet');
           App.render();
         },
         'Delete', 'Cancel');
@@ -1224,7 +1451,7 @@
           U.toast('Повертаю…');
           window.Cloud.restoreVault(id).then(function () {
             U.toast('Копію повернуто', 'ok');
-            location.hash = '#/';
+            App.go('#/');
             App.render();
           }).catch(function (e) {
             U.toast('Не вдалося повернути: ' + (e && e.message ? e.message : e), 'err');
@@ -1241,7 +1468,7 @@
           U.toast('Відновлюю…');
           window.Cloud.restoreSnapshot(id).then(function () {
             U.toast('Версію відновлено', 'ok');
-            location.hash = '#/';
+            App.go('#/');
             App.render();
           }).catch(function (e) {
             U.toast('Не вдалося відновити: ' + (e && e.message ? e.message : e), 'err');
@@ -1258,7 +1485,7 @@
       }
       C.confirm('Повернути демо-дані?',
         'Поточні дані буде замінено демонстраційними. Якщо там є реальні учні — спершу зробіть експорт.',
-        function () { S.reset(); U.toast('Демо-дані відновлено', 'ok'); location.hash = '#/'; App.render(); },
+        function () { S.reset(); U.toast('Демо-дані відновлено', 'ok'); App.go('#/'); App.render(); },
         'Так, замінити');
     },
 
@@ -1267,7 +1494,7 @@
         'Буде видалено всіх учнів, уроки, домашні завдання, оплати, нотатки й матеріали' +
         (window.Cloud && Cloud.available() && Cloud.signedIn() ? ' — на всіх ваших пристроях' : '') +
         '. Профіль і налаштування лишаться. Відновити не вийде.',
-        function () { S.wipe(); U.toast('Дані очищено'); location.hash = '#/'; App.render(); },
+        function () { S.wipe(); U.toast('Дані очищено'); App.go('#/'); App.render(); },
         'Так, видалити все');
     }
   };
@@ -1335,7 +1562,61 @@
     }
   });
 
-  window.addEventListener('hashchange', App.render);
+  /* Нова адреса — нова сторінка: вікна старої закриваються (інакше шторка
+     лишалась би над чужою сторінкою), а новий запис історії отримує свою
+     глибину (див. C.hist). */
+  C.hist.boot();
+  window.addEventListener('hashchange', function () {
+    C.closeAll(true);
+    C.hist.stamp();
+    App.render();
+  });
+
+  /* Пошук на телефоні: «Знайти» на клавіатурі ховає її — результати вже
+     на екрані, а клавіатура закривала пів списку. */
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' || !e.target || e.target.id !== 'stu-search' || !C.touchy()) return;
+    e.preventDefault();
+    e.target.blur();
+  });
+
+  /* Клавіатура телефона. iPhone, а з версії 108 і Chrome на Android, не
+     зменшують сторінку під клавіатуру — вона просто наїжджає згори, разом
+     зі шторкою, її полями й «Зберегти». Видима частина екрана
+     (visualViewport) знає правду: її висоту й зсув передаємо в CSS
+     (--vvh, --vvt), і шторка стоїть над клавіатурою. Поки клавіатура
+     відкрита (html.kb-open), нижня панель і «+ Урок» ховаються. */
+  (function () {
+    var de = document.documentElement;
+    var vv = window.visualViewport;
+    if (vv) {
+      var sync = function () {
+        de.style.setProperty('--vvh', Math.round(vv.height) + 'px');
+        de.style.setProperty('--vvt', Math.round(vv.offsetTop) + 'px');
+      };
+      vv.addEventListener('resize', function () {
+        sync();
+        // клавіатура зʼявилась — поле, в якому пишуть, не лишається під нею
+        var a = document.activeElement;
+        if (C.phone() && a && a.closest && a.closest('.modal') && a.scrollIntoView) {
+          requestAnimationFrame(function () { a.scrollIntoView({ block: 'nearest' }); });
+        }
+      });
+      vv.addEventListener('scroll', sync);
+      sync();
+    }
+    var TYPING = 'input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file])' +
+      ':not([type=button]):not([type=submit]):not([type=color]), textarea, select, [contenteditable="true"]';
+    document.addEventListener('focusin', function (e) {
+      if (e.target && e.target.matches && e.target.matches(TYPING)) de.classList.add('kb-open');
+    });
+    document.addEventListener('focusout', function () {
+      setTimeout(function () {
+        var a = document.activeElement;
+        if (!a || !a.matches || !a.matches(TYPING)) de.classList.remove('kb-open');
+      }, 50);
+    });
+  })();
 
   /* Прокрутку веде сам кабінет (див. App.render і розклад, що відкривається
      на «Зараз»). Браузер після оновлення сторінки повертав стару позицію
@@ -1370,7 +1651,7 @@
     if (e.key === '/' ) {
       var s = document.getElementById('stu-search');
       if (s) { e.preventDefault(); s.focus(); }
-      else { location.hash = '#/students'; }
+      else { App.go('#/students'); }
     }
   });
 

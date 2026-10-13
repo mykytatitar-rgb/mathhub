@@ -224,9 +224,19 @@
    * opts: { back, title, sub, avatar, actions:[{label,icon,act,solid}], short }
    */
   C.hero = function (opts) {
+    /* Телефон бачить ті самі кнопки трохи інакше, а компʼютер — як було:
+       bar — якою кнопка стане у верхній смузі ('solid' — з підписом,
+       'plain' — значком); m — порядок і вигляд у рядку банера на телефоні
+       ({ order, solid, only }: only — лише на телефоні). */
     var a = (opts.actions || []).map(function (b) {
-      return '<button class="hero-btn' + (b.solid ? ' hero-btn--solid' : '') + '" data-act="' + b.act + '"' +
-        (b.arg ? ' data-arg="' + U.esc(b.arg) + '"' : '') + '>' +
+      var m = b.m || {};
+      var cls = (b.solid ? ' hero-btn--solid' : '') +
+        (m.solid === true ? ' hero-btn--msolid' : m.solid === false ? ' hero-btn--mplain' : '') +
+        (m.only ? ' hero-btn--monly' : '');
+      return '<button class="hero-btn' + cls + '" data-act="' + b.act + '"' +
+        (b.arg ? ' data-arg="' + U.esc(b.arg) + '"' : '') +
+        (b.bar ? ' data-bar="' + U.esc(b.bar) + '"' : '') +
+        (m.order != null ? ' style="--mo:' + Number(m.order) + '"' : '') + '>' +
         (b.icon ? icon(b.icon, 17) : '') + U.esc(b.label) + '</button>';
     }).join('');
 
@@ -234,7 +244,9 @@
       (opts.tight ? ' hero--tight' : '') + '">' +
       C.mathPattern() +
       '<div class="hero__inner">' +
-      (opts.back ? '<button class="hero__back" data-act="' + opts.back.act + '"' +
+      // back.phone — «назад» лише для стрілки у верхній смузі телефона; на компʼютері його не видно
+      (opts.back ? '<button class="hero__back' + (opts.back.phone ? ' hero__back--m' : '') +
+        '" data-act="' + opts.back.act + '"' +
         (opts.back.arg ? ' data-arg="' + U.esc(opts.back.arg) + '"' : '') + '>' +
         icon('arrowLeft', 18) + U.esc(opts.back.label) + '</button>' : '') +
       '<div class="hero__row">' +
@@ -271,7 +283,10 @@
 
     var row = '<div class="lesson-row" data-lesson="' + lesson.id + '">' +
       '<div class="lesson-row__num">' + (num != null ? num : icon('book', 24)) + '</div>' +
-      '<div class="lesson-row__body">' +
+      /* На телефоні вся картка — під пальцем: торкнутись опису й відкрити
+         урок, а не цілитися в кнопку. Миша на компʼютері — як було. */
+      '<div class="lesson-row__body"' +
+        (C.touchy() ? ' data-act="lesson-open" data-arg="' + lesson.id + '"' : '') + '>' +
       '<div class="lesson-row__date">' + icon('clock', 14) + U.fmtDateTime(lesson.date) +
       ' <span class="muted">· ' + U.fmtRelative(lesson.date) + '</span></div>' +
       '<div class="lesson-row__title">' + U.esc(lesson.topic || 'Урок без теми') + '</div>' +
@@ -315,13 +330,257 @@
   var modalStack = [];
   var modalSeq = 0;
 
+  /** Телефон чи інший екран, де працюють пальцем. */
+  C.touchy = function () {
+    try { return window.matchMedia('(max-width: 640px), (pointer: coarse)').matches; }
+    catch (e) { return window.innerWidth <= 640; }
+  };
+
+  /** Вузький екран телефона: там вікна — шторки знизу (див. app.css). */
+  C.phone = function () {
+    try { return window.matchMedia('(max-width: 640px)').matches; }
+    catch (e) { return window.innerWidth <= 640; }
+  };
+
+  /* ============================================================
+     Системне «Назад»: шторки й історія переходів
+     ============================================================
+
+     На телефоні «Назад» (кнопка Android, жест у встановленому застосунку) —
+     найчастіший спосіб закрити шторку. Досі він гортав сторінку під нею або
+     виходив із застосунку, а шторка лишалась на екрані. Тепер відкрита
+     шторка має свій запис в історії: «Назад» знімає саме його й закриває
+     шторку, а сторінка лишається там, де була.
+
+     Кожен запис сторінки ще й знає свою глибину d — скільки наших сторінок
+     під ним. З нею стрілка ← у верхній смузі вирішує, чи є куди
+     повертатися «Назад», чи треба йти на батьківську сторінку: інакше
+     ← з першої ж сторінки виводила б із застосунку. */
+
+  var ovEntry = false;      // наш запис «відкрита шторка» зараз нагорі історії
+  var skipPop = false;      // наступний popstate — від нашого ж history.back()
+  var backT = null;
+  var lastD = 0;            // глибина поточного запису
+  var replaceTo = null;     // перехід на цю адресу замінює поточний запис, а не додає новий
+  var poppedTo = null;      // адреса, куди щойно повернулись кнопкою «Назад»
+  var trail = [];           // адреси наших сторінок за глибиною — щоб повертатись до вже відкритої
+  var others = [];          // інші шторки, крім вікон (шухляда теми на карті)
+  var TRAIL_KEY = 'vektor.trail';
+
+  function hist() { return window.history; }
+
+  function anyOpen() {
+    if (modalStack.length) return true;
+    for (var i = 0; i < others.length; i++) if (others[i].open()) return true;
+    return false;
+  }
+
+  function ovOpen() {
+    if (backT) { clearTimeout(backT); backT = null; }
+    if (ovEntry) return;
+    try {
+      hist().pushState({ ov: 1, d: lastD + 1 }, '');
+      lastD += 1;
+      ovEntry = true;
+    } catch (e) { /* без історії шторка просто закривається хрестиком, як раніше */ }
+  }
+
+  /* Шторку закрили хрестиком чи кнопкою, а не «Назад», — її запис в історії
+     прибираємо самі. Не одразу: картка уроку → «Редагувати» закриває одну
+     шторку й за 60 мс відкриває іншу, і та має сісти на той самий запис,
+     а не смикати історію туди й назад. */
+  function ovClosed(fromPop) {
+    if (fromPop) { ovEntry = false; return; }
+    if (backT) clearTimeout(backT);
+    backT = setTimeout(function () {
+      backT = null;
+      if (anyOpen()) return;
+      var st = hist().state;
+      if (ovEntry && st && st.ov) { ovEntry = false; skipPop = true; hist().back(); }
+      else ovEntry = false;
+    }, 120);
+  }
+
+  function saveTrail() {
+    try { sessionStorage.setItem(TRAIL_KEY, JSON.stringify(trail)); } catch (e) {}
+  }
+
+  function pathOf(hash) {
+    var h = String(hash || '').replace(/^#/, '') || '/';
+    var q = h.indexOf('?');
+    return q >= 0 ? h.slice(0, q) : h;
+  }
+
+  window.addEventListener('popstate', function (e) {
+    var st = e.state;
+    if (st && st.d != null) lastD = st.d;
+    if (skipPop) { skipPop = false; return; }
+    /* Перехід за адресою (location.hash = …) теж шле popstate, але з
+       порожнім станом: це не «Назад», і шторок він не стосується. */
+    if (!st) return;
+    ovEntry = false;                       // запис, з якого пішли, уже позаду
+    if (modalStack.length) {
+      modalStack[modalStack.length - 1].request(true);
+      if (anyOpen()) ovOpen();             // під нею ще одна шторка — їй теж потрібен запис
+      return;
+    }
+    for (var i = 0; i < others.length; i++) {
+      if (others[i].open()) {
+        others[i].close(true);
+        if (anyOpen()) ovOpen();
+        return;
+      }
+    }
+    /* Запис шторки, що лишився під сторінкою, на яку з неї перейшли: сам
+       нічого не показує — тож крок далі, до самої сторінки. */
+    if (st.ov) { hist().back(); return; }
+    poppedTo = location.hash;
+  });
+
+  /** Закрити всі вікна. keepHistory — сторінка вже змінилась, історію не чіпати. */
+  C.closeAll = function (keepHistory) {
+    var keep = keepHistory === true;
+    if (keep && backT) { clearTimeout(backT); backT = null; }
+    while (modalStack.length) modalStack[modalStack.length - 1](keep);
+    others.forEach(function (o) { if (o.open()) o.close(keep); });
+    if (keep) ovEntry = false;
+  };
+
+  /* Інші шторки (шухляда теми на карті) — на тому самому записі історії.
+     add({ open: () => bool, close: (fromPop) => … }) */
+  C.overlay = {
+    open: ovOpen,
+    closed: ovClosed,
+    add: function (o) { others.push(o); }
+  };
+
+  C.hist = {
+    /** На старті: позначити поточний запис як сторінку глибини 0 (або ту, що вже записана). */
+    boot: function () {
+      var h = hist(), st = h.state;
+      try {
+        if (!st || st.d == null) h.replaceState({ d: 0 }, '');
+        // перезавантажились із відкритою шторкою — тепер це просто сторінка
+        else if (st.ov) h.replaceState({ d: st.d }, '');
+      } catch (e) {}
+      lastD = (h.state && h.state.d) || 0;
+      try { trail = JSON.parse(sessionStorage.getItem(TRAIL_KEY) || '[]') || []; } catch (e) { trail = []; }
+      trail[lastD] = location.hash;
+      trail.length = lastD + 1;
+      saveTrail();
+    },
+
+    /** Після кожної зміни адреси: новий запис отримує свою глибину. */
+    stamp: function () {
+      var h = hist(), st = h.state;
+      var rep = replaceTo !== null && replaceTo === location.hash;
+      replaceTo = null;
+      if (!st || st.d == null) {
+        var d = rep ? lastD : lastD + 1;
+        try { h.replaceState({ d: d }, ''); } catch (e) {}
+        lastD = d;
+      } else {
+        lastD = st.d;
+        if (st.ov) return;                 // запис шторки — не сторінка, у слід не пишемо
+      }
+      trail[lastD] = location.hash;
+      trail.length = lastD + 1;
+      saveTrail();
+    },
+
+    /** Адреса поточного запису змінилась без переходу (фільтр, пошук). */
+    note: function () { trail[lastD] = location.hash; saveTrail(); },
+
+    depth: function () { return lastD; },
+
+    /** Наступний перехід на hash замінить поточний запис. */
+    replacing: function (hash) { replaceTo = hash; },
+
+    /** Чи на цю сторінку щойно повернулись «Назад» (питання одноразове). */
+    popped: function () {
+      var p = poppedTo !== null && poppedTo === location.hash;
+      poppedTo = null;
+      return p;
+    },
+
+    /** На скільки кроків назад лежить наша сторінка з таким шляхом (0 — немає). */
+    find: function (path) {
+      for (var k = lastD - 1; k >= 0; k--) {
+        if (trail[k] != null && pathOf(trail[k]) === path) return k - lastD;
+      }
+      return 0;
+    }
+  };
+
+  /* Шторку на телефоні можна стягнути пальцем донизу, як системну: за
+     шапку — завжди, за вміст — коли він прокручений до самого верху
+     (інакше той самий рух гортає вміст). Повертає функцію «на місце». */
+  function bindSwipe(sheet, tryClose) {
+    var head = sheet.querySelector('.modal__head');
+    var body = sheet.querySelector('.modal__body');
+    var g = null;
+
+    function back(animate) {
+      sheet.style.transition = animate ? 'transform .2s cubic-bezier(.2,.9,.3,1)' : '';
+      sheet.style.transform = '';
+    }
+
+    sheet.addEventListener('touchstart', function (e) {
+      g = null;
+      if (e.touches.length !== 1 || !C.phone()) return;
+      var t = e.target;
+      if (!(head && head.contains(t))) {
+        if (!body || !body.contains(t) || body.scrollTop > 0) return;
+        // у полі палець виділяє текст чи рухає повзунок, а не тягне шторку
+        if (t.closest && t.closest('input, textarea, select, [contenteditable="true"], .no-swipe')) return;
+        for (var el = t; el && el !== body; el = el.parentElement) {
+          if (el.scrollTop > 0) return;    // внутрішній список гортає себе
+        }
+      }
+      var p = e.touches[0];
+      g = { x: p.clientX, y: p.clientY, on: false, dy: 0, vy: 0, ly: p.clientY, lt: Date.now() };
+    }, { passive: true });
+
+    sheet.addEventListener('touchmove', function (e) {
+      if (!g) return;
+      var p = e.touches[0];
+      var dx = p.clientX - g.x, dy = p.clientY - g.y;
+      if (!g.on) {
+        if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+        // угору чи вбік — це прокрутка; і якщо браузер уже гортає сам — теж не наше
+        if (dy <= 0 || Math.abs(dx) > Math.abs(dy) || !e.cancelable) { g = null; return; }
+        g.on = true;
+        sheet.style.transition = 'none';
+      }
+      if (e.cancelable) e.preventDefault();
+      var now = Date.now();
+      if (now > g.lt) { g.vy = (p.clientY - g.ly) / (now - g.lt); g.ly = p.clientY; g.lt = now; }
+      g.dy = Math.max(0, dy);
+      sheet.style.transform = 'translateY(' + g.dy + 'px)';
+    }, { passive: false });
+
+    sheet.addEventListener('touchend', function () {
+      var s = g; g = null;
+      if (!s || !s.on) return;
+      // далеко або швидко — закрити; трохи — повернути на місце
+      if (s.dy > 90 || (s.vy > 0.5 && s.dy > 24)) tryClose(); else back(true);
+    });
+    sheet.addEventListener('touchcancel', function () {
+      var s = g; g = null;
+      if (s && s.on) back(true);
+    });
+    return back;
+  }
+
   /**
-   * opts: { title, sub, body, wide, buttons: [{label, kind, act, close}], onMount(root, close) }
+   * opts: { title, sub, body, wide, autofocus, buttons: [{label, kind, act, close}], onMount(root, close) }
    * Повертає функцію закриття.
    */
   C.modal = function (opts) {
     var root = document.getElementById('modal-root');
     root.hidden = false;
+    // на телефоні сторінка під шторкою не гортається (див. html.modal-open у CSS)
+    document.documentElement.classList.add('modal-open');
 
     var wrap = document.createElement('div');
     // розкладка — у CSS: на телефоні вікно стає шторкою знизу
@@ -367,16 +626,46 @@
 
     root.appendChild(wrap);
 
-    function close() {
+    var closed = false;
+    // fromPop — закрили кнопкою «Назад»: її запис в історії вже знято
+    function close(fromPop) {
+      if (closed) return;
+      closed = true;
       wrap.remove();
       var i = modalStack.indexOf(close);
       if (i >= 0) modalStack.splice(i, 1);
-      if (!root.children.length) root.hidden = true;
+      if (!root.children.length) {
+        root.hidden = true;
+        document.documentElement.classList.remove('modal-open');
+      }
+      if (!modalStack.length) ovClosed(fromPop === true);
     }
+
+    /* Введене не зникає від випадкового дотику. На телефоні затемнення
+       навколо шторки й «Назад» — це півекрана під пальцем, і досі промах
+       мовчки стирав усе набране. Питаємо, лише якщо людина справді щось
+       змінила (подія input/change), а не коли поле заповнилось само. */
+    var initial = null, touched = false;
+    function dirty() {
+      if (closed || !touched || initial === null || !C.touchy()) return false;
+      try { return JSON.stringify(C.readForm(wrap)) !== initial; } catch (e) { return false; }
+    }
+    function requestClose(fromPop) {
+      if (dirty()) {
+        C.confirm('Скасувати зміни?', 'Введене не збережеться.', function () { close(); },
+          'Не зберігати', 'Повернутися', 'btn--danger');
+        return false;
+      }
+      close(fromPop);
+      return true;
+    }
+    close.request = requestClose;
+
     modalStack.push(close);
+    ovOpen();
 
     U.$$('[data-close]', wrap).forEach(function (el) {
-      el.addEventListener('click', close);
+      el.addEventListener('click', function () { requestClose(false); });
     });
 
     var moreBtn = wrap.querySelector('[data-mmore]');
@@ -404,7 +693,34 @@
 
     if (opts.onMount) opts.onMount(wrap, close);
 
-    var first = wrap.querySelector('input, textarea, select');
+    if (wrap.querySelector('[name]')) {
+      initial = JSON.stringify(C.readForm(wrap));
+      var touch = function () { touched = true; };
+      wrap.addEventListener('input', touch);
+      wrap.addEventListener('change', touch);
+    }
+
+    var sheet = wrap.querySelector('.modal');
+    var scrim = wrap.querySelector('.modal__scrim');
+    var putBack = bindSwipe(sheet, function () {
+      if (dirty()) { putBack(true); requestClose(false); return; }
+      sheet.style.transition = 'transform .18s ease-in';
+      sheet.style.transform = 'translateY(105%)';
+      if (scrim) { scrim.style.transition = 'opacity .18s'; scrim.style.opacity = '0'; }
+      var done = false;
+      var fin = function () { if (!done) { done = true; close(); } };
+      sheet.addEventListener('transitionend', function (e) { if (e.target === sheet) fin(); });
+      setTimeout(fin, 260);
+    });
+
+    /* Курсор у перше поле — лише там, де є миша. На телефоні фокус одразу
+       піднімає клавіатуру посеред появи шторки: вона накриває пів форми ще
+       до того, як людина вирішила, що заповнювати. */
+    var fine = true;
+    try { fine = window.matchMedia('(pointer: fine)').matches; } catch (e) {}
+    var first = fine
+      ? wrap.querySelector('input, textarea, select')
+      : opts.autofocus && wrap.querySelector('input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=file]), textarea, select');
     if (first) setTimeout(function () { first.focus(); }, 60);
 
     return close;
@@ -439,9 +755,24 @@
     U.$$('[name]', root).forEach(function (el) {
       if (el.type === 'checkbox') out[el.name] = el.checked;
       else if (el.type === 'number') out[el.name] = el.value === '' ? null : Number(el.value);
+      else if (el.getAttribute && el.getAttribute('inputmode') === 'decimal') {
+        // «12,5», «12.5» і «1 500» — те саме число, що дало б поле type=number
+        var raw = String(el.value).replace(/[\s ]/g, '').replace(',', '.');
+        var n = raw === '' ? null : Number(raw);
+        out[el.name] = n === null || isFinite(n) ? n : null;
+      }
       else out[el.name] = el.value.trim();
     });
     return out;
+  };
+
+  /* Атрибути поля суми. На телефоні — текстове поле з цифровою
+     клавіатурою: type=number там то відкриває повну клавіатуру (iPhone),
+     то не приймає кому, яку ставить українська розкладка, — і «12,5»
+     мовчки ставало порожнім. На компʼютері — як було, зі стрілками.
+     readForm читає обидва однаково. */
+  C.numAttrs = function (desktop) {
+    return C.touchy() ? 'type="text" inputmode="decimal" autocomplete="off"' : desktop;
   };
 
   /* Підпис привʼязаний до поля: клік по ньому ставить курсор у поле, а

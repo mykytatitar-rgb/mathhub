@@ -576,6 +576,9 @@
       // перемальовування (приїхали зміни) не смикає список назад;
       // поки база не прочитана й уроків нема — ще не ставимо
       if (agPlacedFor === location.hash) return;
+      /* Повернулись «Назад» (урок → дошка → назад): список уже там, де його
+         гортали, — не перескакуємо на «Зараз». */
+      if (window.App && App.scrollRestored) { agPlacedFor = location.hash; return; }
       if (document.querySelector('.ag-ev')) agPlacedFor = location.hash;
       var y = nowEl.getBoundingClientRect().top + window.scrollY - Math.round(window.innerHeight * 0.3);
       window.scrollTo(0, Math.max(0, y));

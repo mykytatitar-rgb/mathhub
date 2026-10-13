@@ -7,6 +7,13 @@
 
   function refresh() { if (window.App) window.App.refresh(); }
 
+  /* Перехід просто зі шторки — через App.go: він ставить нову сторінку на
+     місце запису шторки в історії, а не поверх нього (див. app.js). */
+  function go(hash) {
+    if (window.App && window.App.go) window.App.go(hash);
+    else location.hash = hash;
+  }
+
   function nowTimeRounded() {
     var d = new Date();
     d.setMinutes(d.getMinutes() > 30 ? 60 : 30, 0, 0);
@@ -77,12 +84,12 @@
           'Можна вписати будь-що своє — напр. «Вступ до Politechnika Wrocławska».') +
       '</div>' +
       '<div class="field-row field-row--3">' +
-        C.field('Ціна за урок', C.input('price', data.price, 'type="number" min="0" step="any"')) +
+        C.field('Ціна за урок', C.input('price', data.price, C.numAttrs('type="number" min="0" step="any"'))) +
         C.field('Валюта', C.select('currency', data.currency || 'UAH',
           U.CURRENCY_CODES.map(function (c) {
             return { value: c, label: U.symbol(c) + '  ' + c };
           }))) +
-        C.field('Тривалість, хв', C.input('duration', data.duration || 60, 'type="number" min="15" step="15"')) +
+        C.field('Тривалість, хв', C.input('duration', data.duration || 60, 'type="number" min="15" step="15" inputmode="numeric"')) +
       '</div>' +
       C.field('Колір картки', '<div class="swatches" id="sw">' + swatches + '</div>') +
       '<div class="field"><label class="field__label">Постійний розклад</label>' +
@@ -93,11 +100,13 @@
         'на чотири тижні вперед щоразу, коли ви відкриваєте програму.</div>' +
       '</div>' +
       '<div class="field-row">' +
-        C.field('Телефон учня', C.input('phone', data.phone, 'placeholder="+380 …"')) +
-        C.field('Telegram', C.input('telegram', data.telegram, 'placeholder="@nickname"')) +
+        C.field('Телефон учня', C.input('phone', data.phone, 'type="tel" autocomplete="tel" placeholder="+380 …"')) +
+        C.field('Telegram', C.input('telegram', data.telegram,
+          'autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="@nickname"')) +
       '</div>' +
       C.field('Батьки (контакт)', C.input('parent', data.parent, 'placeholder="Ім\'я, телефон"')) +
-      C.field('Посилання на зустріч', C.input('meetUrl', data.meetUrl, 'placeholder="https://meet.google.com/…"'),
+      C.field('Посилання на зустріч', C.input('meetUrl', data.meetUrl,
+        'type="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://meet.google.com/…"'),
         'Якщо порожньо — використовується спільне посилання з «Налаштувань».') +
       C.field('Ціль і нотатки про учня', C.textarea('target', data.target,
         'placeholder="Напр. Мета — 185+ на НМТ. Слабкі місця: геометрія, параметри."'));
@@ -110,7 +119,7 @@
         !isNew ? { label: 'Видалити учня', kind: 'btn--danger', act: 'del', close: true, onClick: function () {
           C.confirm('Видалити учня?',
             'Разом з ним зникнуть усі уроки, домашні завдання, оплати та нотатки. Дію не можна скасувати.',
-            function () { S.removeStudent(id); U.toast('Учня видалено'); location.hash = '#/students'; refresh(); });
+            function () { S.removeStudent(id); U.toast('Учня видалено'); go('#/students'); refresh(); });
         } } : null,
 
         /* Архів — для тих, хто просто перестав займатися. На відміну від
@@ -140,7 +149,7 @@
                   function () {
                     S.setArchived(id, true);
                     U.toast('Учня переведено в архів', 'ok');
-                    location.hash = '#/students';
+                    go('#/students');
                     refresh();
                   }, 'Перевести в архів');
               } }) : null,
@@ -169,7 +178,7 @@
               var made = S.fillStudentTemplate(created.id);
               if (made) U.toast('Створено ' + U.pl(made, 'урок', 'уроки', 'уроків') +
                 ' за постійним розкладом', 'ok');
-              location.hash = '#/student/' + created.id;
+              go('#/student/' + created.id);
             } else {
               // усе «як було» — до збереження: data і є живий запис учня
               var oldCur = S.curOf(id);
@@ -258,7 +267,7 @@
            в розкладі — і про це ніяк не здогадатися. Тут її видно завжди. */
         C.field('Тривалість, хв',
           C.input('duration', data.duration || 60,
-            'type="number" min="15" max="480" step="5" list="dur-list"') +
+            'type="number" min="15" max="480" step="5" inputmode="numeric" list="dur-list"') +
           '<datalist id="dur-list">' +
           [30, 45, 60, 90, 120].map(function (d) { return '<option value="' + d + '">'; }).join('') +
           '</datalist>') +
@@ -272,7 +281,7 @@
         C.field('Вартість уроку',
           '<div class="row" style="gap:8px">' +
           C.input('price', data.price != null ? data.price : (stud ? stud.price : 500),
-            'type="number" min="0" step="any" style="flex:1"') +
+            C.numAttrs('type="number" min="0" step="any"') + ' style="flex:1"') +
           '<span class="badge badge--grey" data-cur-tag style="height:42px;padding:0 13px;font-size:13px">' +
           U.esc(U.symbol(lessonCur) + ' ' + lessonCur) + '</span></div>',
           'Валюта береться з картки учня') +
@@ -408,7 +417,7 @@
         { label: 'Редагувати', act: 'edit', icon: 'edit', head: true,
           onClick: function () { setTimeout(function () { F.lesson(id); }, 60); } },
         { label: 'Дошка', kind: 'btn--soft', act: 'board', icon: 'board',
-          onClick: function () { location.hash = '#/board/' + id; } },
+          onClick: function () { go('#/board/' + id); } },
         /* На телефоні урок інакше не перенести: у списку тягнути нічого, а
            повна форма заради дня й години — задовга. На великому екрані урок
            перетягують у сітці, і нижній ряд кнопок лишається як був. */
@@ -830,7 +839,7 @@
       '<div class="field-row">' +
         C.field('Сума',
           '<div class="row" style="gap:8px">' +
-          C.input('amount', data.amount, 'type="number" min="0" step="any" style="flex:1"') +
+          C.input('amount', data.amount, C.numAttrs('type="number" min="0" step="any"') + ' style="flex:1"') +
           '<span class="badge badge--grey" data-cur-tag style="height:42px;padding:0 13px;font-size:13px">' +
           U.esc(U.symbol(payCur) + ' ' + payCur) + '</span></div>') +
         C.field('Дата', C.input('date', data.date, 'type="date"')) +
@@ -1291,7 +1300,7 @@
     U.toast('Added ' + plEn(added, 'topic', 'topics') + ' — edit them as you like', 'ok');
     /* Відкриваємо саме додане, а не перше в списку: людина натиснула
        «Додати», і показати їй треба те, що з'явилося. */
-    if (first) { location.hash = '#/sheet/' + first; }
+    if (first) { go('#/sheet/' + first); }
     if (window.App && App.render) App.render();
   };
 
@@ -1394,7 +1403,7 @@
         buttons: [
           !isNew ? { label: 'Delete topic', kind: 'btn--danger', act: 'del', onClick: function () {
             S.remove('materials', id); S.gcImages(); U.toast('Topic deleted');
-            location.hash = '#/sheet';
+            go('#/sheet');
             refresh();
           } } : null,
           { label: 'Cancel', kind: 'btn--ghost', act: 'cancel' },
@@ -1534,7 +1543,7 @@
             function () {
               S.removeDeskItem(id);
               U.toast('Справу видалено');
-              location.hash = '#/desk';
+              go('#/desk');
               refresh();
             });
         } } : null,
@@ -1551,7 +1560,7 @@
                  щоб дивитися на неї в списку. */
               S.ensureBoard(made.id);
               U.toast('Створено — розбираймося', 'ok');
-              location.hash = '#/board/' + made.id;
+              go('#/board/' + made.id);
               return;
             }
             S.update('desk', id, v);
@@ -1639,7 +1648,7 @@
       /* Раніше тут був вибір із чотирьох тижнів, і це змушувало повертатися
          до вікна щомісяця. Поле вільне: скільки треба, стільки й наперед. */
       C.field('На скільки тижнів вперед',
-        C.input('weeks', 4, 'type="number" min="1" max="104" step="1" list="weeks-list"') +
+        C.input('weeks', 4, 'type="number" min="1" max="104" step="1" inputmode="numeric" list="weeks-list"') +
         '<datalist id="weeks-list">' +
         [1, 2, 4, 8, 12, 26, 52].map(function (w) { return '<option value="' + w + '">'; }).join('') +
         '</datalist>',

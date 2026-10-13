@@ -88,7 +88,10 @@
   transition: background .14s, color .14s;
   flex: 0 0 auto;
 }
-.tool-btn:hover { background: var(--blue-50); color: var(--blue-700); }
+@media (hover: hover) { .tool-btn:hover { background: var(--blue-50); color: var(--blue-700); } }
+/* Пальцем наведення немає: інструмент, якого торкнулись, більше не
+   лишається підсвіченим, наче вибраний (як .is-open), — лише мить під пальцем */
+@media (hover: none) { .tool-btn:active { background: var(--blue-50); } }
 .tool-btn.is-active { background: var(--blue-600); color: #fff; }
 .tool-btn:disabled { opacity: .35; cursor: not-allowed; background: transparent; color: var(--ink-2); }
 
@@ -269,7 +272,7 @@
   transition: background .14s;
   color: var(--ink-2);
 }
-.dot-btn:hover { background: var(--blue-50); }
+@media (hover: hover) { .dot-btn:hover { background: var(--blue-50); } }
 .dot-btn.is-active { background: var(--blue-50); box-shadow: inset 0 0 0 2px var(--blue-600); }
 .dot-btn i { display: block; border-radius: 50%; }
 .dot-btn--color i {
@@ -304,7 +307,7 @@
   box-shadow: var(--shadow-sm);
   z-index: 2;
 }
-.board-opts__toggle:hover { color: var(--blue-600); border-color: var(--blue-300); }
+@media (hover: hover) { .board-opts__toggle:hover { color: var(--blue-600); border-color: var(--blue-300); } }
 
 
 /* Крапка на інструменті, що має налаштування */
@@ -325,7 +328,7 @@
   transition: transform .12s;
   box-shadow: inset 0 0 0 1px rgba(23,22,58,.12);
 }
-.pen-color:hover { transform: scale(1.14); }
+@media (hover: hover) { .pen-color:hover { transform: scale(1.14); } }
 .pen-color.is-active { border-color: var(--ink); }
 
 .pen-widths { display: flex; gap: 6px; align-items: center; }
@@ -335,7 +338,7 @@
   display: grid; place-items: center;
   transition: background .14s;
 }
-.pen-width:hover { background: var(--blue-100); }
+@media (hover: hover) { .pen-width:hover { background: var(--blue-100); } }
 .pen-width.is-active { background: var(--blue-600); }
 .pen-width i { display: block; border-radius: 20px; background: var(--ink-2); }
 .pen-width.is-active i { background: #fff; }
@@ -350,7 +353,7 @@
   font-size: 11.5px; font-weight: 750; cursor: pointer;
   transition: background .14s, color .14s;
 }
-.size-btn:hover { background: var(--blue-100); }
+@media (hover: hover) { .size-btn:hover { background: var(--blue-100); } }
 .size-btn.is-active { background: var(--blue-600); color: #fff; }
 
 /* Крокувач: збільшити / зменшити */
@@ -364,7 +367,7 @@
   font-size: 17px; font-weight: 800; line-height: 1;
   cursor: pointer; transition: background .14s, color .14s;
 }
-.stepper__btn:hover { background: var(--blue-600); color: #fff; }
+@media (hover: hover) { .stepper__btn:hover { background: var(--blue-600); color: #fff; } }
 .stepper__val {
   flex: 1; text-align: center;
   font-size: 12.5px; font-weight: 750; color: var(--ink-2);
@@ -393,7 +396,7 @@
   padding: 5px 8px; cursor: pointer;
   transition: background .14s, color .14s;
 }
-.shape-tab:hover { background: var(--blue-100); }
+@media (hover: hover) { .shape-tab:hover { background: var(--blue-100); } }
 .shape-tab.is-active { background: var(--blue-600); color: #fff; }
 
 .shape-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
@@ -403,7 +406,7 @@
   display: grid; place-items: center; cursor: pointer; padding: 0;
   transition: all .14s;
 }
-.shape-btn:hover { border-color: var(--blue-300); color: var(--blue-600); background: var(--blue-50); }
+@media (hover: hover) { .shape-btn:hover { border-color: var(--blue-300); color: var(--blue-600); background: var(--blue-50); } }
 .shape-btn.is-active { border-color: var(--blue-600); color: var(--blue-600); background: var(--blue-50); }
 
 .fill-toggle {
@@ -415,7 +418,7 @@
   padding: 8px 10px; cursor: pointer;
   transition: all .14s;
 }
-.fill-toggle:hover { border-color: var(--blue-300); color: var(--blue-700); }
+@media (hover: hover) { .fill-toggle:hover { border-color: var(--blue-300); color: var(--blue-700); } }
 .fill-toggle.is-active { border-color: var(--blue-600); color: var(--blue-700); }
 .fill-toggle__box {
   width: 16px; height: 16px; border-radius: 4px;
@@ -432,7 +435,7 @@
   padding: 9px 10px; cursor: pointer;
   transition: filter .14s;
 }
-.facts-btn:hover { filter: brightness(.96); }
+@media (hover: hover) { .facts-btn:hover { filter: brightness(.96); } }
 
 /* ---------- Діалог розмірів ---------- */
 
@@ -468,7 +471,7 @@
   font-size: 12.5px; font-weight: 700; cursor: pointer;
   transition: all .14s;
 }
-.constr-num:hover { border-color: var(--blue-600); color: var(--blue-700); background: var(--blue-50); }
+@media (hover: hover) { .constr-num:hover { border-color: var(--blue-600); color: var(--blue-700); background: var(--blue-50); } }
 .constr-num--all { font-size: 11.5px; font-weight: 650; color: var(--muted); }
 
 .constr-angle { display: flex; align-items: center; gap: 6px; }
@@ -487,7 +490,7 @@
   background: rgba(23,22,58,.1); color: var(--ink-2);
   display: grid; place-items: center; cursor: pointer; padding: 0;
 }
-.constr-chip button:hover { background: var(--red); color: #fff; }
+@media (hover: hover) { .constr-chip button:hover { background: var(--red); color: #fff; } }
 
 /* ---------- Властивості фігури ---------- */
 
@@ -558,14 +561,14 @@
   display: grid; place-items: center; cursor: pointer;
   transition: background .14s, color .14s;
 }
-.sel-bar__btn:hover { background: var(--blue-50); color: var(--blue-700); }
-.sel-bar__btn--danger:hover { background: var(--red-bg); color: var(--red); }
+@media (hover: hover) { .sel-bar__btn:hover { background: var(--blue-50); color: var(--blue-700); } }
+@media (hover: hover) { .sel-bar__btn--danger:hover { background: var(--red-bg); color: var(--red); } }
 .sel-bar__btn.is-on { background: var(--violet-bg); color: #5B3FD6; }
 /* «Друкований вигляд»: логотип TeX, як його пишуть у LaTeX — E опущене */
 .sel-bar__btn--tex { width: auto; padding: 0 7px; color: #3333B3; }
 .sel-bar__btn--tex b { font-family: Georgia, 'Times New Roman', serif; font-size: 14px; font-weight: 700; letter-spacing: -.5px; }
 .sel-bar__btn--tex sub { font-size: 14px; vertical-align: -3px; margin: 0 -1px; }
-.sel-bar__btn--tex:hover { background: #ECECFA; }
+@media (hover: hover) { .sel-bar__btn--tex:hover { background: #ECECFA; } }
 .sel-bar__btn.is-busy { cursor: progress; }
 .sel-bar__spin {
   width: 15px; height: 15px; border-radius: 50%;
@@ -590,7 +593,7 @@
   padding: 9px 10px; border: 0; border-radius: 12px; background: none;
   font: inherit; text-align: left; color: var(--ink); cursor: pointer;
 }
-.xfer__row:hover { background: var(--bg); }
+@media (hover: hover) { .xfer__row:hover { background: var(--bg); } }
 .xfer__row > svg { color: var(--muted); flex: none; }
 .xfer__ico { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--blue-50); color: var(--blue-600); flex: none; }
 .xfer__txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
@@ -603,7 +606,7 @@
   padding: 6px 10px 6px 6px; margin-bottom: 6px; border: 0; border-radius: 10px;
   background: var(--bg); font: inherit; font-size: 14px; font-weight: 650; color: var(--ink-2); cursor: pointer;
 }
-.xfer__back:hover { background: var(--blue-50); color: var(--blue-600); }
+@media (hover: hover) { .xfer__back:hover { background: var(--blue-50); color: var(--blue-600); } }
 .xfer__slides { max-height: min(46vh, 380px); overflow-y: auto; margin: 0 -6px; padding: 0 6px 4px; }
 .xfer__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
 .xfer__slide {
@@ -611,7 +614,7 @@
   border: 2px solid transparent; border-radius: 12px; background: none;
   font: inherit; color: var(--ink-2); cursor: pointer; text-align: left;
 }
-.xfer__slide:hover { background: var(--bg); }
+@media (hover: hover) { .xfer__slide:hover { background: var(--bg); } }
 .xfer__slide.is-on { border-color: var(--blue-600); background: var(--blue-50); }
 .xfer__thumb {
   aspect-ratio: 16 / 10; border-radius: 8px; overflow: hidden;
@@ -656,7 +659,7 @@
   font-size: 12.5px; font-weight: 700; color: var(--ink-2);
   border: 0; background: none; cursor: pointer; border-radius: 999px; padding: 7px 4px;
 }
-.board-zoom__val:hover { background: var(--blue-50); color: var(--blue-700); }
+@media (hover: hover) { .board-zoom__val:hover { background: var(--blue-50); color: var(--blue-700); } }
 
 /* Підказка — по центру знизу, щоб не сперечатися з масштабом справа */
 .board-hint {
@@ -763,7 +766,7 @@
   z-index: 6;
   transition: color .14s;
 }
-.board-rail__toggle:hover { color: var(--blue-600); }
+@media (hover: hover) { .board-rail__toggle:hover { color: var(--blue-600); } }
 .board-rail__toggle svg { transition: transform .18s; }
 .board.is-rail-collapsed .board-rail__toggle svg { transform: rotate(180deg); }
 
@@ -780,7 +783,7 @@
   position: relative;
   text-align: left;
 }
-.slide-card:hover { border-color: var(--blue-300); }
+@media (hover: hover) { .slide-card:hover { border-color: var(--blue-300); } }
 .slide-card.is-active { border-color: var(--blue-600); box-shadow: 0 0 0 3px var(--blue-50); }
 
 .slide-card__thumb {
@@ -841,7 +844,7 @@
   cursor: pointer;
   transition: all .14s;
 }
-.slide-add:hover { border-color: var(--blue-300); color: var(--blue-600); background: var(--blue-50); }
+@media (hover: hover) { .slide-add:hover { border-color: var(--blue-300); color: var(--blue-600); background: var(--blue-50); } }
 
 /* ---------- Порожня дошка ---------- */
 
@@ -882,7 +885,8 @@
   .board-opts {
     left: 12px; right: 12px; top: 12px; bottom: auto;
     transform: none; width: auto; max-width: none;
-    max-height: 42vh;
+    /* dvh — видима висота: vh на телефоні вищий за екран під смугами браузера */
+    max-height: 42vh; max-height: 42dvh;
   }
   .board-opts--wide { width: auto; }
   /* панель олівця на вузькому екрані займає всю ширину */
@@ -929,7 +933,7 @@
   border: 0; background: rgba(23,22,58,.62); color: #fff;
   display: grid; place-items: center; cursor: pointer; padding: 0;
 }
-.photo-del:hover { background: var(--red); }
+@media (hover: hover) { .photo-del:hover { background: var(--red); } }
 
 .photo-add {
   width: 74px; height: 74px;
@@ -942,6 +946,6 @@
   font-size: 10px; font-weight: 650;
   transition: all .14s;
 }
-.photo-add:hover { border-color: var(--blue-300); color: var(--blue-600); background: var(--blue-50); }
+@media (hover: hover) { .photo-add:hover { border-color: var(--blue-300); color: var(--blue-600); background: var(--blue-50); } }
 
 .photo-strip--view .photo-thumb { width: 62px; height: 62px; cursor: zoom-in; }

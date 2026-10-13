@@ -83,6 +83,45 @@ html, body {
    беруть на себе верхня смуга й нижня панель. */
 body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
 
+/* Дотик як у застосунку, а не на сайті. Без цього Android підсвічував
+   сірим кожну кнопку й рядок під пальцем, iPhone у горизонтальному
+   положенні сам збільшував шрифт, швидкі дотики по стрілках тижня
+   збільшували сторінку, а потягнути список донизу — перезавантажувало
+   кабінет посеред уроку. Миші все це не стосується. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+@media (max-width: 640px), (pointer: coarse) {
+  /* Полотно дошки, карта й уроки в розкладі мають свій touch-action —
+     він перетинається з цим і лишається своїм. */
+  html { touch-action: manipulation; overscroll-behavior-y: none; }
+
+  /* Довге натискання на кнопку чи вкладку не виділяє текст і не відкриває
+     меню «Копіювати» */
+  .m-bar, .m-tabs, .sidebar, .btn, .icon-btn, .chip, .seg, .nav-item, .tabs,
+  .modal__head, .modal__foot, .hero-btn, .m-act, .m-tab, .more-tile, .act-list__i,
+  .board-top, .board-tools, .board-rails {
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  }
+  .board input, .board textarea { -webkit-user-select: text; user-select: text; }
+  .slide-card__thumb { -webkit-user-drag: none; -webkit-touch-callout: none; }
+
+  /* Прокрутка вмісту шторки чи списку на краю не тягне сторінку під ним,
+     а сама сторінка, поки відкрита шторка, стоїть */
+  .modal__body, .side-scroll, .ref__main, .ref__nav, .cal-body, .mm-dr__body, .bk-side, .act-list {
+    overscroll-behavior: contain;
+  }
+  html.modal-open { overflow: hidden; }
+  .modal__scrim { touch-action: none; }
+}
+
+/* Відгук на дотик замість «наведення»: на дотиковому екрані :hover
+   залипав після торкання — картка лишалась піднятою, інструмент дошки
+   підсвіченим, наче вибраним. Тому наведення — лише там, де є миша
+   (@media (hover: hover)), а пальцю — коротке :active. */
+@media (hover: none) {
+  .list__item--btn:active, .stu-card:active, .quick:active, .card--btn:active,
+  .more-tile:active, .act-list__i:active, .les-hw__r:active, .hw-row:active { background: var(--brand-50); }
+}
+
 /* Цифри однакової ширини: суми й дати в стовпчиках не стрибають,
    коли змінюється значення. */
 .stat__value, .money, .bar__label, td, th, input[type="number"],
@@ -125,7 +164,10 @@ a { color: inherit; text-decoration: none; }
    Каркас
    ============================================================ */
 
-.app { display: flex; min-height: 100vh; }
+/* Висоти «на весь екран» — у dvh, видимій висоті: 100vh на телефоні
+   вищий за те, що видно під смугами браузера, і низ ховався. vh перед
+   ним — для старих браузерів, на компʼютері обидва однакові. */
+.app { display: flex; min-height: 100vh; min-height: 100dvh; }
 
 .sidebar {
   width: var(--sidebar-w);
@@ -160,7 +202,7 @@ a { color: inherit; text-decoration: none; }
   z-index: 20;
   transition: color .14s, border-color .14s, transform .18s;
 }
-.sidebar__toggle:hover { color: var(--blue-600); border-color: var(--blue-300); }
+@media (hover: hover) { .sidebar__toggle:hover { color: var(--blue-600); border-color: var(--blue-300); } }
 .app.is-collapsed .sidebar__toggle { transform: rotate(180deg); }
 
 /* --- Смуга для перетягування ширини --- */
@@ -255,7 +297,7 @@ a { color: inherit; text-decoration: none; }
   width: 22px; height: 22px; border-radius: 7px; cursor: pointer;
   display: grid; place-items: center; padding: 0;
 }
-.side-label button:hover { background: var(--blue-100); }
+@media (hover: hover) { .side-label button:hover { background: var(--blue-100); } }
 
 .nav-item {
   display: flex;
@@ -275,7 +317,7 @@ a { color: inherit; text-decoration: none; }
   transition: background .14s, color .14s, transform .16s ease;
 }
 .nav-item svg { flex: 0 0 auto; color: var(--muted); transition: color .14s; }
-.nav-item:hover { background: var(--blue-50); }
+@media (hover: hover) { .nav-item:hover { background: var(--blue-50); } }
 .nav-item.is-active { background: var(--blue-100); color: var(--blue-700); font-weight: 700; }
 .nav-item.is-active svg { color: var(--blue-600); }
 .nav-item__count {
@@ -293,7 +335,7 @@ a { color: inherit; text-decoration: none; }
   cursor: pointer; border: 0; background: none; width: 100%; text-align: left;
   transition: background .14s;
 }
-.stu-item:hover { background: var(--blue-50); }
+@media (hover: hover) { .stu-item:hover { background: var(--blue-50); } }
 .stu-item.is-active { background: var(--blue-100); }
 .stu-item__name { font-weight: 650; font-size: 14px; color: var(--ink); line-height: 1.25; }
 .stu-item.is-active .stu-item__name { color: var(--blue-700); }
@@ -359,7 +401,7 @@ a { color: inherit; text-decoration: none; }
   font-weight: 600; font-size: 14px; cursor: pointer; padding: 4px 0;
   margin-bottom: 20px;
 }
-.hero__back:hover { color: #fff; }
+@media (hover: hover) { .hero__back:hover { color: #fff; } }
 
 .hero__row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
 .hero__title { font-size: 38px; font-weight: 800; letter-spacing: -1px; margin: 0; line-height: 1.1; }
@@ -379,9 +421,9 @@ a { color: inherit; text-decoration: none; }
   transition: background .15s, border-color .15s, transform .15s;
   backdrop-filter: blur(3px);
 }
-.hero-btn:hover { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.7); transform: translateY(-1px); }
+@media (hover: hover) { .hero-btn:hover { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.7); transform: translateY(-1px); } }
 .hero-btn--solid { background: #fff; color: var(--brand-700); border-color: #fff; }
-.hero-btn--solid:hover { background: var(--brand-50); }
+@media (hover: hover) { .hero-btn--solid:hover { background: var(--brand-50); } }
 
 /* ============================================================
    Сторінка / сітки
@@ -433,7 +475,7 @@ a { color: inherit; text-decoration: none; }
   border: 0; cursor: pointer;
   transition: box-shadow .16s, transform .16s;
 }
-.card--btn:hover { box-shadow: var(--shadow-lg); transform: translateY(-1px); }
+@media (hover: hover) { .card--btn:hover { box-shadow: var(--shadow-lg); transform: translateY(-1px); } }
 .card--btn .card-head { margin-bottom: 12px; }
 
 .card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
@@ -451,7 +493,7 @@ a { color: inherit; text-decoration: none; }
   cursor: pointer; border: 0; width: 100%; text-align: left;
   transition: transform .16s, box-shadow .16s;
 }
-.quick:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+@media (hover: hover) { .quick:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); } }
 .quick__icon { width: 42px; height: 42px; border-radius: 13px; background: var(--blue-50); color: var(--blue-600); display: grid; place-items: center; flex: 0 0 auto; }
 .quick__title { font-weight: 700; font-size: 15.5px; }
 .quick__badge { background: var(--blue-600); color: #fff; font-size: 11.5px; font-weight: 700; padding: 2px 9px; border-radius: 20px; margin-left: 8px; vertical-align: 2px; }
@@ -466,7 +508,7 @@ a { color: inherit; text-decoration: none; }
   display: flex; align-items: center; gap: 20px;
   transition: box-shadow .16s;
 }
-.lesson-row:hover { box-shadow: var(--shadow-lg); }
+@media (hover: hover) { .lesson-row:hover { box-shadow: var(--shadow-lg); } }
 .lesson-row__num {
   width: 62px; height: 62px; border-radius: 50%;
   background: var(--blue-50); color: var(--blue-600);
@@ -494,13 +536,13 @@ a { color: inherit; text-decoration: none; }
 }
 .btn:active { transform: translateY(1px); }
 .btn--primary { background: var(--brand-600); color: #fff; box-shadow: 0 2px 8px rgba(75, 63, 219, .30); }
-.btn--primary:hover { background: var(--brand-700); box-shadow: 0 4px 14px rgba(75, 63, 219, .36); }
+@media (hover: hover) { .btn--primary:hover { background: var(--brand-700); box-shadow: 0 4px 14px rgba(75, 63, 219, .36); } }
 .btn--soft { background: var(--brand-100); color: var(--brand-700); }
-.btn--soft:hover { background: #D6D1FB; }
+@media (hover: hover) { .btn--soft:hover { background: #D6D1FB; } }
 .btn--ghost { background: transparent; color: var(--ink-2); border: 1px solid var(--line); }
-.btn--ghost:hover { background: var(--brand-50); border-color: var(--brand-100); color: var(--brand-700); }
+@media (hover: hover) { .btn--ghost:hover { background: var(--brand-50); border-color: var(--brand-100); color: var(--brand-700); } }
 .btn--danger { background: var(--red-bg); color: var(--red-ink); }
-.btn--danger:hover { background: #F9DADC; }
+@media (hover: hover) { .btn--danger:hover { background: #F9DADC; } }
 .btn--sm { padding: 8px 15px; font-size: 13px; }
 .btn--block { width: 100%; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
@@ -512,8 +554,8 @@ a { color: inherit; text-decoration: none; }
   transition: background .14s, color .14s;
   flex: 0 0 auto;
 }
-.icon-btn:hover { background: var(--blue-50); color: var(--blue-600); }
-.icon-btn--danger:hover { background: var(--red-bg); color: var(--red); }
+@media (hover: hover) { .icon-btn:hover { background: var(--blue-50); color: var(--blue-600); } }
+@media (hover: hover) { .icon-btn--danger:hover { background: var(--red-bg); color: var(--red); } }
 
 /* ============================================================
    Бейджі / чіпи
@@ -540,7 +582,7 @@ a { color: inherit; text-decoration: none; }
   font-size: 13px; font-weight: 600; color: var(--ink-2);
   cursor: pointer; transition: all .14s;
 }
-.chip:hover { border-color: var(--blue-300); color: var(--blue-700); }
+@media (hover: hover) { .chip:hover { border-color: var(--blue-300); color: var(--blue-700); } }
 .chip.is-active { background: var(--blue-600); border-color: var(--blue-600); color: #fff; }
 
 /* Таби */
@@ -560,9 +602,9 @@ a { color: inherit; text-decoration: none; }
   font-weight: 650; font-size: 14px; color: var(--muted); cursor: pointer; white-space: nowrap;
   transition: background .14s, color .14s;
 }
-.tab:hover { color: var(--ink); background: var(--brand-50); }
+@media (hover: hover) { .tab:hover { color: var(--ink); background: var(--brand-50); } }
 .tab.is-active { background: var(--brand-600); color: #fff; }
-.tab.is-active:hover { background: var(--brand-700); }
+@media (hover: hover) { .tab.is-active:hover { background: var(--brand-700); } }
 .tab__count { opacity: .7; font-size: 12px; margin-left: 4px; }
 
 /* ============================================================
@@ -597,7 +639,7 @@ a { color: inherit; text-decoration: none; }
   background: linear-gradient(180deg, var(--blue-500), var(--blue-700));
   min-height: 4px; position: relative; transition: opacity .14s;
 }
-.chart__col:hover .chart__bar { opacity: .82; }
+@media (hover: hover) { .chart__col:hover .chart__bar { opacity: .82; } }
 .chart__cap { font-size: 11px; color: var(--muted); font-weight: 650; white-space: nowrap; }
 .chart__top { font-size: 11.5px; font-weight: 700; color: var(--ink-2); }
 
@@ -617,7 +659,7 @@ a { color: inherit; text-decoration: none; }
   transition: background .14s;
 }
 .list__item:last-child { border-bottom: 0; }
-.list__item:hover { background: #FAFCFF; }
+@media (hover: hover) { .list__item:hover { background: #FAFCFF; } }
 .list__item--btn { cursor: pointer; border-left: 0; border-right: 0; border-top: 0; background: none; width: 100%; text-align: left; font: inherit; color: inherit; }
 
 .tbl { width: 100%; border-collapse: collapse; }
@@ -628,7 +670,7 @@ a { color: inherit; text-decoration: none; }
 }
 .tbl td { padding: 14px 16px; border-bottom: 1px solid var(--line); font-size: 14px; vertical-align: middle; }
 .tbl tbody tr:last-child td { border-bottom: 0; }
-.tbl tbody tr:hover { background: #FAFCFF; }
+@media (hover: hover) { .tbl tbody tr:hover { background: #FAFCFF; } }
 .tbl .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 650; }
 
 .empty { text-align: center; padding: 46px 24px; color: var(--muted); }
@@ -646,7 +688,7 @@ a { color: inherit; text-decoration: none; }
   transition: transform .16s, box-shadow .16s;
   position: relative; overflow: hidden;
 }
-.stu-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+@media (hover: hover) { .stu-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); } }
 .stu-card__strip { position: absolute; top: 0; left: 0; right: 0; height: 4px; }
 .stu-card__name { font-size: 17px; font-weight: 750; letter-spacing: -.3px; }
 .stu-card__sub { font-size: 12.5px; color: var(--muted); font-weight: 550; margin-top: 2px; }
@@ -671,7 +713,7 @@ a { color: inherit; text-decoration: none; }
   background: var(--blue-50); border-left: 3px solid var(--blue-600);
   transition: filter .14s;
 }
-.slot:hover { filter: brightness(.965); }
+@media (hover: hover) { .slot:hover { filter: brightness(.965); } }
 .slot__time { font-size: 11.5px; font-weight: 700; color: var(--blue-700); }
 .slot__name { font-size: 12.5px; font-weight: 650; color: var(--ink); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .slot--done { background: var(--green-bg); border-left-color: var(--green); }
@@ -729,17 +771,17 @@ a { color: inherit; text-decoration: none; }
 .solid-tile { border: 1.5px solid var(--line); background: #fff; border-radius: var(--r-sm);
   padding: 11px 12px; font: inherit; font-size: 13px; font-weight: 600; color: var(--ink-2);
   cursor: pointer; text-align: left; }
-.solid-tile:hover { border-color: var(--blue-600); color: var(--blue-600); }
+@media (hover: hover) { .solid-tile:hover { border-color: var(--blue-600); color: var(--blue-600); } }
 .solid-tile.is-on { border-color: var(--blue-600); background: var(--blue-bg, #F1EFFE); color: var(--blue-600); }
 
 .swatches { display: flex; gap: 9px; flex-wrap: wrap; }
 .swatch { width: 30px; height: 30px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; padding: 0; transition: transform .12s; }
-.swatch:hover { transform: scale(1.12); }
+@media (hover: hover) { .swatch:hover { transform: scale(1.12); } }
 .swatch.is-active { border-color: var(--ink); }
 
 .seg { display: flex; gap: 6px; background: #F2F6FC; padding: 5px; border-radius: 12px; }
 .seg__btn { flex: 1; padding: 9px 10px; border: 0; background: none; border-radius: 9px; font-weight: 650; font-size: 13px; color: var(--muted); cursor: pointer; transition: all .14s; }
-.seg__btn:hover { color: var(--ink); }
+@media (hover: hover) { .seg__btn:hover { color: var(--ink); } }
 .seg__btn.is-active { background: #fff; color: var(--blue-700); box-shadow: var(--shadow-sm); }
 
 .check { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; font-weight: 550; padding: 4px 0; }
@@ -757,7 +799,7 @@ a { color: inherit; text-decoration: none; }
 .modal {
   position: relative;
   background: #fff; border-radius: 24px; box-shadow: var(--shadow-lg);
-  width: 100%; max-width: 540px; max-height: calc(100vh - 48px); min-width: 0;
+  width: 100%; max-width: 540px; max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px); min-width: 0;
   display: flex; flex-direction: column;
   animation: pop .18s cubic-bezier(.2,.9,.3,1.1);
 }
@@ -791,34 +833,54 @@ a { color: inherit; text-decoration: none; }
   font: inherit; font-size: 14px; font-weight: 600; color: var(--ink-2);
   text-align: left; cursor: pointer;
 }
-.modal__mi:hover { background: var(--bg); }
+@media (hover: hover) { .modal__mi:hover { background: var(--bg); } }
 .modal__mi.is-danger { color: var(--red-ink); }
-.modal__mi.is-danger:hover { background: var(--red-bg); }
+@media (hover: hover) { .modal__mi.is-danger:hover { background: var(--red-bg); } }
 
 /* Телефон: вікно — шторка знизу, як у Preply.
    Посередині екрана вікну з відступами по 24 px лишалось 327 px, а рядки
    всередині не переносились — картка уроку вилазила за правий край.
    Знизу на всю ширину: більше місця й кнопки під великим пальцем. */
 @media (max-width: 640px) {
+  /* Клавіатура телефона наїжджає на сторінку згори, не зменшуючи її, —
+     тож шторка стоїть у видимій частині екрана (--vvt, --vvh з app.js), і
+     поля та «Зберегти» лишаються над клавіатурою, а шапка — на екрані. */
+  .modal-root { inset: auto 0; top: var(--vvt, 0px); height: var(--vvh, 100%); }
   .modal-wrap { place-items: end stretch; padding: 0; }
   .modal {
     max-width: none; max-height: 92vh;
+    max-height: min(92dvh, calc(var(--vvh, 100dvh) - 12px - env(safe-area-inset-top)));
     border-radius: 22px 22px 0 0;
     padding-bottom: env(safe-area-inset-bottom);
     animation: sheet-up .22s cubic-bezier(.2,.9,.3,1);
   }
+  .kb-open .modal { padding-bottom: 0; }
   .modal::before {
     content: ''; position: absolute; top: 8px; left: 50%;
     width: 38px; height: 4px; margin-left: -19px;
     border-radius: 2px; background: var(--line);
   }
   .modal__head { padding: 22px 18px 12px; }
-  .modal__body { padding: 2px 18px 6px; }
+  .modal__body { padding: 2px 18px 6px; scroll-padding-bottom: 16px; }
   .modal__foot { flex-wrap: wrap; padding: 14px 18px 18px; gap: 8px; }
   .modal__foot .btn { flex: 1 1 auto; justify-content: center; }
-  .modal__foot .btn--primary { flex-basis: 100%; order: -1; }
+  /* Головна дія — внизу на всю ширину, під великим пальцем. «Скасувати»
+     поруч із нею тільки забирала місце й стирала набране від промаху:
+     закривають хрестиком, «Назад» або стягуванням шторки донизу.
+     Якщо кнопка в шторці одна («Закрити»), вона лишається. */
+  .modal__foot [data-mb="cancel"]:not(:only-child) { display: none; }
+  .modal__foot .btn--primary { flex-basis: 100%; order: 2; }
+
+  /* Повідомлення, поки відкрита шторка, — згори: знизу вони лягали на
+     її головну кнопку */
+  html.modal-open #toast-root { top: calc(10px + env(safe-area-inset-top)); bottom: auto; }
+  html.modal-open #toast-root .toast { animation-name: toastDown; }
+
+  /* Поки набирають текст — нижня панель і «+ Урок» не висять над клавіатурою */
+  .kb-open .m-tabs, .kb-open .ag-fab { display: none; }
 }
 @keyframes sheet-up { from { transform: translateY(40%); opacity: .4 } }
+@keyframes toastDown { from { opacity: 0; transform: translateY(-14px) } }
 
 /* ============================================================
    Тости
@@ -859,7 +921,7 @@ a { color: inherit; text-decoration: none; }
   background: rgba(255,255,255,.12); color: #fff;
   cursor: pointer;
 }
-.update-bar__x:hover { background: rgba(255,255,255,.22); }
+@media (hover: hover) { .update-bar__x:hover { background: rgba(255,255,255,.22); } }
 
 /* ============================================================
    Кільцева діаграма
@@ -938,7 +1000,7 @@ a { color: inherit; text-decoration: none; }
   transition: border-color .14s, background .14s;
   user-select: none;
 }
-.mark:hover { border-color: var(--brand-300); }
+@media (hover: hover) { .mark:hover { border-color: var(--brand-300); } }
 .mark input { position: absolute; opacity: 0; pointer-events: none; }
 .mark__box {
   flex: 0 0 22px; width: 22px; height: 22px;
@@ -1084,7 +1146,7 @@ a { color: inherit; text-decoration: none; }
   cursor: pointer;
   transition: transform .16s, box-shadow .16s, border-color .16s;
 }
-.pnode:hover { transform: scale(1.07); box-shadow: var(--shadow); }
+@media (hover: hover) { .pnode:hover { transform: scale(1.07); box-shadow: var(--shadow); } }
 .pnode__n { font-size: 17px; font-weight: 800; }
 
 /* Кільце засвоєння сидить рівно по краю вузла */
@@ -1162,7 +1224,7 @@ a { color: inherit; text-decoration: none; }
   font: inherit; font-size: 13px; font-weight: 600; color: var(--ink-2);
   transition: border-color .14s, background .14s;
 }
-.orph__i:hover { border-color: var(--brand-300); background: var(--brand-50); }
+@media (hover: hover) { .orph__i:hover { border-color: var(--brand-300); background: var(--brand-50); } }
 .orph__i b { color: var(--brand-700); font-variant-numeric: tabular-nums; }
 
 /* Рівень засвоєння у вікні етапу */
@@ -1199,7 +1261,7 @@ a { color: inherit; text-decoration: none; }
   position: relative;
 }
 .rm + .rm { margin-top: 2px; }
-.rm:hover { background: var(--blue-50); }
+@media (hover: hover) { .rm:hover { background: var(--blue-50); } }
 
 /* Номер етапу з ниткою, що з'єднує їх у послідовність — план читається як шлях */
 .rm__n {
@@ -1280,8 +1342,12 @@ a { color: inherit; text-decoration: none; }
   /* Вузько для одного рядка: кнопка переїжджає під опис уроку */
   .lesson-row { flex-wrap: wrap; padding: 16px 18px; gap: 12px 16px; }
   .lesson-row__num { width: 50px; height: 50px; font-size: 19px; }
-  .lesson-row__body { flex: 1 1 0; min-width: 110px; }
-  .lesson-row > .btn { flex: 1 1 100%; }
+  /* опис займає решту першого рядка — кнопки переходять у другий */
+  .lesson-row__body { flex: 1 1 calc(100% - 66px); min-width: 110px; }
+  /* «Дошка» й «Деталі» — поруч в один ряд, а не дві смуги на всю ширину;
+     сам опис уроку теж відкриває урок (див. C.lessonRow) */
+  .lesson-row > .btn { flex: 1 1 0; min-width: 0; }
+  .lesson-row__body[data-act] { cursor: pointer; }
 }
 
 @media (max-width: 900px) {
@@ -1407,6 +1473,71 @@ a { color: inherit; text-decoration: none; }
   .main { padding-bottom: calc(58px + env(safe-area-inset-bottom)); }
   .app.is-board .main { padding-bottom: 0; }
   .toast-root { bottom: calc(70px + env(safe-area-inset-bottom)); }
+}
+
+/* --- Телефон: «Ще» — шторка з плитками розділів (див. moreSheet в app.js) --- */
+.more-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-bottom: 6px; }
+.more-tile {
+  min-height: 76px; padding: 12px 14px;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 8px;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--surface);
+  font: inherit; font-size: 14px; font-weight: 700; color: var(--ink); text-align: left; cursor: pointer;
+}
+.more-tile__top { display: flex; align-items: center; justify-content: space-between; width: 100%; color: var(--brand-600); }
+.more-tile__n {
+  min-width: 22px; padding: 2px 7px; border-radius: 999px;
+  background: var(--brand-50); color: var(--brand-700); font-size: 12px; font-weight: 750; text-align: center;
+}
+.more-tile.is-on { border-color: var(--brand-300); background: var(--brand-50); }
+
+/* Тиха картка «Застосунок на телефоні» — у «Ще» й у налаштуваннях */
+.install-card {
+  display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 14px;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--surface);
+}
+.install-card__i { flex: none; width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center;
+  background: var(--brand-50); color: var(--brand-600); }
+.install-card__t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; font-size: 13px; line-height: 1.4; color: var(--muted); }
+.install-card__t b { font-size: 14px; color: var(--ink); }
+.stack > .install-card { margin-top: 0; }
+
+/* Список дій під «⋯» у верхній смузі */
+.act-list { display: flex; flex-direction: column; gap: 2px; padding-bottom: 6px; }
+.act-list__i {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 50px; padding: 0 12px;
+  border: 0; border-radius: 12px; background: none;
+  font: inherit; font-size: 15px; font-weight: 650; color: var(--ink); text-align: left; cursor: pointer;
+}
+.act-list__i svg { flex: none; color: var(--brand-600); }
+
+/* Кнопки банера, які на телефоні виглядають інакше (див. m у C.hero), і
+   «назад», потрібний лише стрілці верхньої смуги телефона */
+.hero-btn--monly, .hero__back--m { display: none; }
+/* Найближчий урок на Огляді — лише на телефоні */
+.dash-next { display: none; }
+
+@media (max-width: 640px) {
+  .hero-btn--monly { display: inline-flex; }
+  .hero__actions > .hero-btn { order: var(--mo, 50); }
+  .hero-btn.hero-btn--msolid { background: #fff; color: var(--brand-700); border-color: #fff; }
+  .hero-btn.hero-btn--mplain { background: rgba(255,255,255,.10); color: #fff; border-color: rgba(255,255,255,.34); }
+
+  .dash-next { display: block; margin-bottom: 12px; padding: 14px; }
+  .dash-next__who {
+    display: flex; align-items: center; gap: 12px; width: 100%; padding: 0;
+    border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer;
+  }
+  .dash-next__t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .dash-next__t b { font-size: 16px; font-weight: 750; }
+  .dash-next__k { font-size: 11.5px; font-weight: 750; letter-spacing: .3px; text-transform: uppercase; color: var(--brand-600); }
+  .dash-next__acts { display: flex; gap: 8px; margin-top: 12px; }
+  .dash-next__acts .btn { flex: 1 1 0; min-width: 0; }
+
+  /* Сторінка учня: вкладки лишаються під верхньою смугою, поки гортають */
+  .page > .tabs {
+    position: sticky; top: calc(54px + env(safe-area-inset-top)); z-index: 30;
+    background: var(--surface);
+  }
 }
 
 /* --- Телефон: ущільнення ---
@@ -1634,8 +1765,8 @@ a { color: inherit; text-decoration: none; }
    вузькою смужкою, а решта тижня — за краєм вікна */
 /* Сітка бере всю висоту, що лишилась під шапкою. Коли суми сховані,
    шапка дня коротша — і сітці дістається більше. */
-.cal-body { display: flex; max-height: calc(100vh - 215px); min-height: 420px; overflow-y: auto; }
-.cal--nomoney .cal-body { max-height: calc(100vh - 160px); }
+.cal-body { display: flex; max-height: calc(100vh - 215px); max-height: calc(100dvh - 215px); min-height: 420px; overflow-y: auto; }
+.cal--nomoney .cal-body { max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); }
 .cal--nomoney .cal-dayhead__money { display: none; }
 .cal--nomoney .cal-dayhead { padding: 6px 6px 7px; }
 .cal-gutter { width: 58px; flex: 0 0 58px; border-right: 1px solid var(--line); }
@@ -1675,7 +1806,7 @@ a { color: inherit; text-decoration: none; }
 }
 /* Миша й перо беруть урок одразу, без затримання, — їм прокрутка не потрібна */
 @media (pointer: fine) { .cal-ev { touch-action: none; } }
-.cal-ev:hover { box-shadow: var(--shadow); z-index: 2; }
+@media (hover: hover) { .cal-ev:hover { box-shadow: var(--shadow); z-index: 2; } }
 .cal-ev.is-dragging { opacity: .85; cursor: grabbing; box-shadow: var(--shadow-lg); z-index: 6; }
 .cal-ev.is-cancelled { opacity: .55; }
 .cal-ev.is-cancelled .cal-ev__name { text-decoration: line-through; }
@@ -1703,8 +1834,8 @@ a { color: inherit; text-decoration: none; }
   opacity: 0;
   transition: opacity .14s;
 }
-.cal-ev:hover .cal-ev__grip::after { opacity: .45; }
-.cal-ev__grip:hover::after { opacity: .8; }
+@media (hover: hover) { .cal-ev:hover .cal-ev__grip::after { opacity: .45; } }
+@media (hover: hover) { .cal-ev__grip:hover::after { opacity: .8; } }
 /* на дотику наведення не буває — там ручка помітна завжди */
 @media (hover: none) { .cal-ev__grip::after { opacity: .35; } }
 /* Смужку у 8 px пальцем не влучити. Але й не більше двох пʼятих уроку:
@@ -1732,7 +1863,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 @media (max-width: 900px) {
-  .cal-body { max-height: calc(100vh - 260px); min-height: 380px; }
+  .cal-body { max-height: calc(100vh - 260px); max-height: calc(100dvh - 260px); min-height: 380px; }
   .cal-head__corner, .cal-gutter { width: 44px; flex-basis: 44px; }
   .cal-hour span { font-size: 9.5px; right: 5px; }
   .cal-dayhead__num { font-size: 16px; }
@@ -1812,7 +1943,7 @@ body.is-navdrag .nav-item { touch-action: none; }
   z-index: 3;
   transition: background .14s, border-color .14s;
 }
-.cal-ev__tick:hover { border-color: var(--green); background: #fff; }
+@media (hover: hover) { .cal-ev__tick:hover { border-color: var(--green); background: #fff; } }
 .cal-ev.is-done .cal-ev__tick { background: var(--green); border-color: var(--green); }
 
 .cal-ev.is-done .cal-ev__name,
@@ -2000,7 +2131,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
   background: #fff; font: inherit; font-size: 13px; text-align: left;
   cursor: pointer; color: var(--ink, #0d2149);
 }
-.file-row:hover { border-color: var(--blue-300, #8fb4ff); background: var(--blue-50, #f0f5ff); }
+@media (hover: hover) { .file-row:hover { border-color: var(--blue-300, #8fb4ff); background: var(--blue-50, #f0f5ff); } }
 .file-row__i { color: var(--blue-600, #1358f5); display: flex; flex: 0 0 auto; }
 .file-row__n {
   font-weight: 600; min-width: 0;
@@ -2008,7 +2139,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 }
 .file-row__d { color: var(--muted, #7e90ae); display: flex; flex: 0 0 auto; }
 .file-strip .file-row { cursor: default; }
-.file-strip .file-row:hover { border-color: var(--line, #e6eaf0); background: #fff; }
+@media (hover: hover) { .file-strip .file-row:hover { border-color: var(--line, #e6eaf0); background: #fff; } }
 
 /* Вибір матеріалів, які поїдуть учневі */
 .mat-pick {
@@ -2025,7 +2156,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
   display: flex; align-items: center; gap: 9px;
   padding: 7px 14px; font-size: 13.5px; cursor: pointer;
 }
-.mat-pick__r:hover { background: var(--blue-50, #f0f5ff); }
+@media (hover: hover) { .mat-pick__r:hover { background: var(--blue-50, #f0f5ff); } }
 .mat-pick__r input { accent-color: var(--blue-600, #1358f5); cursor: pointer; }
 
 /* Матеріал, у якому ні файлу, ні посилання — учневі відкривати нічого */
@@ -2111,7 +2242,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
   font: inherit; font-size: 13px; text-align: left; cursor: pointer;
   color: var(--ink, #0d2149);
 }
-.les-hw__r:hover, .les-hw__add:hover { background: var(--blue-50, #f0f5ff); }
+@media (hover: hover) { .les-hw__r:hover, .les-hw__add:hover { background: var(--blue-50, #f0f5ff); } }
 .les-hw__t {
   font-weight: 650; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -2137,7 +2268,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
   background: #fff; font: inherit; cursor: pointer; text-align: left;
 }
 .hw-row:last-child { border-bottom: 0; }
-.hw-row:hover { background: var(--blue-50, #f0f5ff); }
+@media (hover: hover) { .hw-row:hover { background: var(--blue-50, #f0f5ff); } }
 .hw-row__t { font-weight: 650; font-size: 14px; line-height: 1.3; }
 
 /* Службові подробиці синхронізації — складені, щоб не лізли на очі */
@@ -2152,7 +2283,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 .sync-more > summary::-webkit-details-marker { display: none; }
 .sync-more > summary::before { content: '▸ '; }
 .sync-more[open] > summary::before { content: '▾ '; }
-.sync-more > summary:hover { color: var(--blue-600); }
+@media (hover: hover) { .sync-more > summary:hover { color: var(--blue-600); } }
 
 /* Смуга «ця вкладка стара»: закрити не можна, бо поки вона є —
    зміни не їдуть на сервер, і мовчати про це не можна. */
@@ -2290,7 +2421,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 .ref__count { font-size: 12px; font-weight: 600; opacity: .8;
               text-transform: uppercase; letter-spacing: .4px; margin-right: auto; }
 .ref__bar .btn { background: rgba(255,255,255,.16); border-color: transparent; color: #fff; }
-.ref__bar .btn:hover { background: rgba(255,255,255,.28); }
+@media (hover: hover) { .ref__bar .btn:hover { background: rgba(255,255,255,.28); } }
 
 .ref__q { flex: 0 0 250px; height: 36px; padding: 0 13px; border-radius: var(--r-sm);
           border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.16);
@@ -2308,7 +2439,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
           cursor: pointer; font: inherit; font-size: 13.5px; font-weight: 600;
           color: var(--ink-2); text-align: left; border-radius: var(--r-sm);
           transition: background .14s, color .14s; }
-.ref__t:hover { background: var(--blue-50); color: var(--blue-700); }
+@media (hover: hover) { .ref__t:hover { background: var(--blue-50); color: var(--blue-700); } }
 .ref__t svg { margin-left: auto; opacity: .3; flex: 0 0 auto; }
 .ref__n { color: var(--muted-2); font-size: 12.5px; font-variant-numeric: tabular-nums;
           flex: 0 0 auto; min-width: 20px; }
@@ -2382,7 +2513,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 /* Шапка знахідки в пошуку */
 .gcard__h--go { width: 100%; border: 0; cursor: pointer; font: inherit; text-align: left;
                 display: flex; align-items: center; gap: 9px; }
-.gcard__h--go:hover { background: var(--blue-700); }
+@media (hover: hover) { .gcard__h--go:hover { background: var(--blue-700); } }
 .gcard__grp { margin-left: auto; font-weight: 600; font-size: 12px; opacity: .82;
               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50%; }
 
@@ -2406,7 +2537,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 
 /* Довідник займає всю висоту: перелік тем має прокручуватись окремо від
    змісту, інакше при переході на двадцяту тему список тікає вгору. */
-.app:has(.ref) { height: 100vh; }
+.app:has(.ref) { height: 100vh; height: 100dvh; }
 .app:has(.ref) .main { display: flex; flex-direction: column; overflow: hidden; }
 
 /* Друк: лише сама тема, без переліку й шапки */
@@ -2443,14 +2574,14 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
                   font: inherit; font-size: 12.5px; font-weight: 800; letter-spacing: .4px;
                   padding: 6px 11px; border-radius: 7px; }
 .fx-lang button.is-on { background: #fff; color: var(--brand-700); }
-.fx-lang button:not(.is-on):hover { color: #fff; background: rgba(255,255,255,.14); }
+@media (hover: hover) { .fx-lang button:not(.is-on):hover { color: #fff; background: rgba(255,255,255,.14); } }
 .fx-list { max-width: 860px; display: flex; flex-direction: column; gap: 14px; }
 .fx-intro { max-width: 860px; font-size: 14px; line-height: 1.65; color: var(--ink-2); margin: -4px 0 16px; }
 .fx-topicbar { margin-bottom: 2px; }
 .fx-all { margin-left: auto; border: 0; background: none; font: inherit; font-size: 13px; font-weight: 700;
           color: var(--blue-700); cursor: pointer; padding: 4px 8px; border-radius: 8px; letter-spacing: 0;
           text-transform: none; }
-.fx-all:hover { background: var(--blue-50); }
+@media (hover: hover) { .fx-all:hover { background: var(--blue-50); } }
 
 .fx { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
       box-shadow: var(--shadow-sm); padding: 16px 18px 14px; scroll-margin-top: 12px;
@@ -2475,14 +2606,14 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 .fx__proofbtn { display: inline-flex; align-items: center; gap: 6px; border: 0; cursor: pointer;
                 font: inherit; font-size: 13px; font-weight: 750; color: #fff; background: var(--blue-600);
                 padding: 7px 13px 7px 10px; border-radius: 999px; }
-.fx__proofbtn:hover { background: var(--blue-700); }
+@media (hover: hover) { .fx__proofbtn:hover { background: var(--blue-700); } }
 .fx__proofbtn svg { transition: transform .18s; }
 .fx.is-open .fx__proofbtn { background: var(--blue-50); color: var(--blue-700); }
 .fx.is-open .fx__proofbtn svg { transform: rotate(90deg); }
 .fx__links { margin-left: auto; display: flex; gap: 4px; flex-wrap: wrap; }
 .fx__link { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; cursor: pointer;
             font: inherit; font-size: 12.5px; font-weight: 650; color: var(--muted); padding: 6px 8px; border-radius: 8px; }
-.fx__link:hover { background: var(--bg); color: var(--blue-700); }
+@media (hover: hover) { .fx__link:hover { background: var(--bg); color: var(--blue-700); } }
 
 .fx__proof { display: none; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
 .fx.is-open .fx__proof { display: block; }
@@ -2500,7 +2631,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 .fx__rel--back { margin: 10px 0 0; }
 .fx-chip { border: 1px solid var(--blue-100); background: var(--blue-50); color: var(--blue-700);
            font: inherit; font-size: 12px; font-weight: 650; padding: 3px 9px; border-radius: 999px; cursor: pointer; }
-.fx-chip:hover { background: var(--blue-100); }
+@media (hover: hover) { .fx-chip:hover { background: var(--blue-100); } }
 
 /* Малюнок до доведення */
 .fx__fig { display: flex; justify-content: center; margin: 4px 0 12px; }
@@ -2535,7 +2666,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 .mm-fx__i { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 100%;
             border: 1px solid var(--line); background: var(--surface); border-radius: var(--r-sm);
             padding: 9px 11px; cursor: pointer; font: inherit; text-align: left; color: var(--ink); }
-.mm-fx__i:hover { border-color: var(--blue-300); background: var(--blue-50); }
+@media (hover: hover) { .mm-fx__i:hover { border-color: var(--blue-300); background: var(--blue-50); } }
 .mm-fx__t { font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
 .mm-fx__f { font-size: 14px; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
@@ -2659,7 +2790,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
   padding: 8px 10px; margin: 0 -10px; border-radius: var(--r-sm);
   border: 0; background: transparent; text-align: left; cursor: pointer; color: var(--ink); font: inherit; font-size: 14px;
 }
-.mm-row:hover { background: var(--brand-50); }
+@media (hover: hover) { .mm-row:hover { background: var(--brand-50); } }
 .mm-row__name { flex: 1; min-width: 0; font-weight: 600; }
 .mm-row__name small { display: block; color: var(--muted); font-size: 12px; font-weight: 500; }
 .mm-row__tag { font-size: 12px; color: var(--muted); white-space: nowrap; }
@@ -2709,14 +2840,14 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
   border: 1px solid var(--line); background: #fff; color: var(--ink);
   font: inherit; font-size: 13px; font-weight: 550; cursor: pointer; text-align: left; line-height: 1.3;
 }
-.mm-chip:hover { border-color: var(--brand-300); box-shadow: var(--shadow-sm); }
+@media (hover: hover) { .mm-chip:hover { border-color: var(--brand-300); box-shadow: var(--shadow-sm); } }
 .mm-chip.is-locked { color: var(--muted-2); background: #FBFAFE; }
 .mm-chip.is-next { border-color: var(--brand-600); box-shadow: 0 0 0 2px var(--brand-50); }
 .mm-chip.is-sel { background: var(--ink); color: #fff; border-color: var(--ink); }
 
 /* ---- Карта ---- */
 
-.mm-mapwrap { position: relative; padding: 0; overflow: hidden; height: max(540px, calc(100vh - 260px)); background: #FAF9FE; }
+.mm-mapwrap { position: relative; padding: 0; overflow: hidden; height: max(540px, calc(100vh - 260px)); height: max(540px, calc(100dvh - 260px)); background: #FAF9FE; }
 #mm-svg { width: 100%; height: 100%; display: block; cursor: grab; user-select: none; touch-action: none; }
 #mm-svg.is-drag { cursor: grabbing; }
 
@@ -2729,7 +2860,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 
 .mm-edge { fill: none; stroke-width: 1.6; opacity: .38; }
 .mm-band { fill: none; stroke-width: 64; cursor: pointer; }
-.mm-band:hover { opacity: .9; }
+@media (hover: hover) { .mm-band:hover { opacity: .9; } }
 .mm-bandlbl { fill: #fff; font-weight: 750; pointer-events: none; }
 .mm-bandq { font-weight: 650; font-style: italic; opacity: .8; pointer-events: none; }
 #mm-svg.lod-2 .mm-bandq { display: none; }
@@ -2739,7 +2870,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 .mm-seclbl { font-size: 17px; font-weight: 750; paint-order: stroke; stroke: #FAF9FE; stroke-width: 6px; stroke-linejoin: round; pointer-events: none; }
 .mm-t { cursor: pointer; }
 .mm-tlbl { font-size: 15px; fill: var(--ink-2); paint-order: stroke; stroke: #FAF9FE; stroke-width: 5px; stroke-linejoin: round; pointer-events: none; }
-.mm-t:hover .mm-tlbl { fill: var(--ink); font-weight: 650; }
+@media (hover: hover) { .mm-t:hover .mm-tlbl { fill: var(--ink); font-weight: 650; } }
 .mm-hit { fill: transparent; }
 
 /* Рівень деталізації: здалеку підписи тем лише заважають. */
@@ -2760,7 +2891,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 .mm-zoom { display: flex; flex-direction: column; background: #fff; border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow); overflow: hidden; }
 .mm-zoom button { width: 38px; height: 38px; border: 0; background: #fff; font-size: 17px; cursor: pointer; color: var(--ink-2); }
 .mm-zoom button + button { border-top: 1px solid var(--line); }
-.mm-zoom button:hover { background: var(--brand-50); color: var(--brand-700); }
+@media (hover: hover) { .mm-zoom button:hover { background: var(--brand-50); color: var(--brand-700); } }
 .mm-maplegend { background: #fff; border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow); padding: 10px 14px; font-size: 12.5px; display: grid; gap: 5px; }
 .mm-maplegend div { display: flex; align-items: center; gap: 8px; }
 .mm-maphint { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); background: rgba(23, 22, 58, .82); color: #fff; font-size: 12.5px; padding: 6px 12px; border-radius: 99px; pointer-events: none; white-space: nowrap; }
@@ -2777,7 +2908,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 .mm-dr__title { margin: 4px 0 4px; font-size: 22px; font-weight: 800; line-height: 1.25; letter-spacing: -.4px; }
 .mm-dr__stage { font-size: 13px; color: var(--muted); }
 .mm-dr__close { position: absolute; right: 12px; top: 12px; width: 34px; height: 34px; border: 0; border-radius: var(--r-sm); background: transparent; cursor: pointer; color: var(--muted); display: grid; place-items: center; }
-.mm-dr__close:hover { background: var(--brand-50); color: var(--ink); }
+@media (hover: hover) { .mm-dr__close:hover { background: var(--brand-50); color: var(--ink); } }
 .mm-dr__body { padding: 4px 20px 20px; overflow: auto; flex: 1; }
 .mm-dr__inside { margin: 0 0 16px; color: var(--ink-2); font-size: 14px; line-height: 1.55; }
 .mm-dr__h { margin: 18px 0 6px; font-size: 12px; font-weight: 750; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); }
@@ -2790,7 +2921,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
   padding: 10px 4px 9px; border-radius: var(--r-md); border: 1px solid var(--line); background: #fff;
   font: inherit; font-size: 12px; font-weight: 650; color: var(--ink-2); cursor: pointer; line-height: 1.2; text-align: center;
 }
-.mm-seg button:hover { border-color: var(--brand-300); }
+@media (hover: hover) { .mm-seg button:hover { border-color: var(--brand-300); } }
 .mm-seg button.is-on { border-color: var(--ink); background: var(--ink); color: #fff; }
 .mm-seg .mm-g { width: 18px; height: 18px; }
 
@@ -2827,7 +2958,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 .mm-caption__w { font-size: 13.5px; line-height: 1.5; color: var(--ink-2); }
 .mm-caption__n { margin-top: 8px; font-size: 12px; color: var(--muted); }
 .mm-caption__x { position: absolute; right: 8px; top: 8px; width: 28px; height: 28px; border: 0; background: transparent; border-radius: var(--r-sm); color: var(--muted); cursor: pointer; display: grid; place-items: center; }
-.mm-caption__x:hover { background: var(--brand-50); color: var(--ink); }
+@media (hover: hover) { .mm-caption__x:hover { background: var(--brand-50); color: var(--ink); } }
 
 /* ---- Майнд-меп ---- */
 
@@ -2837,7 +2968,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 .mt-link.is-out { stroke-dasharray: 5 6; opacity: .6; }
 .mt-node { cursor: pointer; }
 .mt-pill { stroke-width: 1.3; transition: filter .12s; }
-.mt-node:hover .mt-pill { filter: drop-shadow(0 2px 6px rgba(23, 22, 58, .14)); }
+@media (hover: hover) { .mt-node:hover .mt-pill { filter: drop-shadow(0 2px 6px rgba(23, 22, 58, .14)); } }
 .mt-node.is-out { opacity: .5; }
 .mt-node.is-sel .mt-pill { stroke: #17163A; stroke-width: 2.4; }
 .mt-rootlbl { fill: #fff; font-size: 17px; font-weight: 750; }
@@ -2850,8 +2981,8 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 .mt-badge { fill: #8E8CA8; font-size: 11px; font-weight: 650; }
 .mt-chev circle { fill: #fff; stroke: #CFCBE3; stroke-width: 1.3; }
 .mt-chev text { fill: #4B3FDB; font-size: 16px; font-weight: 800; }
-.mt-chev:hover circle { fill: #4B3FDB; stroke: #4B3FDB; }
-.mt-chev:hover text { fill: #fff; }
+@media (hover: hover) { .mt-chev:hover circle { fill: #4B3FDB; stroke: #4B3FDB; } }
+@media (hover: hover) { .mt-chev:hover text { fill: #fff; } }
 .mm-treebtns { display: flex; gap: 6px; background: #fff; border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow); padding: 6px; }
 
 .mm-undo {
@@ -2861,7 +2992,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
   box-shadow: var(--shadow-lg); font-size: 13.5px;
 }
 .mm-undo button { background: rgba(255, 255, 255, .14); color: #fff; border: 0; border-radius: var(--r-sm); padding: 6px 11px; font: inherit; font-weight: 650; cursor: pointer; }
-.mm-undo button:hover { background: rgba(255, 255, 255, .24); }
+@media (hover: hover) { .mm-undo button:hover { background: rgba(255, 255, 255, .24); } }
 @media (max-width: 640px) {
   .mm-undo { bottom: calc(58px + 12px + env(safe-area-inset-bottom)); left: 12px; right: 12px; transform: none; justify-content: space-between; }
   .mm-undo button { min-height: 40px; }
@@ -2911,7 +3042,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
   background: #fff; font: inherit; font-size: 14px; font-weight: 650; color: var(--ink-2); cursor: pointer;
 }
 .ol-tab span { font-size: 12px; font-weight: 700; color: var(--muted); }
-.ol-tab:hover { border-color: var(--brand-300); }
+@media (hover: hover) { .ol-tab:hover { border-color: var(--brand-300); } }
 .ol-tab.is-on { background: var(--ink); border-color: var(--ink); color: #fff; }
 .ol-tab.is-on span { color: rgba(255, 255, 255, .7); }
 .ol-card { margin-bottom: 12px; border-left: 4px solid var(--c, var(--brand-600)); }
@@ -3008,7 +3139,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
   border: 1px solid var(--line); background: #fff; font: inherit; font-size: 13px; font-weight: 700;
   color: var(--ink); cursor: pointer; font-variant-numeric: tabular-nums; transition: background .2s, border-color .2s;
 }
-.mx-cell:hover { border-color: var(--brand-300); }
+@media (hover: hover) { .mx-cell:hover { border-color: var(--brand-300); } }
 .mx-cell.is-hidden { background: #F4F3FA; border-style: dashed; color: transparent; }
 .mx-cell.is-parent { background: color-mix(in srgb, var(--c, #4B3FDB) 18%, #fff); border-color: var(--c, var(--brand-600)); }
 .mx-cell.is-pick { background: var(--c, var(--brand-600)); border-color: var(--c, var(--brand-600)); color: #fff; }
@@ -3046,7 +3177,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
   padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r-sm);
   background: #fff; font: inherit; font-size: 13px; cursor: pointer; line-height: 1.4;
 }
-.mm-olymp__p:hover { border-color: var(--brand-300); background: var(--brand-50); }
+@media (hover: hover) { .mm-olymp__p:hover { border-color: var(--brand-300); background: var(--brand-50); } }
 /* Умова в списку — два рядки з формулами як формулами: обрізати їх
    крапками означало б лишити «В … і … на …» замість задачі. */
 .mm-olymp__t {
@@ -3083,7 +3214,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 
 .bk-layout { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 18px; align-items: start; }
 .bk-side {
-  position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto;
+  position: sticky; top: 16px; max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); overflow-y: auto;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
   padding: 6px 14px 14px; box-shadow: var(--shadow-sm);
 }
@@ -3099,7 +3230,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
   display: flex; align-items: center; gap: 8px; padding: 5px 4px; border-radius: 7px;
   font-size: 13px; line-height: 1.3; color: var(--ink); cursor: pointer;
 }
-.bk-opt:hover { background: var(--brand-50); }
+@media (hover: hover) { .bk-opt:hover { background: var(--brand-50); } }
 .bk-opt input { margin: 0; flex: none; accent-color: var(--brand-600); }
 .bk-opt__l { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 .bk-opt__hint { font-size: 11.5px; color: var(--muted); line-height: 1.25; }
@@ -3112,7 +3243,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
   background: none; border: 0; padding: 2px 0; font: inherit; font-size: 12px; font-weight: 600;
   text-transform: none; letter-spacing: 0; color: var(--brand-600); cursor: pointer;
 }
-.bk-link:hover { text-decoration: underline; }
+@media (hover: hover) { .bk-link:hover { text-decoration: underline; } }
 
 .bk-bar { position: sticky; top: 8px; z-index: 5; padding: 12px 14px; margin-bottom: 12px; }
 .bk-bar__row { display: flex; gap: 10px; align-items: center; }
@@ -3127,7 +3258,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
   border: 1px solid var(--brand-100); background: var(--brand-50); color: var(--brand-700);
   font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
 }
-.bk-chip:hover { border-color: var(--brand-300); }
+@media (hover: hover) { .bk-chip:hover { border-color: var(--brand-300); } }
 .bk-chip span { font-size: 14px; line-height: 1; }
 .bk-more { display: flex; justify-content: center; margin: 14px 0; }
 
@@ -3140,7 +3271,7 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
   color: color-mix(in srgb, var(--c, #4B3FDB) 75%, #000); border-radius: 6px;
   padding: 3px 8px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
 }
-.bk-tag:hover { background: color-mix(in srgb, var(--c, #4B3FDB) 18%, #fff); }
+@media (hover: hover) { .bk-tag:hover { background: color-mix(in srgb, var(--c, #4B3FDB) 18%, #fff); } }
 
 /* Ранг як на Codewars: шестикутник і «6 кю», кольори груп ті самі */
 .kyu {

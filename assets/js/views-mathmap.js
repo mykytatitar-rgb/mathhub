@@ -367,7 +367,7 @@
   }
 
   function switchTo(newWho) {
-    if (newWho !== who) { selected = null; hideDrawer(); }
+    if (newWho !== who) { selected = null; hideDrawer(); dropDrawerEntry(); }
     who = newWho;
     invalidate();
   }
@@ -1620,9 +1620,22 @@
     if (u) u.hidden = true;
   }
 
+  /* На телефоні шухляда теми — шторка на весь екран, тож «Назад» має
+     закривати її, а не йти з карти (див. C.overlay у components.js).
+     На компʼютері це бічна панель поруч із картою — історію не чіпаємо. */
+  var drawerEntry = false;
+
+  if (window.C && C.overlay) {
+    C.overlay.add({
+      open: function () { return drawerEntry && !!selected; },
+      close: function (fromPop) { closeDrawer(fromPop); }
+    });
+  }
+
   function openTopic(id, opts) {
     if (!byId[id]) return;
     selected = id;
+    if (window.innerWidth <= 640 && window.C && C.overlay) { C.overlay.open(); drawerEntry = true; }
     renderDrawer();
     if (svgEl && worldEl) {
       redrawWorld();
@@ -1634,9 +1647,16 @@
     }
   }
 
-  function closeDrawer() {
+  // шухляду сховали без closeDrawer (змінився учень, фільтр) — її запис в історії теж прибрати
+  function dropDrawerEntry() {
+    if (drawerEntry) { drawerEntry = false; C.overlay.closed(false); }
+  }
+
+  // fromPop — закрили кнопкою «Назад» (або сторінка змінилась): запис історії вже не наш
+  function closeDrawer(fromPop) {
     selected = null;
     hideDrawer();
+    if (drawerEntry) { drawerEntry = false; C.overlay.closed(fromPop === true); }
     if (svgEl && worldEl) redrawWorld();
     else if (treeWorld) redrawTree();
     else if (currentView() === 'road') rerender();
@@ -1941,7 +1961,7 @@
 
     if (act === 'scope' && who) {
       S.update('students', who, { mapScope: +arg === 6 ? 6 : 3 });
-      if (selected && byId[selected] && byId[selected].stage > maxStage()) { selected = null; hideDrawer(); }
+      if (selected && byId[selected] && byId[selected].stage > maxStage()) { selected = null; hideDrawer(); dropDrawerEntry(); }
       rerender();
       return;
     }

@@ -490,18 +490,28 @@
     var st = S.get('students', ls.studentId);
     var was = U.toDate(ls.date);
 
+    /* Час із поля, а порожнє (вибирач часу на телефоні вміє його стерти) —
+       стара година уроку. Один для підпису й для збереження: підпис казав
+       «о 00:00», а збереглась би стара година. */
+    function pickTime(time) {
+      return /^\d{2}:\d{2}/.test(time || '') ? time.slice(0, 5) : U.fmtTime(was);
+    }
+
     function whenText(day, time) {
-      var d = U.toDate(day + 'T' + (time || '00:00'));
+      var d = U.toDate(day + 'T' + pickTime(time));
       if (isNaN(d.getTime())) return '';
       return U.DAYS_FULL[d.getDay()] + ', ' + U.fmtDateLong(d) + ' о ' + U.fmtTime(d);
     }
 
+    /* Кнопки зсуву — звичайним рядком, не row--wrap: на телефоні такий ряд
+       «таблеток» виходить за поля сторінки (див. app.css), а в шторці через
+       це став на 16 px правіше за поля дати й часу. */
     var body =
       '<div class="field-row">' +
         C.field('Дата', C.input('_date', ls.date.slice(0, 10), 'type="date"')) +
         C.field('Час', C.input('_time', ls.date.slice(11, 16) || U.fmtTime(was), 'type="time"')) +
       '</div>' +
-      '<div class="row row--wrap" style="gap:8px;margin:2px 0 12px">' +
+      '<div class="row" style="gap:8px;flex-wrap:wrap;margin:2px 0 12px">' +
         '<button type="button" class="chip" data-shift="1">+1 день</button>' +
         '<button type="button" class="chip" data-shift="7">+1 тиждень</button>' +
       '</div>' +
@@ -518,7 +528,7 @@
           onClick: function (root) {
             var v = C.readForm(root);
             if (!/^\d{4}-\d{2}-\d{2}$/.test(v._date || '')) { U.toast('Вкажіть дату', 'err'); return false; }
-            var when = v._date + 'T' + (/^\d{2}:\d{2}/.test(v._time || '') ? v._time.slice(0, 5) : U.fmtTime(was));
+            var when = v._date + 'T' + pickTime(v._time);
             var cur = S.get('lessons', id);
             if (!cur || when === cur.date) return;          // нічого не змінилось
             S.update('lessons', id, F.lessonMovePatch(cur, when));

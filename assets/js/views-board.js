@@ -3274,8 +3274,9 @@
       if (t.to === cur.lessonId) { setTimeout(function () { beginPlacing(t); }, 0); return; }
       flushSave();
       pendingTransfer = t;
-      // зі шторки — замість її запису в історії (див. App.go)
-      if (window.App && App.go) App.go('#/board/' + t.to);
+      /* Нова дошка стає на місце цієї, а не поверх неї: інакше «Вийти»
+         з неї вело б назад на дошку, з якої переносили (див. App.go). */
+      if (window.App && App.go) App.go('#/board/' + t.to, 'page');
       else location.hash = '#/board/' + t.to;
     }
 

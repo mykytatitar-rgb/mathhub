@@ -172,9 +172,11 @@
      Зі шторки (відкрите вікно має свій запис в історії) — замість її запису,
      а не поверх: інакше під новою сторінкою лишався б «порожній» запис, і
      перше «Назад» звідти нічого не робило б. replace — замінити поточну
-     сторінку (вкладки нижньої панелі не накопичуються в історії). */
+     сторінку (вкладки нижньої панелі не накопичуються в історії);
+     'page' — замінити сторінку навіть із шторки над нею (див. C.hist.replacePage). */
   App.go = function (hash, replace) {
     if (samePlace(hash)) { C.closeAll(); return; }
+    if (replace === 'page') { C.hist.replacePage(hash); return; }
     var st = history.state;
     if (replace || (st && st.ov)) {
       C.hist.replacing(hash);
@@ -1605,8 +1607,14 @@
       vv.addEventListener('scroll', sync);
       sync();
     }
+    /* Лише поля, що піднімають клавіатуру. Список (select) і дата з часом
+       відкривають свій вибір, а після нього фокус лишається на полі, і
+       focusout не приходить — нижня панель і «+ Урок» висіли б схованими
+       без жодної клавіатури. */
     var TYPING = 'input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file])' +
-      ':not([type=button]):not([type=submit]):not([type=color]), textarea, select, [contenteditable="true"]';
+      ':not([type=button]):not([type=submit]):not([type=color])' +
+      ':not([type=date]):not([type=time]):not([type=datetime-local]):not([type=month]):not([type=week]),' +
+      ' textarea, [contenteditable="true"]';
     document.addEventListener('focusin', function (e) {
       if (e.target && e.target.matches && e.target.matches(TYPING)) de.classList.add('kb-open');
     });

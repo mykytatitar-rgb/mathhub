@@ -362,6 +362,8 @@
     var s = Object.keys(q).map(function (k) { return k + '=' + encodeURIComponent(q[k]); }).join('&');
     // стан запису (його глибину для «Назад») лишаємо — міняється лише адреса
     try { history.replaceState(history.state, '', '#/bank' + (s ? '?' + s : '')); } catch (e) { /* адреса — зручність */ }
+    // якщо нагорі запис шторки — адреса дістанеться сторінці під нею (див. C.hist.note)
+    if (window.C && C.hist) C.hist.note();
     draw();
   }
 

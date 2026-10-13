@@ -365,6 +365,8 @@
   var poppedTo = null;      // адреса, куди щойно повернулись кнопкою «Назад»
   var trail = [];           // адреси наших сторінок за глибиною — щоб повертатись до вже відкритої
   var others = [];          // інші шторки, крім вікон (шухляда теми на карті)
+  var under = null;         // { url, d }: нова адреса для сторінки під шторкою (див. C.hist.note)
+  var thenGo = null;        // після нашого history.back() — замінити сторінку цією адресою
   var TRAIL_KEY = 'vektor.trail';
 
   function hist() { return window.history; }
@@ -414,7 +416,26 @@
   window.addEventListener('popstate', function (e) {
     var st = e.state;
     if (st && st.d != null) lastD = st.d;
-    if (skipPop) { skipPop = false; return; }
+    /* Повернулись на сторінку, чию адресу міняли, поки над нею була
+       шторка (вигляд карти з шухляди теми): адреса жила в записі шторки і
+       зникла б разом із ним, а hashchange, що вже в черзі, намалював би
+       сторінку за старою. Тепер він малює ту, що людина щойно бачила. */
+    if (under && st && st.d != null && st.d <= under.d) {
+      if (st.d === under.d && !st.ov && location.hash !== under.url) {
+        try { hist().replaceState(st, '', under.url); } catch (err) {}
+      }
+      under = null;
+    }
+    if (skipPop) {
+      skipPop = false;
+      if (thenGo !== null) {
+        var to = thenGo;
+        thenGo = null;
+        replaceTo = to;
+        location.replace(to);
+      }
+      return;
+    }
     /* Перехід за адресою (location.hash = …) теж шле popstate, але з
        порожнім станом: це не «Назад», і шторок він не стосується. */
     if (!st) return;
@@ -457,13 +478,24 @@
   C.hist = {
     /** На старті: позначити поточний запис як сторінку глибини 0 (або ту, що вже записана). */
     boot: function () {
-      var h = hist(), st = h.state;
+      var h = hist(), st = h.state, leaving = false;
       try {
         if (!st || st.d == null) h.replaceState({ d: 0 }, '');
-        // перезавантажились із відкритою шторкою — тепер це просто сторінка
+        else if (st.ov && st.d >= 1 && h.length > 1) {
+          /* Перезавантажились із відкритою шторкою (Android вивантажив
+             вкладку, кабінет оновився). Самої шторки вже немає, а під її
+             записом лежить та сама сторінка — тож перше «Назад» нічого б не
+             робило. Сходимо з запису шторки одразу, ще до першого «Назад»;
+             адресу, яку людина бачила, сторінка під ним отримає (див. popstate). */
+          under = { url: location.hash, d: st.d - 1 };
+          skipPop = true;
+          h.back();
+          leaving = true;
+        }
+        // запис шторки без сторінки під ним — тепер це просто сторінка
         else if (st.ov) h.replaceState({ d: st.d }, '');
-      } catch (e) {}
-      lastD = (h.state && h.state.d) || 0;
+      } catch (e) { skipPop = false; under = null; }
+      lastD = leaving ? st.d - 1 : (h.state && h.state.d) || 0;
       try { trail = JSON.parse(sessionStorage.getItem(TRAIL_KEY) || '[]') || []; } catch (e) { trail = []; }
       trail[lastD] = location.hash;
       trail.length = lastD + 1;
@@ -483,18 +515,50 @@
         lastD = st.d;
         if (st.ov) return;                 // запис шторки — не сторінка, у слід не пишемо
       }
+      // на цій глибині вже інша сторінка — відкладена адреса їй не належить
+      if (under && lastD <= under.d) under = null;
       trail[lastD] = location.hash;
       trail.length = lastD + 1;
       saveTrail();
     },
 
     /** Адреса поточного запису змінилась без переходу (фільтр, пошук). */
-    note: function () { trail[lastD] = location.hash; saveTrail(); },
+    note: function () {
+      var st = hist().state;
+      /* Змінили, поки нагорі запис шторки (вигляд карти з шухляди теми):
+         нова адреса потрапила в її запис, а сторінка під ним лишилась зі
+         старою. Запамʼятовуємо — popstate віддасть адресу сторінці, щойно
+         шторка закриється, інакше закриття скасувало б вибір. */
+      if (st && st.ov && st.d >= 1) {
+        under = { url: location.hash, d: st.d - 1 };
+        trail[st.d - 1] = location.hash;
+      } else {
+        trail[lastD] = location.hash;
+      }
+      saveTrail();
+    },
 
     depth: function () { return lastD; },
 
     /** Наступний перехід на hash замінить поточний запис. */
     replacing: function (hash) { replaceTo = hash; },
+
+    /* Замінити саму сторінку під шторкою, а не запис шторки. Перенесення
+       на іншу дошку: нова дошка стає на місце старої, і «Вийти» веде туди,
+       звідки на дошку прийшли, а не на дошку, з якої переносили. Спершу
+       сходимо з запису шторки, а заміняємо вже в popstate. */
+    replacePage: function (hash) {
+      var st = hist().state;
+      if (st && st.ov) {
+        if (backT) { clearTimeout(backT); backT = null; }
+        ovEntry = false;
+        thenGo = hash;
+        skipPop = true;
+        try { hist().back(); return; } catch (e) { thenGo = null; skipPop = false; }
+      }
+      replaceTo = hash;
+      location.replace(hash);
+    },
 
     /** Чи на цю сторінку щойно повернулись «Назад» (питання одноразове). */
     popped: function () {
@@ -646,12 +710,16 @@
        мовчки стирав усе набране. Питаємо, лише якщо людина справді щось
        змінила (подія input/change), а не коли поле заповнилось само. */
     var initial = null, touched = false;
-    function dirty() {
-      if (closed || !touched || initial === null || !C.touchy()) return false;
+    /* anyScreen — питати й на компʼютері. «Назад» браузера (бічна кнопка
+       миші, Alt+←) тепер теж закриває вікно, бо воно має свій запис в
+       історії, — і випадковий дотик до неї не має стирати заповнену форму.
+       Хрестик, Esc і затемнення на компʼютері закривають, як і раніше. */
+    function dirty(anyScreen) {
+      if (closed || !touched || initial === null || (!anyScreen && !C.touchy())) return false;
       try { return JSON.stringify(C.readForm(wrap)) !== initial; } catch (e) { return false; }
     }
     function requestClose(fromPop) {
-      if (dirty()) {
+      if (dirty(fromPop === true)) {
         C.confirm('Скасувати зміни?', 'Введене не збережеться.', function () { close(); },
           'Не зберігати', 'Повернутися', 'btn--danger');
         return false;

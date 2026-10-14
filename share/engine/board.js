@@ -30,6 +30,14 @@
     catch (e) { return false; }
   }
 
+  /* Поле тексту зʼявляється, коли палець підняли (див. _tapWait): лише тоді
+     iPhone відкриває клавіатуру. Стилус — так само, але тільки на телефоні
+     чи планшеті. Перо графічного планшета на компʼютері — як миша, одразу
+     на натисканні: там клавіатура справжня, і поле поводиться як завжди. */
+  function textOnLift(kind) {
+    return kind === 'touch' || (kind === 'pen' && coarse());
+  }
+
   function uid(p) { return p + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
   /* Стійкий номер у кожного об'єкта на дошці.
@@ -2362,6 +2370,7 @@
     this._kinds = {};          // pointerId → 'pen' | 'touch' | 'mouse'
     this._penSeen = false;     // на цьому пристрої вже писали стилусом
     this._pinch = null;
+    this._touchView = null;    // вигляд полотна до першого дотику жесту — його повертає перо
     this._ink = null;          // шар слайда для письма пером (див. renderInk)
     this._inkOk = false;
 
@@ -2531,6 +2540,8 @@
     this.syncConstructions();
 
     if (!keepView) {
+      // вигляд іншого слайда перу вже не повертаємо (див. _touchView)
+      this._touchView = null;
       var v = slide && slide.view;
       /* Телефон чи планшет, а слайд готували на ноутбуці: збережений вигляд
          ширший за цей екран. Досі він відкривався тим самим масштабом від
@@ -3319,8 +3330,9 @@
     /* Текст мишею: полотно не має ні захоплювати вказівник, ні дозволяти
        стандартну дію mousedown — інакше вона забирає фокус
        у щойно створеного поля введення, і воно закривається порожнім.
-       Пальцем і стилусом — нижче: поле зʼявляється, коли їх піднімуть. */
-    if (!this.readOnly && this.tool === 'text' && e.button === 0 && !this.spaceDown && kind === 'mouse') {
+       Пальцем і стилусом телефона — нижче: поле зʼявляється, коли їх піднімуть. */
+    var textLate = textOnLift(kind);
+    if (!this.readOnly && this.tool === 'text' && e.button === 0 && !this.spaceDown && !textLate) {
       e.preventDefault();
       if (this.opts.onTextPlace) this.opts.onTextPlace(w, p, kind);
       return;
@@ -3338,18 +3350,28 @@
       var palms = Object.keys(this._pointers).filter(function (id) { return self0._kinds[id] === 'touch'; });
       if (palms.length) this._dropPalm(palms);
       this._pinch = null;
-      /* Долоня встигла посунути полотно, поки лягала, — повертаємо, як
-         було: інакше дошка зсувалася щоразу, коли кладуть руку. */
+      /* Долоня встигла посунути чи масштабувати полотно, поки лягала, —
+         повертаємо, як було: інакше дошка зсувалася щоразу, коли кладуть
+         руку. Вигляд беремо з _touchView, а не з руху одним пальцем: долоня
+         часто лягає двома дотиками, і тоді це вже масштаб, а не рух. */
+      var tv = this._touchView;
+      this._touchView = null;
       if (this._pan && this._pan.touch) {
-        this.cam.x = this._pan.camx;
-        this.cam.y = this._pan.camy;
         this._pan = null;
         this.applyCursor();
+      }
+      if (palms.length && tv && (tv.x !== this.cam.x || tv.y !== this.cam.y || tv.s !== this.scale)) {
+        this.cam.x = tv.x;
+        this.cam.y = tv.y;
+        this.scale = tv.s;
         this.viewChanged();
         w = this.toWorld(p.x, p.y);
       }
     } else if (kind === 'touch' && this._penDown()) {
       return;
+    } else if (kind === 'touch' && !this._touchView) {
+      // перший дотик жесту: яким було полотно до нього (див. перо вище)
+      this._touchView = { x: this.cam.x, y: this.cam.y, s: this.scale };
     }
 
     try { this.canvas.setPointerCapture(e.pointerId); } catch (err) { /* синтетичні події */ }
@@ -3376,8 +3398,9 @@
 
     /* Текст пальцем чи стилусом: поле — коли палець піднімуть. Саме тоді
        iPhone дозволяє відкрити клавіатуру (це дія людини, а не таймер), і
-       дотик, що виявився початком масштабу, нічого не ставить. */
-    if (!this.readOnly && this.tool === 'text' && !this.spaceDown) {
+       дотик, що виявився початком масштабу, нічого не ставить. Права й
+       середня кнопка миші сюди не доходять — ними, як і було, рухають полотно. */
+    if (!this.readOnly && this.tool === 'text' && e.button === 0 && !this.spaceDown && textLate) {
       e.preventDefault();
       this._tapWait = { id: e.pointerId, x: p.x, y: p.y, w: w, what: 'text' };
       return;
@@ -3793,6 +3816,10 @@
     delete this._pointers[e.pointerId];
     delete this._kinds[e.pointerId];
     var left = Object.keys(this._pointers);
+    // усі пальці підняли — жест скінчився, і повертати перу вже нічого
+    var touchLeft = false;
+    for (var li = 0; li < left.length; li++) if (this._kinds[left[li]] === 'touch') touchLeft = true;
+    if (!touchLeft) this._touchView = null;
     if (left.length < 2) this._pinch = null;
     else if (this._pinch) {
       /* Підняли один із трьох пальців — жест ведуть ті два, що лишились.
@@ -5004,6 +5031,7 @@
   Board.unionBounds = unionBounds;
   Board.drawItem = drawItem;
   Board.drawBackground = drawBackground;
+  Board.textOnLift = textOnLift;
 
   window.Board = Board;
 })();

@@ -347,7 +347,11 @@
       var ta = document.createElement('textarea');
       ta.className = 'sb-tin';
       var x = screen.x, y = screen.y;
-      if (kind && kind !== 'mouse') {
+      /* Рушій кличе нас, коли палець підняли, лише на телефоні й планшеті
+         (див. textOnLift у board.js). Перо графічного планшета на компʼютері —
+         як миша, одразу на натисканні. */
+      var lifted = Board.textOnLift ? Board.textOnLift(kind) : (!!kind && kind !== 'mouse');
+      if (lifted) {
         /* Телефон: поле не вилазить за правий край — інакше набране
            ховалося б за екраном. Напис однаково ляже, де торкнулись. */
         var bw = body.clientWidth;
@@ -362,7 +366,7 @@
       /* Пальцем рушій кличе нас, коли палець підняли, — це дія людини, і
          лише тоді iPhone відкриває клавіатуру; фокус із таймера він ігнорує.
          Мишею — наступним тіком, як було: інакше mousedown забрав би фокус. */
-      if (kind && kind !== 'mouse') ta.focus();
+      if (lifted) ta.focus();
       else setTimeout(function () { ta.focus(); }, 0);
 
       var done = false;

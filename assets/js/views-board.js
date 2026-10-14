@@ -246,16 +246,25 @@
         '<button class="board-rail__toggle" data-act="board-rail-toggle" ' +
           'title="Згорнути або показати слайди">' +
           icon('chevronD', 15) + '<span data-rail-count></span></button>' +
-        /* На телефоні видно один рядок (board.css), і назва рядка — це
-           перемикач на інший: «Урок» → слайди ДЗ і навпаки. На компʼютері
-           видно обидва, і дотик до назви нічого не змінює. */
+        /* На телефоні видно один рядок слайдів (board.css), а цей перемикач
+           над стрічкою каже, який саме, і скільки слайдів в обох. Досі до ДЗ
+           вела лише вузька вертикальна назва рядка — без стрілки й без
+           числа, і слайди ДЗ здавались зниклими. На компʼютері видно обидва
+           рядки, і перемикача немає. Кнопки — справжні, тож читалка екрана
+           їх бачить; число й «натиснуто» малює paintRailKind(). */
+        '<div class="rail-kinds" data-rail-kinds>' +
+          '<button class="rail-kinds__b" data-act="board-rail-kind" data-arg="lesson" ' +
+            'aria-pressed="true">Урок <b data-rail-n="lesson"></b></button>' +
+          '<button class="rail-kinds__b rail-kinds__b--hw" data-act="board-rail-kind" data-arg="hw" ' +
+            'aria-pressed="false">ДЗ <b data-rail-n="hw"></b></button>' +
+        '</div>' +
         '<div class="board-rails">' +
           '<div class="board-rail-row">' +
-            '<span class="rail-tag" data-act="board-rail-kind" data-arg="hw">Урок</span>' +
+            '<span class="rail-tag">Урок</span>' +
             '<div class="board-rail" data-rail="lesson"></div>' +
           '</div>' +
           '<div class="board-rail-row board-rail-row--hw">' +
-            '<span class="rail-tag rail-tag--hw" data-act="board-rail-kind" data-arg="lesson">ДЗ</span>' +
+            '<span class="rail-tag rail-tag--hw">ДЗ</span>' +
             '<div class="board-rail" data-rail="hw"></div>' +
           '</div>' +
         '</div>' +
@@ -437,8 +446,10 @@
       /* Телефон і планшет: панель налаштувань лежить поверх креслення, і
          досі закривалась лише повторним дотиком до інструмента. Тепер
          перший штрих її прибирає — колір і товщину обирають до письма, а
-         не під час. Дотик до активного інструмента поверне її. */
-      if (e.target === canvas && (window.innerWidth <= 900 || compactBoard())) {
+         не під час. Дотик до активного інструмента поверне її. На
+         компʼютері — як було, хіба що вікно вужче за 700 px (тоді й
+         розкладка телефонна): напівекранне вікно мишею панель не ховає. */
+      if (e.target === canvas && (fingers() || compactBoard())) {
         var op = root.querySelector('[data-opts]');
         if (op && !op.hidden) { op.hidden = true; cur.optsTapHidden = true; }
       }
@@ -2364,10 +2375,34 @@
   }
 
   /* Телефон: видно один рядок слайдів — того, де відкритий слайд, або
-     той, на який перемкнули дотиком до назви рядка. */
+     той, на який перемкнули перемикачем «Урок · ДЗ». */
   function paintRailKind() {
     var rails = document.querySelector('.board-rails');
-    if (rails && cur) rails.classList.toggle('is-hw', (cur.railKind || curKind()) === 'hw');
+    if (!rails || !cur) return;
+    var shown = cur.railKind || curKind();
+    rails.classList.toggle('is-hw', shown === 'hw');
+    U.$$('[data-rail-kinds] [data-arg]').forEach(function (b) {
+      var k = b.dataset.arg;
+      b.classList.toggle('is-on', k === shown);
+      b.setAttribute('aria-pressed', k === shown ? 'true' : 'false');
+      var n = b.querySelector('[data-rail-n]');
+      if (n) n.textContent = railIndexes(k).length;
+    });
+    paintRailCount(shown);
+  }
+
+  /* Лічильник на язичку стрічки. На компʼютері — місце відкритого слайда
+     в його рядку, як було. На телефоні — про той рядок, який видно: досі
+     після перемикання на ДЗ він і далі казав «1 / 3» про слайди уроку. */
+  function paintRailCount(shown) {
+    var cnt = document.querySelector('[data-rail-count]');
+    if (!cnt || !cur) return;
+    var row = railIndexes(compactBoard() ? shown : curKind());
+    var pos = row.indexOf(cur.index);
+    var hid = cur.board.slides.filter(function (s) { return s.hidden; }).length;
+    cnt.textContent = (pos >= 0 ? (pos + 1) + ' / ' + row.length
+                                : U.pl(row.length, 'слайд', 'слайди', 'слайдів')) +
+      (hid ? ' · ' + hid + ' прихов.' : '');
   }
 
   function renderRail() {
@@ -2376,13 +2411,6 @@
     renderRailRow('hw');
     paintRailKind();
     revealActiveCard();
-
-    var cnt = document.querySelector('[data-rail-count]');
-    if (!cnt) return;
-    var row = railIndexes(curKind());
-    var hid = cur.board.slides.filter(function (s) { return s.hidden; }).length;
-    cnt.textContent = (row.indexOf(cur.index) + 1) + ' / ' + row.length +
-      (hid ? ' · ' + hid + ' прихов.' : '');
   }
 
   /* ---------- Згортання стрічки слайдів ---------- */
@@ -3658,9 +3686,14 @@
     var body = document.querySelector('.board-body');
     if (!body) return;
 
-    /* Пальцем чи стилусом рушій кличе нас, коли їх підняли (див. _tapWait
-       у board.js), — це дія людини, і лише тоді iPhone відкриває клавіатуру. */
-    var touch = !!kind && kind !== 'mouse';
+    /* Пальцем чи стилусом телефона рушій кличе нас, коли їх підняли (див.
+       textOnLift у board.js), — це дія людини, і лише тоді iPhone відкриває
+       клавіатуру. Тоді й фокус — одразу (lifted). А як поводиться поле —
+       залежить від пристрою, а не від того, чим торкнулись: клавіатура на
+       екрані (softKb) — лише на телефоні й планшеті. Перо графічного
+       планшета на компʼютері — як миша: «Ввід» ставить напис, як було. */
+    var lifted = window.Board && Board.textOnLift ? Board.textOnLift(kind) : (!!kind && kind !== 'mouse');
+    var softKb = fingers();
 
     var old = body.querySelector('.board-text-input');
     if (old && old._commit) {
@@ -3671,7 +3704,7 @@
          кожне «готово» відкривало нове порожнє. Порожнє ж поле просто
          переїжджає туди, куди торкнулись. Мишею — як було: клік деінде
          записує набране й одразу починає наступний напис. */
-      if (touch && typed) return;
+      if (softKb && typed) return;
     }
 
     var ta = document.createElement('textarea');
@@ -3679,7 +3712,7 @@
     ta.rows = 1;
     var size = cur.engine.fontSize * cur.engine.scale;
     var left = screen.x, top = screen.y - size;
-    if (touch) {
+    if (softKb) {
       /* Телефон: поле не вилазить за край екрана — інакше набране ховалося
          б праворуч, а клавіатура вже закрила низ. Сам напис ляже там, де
          торкнулись. */
@@ -3738,14 +3771,14 @@
       /* На клавіатурі телефона немає Shift+Enter, тож «Ввід» там — новий
          рядок, як у будь-якому полі для тексту. Інакше напис у два рядки
          пальцем не набрати взагалі. */
-      if (e.key === 'Enter' && !e.shiftKey && !touch) { e.preventDefault(); commit(); }
+      if (e.key === 'Enter' && !e.shiftKey && !softKb) { e.preventDefault(); commit(); }
       else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
     });
 
     /* Клавіатура телефона наїжджає на полотно, не зменшуючи його. Якщо поле
        опинилось під нею — піднімаємо креслення разом із полем рівно на
        стільки, щоб його було видно. Напис однаково ляже туди, де торкнулись. */
-    var vv = touch ? window.visualViewport : null;
+    var vv = softKb ? window.visualViewport : null;
     function lift() {
       if (done || !vv || !cur) return;
       var r = ta.getBoundingClientRect();
@@ -3766,7 +3799,7 @@
       cur.vvOff = unlift;
     }
 
-    if (touch) {
+    if (lifted) {
       /* Пальцем — фокус одразу, у тій самій дії людини: фокус із таймера
          iPhone ігнорує, і клавіатура не відкривалась. Таймер нижче —
          запасний, для браузерів, що таки скасують цей фокус. */
@@ -4534,7 +4567,9 @@
     var meet = lesson ? S.meetUrlFor(lesson.studentId) : '';
     var hwN = lesson ? lessonHomework().length : 0;
     var s = slide();
-    actSheet('Дошка', s.title || ('Слайд ' + (cur.index + 1)),
+    // номер — у своєму рядку, як на картці слайда (див. slideCardHtml)
+    var pos = railIndexes(curKind()).indexOf(cur.index);
+    actSheet('Дошка', s.title || ('Слайд ' + (pos + 1)),
       (meet
         ? '<a class="act-list__i" href="' + U.esc(meet) + '" target="_blank" rel="noopener">' +
           icon('present', 20) + '<span>Зустріч</span></a>'
@@ -4614,6 +4649,7 @@
       if (!cur) return;
       cur.railKind = arg === 'hw' ? 'hw' : 'lesson';
       paintRailKind();
+      revealActiveCard();              // повернулись до рядка відкритого слайда — він на видноті
     },
     'board-rail-toggle': function () { toggleRail(); },
     'board-save-view': function () {

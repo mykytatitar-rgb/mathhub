@@ -450,6 +450,44 @@ scenario('Долоня, що посунула полотно, поки ляга�
   same(last.d[0] + ',' + last.d[1], '300,300', 'штрих почався там, де торкнулось перо');
 });
 
+scenario('Долоня двома дотиками посунула й масштабувала полотно — перо повертає і місце, і масштаб', function () {
+  var b = engine().b;
+  b.setTool('pen');
+  b._pointerDown(penEv(225, 10, 10));
+  b._pointerUp(penEv(225, 10, 10));                       // стилус на пристрої вже був
+  var view = b.cam.x + ',' + b.cam.y + ',' + b.scale;
+  b._pointerDown(penEv(226, 600, 500, 'touch'));          // долоня — першим дотиком
+  b._pointerDown(penEv(227, 700, 520, 'touch'));          // і другим: це вже «масштаб»
+  b._pointerMove(penEv(226, 560, 470, 'touch'));          // долоня ковзнула й розійшлась
+  b._pointerMove(penEv(227, 800, 560, 'touch'));
+  ok(b.cam.x + ',' + b.cam.y + ',' + b.scale !== view, 'поки лягала — полотно поїхало');
+  b._pointerDown(penEv(228, 300, 300));                   // перо
+  same(b.cam.x + ',' + b.cam.y + ',' + b.scale, view, 'перо торкнулось — полотно й масштаб як були');
+  b._pointerMove(penEv(228, 340, 310));
+  b._pointerUp(penEv(228, 340, 310));
+  b._pointerUp(penEv(226, 560, 470, 'touch'));
+  b._pointerUp(penEv(227, 800, 560, 'touch'));
+  var last = b.items()[b.items().length - 1];
+  same(last.d[0] + ',' + last.d[1], '300,300', 'штрих почався там, де торкнулось перо');
+  same(b._touchView, null, 'нічого не лишилось на наступний жест');
+});
+
+scenario('Свідомий масштаб двома пальцями, потім перо — масштаб лишається', function () {
+  var b = engine().b;
+  b.setTool('select');
+  b._pointerDown(finger(229, 400, 300));
+  b._pointerDown(finger(230, 600, 300));
+  b._pointerMove(finger(229, 350, 300));
+  b._pointerMove(finger(230, 650, 300));
+  b._pointerUp(finger(229, 350, 300));
+  b._pointerUp(finger(230, 650, 300));                    // пальці підняли — жест скінчився
+  var view = b.cam.x + ',' + b.cam.y + ',' + b.scale;
+  b.setTool('pen');
+  b._pointerDown(penEv(231, 300, 300));
+  b._pointerUp(penEv(231, 320, 300));
+  same(b.cam.x + ',' + b.cam.y + ',' + b.scale, view, 'перо нічого не повертає');
+});
+
 /* ---------- Телефон: пальці ---------- */
 
 function finger(id, x, y, extra) { return Object.assign(penEv(id, x, y, 'touch'), extra || {}); }
@@ -599,6 +637,39 @@ scenario('Текст пальцем: поле — коли підняли (то�
   same(placed.length, 1, 'перерваний дотик поля не відкриває');
   b._pointerDown(ev(300, 300, { pointerId: 382, pointerType: 'mouse' }));
   same(placed.join(), 'touch,mouse', 'мишею — одразу, як було');
+});
+
+scenario('Текст пером графічного планшета на компʼютері — одразу, як мишею; стилусом телефона — коли підняли', function () {
+  var placed = [];
+  var pc = engine({ onTextPlace: function (w, s, kind) { placed.push(kind); } }).b;
+  pc.setTool('text');
+  pc._pointerDown(penEv(383, 200, 200));
+  same(placed.join(), 'pen', 'компʼютер: поле на натисканні пера');
+  pc._pointerMove(penEv(383, 240, 200));
+  pc._pointerUp(penEv(383, 240, 200));
+  same(pc.cam.x + ',' + pc.cam.y, '0,0', 'і перо, що поїхало, полотна не рухає');
+
+  var got = [];
+  var ph = engine({ touch: true, onTextPlace: function (w, s, kind) { got.push(kind); } }).b;
+  ph.setTool('text');
+  ph._pointerDown(penEv(384, 200, 200));
+  same(got.length, 0, 'телефон: дотик стилусом — ще не поле');
+  ph._pointerUp(penEv(384, 200, 200));
+  same(got.join(), 'pen', 'підняли — поле');
+});
+
+scenario('Текст: права кнопка миші рухає полотно, а не відкриває поле', function () {
+  var placed = [];
+  var b = engine({ onTextPlace: function () { placed.push(1); } }).b;
+  b.setTool('text');
+  b._pointerDown(ev(300, 300, { pointerId: 385, pointerType: 'mouse', button: 2 }));
+  b._pointerMove(ev(260, 300, { pointerId: 385, pointerType: 'mouse', button: 2 }));
+  b._pointerUp(ev(260, 300, { pointerId: 385, pointerType: 'mouse', button: 2 }));
+  same(placed.length, 0, 'поля немає');
+  same(b.cam.x, 40, 'полотно пішло за мишею');
+  b._pointerDown(ev(300, 300, { pointerId: 386, pointerType: 'mouse', button: 1 }));
+  b._pointerUp(ev(300, 300, { pointerId: 386, pointerType: 'mouse', button: 1 }));
+  same(placed.length, 0, 'середня кнопка без руху — теж без поля');
 });
 
 scenario('Пальцем у тонку лінію влучити легше, ніж мишею', function () {

@@ -787,6 +787,10 @@
 .board-rail__toggle svg { transition: transform .18s; }
 .board.is-rail-collapsed .board-rail__toggle svg { transform: rotate(180deg); }
 
+/* Перемикач «Урок · ДЗ» — лише на телефоні, де видно один рядок слайдів
+   (див. «Телефон: стоячи й лежачи»). На компʼютері видно обидва рядки. */
+.rail-kinds { display: none; }
+
 .slide-card {
   flex: 0 0 auto;
   width: 112px;
@@ -935,12 +939,40 @@
   .board-tools [data-act="board-clear"] { display: none; }
 
   /* Слайди — одним рядком: двома вони зʼїдали пів екрана. Видно рядок
-     відкритого слайда; назва рядка («Урок» / «ДЗ») перемикає на інший. */
+     відкритого слайда; інший — перемикачем «Урок · ДЗ» на язичку зліва,
+     з числом слайдів у кожному. Досі перемикала вузька вертикальна назва
+     рядка, і про слайди ДЗ легко було подумати, що їх немає. Сама назва
+     рядка тут зайва: який рядок видно, каже перемикач. */
   .board-rails:not(.is-hw) .board-rail-row--hw,
   .board-rails.is-hw .board-rail-row:not(.board-rail-row--hw) { display: none; }
   .board-rail-row--hw { border-top: 0; }
-  .rail-tag { width: 28px; font-size: 10px; cursor: pointer; }
-  .rail-tag:active { background: var(--blue-50); color: var(--blue-700); }
+  .rail-tag { display: none; }
+  .rail-kinds {
+    position: absolute;
+    left: 14px; top: -26px;
+    height: 26px;
+    display: flex;
+    border: 1px solid var(--line);
+    border-bottom: 0;
+    border-radius: 10px 10px 0 0;
+    background: #fff;
+    overflow: hidden;
+    z-index: 6;
+  }
+  .board.is-rail-collapsed .rail-kinds { display: none; }
+  .rail-kinds__b {
+    display: flex; align-items: center; gap: 4px;
+    padding: 0 11px;
+    border: 0; background: none;
+    font: inherit; font-size: 11.5px; font-weight: 700;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .rail-kinds__b + .rail-kinds__b { border-left: 1px solid var(--line); }
+  .rail-kinds__b b { font-weight: 800; color: var(--muted-2); }
+  .rail-kinds__b.is-on { background: var(--blue-50); color: var(--blue-700); }
+  .rail-kinds__b--hw.is-on { background: #FFF8EF; color: #C2751A; }
+  .rail-kinds__b.is-on b { color: inherit; }
   /* Кнопки правки слайда — шторкою з підписами (дотик до відкритого
      слайда): поруч зі стрічкою для них немає місця. Три крапки на
      відкритій картці кажуть, що вона відкриває дії. */
@@ -1010,7 +1042,19 @@
   .board-opts--stroke .strip-group { grid-template-columns: repeat(4, 1fr); }
 
   .board-zoom { top: 8px; bottom: auto; right: 8px; }
-  .board-hint { display: block; bottom: 12px; border-radius: 14px; }
+  /* Телефон 667×375 чи 640×360 вужчий за 700 px, і розкладка «стоячи» діє
+     й тут. Що вона ставить для стоячого — скасовуємо: інакше підказка мала
+     і top, і bottom та розтягувалась темною плямою на всю висоту полотна,
+     а масштаб зникав, щойно відкрито налаштування, хоч тут вони не поруч. */
+  .board-body:has(.board-opts:not([hidden])) .board-zoom { display: flex; }
+  /* Підказка — згори посередині: знизу язички стрічки слайдів, а панель
+     налаштувань заввишки з полотно — тож підказка над нею (z-index), а не під */
+  .board-hint {
+    display: block;
+    top: 8px; bottom: auto;
+    border-radius: 14px;
+    z-index: 7;
+  }
 
   /* слайди — назвами, без мініатюр: мініатюри забирали третину висоти;
      схований від учня видно й так — за пунктирною рамкою */
@@ -1018,6 +1062,9 @@
   .slide-card { width: auto; max-width: 150px; }
   .slide-card__thumb, .slide-card__empty, .slide-card__eye { display: none; }
   .slide-add { width: 36px; height: 30px; border-radius: 10px; }
+  /* перемикач «Урок · ДЗ» — правіше за стовпчик інструментів, що сягає
+     низу полотна; відкриті налаштування лягають поверх нього, а не навпаки */
+  .rail-kinds { left: 66px; z-index: 5; }
 }
 
 /* ---------- Під пальцем: цілі завбільшки з палець ----------

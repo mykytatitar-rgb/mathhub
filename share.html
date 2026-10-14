@@ -99,20 +99,25 @@
   .foot{text-align:center;font-size:11.5px;color:#AAA8C2;margin-top:22px}
 
   /* Чи дійшло написане учнем. Досі про це не знав ніхто: штрихи лежали в
-     пам'яті вкладки, і закрита вкладка забирала їх із собою мовчки. */
+     пам'яті вкладки, і закрита вкладка забирала їх із собою мовчки.
+     Це лише напис, тож дотики проходять крізь нього: він лягає на кнопки
+     уроку (на «Далі →» старого уроку), і натискання раніше просто зникали. */
   .ink{position:fixed;right:14px;top:14px;z-index:11;display:none;
     right:calc(14px + env(safe-area-inset-right));
     padding:7px 13px;border-radius:999px;font-size:12px;font-weight:700;
-    background:rgba(255,255,255,.95);color:#3D3B63;box-shadow:0 3px 14px rgba(23,22,58,.18)}
+    background:rgba(255,255,255,.95);color:#3D3B63;box-shadow:0 3px 14px rgba(23,22,58,.18);
+    pointer-events:none}
   .ink.is-on{display:block}
   .ink.is-ok{color:#0C7F51}
   .ink.is-wait{color:#8A5409;background:#FDF3E3}
-  /* На телефоні теж угорі: знизу напис накривав масштаб і стрічку слайдів.
-     Якщо там уже кнопка «до розкладу» — стаємо під нею, а не на неї. */
-  @media (max-width:700px){
-    .ink{left:auto;bottom:auto;max-width:calc(100% - 28px);
-      top:10px;top:calc(10px + env(safe-area-inset-top))}
-    body:has(.back-portal) .ink{top:58px;top:calc(58px + env(safe-area-inset-top))}
+  /* На телефоні (і стоячи, і лежачи) — унизу посередині, над стрічкою
+     слайдів, як підказки самої дошки. Угорі шапка уроку на телефоні у два
+     рядки, і напис лежав саме на «Далі →» та номері слайда; у лівому
+     нижньому куті — на масштабі. */
+  @media (max-width:700px),(max-height:500px) and (pointer:coarse){
+    .ink{top:auto;right:auto;left:50%;transform:translateX(-50%);
+      bottom:84px;bottom:calc(84px + env(safe-area-inset-bottom));
+      max-width:calc(100% - 28px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   }
 </style>
 </head>
@@ -216,9 +221,16 @@
   /* Куди повертатися з уроку. Учень заходить у нього з розкладу, і без
      цього єдиним шляхом назад лишалася б кнопка браузера. */
   var BACK_KEY = 'vektor.fromPortal';
+  /* Який урок розклад щойно відкрив у цій вкладці. Тоді попередній крок
+     історії — сам розклад, і «до розкладу» — це крок назад, а не ще один
+     уперед (див. backToPortal). */
+  var NAV_KEY = 'vektor.portalNav';
 
   if (/^portal:/i.test(path)) {
-    try { sessionStorage.setItem(BACK_KEY, location.hash); } catch (e) {}
+    try {
+      sessionStorage.setItem(BACK_KEY, location.hash);
+      sessionStorage.removeItem(NAV_KEY);       // з розкладу ще нічого не відкривали
+    } catch (e) {}
     startPortal(path.replace(/^portal:/i, '').trim());
     return;
   }
@@ -244,8 +256,25 @@
     a.className = 'back-portal';
     a.href = backHref;
     a.textContent = '← Мій розклад';
+    a.addEventListener('click', backToPortal);
     document.body.appendChild(a);
     return a;
+  }
+
+  /* «До розкладу» — крок назад, як стрілка в шапці застосунку. Звичайне
+     посилання додавало б у історію ще один крок уперед, і системне «Назад»
+     на телефоні знову відкривало урок, а кожен урок туди й назад додавав два
+     зайві кроки. Якщо урок відкрили з розкладу в цій самій вкладці — просто
+     повертаємось на крок; інакше розклад стає на місце уроку, не додаючи
+     кроку. Далі розклад покаже перезавантаження за зміною адреси (вище). */
+  function backToPortal(e) {
+    // Ctrl чи середня кнопка — учень хоче розклад в окремій вкладці, не заважаємо
+    if (e && (e.ctrlKey || e.metaKey || e.shiftKey || e.button)) return;
+    if (e) e.preventDefault();
+    var nav = '';
+    try { nav = sessionStorage.getItem(NAV_KEY) || ''; } catch (er) {}
+    if (nav && nav === location.hash && history.length > 1) history.back();
+    else location.replace(backHref);
   }
 
   // код уроку — це <тека репетитора>/<код>, а самій базі потрібен лише код
@@ -758,14 +787,13 @@
       var root = document.createElement('div');
       root.style.height = '100%';
       document.body.appendChild(root);
-      // «до розкладу» тепер у шапці дошки (env.back) — плаваюча вже зайва
-      if (backPill && backPill.parentNode) backPill.parentNode.removeChild(backPill);
       pinchLock(true);
 
-      return window.StudentBoard.start({
+      var started = window.StudentBoard.start({
         token: token,
         uid: path.split('/')[0],
         back: backHref,
+        toPortal: backToPortal,
         API: API,
         KEY: KEY,
         rpc: rpc,
@@ -778,6 +806,19 @@
         uploadPhoto: uploadPhoto,
         sendHomework: sendHomework
       });
+
+      /* «До розкладу» тепер у шапці дошки (env.back) — плаваючу прибираємо.
+         Але лише коли та кнопка справді зʼявилась: ця сторінка завжди свіжа,
+         а рушій береться за номером версії й на пристрої з кабінетом може
+         прийти старший, з кешу, — тоді плаваюча лишається єдиним шляхом назад. */
+      if (backPill) {
+        if (document.getElementById('sb-back')) {
+          if (backPill.parentNode) backPill.parentNode.removeChild(backPill);
+        } else {
+          document.body.appendChild(backPill);           // і лишається зверху
+        }
+      }
+      return started;
     });
   }
 
@@ -823,6 +864,14 @@
     }
 
     var box = document.getElementById('portal');
+
+    /* Урок відкрито звідси, у цій вкладці: тоді «до розкладу» з уроку —
+       крок назад історією (див. backToPortal). */
+    box.addEventListener('click', function (e) {
+      var a = e.target.closest && e.target.closest('.les__go');
+      if (a) try { sessionStorage.setItem(NAV_KEY, a.hash); } catch (er) {}
+    });
+
     var PIN_KEY = 'vektor.pin.' + tok;
     var pin = '';
     try { pin = sessionStorage.getItem(PIN_KEY) || ''; } catch (e) {}

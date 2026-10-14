@@ -103,7 +103,9 @@
       '.sb{padding-bottom:env(safe-area-inset-bottom);background:#fff}' +
       '.sb-top{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}' +
       '.sb-rail{padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right))}' +
-      '.sb-tools{left:calc(12px + env(safe-area-inset-left))}.sb-opts{left:calc(64px + env(safe-area-inset-left))}.sb-name{left:calc(72px + env(safe-area-inset-left))}' +
+      '.sb-tools{left:calc(12px + env(safe-area-inset-left))}.sb-opts{left:calc(64px + env(safe-area-inset-left))}' +
+      // назва зсунута від вирізу зліва — на стільки ж коротша, інакше кінець ховався під вирізом справа
+      '.sb-name{left:calc(72px + env(safe-area-inset-left));max-width:calc(100% - 100px - env(safe-area-inset-left) - env(safe-area-inset-right))}' +
       '.sb-zoom{right:calc(14px + env(safe-area-inset-right))}.sb-del{right:calc(14px + env(safe-area-inset-right))}' +
       '.sb-toast{bottom:calc(74px + env(safe-area-inset-bottom))}' +
       '.sb-btn{min-height:40px;min-width:40px;display:inline-flex;align-items:center;justify-content:center}.sb-sc{min-height:38px}' +
@@ -124,9 +126,21 @@
       '.sb-chip.on{border-color:#4B3FDB;background:#F1EFFE;color:#3A31B0}.sb-chip.on .sb-n{color:#3A31B0}' +
       '.sb-sec{display:none}' +
       '#sb-panels[data-open="notes"] [data-sec="notes"],#sb-panels[data-open="mats"] [data-sec="mats"],#sb-panels[data-open="hw"] [data-sec="hw"]{display:block}' +
-      '#sb-panels[data-open] .sb-secs{max-height:40vh;overflow-y:auto;overscroll-behavior:contain;border-top:1px solid #E7E5F2;padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}' +
+      /* svh — висота екрана з усіма панелями браузера: vh на iPhone рахується
+         без них, і розділ виходив вищим, ніж здавалося. vh — для старих браузерів. */
+      '#sb-panels[data-open] .sb-secs{max-height:40vh;max-height:40svh;overflow-y:auto;overscroll-behavior:contain;border-top:1px solid #E7E5F2;padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}' +
       '.sb-extra{max-height:none;overflow:visible;border-top:0}.sb-extra h3,.sb-lbl{display:none}.sb-note{border-top:0}' +
       '.sb-note,.sb-desc,.sb-matf,.sb-meta,.sb-hw b{overflow-wrap:anywhere}.sb-rule svg{max-width:100%;height:auto}' +
+    '}' +
+    /* Лежачи шапка, стрічка й рядок кнопок уже забирають половину висоти, і
+       розділ, що відсуває полотно, лишав від дошки кілька пікселів. Тут він
+       розгортається поверх дошки — аркушем над рядком кнопок, до самої шапки,
+       а полотно свого розміру не міняє: згорнули — і дошка та сама. */
+    '@media (max-height:500px) and (pointer:coarse){' +
+      '#sb-panels{position:relative}' +
+      '#sb-panels[data-open] .sb-secs{position:absolute;left:0;right:0;bottom:100%;z-index:7;background:#fff;' +
+        'box-shadow:0 -10px 28px rgba(23,22,58,.14);' +
+        'max-height:calc(100vh - 124px - env(safe-area-inset-bottom));max-height:calc(100svh - 124px - env(safe-area-inset-bottom))}' +
     '}';
 
   /* ============================================================
@@ -149,10 +163,12 @@
         '<div class="sb-top">' +
           /* «До розкладу» — перша кнопка шапки, а не плаваюча поверх сторінки:
              плаваюча на компʼютері лежала на назві уроку, а на телефоні — на
-             стрічці слайдів і масштабі. На телефоні підпис коротший. */
+             стрічці слайдів і масштабі. На телефоні підпис коротший.
+             Пробіл після стрілки — нерозривний: кнопка гнучка (inline-flex),
+             і звичайний пробіл на початку підпису зникав — «←Мій розклад». */
           (env.back
             ? '<a class="sb-btn sb-back" id="sb-back" href="' + esc(env.back) + '" aria-label="Мій розклад">' +
-                '←<span class="sb-wide"> Мій розклад</span><span class="sb-narrow"> Розклад</span></a>'
+                '←<span class="sb-wide">&nbsp;Мій розклад</span><span class="sb-narrow">&nbsp;Розклад</span></a>'
             : '') +
           '<div class="sb-head"><div class="sb-ttl">' + esc(meta.title || 'Урок') + '</div>' +
           '<div class="sb-sub">' + esc([meta.student, meta.date].filter(Boolean).join(' · ')) + '</div></div>' +
@@ -161,10 +177,11 @@
               ? '<button class="sb-btn" id="sb-undo" title="Скасувати (Ctrl+Z)" disabled>↶</button>' +
                 '<button class="sb-btn" id="sb-redo" title="Повернути (Ctrl+Y)" disabled>↷</button>'
               : '') +
-            // на телефоні — самі стрілки: між ними номер слайда, і так зрозуміло
-            '<button class="sb-btn" id="sb-prev" aria-label="Попередній слайд">←<span class="sb-wide"> Назад</span></button>' +
+            /* На телефоні — самі стрілки: між ними номер слайда, і так зрозуміло.
+               Пробіл нерозривний: на планшеті кнопка гнучка, і звичайний губився. */
+            '<button class="sb-btn" id="sb-prev" aria-label="Попередній слайд">←<span class="sb-wide">&nbsp;Назад</span></button>' +
             '<span class="sb-pos" id="sb-pos"></span>' +
-            '<button class="sb-btn" id="sb-next" aria-label="Наступний слайд"><span class="sb-wide">Далі </span>→</button>' +
+            '<button class="sb-btn" id="sb-next" aria-label="Наступний слайд"><span class="sb-wide">Далі&nbsp;</span>→</button>' +
           '</div>' +
         '</div>' +
         '<div class="sb-body" id="sb-body">' +
@@ -327,12 +344,18 @@
 
     el('sb-rail').addEventListener('click', function (e) {
       var b = e.target.closest('[data-go]');
-      if (b) { flushSend(); go(+b.getAttribute('data-go')); }
+      if (b) { commitText(); flushSend(); go(+b.getAttribute('data-go')); }
     });
-    el('sb-prev').onclick = function () { flushSend(); go(idx - 1); };
-    el('sb-next').onclick = function () { flushSend(); go(idx + 1); };
-    // перед переходом до розкладу — своє в чергу, щоб поїхало навздогін
-    if (el('sb-back')) el('sb-back').addEventListener('click', function () { flushSend(); });
+    el('sb-prev').onclick = function () { commitText(); flushSend(); go(idx - 1); };
+    el('sb-next').onclick = function () { commitText(); flushSend(); go(idx + 1); };
+    /* Перед переходом до розкладу — набране на дошку, своє в чергу, щоб
+       поїхало навздогін. Сам перехід — крок назад історією (env.toPortal),
+       а не ще один крок уперед, як у звичайного посилання. */
+    if (el('sb-back')) el('sb-back').addEventListener('click', function (e) {
+      commitText();
+      flushSend();
+      if (env.toPortal) env.toPortal(e);
+    });
 
     /* ---------- Масштаб ---------- */
 
@@ -475,6 +498,15 @@
       });
     }
 
+    /* Набране в полі, але ще не записане на дошку. iPhone не відпускає поле,
+       коли торкаються кнопки чи посилання, тож blur не приходить: перехід до
+       розкладу мовчки губив напис, а інший слайд забирав його собі. Тому перед
+       кожним таким переходом записуємо набране на слайд, де його почали. */
+    function commitText() {
+      var t = el('sb-body').querySelector('.sb-tin');
+      if (t && t._finish) t._finish();
+    }
+
     /* ============================================================
        Відправлення свого
        ============================================================
@@ -605,6 +637,7 @@
     }
 
     window.addEventListener('pagehide', function () {
+      commitText();
       flushSend();
       if (!queue.length) return;
       /* Запит «на вихід» браузер приймає лише до 64 КБ — більший просто не
@@ -705,8 +738,8 @@
         engine.deleteSelection();
         return;
       }
-      if (k === 'arrowright' || k === 'pagedown') { flushSend(); go(idx + 1); }
-      if (k === 'arrowleft' || k === 'pageup') { flushSend(); go(idx - 1); }
+      if (k === 'arrowright' || k === 'pagedown') { commitText(); flushSend(); go(idx + 1); }
+      if (k === 'arrowleft' || k === 'pageup') { commitText(); flushSend(); go(idx - 1); }
     });
 
     /* ============================================================

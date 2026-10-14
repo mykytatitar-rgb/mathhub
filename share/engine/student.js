@@ -27,6 +27,11 @@
     });
   }
   function el(id) { return document.getElementById(id); }
+  // палець — головний вказівник: телефон чи планшет, клавіатура на екрані
+  function fingers() {
+    try { return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); }
+    catch (e) { return false; }
+  }
 
   var COLORS = ['#0D2149', '#4B3FDB', '#E24A4A', '#16A34A', '#F2A93B', '#8B5CF6', '#DB2777', '#64748B'];
   var WIDTHS = [2, 4, 7];
@@ -90,7 +95,39 @@
     '.sb-tin{position:absolute;z-index:6;min-width:170px;min-height:34px;border:2px solid #4B3FDB;border-radius:8px;padding:5px 8px;font-family:inherit;font-weight:500;line-height:1.25;background:rgba(255,255,255,.97);outline:none;resize:none;overflow:hidden}' +
     '.sb-del{position:absolute;right:14px;top:12px;z-index:4;color:#C62828;border-color:#F3C4C4;box-shadow:0 4px 14px rgba(23,22,58,.1)}.sb-del[hidden]{display:none}' +
     '.sb-toast{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);background:#17163A;color:#fff;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}.sb-toast.show{opacity:1}' +
-    '@media(max-width:640px){.sb-top{padding:8px 10px}.sb-sp{width:100%;justify-content:space-between}.sb-tl{width:34px;height:34px;font-size:15px}.sb-opts{left:56px;max-width:calc(100% - 70px)}.sb-name{left:56px}}';
+    '.sb-back{display:inline-flex;align-items:center;text-decoration:none;white-space:nowrap;color:#3A31B0}.sb-narrow{display:none}.sb-chips{display:none}' +
+    /* Під пальцем: кнопки — щонайменше 40 px, а лежачи сторінка тягнеться
+       під виріз телефона (viewport-fit=cover) — шапку, стрічку й кнопки над
+       полотном відсуваємо від нього. Мишею цього блоку немає зовсім. */
+    '@media (pointer:coarse){' +
+      '.sb{padding-bottom:env(safe-area-inset-bottom);background:#fff}' +
+      '.sb-top{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}' +
+      '.sb-rail{padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right))}' +
+      '.sb-tools{left:calc(12px + env(safe-area-inset-left))}.sb-opts{left:calc(64px + env(safe-area-inset-left))}.sb-name{left:calc(72px + env(safe-area-inset-left))}' +
+      '.sb-zoom{right:calc(14px + env(safe-area-inset-right))}.sb-del{right:calc(14px + env(safe-area-inset-right))}' +
+      '.sb-toast{bottom:calc(74px + env(safe-area-inset-bottom))}' +
+      '.sb-btn{min-height:40px;min-width:40px;display:inline-flex;align-items:center;justify-content:center}.sb-sc{min-height:38px}' +
+      '.sb-matf,.sb-add span{min-height:40px;display:inline-flex;align-items:center}' +
+    '}' +
+    '@media(max-width:640px){.sb-top{padding:8px 10px}.sb-sp{width:100%;justify-content:space-between}.sb-tl{width:34px;height:34px;font-size:15px}.sb-opts{left:56px;max-width:calc(100% - 70px)}.sb-name{left:56px}}' +
+    /* Телефон — і стоячи, і лежачи. Полотно — головне: шапка коротша,
+       а конспект, матеріали й домашнє згорнуті в рядок кнопок із лічильниками.
+       Розгорнуте — одне за раз і не вище 40% екрана; досі все це стояло
+       під дошкою відкритим і стискало її до смужки. */
+    '@media (max-width:640px),(max-height:500px) and (pointer:coarse){' +
+      '.sb-top{gap:8px 10px}.sb-head{flex:1 1 0;min-width:0}.sb-ttl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.sb-sub{display:none}' +
+      '.sb-wide{display:none}.sb-narrow{display:inline}' +
+      '#sb-panels{flex:0 0 auto;background:#fff;border-top:1px solid #E7E5F2}#sb-panels:empty{display:none}' +
+      '.sb-chips{display:flex;gap:8px;padding:7px 10px;padding:7px max(10px,env(safe-area-inset-right)) 7px max(10px,env(safe-area-inset-left));overflow-x:auto;scrollbar-width:none}.sb-chips::-webkit-scrollbar{display:none}' +
+      '.sb-chip{flex:0 0 auto;min-height:38px;padding:0 12px;border:1.5px solid #E7E5F2;border-radius:999px;background:#fff;font:inherit;font-size:13px;font-weight:700;color:#3D3B63;cursor:pointer;white-space:nowrap}' +
+      '.sb-chip .sb-n{color:#7E90AE;font-weight:650}.sb-chip.hw{color:#B06A10}' +
+      '.sb-chip.on{border-color:#4B3FDB;background:#F1EFFE;color:#3A31B0}.sb-chip.on .sb-n{color:#3A31B0}' +
+      '.sb-sec{display:none}' +
+      '#sb-panels[data-open="notes"] [data-sec="notes"],#sb-panels[data-open="mats"] [data-sec="mats"],#sb-panels[data-open="hw"] [data-sec="hw"]{display:block}' +
+      '#sb-panels[data-open] .sb-secs{max-height:40vh;overflow-y:auto;overscroll-behavior:contain;border-top:1px solid #E7E5F2;padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}' +
+      '.sb-extra{max-height:none;overflow:visible;border-top:0}.sb-extra h3,.sb-lbl{display:none}.sb-note{border-top:0}' +
+      '.sb-note,.sb-desc,.sb-matf,.sb-meta,.sb-hw b{overflow-wrap:anywhere}.sb-rule svg{max-width:100%;height:auto}' +
+    '}';
 
   /* ============================================================
      Старт
@@ -110,16 +147,24 @@
     env.root.innerHTML =
       '<div class="sb">' +
         '<div class="sb-top">' +
-          '<div><div class="sb-ttl">' + esc(meta.title || 'Урок') + '</div>' +
+          /* «До розкладу» — перша кнопка шапки, а не плаваюча поверх сторінки:
+             плаваюча на компʼютері лежала на назві уроку, а на телефоні — на
+             стрічці слайдів і масштабі. На телефоні підпис коротший. */
+          (env.back
+            ? '<a class="sb-btn sb-back" id="sb-back" href="' + esc(env.back) + '" aria-label="Мій розклад">' +
+                '←<span class="sb-wide"> Мій розклад</span><span class="sb-narrow"> Розклад</span></a>'
+            : '') +
+          '<div class="sb-head"><div class="sb-ttl">' + esc(meta.title || 'Урок') + '</div>' +
           '<div class="sb-sub">' + esc([meta.student, meta.date].filter(Boolean).join(' · ')) + '</div></div>' +
           '<div class="sb-sp">' +
             (canWrite
               ? '<button class="sb-btn" id="sb-undo" title="Скасувати (Ctrl+Z)" disabled>↶</button>' +
                 '<button class="sb-btn" id="sb-redo" title="Повернути (Ctrl+Y)" disabled>↷</button>'
               : '') +
-            '<button class="sb-btn" id="sb-prev">← Назад</button>' +
+            // на телефоні — самі стрілки: між ними номер слайда, і так зрозуміло
+            '<button class="sb-btn" id="sb-prev" aria-label="Попередній слайд">←<span class="sb-wide"> Назад</span></button>' +
             '<span class="sb-pos" id="sb-pos"></span>' +
-            '<button class="sb-btn" id="sb-next">Далі →</button>' +
+            '<button class="sb-btn" id="sb-next" aria-label="Наступний слайд"><span class="sb-wide">Далі </span>→</button>' +
           '</div>' +
         '</div>' +
         '<div class="sb-body" id="sb-body">' +
@@ -286,6 +331,8 @@
     });
     el('sb-prev').onclick = function () { flushSend(); go(idx - 1); };
     el('sb-next').onclick = function () { flushSend(); go(idx + 1); };
+    // перед переходом до розкладу — своє в чергу, щоб поїхало навздогін
+    if (el('sb-back')) el('sb-back').addEventListener('click', function () { flushSend(); });
 
     /* ---------- Масштаб ---------- */
 
@@ -344,13 +391,28 @@
     function placeText(world, screen, kind) {
       if (!canWrite) return;
       var body = el('sb-body');
+      /* Рушій кличе нас, коли палець підняли, лише на телефоні й планшеті
+         (див. textOnLift у board.js). Перо графічного планшета на компʼютері —
+         як миша, одразу на натисканні. А клавіатура на екрані — справа
+         пристрою, а не того, чим торкнулись. */
+      var lifted = Board.textOnLift ? Board.textOnLift(kind) : (!!kind && kind !== 'mouse');
+      var softKb = fingers();
+
+      /* Поле, що лишилось відкритим. Пальцем дотик повз набране — це «готово»,
+         а не «ще один напис тут»: iPhone, торкнувшись полотна, поле сам не
+         відпускає, і кожне «готово» відкривало б нове порожнє. Порожнє поле
+         просто переїжджає туди, де торкнулись. Мишею — як було: клік деінде
+         записує набране й одразу починає наступний напис. */
+      var old = body.querySelector('.sb-tin');
+      if (old && old._finish) {
+        var typed = /\S/.test(old.value || '');
+        old._finish();
+        if (softKb && typed) return;
+      }
+
       var ta = document.createElement('textarea');
       ta.className = 'sb-tin';
       var x = screen.x, y = screen.y;
-      /* Рушій кличе нас, коли палець підняли, лише на телефоні й планшеті
-         (див. textOnLift у board.js). Перо графічного планшета на компʼютері —
-         як миша, одразу на натисканні. */
-      var lifted = Board.textOnLift ? Board.textOnLift(kind) : (!!kind && kind !== 'mouse');
       if (lifted) {
         /* Телефон: поле не вилазить за правий край — інакше набране
            ховалося б за екраном. Напис однаково ляже, де торкнулись. */
@@ -362,21 +424,46 @@
       ta.style.top = y + 'px';
       ta.style.fontSize = Math.max(12, engine.fontSize * engine.scale) + 'px';
       ta.style.color = engine.color;
+      // «Ввід» на клавіатурі телефона — новий рядок; готово — дотик повз поле
+      if (softKb) ta.setAttribute('enterkeyhint', 'enter');
       body.appendChild(ta);
-      /* Пальцем рушій кличе нас, коли палець підняли, — це дія людини, і
-         лише тоді iPhone відкриває клавіатуру; фокус із таймера він ігнорує.
-         Мишею — наступним тіком, як було: інакше mousedown забрав би фокус. */
-      if (lifted) ta.focus();
-      else setTimeout(function () { ta.focus(); }, 0);
 
       var done = false;
       function finish() {
         if (done) return;
         done = true;
+        unlift();
         var v = ta.value.trim();
         ta.remove();
         if (v) engine.addText(world, v);
       }
+      ta._finish = finish;
+
+      /* Клавіатура телефона наїжджає на полотно, не зменшуючи його. Якщо поле
+         опинилось під нею — піднімаємо креслення разом із полем рівно на
+         стільки, щоб набране було видно. Напис однаково ляже туди, де
+         торкнулись: місце запамʼятали ще до підйому. */
+      var vv = softKb ? window.visualViewport : null;
+      function lift() {
+        if (done || !vv) return;
+        var r = ta.getBoundingClientRect();
+        var over = r.bottom - (vv.offsetTop + vv.height) + 12;
+        // не вище за верх полотна: поле має лишитися на екрані
+        over = Math.min(over, r.top - body.getBoundingClientRect().top - 8);
+        if (over <= 1) return;
+        engine.cam.y += over / engine.scale;
+        engine.viewChanged();
+        ta.style.top = (parseFloat(ta.style.top) - over) + 'px';
+      }
+      function unlift() { if (vv) vv.removeEventListener('resize', lift); }
+      if (vv) vv.addEventListener('resize', lift);
+
+      /* Пальцем рушій кличе нас, коли палець підняли, — це дія людини, і
+         лише тоді iPhone відкриває клавіатуру; фокус із таймера він ігнорує.
+         Мишею — наступним тіком, як було: інакше mousedown забрав би фокус. */
+      if (lifted) { ta.focus(); lift(); }
+      else setTimeout(function () { ta.focus(); }, 0);
+
       ta.addEventListener('blur', finish);
       ta.addEventListener('keydown', function (ev) {
         if (ev.key === 'Escape') { ta.value = ''; finish(); }
@@ -756,12 +843,22 @@
       }).catch(function () {});
     }
 
+    /* Що розгорнуто на телефоні: '' — нічого, або 'notes' / 'mats' / 'hw'.
+       На компʼютері все видно одразу, як і було, і рядка кнопок там немає. */
+    var openSec = '';
+
     function paintPanels() {
-      var html = '';
-      if (meta.notes) html += '<div class="sb-note"><b>Конспект уроку:</b>\n' + esc(meta.notes) + '</div>';
+      var secs = [];                            // [ключ, підпис кнопки, скільки, розмітка]
+      /* Перенос рядка — всередині підпису: на телефоні підпис ховаємо
+         (його заступає кнопка), і текст не починається з порожнього рядка. */
+      if (meta.notes) {
+        secs.push(['notes', 'Конспект', 0,
+          '<div class="sb-note sb-sec" data-sec="notes"><b class="sb-lbl">Конспект уроку:\n</b>' + esc(meta.notes) + '</div>']);
+      }
 
       if (meta.materials && meta.materials.length) {
-        html += '<div class="sb-extra"><h3>Матеріали</h3>' + meta.materials.map(function (m) {
+        secs.push(['mats', 'Матеріали', meta.materials.length,
+          '<div class="sb-extra sb-sec" data-sec="mats"><h3>Матеріали</h3>' + meta.materials.map(function (m) {
           return '<div class="sb-hw"><b>' + esc(m.title) + '</b>' +
             (m.note ? '<div class="sb-desc">' + esc(m.note) + '</div>' : '') +
             ((m.rules || []).length
@@ -779,11 +876,12 @@
                 }).join('') + '</div>'
               : '') +
             '</div>';
-        }).join('') + '</div>';
+        }).join('') + '</div>']);
       }
 
       if (meta.homework && meta.homework.length) {
-        html += '<div class="sb-extra"><h3>Домашнє завдання</h3>' + meta.homework.map(function (h) {
+        secs.push(['hw', 'Домашнє', meta.homework.length,
+          '<div class="sb-extra sb-sec" data-sec="hw"><h3>Домашнє завдання</h3>' + meta.homework.map(function (h) {
           return '<div class="sb-hw"><b>' + esc(h.title) + '</b>' +
             '<div class="sb-meta">' + (h.due ? 'до ' + esc(h.due) : '') +
               (h.sent ? ' · <span class="sb-sent">надіслано ' + h.sent + '</span>' : '') + '</div>' +
@@ -802,11 +900,45 @@
                   esc(h.id || '') + '"><span>📷 Сфотографувати</span></label>'
               : '') +
             '</div>';
-        }).join('') + '</div>';
+        }).join('') + '</div>']);
       }
 
-      el('sb-panels').innerHTML = html;
+      /* Рядок кнопок видно лише на телефоні (див. CSS). Розділи під ним —
+         ті самі, що на компʼютері, тож там нічого не змінилось. */
+      el('sb-panels').innerHTML = secs.length
+        ? '<div class="sb-chips">' + secs.map(function (s) {
+            return '<button type="button" class="sb-chip' + (s[0] === 'hw' ? ' hw' : '') +
+              '" data-fold="' + s[0] + '" aria-expanded="false">' + s[1] +
+              (s[2] ? ' <span class="sb-n">· ' + s[2] + '</span>' : '') + '</button>';
+          }).join('') + '</div>' +
+          '<div class="sb-secs">' + secs.map(function (s) { return s[3]; }).join('') + '</div>'
+        : '';
+      showSec(openSec);
     }
+
+    /** Розгорнути на телефоні один розділ ('' — згорнути все). */
+    function showSec(k) {
+      var box = el('sb-panels');
+      // розділу могло вже не стати (репетитор прибрав матеріали) — тоді згортаємо
+      if (k && !box.querySelector('[data-sec="' + k + '"]')) k = '';
+      openSec = k;
+      if (k) box.setAttribute('data-open', k); else box.removeAttribute('data-open');
+      [].forEach.call(box.querySelectorAll('[data-fold]'), function (b) {
+        var on = b.getAttribute('data-fold') === k;
+        b.classList.toggle('on', on);
+        b.setAttribute('aria-expanded', on ? 'true' : 'false');
+      });
+    }
+
+    // дотик до розгорнутого згортає його; до іншого — перемикає
+    el('sb-panels').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-fold]');
+      if (!b) return;
+      var k = b.getAttribute('data-fold');
+      showSec(openSec === k ? '' : k);
+      var list = el('sb-panels').querySelector('.sb-secs');
+      if (list) list.scrollTop = 0;
+    });
 
     el('sb-panels').addEventListener('change', function (e) {
       var inp = e.target.closest('input[data-hw]');

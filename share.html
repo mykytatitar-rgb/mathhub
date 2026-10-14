@@ -2,7 +2,7 @@
 <html lang="uk">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Урок — Вектор</title>
 <meta name="theme-color" content="#4B3FDB">
 <meta name="robots" content="noindex,nofollow">
@@ -11,6 +11,12 @@
   html,body{margin:0;height:100%;background:#F6F5FB;
     font-family:Manrope,"Segoe UI",system-ui,sans-serif;color:#17163A}
   #frame{position:fixed;inset:0;width:100%;height:100%;border:0;display:none}
+  /* Сторінка тягнеться під виріз і заокруглені кути телефона (viewport-fit=cover).
+     Старий урок у рамці про це нічого не знає, тому рамку тримаємо в безпечній
+     зоні. На компʼютері відступи нульові — рамка та сама, на весь екран. */
+  #frame{top:env(safe-area-inset-top);left:env(safe-area-inset-left);
+    width:calc(100% - env(safe-area-inset-left) - env(safe-area-inset-right));
+    height:calc(100% - env(safe-area-inset-top) - env(safe-area-inset-bottom))}
   .msg{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px}
   .box{max-width:420px;text-align:center}
   .box h1{font-size:19px;margin:0 0 10px}
@@ -20,8 +26,9 @@
   @keyframes r{to{transform:rotate(360deg)}}
 
   /* ---- Портал учня ---- */
-  #portal{display:none;min-height:100%;padding:0 0 40px}
-  .pw{max-width:760px;margin:0 auto;padding:0 18px}
+  #portal{display:none;min-height:100%;padding:0 0 40px;padding-bottom:calc(40px + env(safe-area-inset-bottom))}
+  .pw{max-width:760px;margin:0 auto;padding:0 18px;
+    padding-left:max(18px, env(safe-area-inset-left));padding-right:max(18px, env(safe-area-inset-right))}
   .phead{background:linear-gradient(140deg,#4B3FDB,#2E248F);color:#fff;padding:26px 0 30px;margin-bottom:-14px}
   .phead h1{margin:0;font-size:22px;letter-spacing:-.3px}
   .phead .sub{margin-top:5px;font-size:13.5px;opacity:.85}
@@ -56,14 +63,30 @@
     font-size:12.5px;font-weight:700}
   .les__go:hover{background:#3A31B0}
   .les__go::before{content:'▸';font-size:14px;line-height:1}
+  /* Довга адреса чи назва файлу одним словом розпирала картку за край
+     екрана телефона, і сторінка їздила вбік. */
+  .les__t,.les__s,.mat__t,.mat__n{overflow-wrap:anywhere}
+  .mat a{max-width:100%;overflow-wrap:anywhere}
+  /* Порталом користуються з телефона: кнопки — під палець, а не під мишу. */
+  @media (max-width:640px),(pointer:coarse){
+    .les__go{min-height:44px;padding:11px 18px;font-size:14px}
+    .mat a{min-height:40px;padding:9px 14px;font-size:13px}
+  }
 
   /* Повернення з уроку до розкладу — поверх дошки, у безпечній зоні */
   .back-portal{position:fixed;left:14px;top:14px;z-index:10;
+    left:calc(14px + env(safe-area-inset-left));
     padding:8px 14px;border-radius:9px;font-size:12.5px;font-weight:700;
     background:rgba(255,255,255,.94);color:#3A31B0;text-decoration:none;
     box-shadow:0 3px 14px rgba(23,22,58,.18)}
   .back-portal:hover{background:#fff}
-  @media (max-width:700px){.back-portal{left:auto;right:14px;top:auto;bottom:14px}}
+  /* На телефоні — праворуч угорі, під пальцем. Знизу кнопка лежала на
+     стрічці слайдів і масштабі. Жива дошка цієї кнопки не має взагалі:
+     там «до розкладу» — перша кнопка її шапки. */
+  @media (max-width:700px){.back-portal{left:auto;bottom:auto;
+    right:14px;right:calc(14px + env(safe-area-inset-right));
+    top:10px;top:calc(10px + env(safe-area-inset-top));
+    padding:11px 16px;font-size:13px}}
   .none{font-size:13px;color:#7C7A9C;padding:6px 0}
   .pin{max-width:320px;margin:0 auto;text-align:center}
   .pin input{width:100%;margin-top:14px;padding:13px 16px;font:inherit;font-size:19px;
@@ -78,12 +101,19 @@
   /* Чи дійшло написане учнем. Досі про це не знав ніхто: штрихи лежали в
      пам'яті вкладки, і закрита вкладка забирала їх із собою мовчки. */
   .ink{position:fixed;right:14px;top:14px;z-index:11;display:none;
+    right:calc(14px + env(safe-area-inset-right));
     padding:7px 13px;border-radius:999px;font-size:12px;font-weight:700;
     background:rgba(255,255,255,.95);color:#3D3B63;box-shadow:0 3px 14px rgba(23,22,58,.18)}
   .ink.is-on{display:block}
   .ink.is-ok{color:#0C7F51}
   .ink.is-wait{color:#8A5409;background:#FDF3E3}
-  @media (max-width:700px){.ink{right:auto;left:14px;top:auto;bottom:14px}}
+  /* На телефоні теж угорі: знизу напис накривав масштаб і стрічку слайдів.
+     Якщо там уже кнопка «до розкладу» — стаємо під нею, а не на неї. */
+  @media (max-width:700px){
+    .ink{left:auto;bottom:auto;max-width:calc(100% - 28px);
+      top:10px;top:calc(10px + env(safe-area-inset-top))}
+    body:has(.back-portal) .ink{top:58px;top:calc(58px + env(safe-area-inset-top))}
+  }
 </style>
 </head>
 <body>
@@ -139,9 +169,21 @@
   var p    = document.getElementById('p');
 
   function fail(title, text) {
+    pinchLock(false);
     spin.style.display = 'none';
     h.textContent = title;
     p.textContent = text;
+  }
+
+  /* Поки на екрані дошка, сторінка не масштабується. Поле тексту на дошці
+     має розмір самого напису й буває дрібним, а iPhone при дотику до такого
+     поля збільшував усю сторінку — і повернути назад учень не міг: пальці
+     на полотні рухають дошку, а не сторінку. Масштаб дошки — у самій дошці.
+     Розклад і повідомлення лишаються звичайними: їх можна збільшити. */
+  var VIEWPORT = 'width=device-width,initial-scale=1,viewport-fit=cover';
+  function pinchLock(on) {
+    var m = document.querySelector('meta[name=viewport]');
+    if (m) m.setAttribute('content', on ? VIEWPORT + ',maximum-scale=1' : VIEWPORT);
   }
 
   // Код — у частині адреси після #, щоб він не потрапляв у журнали сервера.
@@ -188,19 +230,22 @@
     return;
   }
 
-  showBackToPortal();
+  /* Кнопка «до розкладу» — лише якщо учень справді прийшов з порталу.
+     Окремою плаваючою кнопкою — поки урок вантажиться, на екрані помилки
+     й у старому уроці в рамці. Жива дошка ставить її першою у свою шапку,
+     тож там плаваючу прибираємо: на телефоні вона лежала на стрічці слайдів. */
+  var backHref = '';
+  try { backHref = sessionStorage.getItem(BACK_KEY) || ''; } catch (e) {}
+  var backPill = showBackToPortal();
 
-  /** Кнопка «до розкладу» — лише якщо учень справді прийшов з порталу. */
   function showBackToPortal() {
-    var back = '';
-    try { back = sessionStorage.getItem(BACK_KEY) || ''; } catch (e) {}
-    if (!back) return;
-
+    if (!backHref) return null;
     var a = document.createElement('a');
     a.className = 'back-portal';
-    a.href = back;
+    a.href = backHref;
     a.textContent = '← Мій розклад';
     document.body.appendChild(a);
+    return a;
   }
 
   // код уроку — це <тека репетитора>/<код>, а самій базі потрібен лише код
@@ -238,6 +283,7 @@
     frame.srcdoc = html;
     frame.style.display = 'block';
     msg.style.display = 'none';
+    pinchLock(true);
     var t = html.match(/<title>([^<]*)<\/title>/);
     if (t) document.title = t[1];
   }
@@ -712,12 +758,14 @@
       var root = document.createElement('div');
       root.style.height = '100%';
       document.body.appendChild(root);
-      var back = document.querySelector('.back-portal');
-      if (back) document.body.appendChild(back);          // «до розкладу» лишається зверху
+      // «до розкладу» тепер у шапці дошки (env.back) — плаваюча вже зайва
+      if (backPill && backPill.parentNode) backPill.parentNode.removeChild(backPill);
+      pinchLock(true);
 
       return window.StudentBoard.start({
         token: token,
         uid: path.split('/')[0],
+        back: backHref,
         API: API,
         KEY: KEY,
         rpc: rpc,
@@ -734,6 +782,8 @@
   }
 
   function startLegacy() {
+    // жива дошка не піднялась, а свою кнопку вже прибрала — повертаємо плаваючу
+    if (backPill && !backPill.parentNode) document.body.appendChild(backPill);
     return load()
       .then(function () { live.connect(); watch(); })
       .catch(function (e) {

@@ -251,13 +251,11 @@
            видно обидва, і дотик до назви нічого не змінює. */
         '<div class="board-rails">' +
           '<div class="board-rail-row">' +
-            '<span class="rail-tag" role="button" data-act="board-rail-kind" data-arg="hw" ' +
-              'title="Показати слайди ДЗ">Урок</span>' +
+            '<span class="rail-tag" data-act="board-rail-kind" data-arg="hw">Урок</span>' +
             '<div class="board-rail" data-rail="lesson"></div>' +
           '</div>' +
           '<div class="board-rail-row board-rail-row--hw">' +
-            '<span class="rail-tag rail-tag--hw" role="button" data-act="board-rail-kind" data-arg="lesson" ' +
-              'title="Показати слайди уроку">ДЗ</span>' +
+            '<span class="rail-tag rail-tag--hw" data-act="board-rail-kind" data-arg="lesson">ДЗ</span>' +
             '<div class="board-rail" data-rail="hw"></div>' +
           '</div>' +
         '</div>' +

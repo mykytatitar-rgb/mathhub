@@ -142,19 +142,62 @@
     var list = all.filter(function (p) { return pass(p); });
     sortList(list);
 
-    var side = '<aside class="bk-side' + (mobileOpen ? ' is-open' : '') + '">' + facets() + '</aside>';
-    var main = '<div class="bk-main">' + toolbar(list.length) +
-      (list.length
-        ? list.slice(0, shown).map(card).join('') +
-          (list.length > shown
-            ? '<div class="bk-more"><button class="btn btn--soft" data-act="bk-more">Показати ще ' +
-              Math.min(PAGE, list.length - shown) + ' з ' + (list.length - shown) + '</button></div>'
-            : '')
-        : '<div class="card">' + C.empty('search', 'Нічого не знайшлося',
-            'Приберіть частину фільтрів або змініть запит.') + '</div>') +
+    var layout = box.querySelector('.bk-layout');
+    if (!layout) {
+      box.innerHTML = '<div class="bk-layout">' +
+        '<aside class="bk-side' + (mobileOpen ? ' is-open' : '') + '">' + sideHtml(list.length) + '</aside>' +
+        // затемнення під шторкою фільтрів (телефон): дотик по ньому — закрити
+        '<div class="bk-scrim" data-act="bk-mobile"></div>' +
+        '<div class="bk-main">' + toolbar(list.length) + '<div data-bk-list>' + listHtml(list) + '</div></div>' +
       '</div>';
+      return;
+    }
 
-    box.innerHTML = '<div class="bk-layout">' + side + main + '</div>';
+    /* Далі — усе, крім рядка пошуку. Поле, у якому набирають, не можна
+       замінювати новим: iPhone на заміненому полі ховає клавіатуру, а
+       повернути її з таймера не дає — кожна пауза в наборі збивала б запит. */
+    var side = layout.querySelector('.bk-side');
+    var keep = side.scrollTop;               // фільтри не відскакують нагору після кожної галочки
+    side.innerHTML = sideHtml(list.length);
+    side.scrollTop = keep;
+    layout.querySelector('[data-bk-info]').innerHTML = infoHtml(list.length);
+    layout.querySelector('[data-bk-list]').innerHTML = listHtml(list);
+    var nf = layout.querySelector('[data-bk-nf]');
+    if (nf) nf.textContent = nFilters() ? ' · ' + nFilters() : '';
+
+    // «скинути все» чистить і запит — але поле під пальцем не чіпаємо
+    var q = document.getElementById('bk-q');
+    if (q && q !== document.activeElement && q.value !== f.q) q.value = f.q;
+    var sort = layout.querySelector('[data-bk-sort]');
+    if (sort && sort.value !== f.sort) sort.value = f.sort;
+  }
+
+  function listHtml(list) {
+    return list.length
+      ? list.slice(0, shown).map(card).join('') +
+        (list.length > shown
+          ? '<div class="bk-more"><button class="btn btn--soft" data-act="bk-more">Показати ще ' +
+            Math.min(PAGE, list.length - shown) + ' з ' + (list.length - shown) + '</button></div>'
+          : '')
+      : '<div class="card">' + C.empty('search', 'Нічого не знайшлося',
+          'Приберіть частину фільтрів або змініть запит.') + '</div>';
+  }
+
+  /* Фільтри. На телефоні це шторка знизу — тоді в неї своя шапка з
+     хрестиком і внизу кнопка з тим, скільки задач лишилось (на великому
+     екрані обидві сховані). */
+  function sideHtml(n) {
+    return '<div class="bk-side__head">Фільтри' +
+        '<button class="icon-btn" data-act="bk-mobile" aria-label="Закрити фільтри">' + icon('x', 18) + '</button>' +
+      '</div>' +
+      facets() +
+      '<div class="bk-side__foot"><button class="btn btn--primary" data-act="bk-mobile">' +
+        (n ? 'Показати ' + U.pl(n, 'задачу', 'задачі', 'задач') : 'Закрити') +
+      '</button></div>';
+  }
+
+  function nFilters() {
+    return LISTS.reduce(function (s, k) { return s + f[k].length; }, 0);
   }
 
   function sortList(list) {
@@ -259,19 +302,17 @@
     return html;
   }
 
-  function toolbar(n) {
-    var chips = [];
-    LISTS.forEach(function (k) {
-      f[k].forEach(function (v) {
-        chips.push('<button class="bk-chip" data-act="bk-drop" data-arg="' + U.esc(k + ':' + v) + '">' +
-          chipLabel(k, v) + ' <span aria-hidden="true">×</span></button>');
-      });
-    });
-
+  /* Рядок пошуку малюється один раз на сторінку (див. draw): далі
+     оновлюються лише лічильник і «таблетки» під ним. */
+  function toolbar(count) {
+    var n = nFilters();
     return '<div class="card bk-bar">' +
       '<div class="bk-bar__row">' +
         '<div class="bk-search">' + icon('search', 16) +
-          '<input class="input" id="bk-q" placeholder="Пошук: трапеція, модуль, 14.23, prime…" value="' + U.esc(f.q) + '">' +
+          /* inputmode, а не type="search": клавіатура телефона отримує
+             клавішу «Знайти», а поле на компʼютері лишається таким, як було */
+          '<input class="input" id="bk-q" placeholder="Пошук: трапеція, модуль, 14.23, prime…" value="' + U.esc(f.q) + '"' +
+            ' inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">' +
         '</div>' +
         '<select class="input bk-sort" data-bk-sort aria-label="Порядок задач">' +
           [['', 'За джерелом'], ['easy', 'Спершу легші'], ['hard', 'Спершу складніші'], ['rand', 'Випадково']]
@@ -279,16 +320,27 @@
               return '<option value="' + o[0] + '"' + (f.sort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
             }).join('') +
         '</select>' +
-        '<button class="btn btn--soft btn--sm bk-filters-btn" data-act="bk-mobile">' + icon('filter', 15) + 'Фільтри</button>' +
+        '<button class="btn btn--soft btn--sm bk-filters-btn" data-act="bk-mobile">' + icon('filter', 15) +
+          'Фільтри<span data-bk-nf>' + (n ? ' · ' + n : '') + '</span></button>' +
       '</div>' +
-      '<div class="bk-bar__info">' +
-        '<b>' + U.pl(n, 'задача', 'задачі', 'задач') + '</b>' +
-        (n !== all.length ? '<span class="muted"> з ' + all.length + '</span>' : '') +
-        (chips.length
-          ? chips.join('') + '<button class="bk-link" data-act="bk-clear-all">скинути все</button>'
-          : '') +
-      '</div>' +
+      '<div class="bk-bar__info" data-bk-info>' + infoHtml(count) + '</div>' +
     '</div>';
+  }
+
+  /** Скільки знайшлося й вибрані фільтри «таблетками». */
+  function infoHtml(n) {
+    var chips = [];
+    LISTS.forEach(function (k) {
+      f[k].forEach(function (v) {
+        chips.push('<button class="bk-chip" data-act="bk-drop" data-arg="' + U.esc(k + ':' + v) + '">' +
+          chipLabel(k, v) + ' <span aria-hidden="true">×</span></button>');
+      });
+    });
+    return '<b>' + U.pl(n, 'задача', 'задачі', 'задач') + '</b>' +
+      (n !== all.length ? '<span class="muted"> з ' + all.length + '</span>' : '') +
+      (chips.length
+        ? chips.join('') + '<button class="bk-link" data-act="bk-clear-all">скинути все</button>'
+        : '');
   }
 
   function chipLabel(k, v) {
@@ -394,8 +446,36 @@
       window.scrollTo(0, 0);
     },
     'bk-open': function (key) { openGroups[key] = true; draw(); },
-    'bk-mobile': function () { mobileOpen = !mobileOpen; draw(); }
+    'bk-mobile': function () { setMobile(!mobileOpen); }
   };
+
+  /* На телефоні фільтри — шторка поверх сторінки, тож системне «Назад»
+     має закривати її, а не йти з банку (див. C.overlay у components.js).
+     На ширшому екрані вони розгортаються просто над задачами — там історію
+     не чіпаємо. */
+  var sheetEntry = false;
+
+  if (C && C.overlay) {
+    C.overlay.add({
+      open: function () { return sheetEntry && mobileOpen; },
+      close: function (fromPop) { setMobile(false, fromPop === true); }
+    });
+  }
+
+  /* Лише клас на панелі — без перемальовування: шторку закривають і
+     тоді, коли сторінка вже йде геть (перехід деінде), і перебирати
+     тоді двадцять тисяч задач ні до чого. */
+  function setMobile(on, fromPop) {
+    if (on === mobileOpen) return;
+    mobileOpen = on;
+    if (on && C && C.phone && C.phone() && C.overlay) { C.overlay.open(); sheetEntry = true; }
+    if (!on && sheetEntry) { sheetEntry = false; C.overlay.closed(!!fromPop); }
+    var side = document.querySelector('[data-bk] .bk-side');
+    if (side) {
+      side.classList.toggle('is-open', on);
+      if (on) side.scrollTop = 0;
+    }
+  }
 
   document.addEventListener('change', function (e) {
     if (!document.querySelector('[data-bk]')) return;
@@ -411,6 +491,7 @@
     }
   });
 
+  // поле пошуку лишається тим самим (draw його не чіпає) — фокус і клавіатура не злітають
   var qTimer = null;
   document.addEventListener('input', function (e) {
     if (e.target.id !== 'bk-q') return;
@@ -419,8 +500,6 @@
     qTimer = setTimeout(function () {
       f.q = value;
       commit();
-      var input = document.getElementById('bk-q');
-      if (input) { input.focus(); input.setSelectionRange(value.length, value.length); }
     }, 250);
   });
 })();

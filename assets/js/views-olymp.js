@@ -160,7 +160,9 @@
         '<span class="field__label">Пошук в умовах</span>' +
         '<input class="input" id="ol-q" placeholder="' +
           (isBook ? 'модуль, трапеція, 14.23, прогресія…' : isOlymp ? 'triangle, prime, ways…' : 'трикутник, prime, 14.23…') +
-          '" value="' + U.esc(filters.q) + '">' +
+          '" value="' + U.esc(filters.q) + '"' +
+          // клавіша «Знайти» на телефоні, без автозаміни; поле на компʼютері — як було
+          ' inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">' +
       '</label>');
     fields.push(select('topic', 'Тема карти', [['', 'Усі теми']].concat(topics.map(function (t) {
       return [t, topicName[t] + ' · ' + topicCount[t]];
@@ -224,17 +226,25 @@
             'Фільтри' + (nSet ? ' · ' + nSet : '') + '</button>' +
           '<div class="ol-more-f">' +
             fields.slice(1).join('') +
-            (any ? '<button class="btn btn--ghost btn--sm" data-act="ol-clear">Скинути</button>' : '') +
+            '<button class="btn btn--ghost btn--sm" data-act="ol-clear" data-ol-clear' +
+              (any ? '' : ' style="display:none"') + '>Скинути</button>' +
           '</div>' +
         '</div>' +
-        '<div class="muted small mt-2">' +
-          'Знайдено ' + U.pl(list.length, 'задача', 'задачі', 'задач') +
-          ' з ' + all.length +
-          (bad ? ' · частина файлів не завантажилась' : '') +
-        '</div>' +
+        '<div class="muted small mt-2" data-ol-count>' + countText(list.length, all.length, bad) + '</div>' +
       '</div>';
 
-    var body = list.length
+    box.innerHTML = head + '<div data-ol-list>' + listHtml(list) + '</div>' + credits();
+    box.olAll = all;
+    box.olBad = bad;
+  }
+
+  function countText(n, total, bad) {
+    return 'Знайдено ' + U.pl(n, 'задача', 'задачі', 'задач') + ' з ' + total +
+      (bad ? ' · частина файлів не завантажилась' : '');
+  }
+
+  function listHtml(list) {
+    return list.length
       ? list.slice(0, shown).map(card).join('') +
         (list.length > shown
           ? '<div class="row" style="justify-content:center;margin:14px 0">' +
@@ -243,9 +253,22 @@
           : '')
       : '<div class="card">' + C.empty('search', 'Нічого не знайшлося',
           'Спробуйте прибрати частину фільтрів.') + '</div>';
+  }
 
-    box.innerHTML = head + body + credits();
-    box.olAll = all;
+  /* Лише список і лічильник — без рядка фільтрів. Поле пошуку, у якому
+     набирають, лишається тим самим: iPhone на заміненому полі ховав
+     клавіатуру після кожної паузи в наборі, а повернути її з таймера
+     браузер не дає. */
+  function drawList(box) {
+    var all = box.olAll;
+    var list = all.filter(matches);
+    var el = box.querySelector('[data-ol-list]');
+    if (!el) { draw(box, all, box.olBad); return; }
+    el.innerHTML = listHtml(list);
+    var n = box.querySelector('[data-ol-count]');
+    if (n) n.innerHTML = countText(list.length, all.length, box.olBad);
+    var clr = box.querySelector('[data-ol-clear]');
+    if (clr) clr.style.display = KEYS.some(function (k) { return k !== 'bank' && filters[k]; }) ? '' : 'none';
   }
 
   /** Звідки задачі. Відкритий набір — це не «нічиє», а чужа праця з ліцензією. */
@@ -407,7 +430,7 @@
     'ol-more': function () {
       shown += PAGE;
       var box = document.querySelector('[data-ol]');
-      if (box && box.olAll) draw(box, box.olAll, 0);
+      if (box && box.olAll) drawList(box);
     },
 
     'ol-clear': function () {
@@ -526,12 +549,7 @@
       filters.q = value;
       shown = PAGE;
       var box = document.querySelector('[data-ol]');
-      if (box && box.olAll) {
-        var all = box.olAll;
-        draw(box, all, 0);
-        var input = document.getElementById('ol-q');
-        if (input) { input.focus(); input.setSelectionRange(value.length, value.length); }
-      }
+      if (box && box.olAll) drawList(box);
     }, 250);
   });
 
@@ -540,9 +558,18 @@
     var all = S.db().lessons.filter(function (l) { return l.status !== 'cancelled'; });
     if (!all.length) return null;
     var now = Date.now();
-    var sorted = all.slice().sort(function (a, b) {
-      return Math.abs(new Date(a.date) - now) - Math.abs(new Date(b.date) - now);
-    });
-    return sorted[0];
+    function start(l) { return U.toDate(l.date).getTime(); }     // час уроку — місцевий
+    function end(l) { return start(l) + (l.duration || 60) * 60000; }
+    function near(list) {
+      return list.slice().sort(function (a, b) {
+        return Math.abs(start(a) - now) - Math.abs(start(b) - now);
+      })[0];
+    }
+    /* Спершу — урок, що ще не скінчився: той, що йде, чи наступний. Раніше
+       брався найближчий за часом початку, і о 14:00 задача лягала на дошку
+       уроку, що вже скінчився о 13:00, а не того, що о 17:00. Минулі —
+       лише коли попереду уроків немає зовсім. */
+    var ahead = all.filter(function (l) { return end(l) >= now; });
+    return near(ahead.length ? ahead : all);
   }
 })();

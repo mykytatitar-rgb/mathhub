@@ -136,11 +136,21 @@
 
   App.setQuery = function (patch) { setQuery(patch); };
 
+  /* Те саме, але без перемальовування сторінки: її частину оновить сам
+     розділ (пошук у довіднику). Повертає новий маршрут — або null, якщо
+     адреса не змінилась чи сторінку однаково буде перемальовано. */
+  App.quietQuery = function (patch) { return writeQuery(patch) ? parseRoute() : null; };
+
   /* Фільтр, пошук, тиждень, вигляд — це та сама сторінка, а не новий крок.
      Адреса змінюється на місці (replaceState), без нового запису в історії:
      інакше «Назад» після пошуку прокручував би «Ол», «Олек», «Олекс», а не
      повертав на попередню сторінку. */
   function setQuery(patch) {
+    if (writeQuery(patch)) App.render();
+  }
+
+  /** Записати нові параметри в адресу. true — записано на місці. */
+  function writeQuery(patch) {
     var r = parseRoute();
     Object.keys(patch).forEach(function (k) {
       if (patch[k] === '' || patch[k] == null) delete r.query[k];
@@ -150,15 +160,15 @@
       return encodeURIComponent(k) + '=' + encodeURIComponent(r.query[k]);
     }).join('&');
     var h = '#' + r.path + (qs ? '?' + qs : '');
-    if (h === location.hash) return;
+    if (h === location.hash) return false;
     try {
       history.replaceState(history.state, '', h);
     } catch (e) {
-      location.replace(h);               // без історії — хоча б не новий запис
-      return;
+      location.replace(h);               // без історії — хоча б не новий запис (сторінку намалює hashchange)
+      return false;
     }
     C.hist.note();
-    App.render();
+    return true;
   }
 
   /** Той самий розділ, що вже відкритий («#/» і порожня адреса — одне й те саме). */
@@ -691,10 +701,12 @@
     if (V.boardMountedFor()) V.unmountBoard();
     app.classList.remove('is-board');
 
-    // зберегти фокус пошуку
+    /* Зберегти фокус пошуку. Довідник шукає без перемальовування, але
+       сторінка буває перемальована й посеред набору (приїхали зміни з
+       іншого пристрою) — тоді поле стає на місце з курсором там, де був. */
     var act = document.activeElement;
-    var restore = act && act.id === 'stu-search'
-      ? { id: act.id, pos: act.selectionStart } : null;
+    var restore = act && (act.id === 'stu-search' || (act.hasAttribute && act.hasAttribute('data-ref-q')))
+      ? { sel: act.id === 'stu-search' ? '#stu-search' : '[data-ref-q]', pos: act.selectionStart } : null;
 
     /* Поки розділ тягнуть під рукою, панель не перемальовуємо: інакше
        перемальовування посеред руху викинуло б той самий пункт з-під пальця. */
@@ -769,7 +781,7 @@
     App.scrollRestored = false;
 
     if (restore) {
-      var el = document.getElementById(restore.id);
+      var el = document.querySelector(restore.sel);
       if (el) { el.focus(); try { el.setSelectionRange(restore.pos, restore.pos); } catch (e) {} }
     }
   };
@@ -787,6 +799,36 @@
   }
 
   App.refresh = function () { App.render(); };
+
+  /* Файл зі сховища браузера — людині. На телефоні «завантажене» губиться в
+     теці завантажень, а iPhone ще й відкривав файл поверх кабінету без
+     дороги назад. Тож там — системне «Поділитися»: зберегти у «Файли»,
+     надіслати учневі, відкрити в іншій програмі. Не вийшло (браузер не
+     вміє чи минуло забагато часу від дотику) — звичайне завантаження. */
+  function giveFile(blob, name) {
+    var file = null;
+    if (C.touchy() && navigator.share && navigator.canShare && window.File) {
+      try { file = new File([blob], name, { type: blob.type || 'application/octet-stream' }); } catch (e) { file = null; }
+    }
+    if (file && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file] }).catch(function (e) {
+        if (!(e && e.name === 'AbortError')) saveFile(blob, name);   // відмовились у меню — нічого не робимо
+      });
+      return;
+    }
+    saveFile(blob, name);
+  }
+
+  function saveFile(blob, name) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    /* Посилання живе хвилину, а не секунду: телефон відкриває файл не
+       одразу, і за секунду його вже не було — «не вдалося завантажити». */
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 60000);
+  }
 
   /* ============================================================
      Дії
@@ -1007,12 +1049,7 @@
       // exportBundle асинхронний, бо збирає ще й картинки дошок з IndexedDB
       S.exportBundle().then(function (json) {
         var blob = new Blob([json], { type: 'application/json;charset=utf-8' });
-        var a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'mathhub-backup-' + U.ymd(new Date()) + '.json';
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+        saveFile(blob, 'mathhub-backup-' + U.ymd(new Date()) + '.json');
         U.toast('Копію завантажено · ' + Math.max(1, Math.round(blob.size / 1024)) + ' КБ', 'ok');
       }).catch(function (e) {
         U.toast('Не вдалося зібрати копію: ' + (e && e.message ? e.message : e), 'err');
@@ -1068,12 +1105,7 @@
       });
       window.ImgStore.get(key).then(function (blob) {
         if (!blob) { U.toast('Файл не знайдено — можливо, його прибрали', 'err'); return; }
-        var a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = (meta && meta.name) || 'файл';
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+        giveFile(blob, (meta && meta.name) || 'файл');
       }).catch(function (e) {
         U.toast('Не вдалося відкрити файл: ' + (e && e.message ? e.message : e), 'err');
       });
@@ -1395,12 +1427,7 @@
           (d.files || []).forEach(function (f) { if (f.key === key && f.name) name = f.name; });
         });
 
-        var a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = name;
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+        giveFile(blob, name);
       }).catch(function () { U.toast('Не вдалося відкрити файл', 'err'); });
     },
 
@@ -1575,11 +1602,15 @@
   });
 
   /* Пошук на телефоні: «Знайти» на клавіатурі ховає її — результати вже
-     на екрані, а клавіатура закривала пів списку. */
+     на екрані, а клавіатура закривала пів списку. Те саме в банку, в
+     олімпіадах і в довіднику. Пошук на карті тут не рахується: там Enter
+     відкриває першу знайдену тему (див. views-mathmap.js). */
+  var SEARCHES = '#stu-search, #bk-q, #ol-q, [data-ref-q]';
   document.addEventListener('keydown', function (e) {
-    if (e.key !== 'Enter' || !e.target || e.target.id !== 'stu-search' || !C.touchy()) return;
+    var t = e.target;
+    if (e.key !== 'Enter' || !t || !t.matches || !t.matches(SEARCHES) || !C.touchy()) return;
     e.preventDefault();
-    e.target.blur();
+    t.blur();
   });
 
   /* Клавіатура телефона. iPhone, а з версії 108 і Chrome на Android, не

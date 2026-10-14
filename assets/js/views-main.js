@@ -53,7 +53,7 @@
     }
     var max = Math.max(1, Math.max.apply(null, months.map(function (m) { return m.value; })));
     return months.map(function (m) {
-      var cap = m.value ? U.esc(Math.round(m.value).toLocaleString('uk-UA').replace(/[  ]/g, ' ')) : '';
+      var cap = m.value ? U.esc(Math.round(m.value).toLocaleString('uk-UA').replace(/[\u00A0\u202F ]/g, '\u00A0')) : '';
       return '<div class="chart__col">' +
         '<div class="chart__top">' + cap + '</div>' +
         '<div class="chart__bar" style="height:' + Math.max(4, (m.value / max) * 100) + '%' +
@@ -750,7 +750,7 @@
           return '<button class="chip' + (c === code ? ' is-active' : '') + '" data-act="filter-cur" data-arg="' + c + '">' +
             U.symbol(c) + ' ' + c + ' <span style="opacity:.6">' + n + '</span></button>';
         }).join('') +
-        '<span class="small muted" style="margin-left:6px">картки й учні нижче — у цій валюті; ' +
+        '<span class="small muted cur-hint" style="margin-left:6px">картки й учні нижче — у цій валюті; ' +
         'дохід угорі й список оплат — усі валюти</span></div>'
       : '';
 
@@ -789,8 +789,9 @@
       /* Раніше великі суми скорочувалися до «14к». Для питання «скільки я
          заробив» це та сама неповна цифра: округлення до тисяч ховає рівно
          те, за чим сюди дивляться. Показуємо число повністю, з пробілом між
-         тисячами — воно вміщається. */
-      var cap = !m.value ? '' : U.esc(Math.round(m.value).toLocaleString('uk-UA').replace(/[   ]/g, ' '));
+         тисячами — воно вміщається. Пробіл нерозривний: у вузькому
+         стовпчику телефона «14 500» інакше ламалось на два рядки. */
+      var cap = !m.value ? '' : U.esc(Math.round(m.value).toLocaleString('uk-UA').replace(/[\u00A0\u202F ]/g, '\u00A0'));
       /* Місяць без доходу малювався такою ж смужкою, як і місяць з дрібною
          сумою, — виходило «щось було», хоча не було нічого. Порожній місяць
          тепер ледь помітна риска, і сплутати їх не можна. */
@@ -1135,7 +1136,7 @@
         '<div class="ref__title">Cheat sheets</div>' +
         '<div class="ref__count">' + plEn(all.length, 'topic', 'topics') + '</div>' +
         '<input class="ref__q" data-ref-q type="search" placeholder="Find a rule…" ' +
-          'value="' + U.esc(q) + '" autocomplete="off">' +
+          'value="' + U.esc(q) + '" autocomplete="off" enterkeyhint="search" autocapitalize="off" autocorrect="off" spellcheck="false">' +
         '<button class="btn btn--ghost btn--sm" data-act="sheet-print">' +
           icon('download', 15) + 'Print</button>' +
         '<button class="btn btn--ghost btn--sm" data-act="mat-edit" data-arg="' + m.id + '">' +
@@ -2229,7 +2230,7 @@
             // сервер віддає час у UTC — перетворюємо на дату, інакше U.toDate
             // прочитає його як місцевий і покаже на 3 години раніше
             '<span class="small">' + U.esc(U.fmtDateTime(new Date(r.created_at))) + '</span>' +
-            '<span class="small muted">' + U.esc(r.device || '') + '</span>' +
+            '<span class="small muted snap-row__dev">' + U.esc(r.device || '') + '</span>' +
             '<button class="btn btn--ghost btn--sm spacer" data-act="sync-restore" data-arg="' + r.id + '">' +
             'Відновити</button>' +
           '</div>';
@@ -2437,24 +2438,51 @@
      повернутися до результатів кнопкою «назад». */
   function bindRefSearch() {
     var q = document.querySelector('[data-ref-q]');
-    if (!q || !window.App || !App.setQuery) return;
+    if (!q || !window.App || !App.quietQuery) return;
 
     var timer = null;
     q.addEventListener('input', function () {
       if (timer) clearTimeout(timer);
       // не перемальовуємо на кожну літеру: двадцять одна тема — це відчутно
-      timer = setTimeout(function () { App.setQuery({ q: q.value.trim() }); }, 220);
+      timer = setTimeout(function () { refSearch(q.value.trim()); }, 220);
     });
     q.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') { q.value = ''; App.setQuery({ q: '' }); }
+      if (e.key === 'Escape') { clearTimeout(timer); q.value = ''; refSearch(''); }
     });
+  }
 
-    /* Курсор повертаємо в кінець рядка: перемальовування замінює поле, і без
-       цього кожна літера викидала б курсор на початок. */
-    if (document.activeElement !== q && q.value) {
-      q.focus();
-      q.setSelectionRange(q.value.length, q.value.length);
-    }
+  /* Знахідки — у змісті й переліку тем, а шапку з полем пошуку не чіпаємо.
+     Раніше перемальовувалась уся сторінка, а поле після кожної паузи в
+     наборі ставилось наново й діставало фокус із таймера: iPhone на цьому
+     ховав клавіатуру, а Android її знову підкидав. */
+  function refSearch(value) {
+    var route = App.quietQuery({ q: value });
+    if (!route) return;
+    var html = route.parts[0] === 'reference' && V.formulas ? V.formulas(route.query)
+      : route.parts[0] === 'sheet' ? V.sheet(route.parts[1], route.query)
+      : null;
+    var tmp = document.createElement('div');
+    tmp.innerHTML = html || '';
+    var fresh = { main: tmp.querySelector('.ref__main'), nav: tmp.querySelector('.ref__nav') };
+    var main = document.querySelector('.ref__main'), nav = document.querySelector('.ref__nav');
+    // база формул ще вантажиться чи сторінка інша — тоді вже як звичайно, цілою
+    if (!fresh.main || !fresh.nav || !main || !nav) { App.render(); return; }
+    main.innerHTML = fresh.main.innerHTML;
+    main.scrollTop = 0;
+    nav.innerHTML = fresh.nav.innerHTML;
+    centerRefNav();
+  }
+
+  /* На вузькому екрані перелік тем — рядок, що гортається вбік, і вибрана
+     тема ховалась за його краєм. Підкручуємо сам рядок (а не сторінку,
+     як зробив би scrollIntoView), щоб вона стала посередині. */
+  function centerRefNav() {
+    if (window.innerWidth > 1000) return;
+    var nav = document.querySelector('.ref__nav');
+    var on = nav && nav.querySelector('.ref__t.is-on');
+    if (!on) return;
+    var r = on.getBoundingClientRect(), nr = nav.getBoundingClientRect();
+    nav.scrollLeft += (r.left + r.width / 2) - (nr.left + nr.width / 2);
   }
 
   /** Спільний хук після кожного рендеру. */
@@ -2467,6 +2495,7 @@
       V.fillTelegramAsync();
     }
     bindRefSearch();
+    centerRefNav();
     V.hydratePhotos();
     // карта буває і в «Карті математики», і в картці учня; без неї — прибирає за собою шухляду
     if (V.mountMathmap) V.mountMathmap(route);

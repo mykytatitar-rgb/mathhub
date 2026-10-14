@@ -1445,7 +1445,11 @@ a { color: inherit; text-decoration: none; }
      Банер учня лишається — аватар, ім'я й дії з учнем там і є змістом. */
   .hero:not(:has(.avatar)) { display: none; }
   .hero:has(.avatar) .hero__back { display: none; }
-  .ref--fx .ref__bar .ref__title, .ref--fx .ref__bar .ref__count { display: none; }
+  /* Довідник: назва вже у верхній смузі, а лічильник і «Друк» на телефоні
+     нічого не дають — шапка лишається для мови й пошуку. У базі формул
+     пошук стає поруч із перемикачем мови, а не окремим рядком під ним. */
+  .ref .ref__bar .ref__title, .ref .ref__bar .ref__count, .ref .ref__bar [data-act="sheet-print"] { display: none; }
+  .ref--fx .ref__q { flex: 1 1 0; order: 0; min-width: 0; }
 }
 
 /* --- Телефон: нижня панель розділів --- */
@@ -1645,6 +1649,19 @@ a { color: inherit; text-decoration: none; }
 
   /* Дрібні цілі для пальця */
   .icon-btn { min-width: 38px; min-height: 38px; }
+
+  /* Довге слово без пробілів (посилання, назва файлу, адреса пошти) у
+     нотатці чи підказці розпирало сторінку вшир — і вона гортала вбік.
+     Тепер воно переноситься посеред слова. */
+  .pre-wrap, .desk__n, .field__hint, .mm-row__name small { overflow-wrap: anywhere; }
+  /* Те, що все одно виступило за край, обрізається, а не тягне вбік усю
+     сторінку. Саме clip, а не hidden: hidden робить .main прокручуваним
+     блоком, і липкі вкладки й смуги в ньому перестали б липнути. */
+  .main { overflow-x: clip; }
+
+  /* Підказка біля перемикача валют у фінансах — для великого екрана: на
+     телефоні вона займала два рядки над картками */
+  .cur-hint { display: none; }
 }
 
 /* --- Телефон: таблиці рядками ---
@@ -2084,8 +2101,9 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 
 @media (max-width: 640px) {
   /* на вузькому екрані назва пристрою — найменш потрібне, ховаємо її,
-     щоб дата й кнопка не переносилися */
-  .snap-row .muted { display: none; }
+     щоб дата й кнопка не переносилися. Підсумок копії («11 уроків, 30 на
+     дошках») лишається: без нього не видно, яку з копій повертати. */
+  .snap-row__dev { display: none; }
 }
 
 /* ============================================================
@@ -2833,7 +2851,9 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 .mm-lane__acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; margin-bottom: 14px; }
 .mm-lane__acts .btn { border-color: transparent; color: var(--muted); }
 
-.mm-doms { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px 22px; }
+/* min(…, 100%): у вузькій смузі телефона колонка не ширша за саму смугу —
+   інакше роудмап гортався вбік. На великому екрані це ті самі 320 px. */
+.mm-doms { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 16px 22px; }
 .mm-dom__name { font-size: 12px; font-weight: 750; letter-spacing: .4px; text-transform: uppercase; margin-bottom: 8px; }
 .mm-dom__q { display: block; margin-top: 2px; font-size: 13px; font-weight: 550; letter-spacing: 0; text-transform: none; color: var(--muted); font-style: italic; }
 .mm-chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -2986,6 +3006,11 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 .mt-chev text { fill: #4B3FDB; font-size: 16px; font-weight: 800; }
 @media (hover: hover) { .mt-chev:hover circle { fill: #4B3FDB; stroke: #4B3FDB; } }
 @media (hover: hover) { .mt-chev:hover text { fill: #fff; } }
+/* Невидиме ширше коло довкола стрілки: стрілка 22 px, а палець — утричі
+   товщий. Миші воно не заважає — ловить дотики лише на сенсорному екрані. */
+.mt-chev .mt-hit, .mt-chev:hover .mt-hit { fill: transparent; stroke: none; }
+.mt-hit { pointer-events: none; }
+@media (pointer: coarse) { .mt-hit { pointer-events: all; } }
 .mm-treebtns { display: flex; gap: 6px; background: #fff; border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow); padding: 6px; }
 
 .mm-undo {
@@ -3328,3 +3353,98 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 .tech-zone[open] > summary::before { content: '▾ '; }
 .tech-zone[open] > summary { margin-bottom: 12px; }
 .tech-zone > .card { margin-bottom: 16px; }
+
+/* ============================================================
+   Телефон: карта математики, банк, олімпіади, формули
+   ============================================================
+
+   Окремим блоком у кінці: правила тут мають переважати загальні вище
+   (у тієї самої ваги перемагає те, що далі у файлі). */
+
+/* Шторка фільтрів банку: шапка, підсумок і затемнення — лише на телефоні */
+.bk-scrim, .bk-side__head, .bk-side__foot { display: none; }
+.bk-group:has(+ .bk-side__foot) { border-bottom: 0; }
+
+@media (max-width: 640px) {
+  /* --- Карта: пошук на всю ширину, список знахідок під ним, а не за лівим краєм --- */
+  .mm-bar { gap: 10px; margin-bottom: 12px; }
+  .mm-search { flex: 1 1 100%; }
+  .mm-search > svg { top: 14px; }
+  .mm-search input { width: 100%; height: 44px; }
+  .mm-qlist { left: 0; right: 0; top: 50px; width: auto; max-height: 60vh; max-height: 60dvh; }
+  .mm-qitem { min-height: 44px; }
+
+  /* --- Роудмап: вузька колія ліворуч, усе інше — темам --- */
+  .mm-lane { grid-template-columns: 30px minmax(0, 1fr); gap: 10px; }
+  .mm-lane__dot { width: 28px; height: 28px; font-size: 12px; }
+  .mm-road::before { left: 13px; top: 32px; bottom: 32px; }
+  .mm-lane__prog { min-width: 0; flex: 1 1 100%; margin-left: 0; }
+
+  /* --- Карта й майнд-меп: рівно в екран між верхньою смугою й нижньою
+     панеллю — кнопки масштабу не ховаються під панель, а сторінку не
+     треба гортати, щоб до них дістатися --- */
+  .mm--map .mm-mapwrap, .mm--tree .mm-mapwrap {
+    height: calc(100vh - 54px - 58px - 144px);
+    height: calc(100dvh - 54px - 58px - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 144px);
+    min-height: 300px;
+  }
+  .mm-maplegend { display: none; }
+  .mm-maphint { white-space: normal; width: max-content; max-width: calc(100% - 24px); text-align: center; }
+  /* панель кнопок — на всю ширину, щоб «Розділи · Усі теми · Згорнути»
+     переносились, а не вилазили за край; порожнє місце в ній карту не
+     затуляє — крізь нього тягнуть далі */
+  .mm-mapui { left: 10px; right: 10px; bottom: 10px; pointer-events: none; }
+  .mm-mapui > * { pointer-events: auto; }
+
+  /* --- Шухляда теми — на весь екран, як сторінка застосунку; закривається
+     хрестиком або «Назад» (запис в історії ставить views-mathmap.js) --- */
+  .mm-drawer {
+    inset: 0; width: auto; border: 0; border-radius: 0; box-shadow: none;
+    padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);
+    animation: sheet-up .22s cubic-bezier(.2,.9,.3,1);
+  }
+  .mm-dr__close { width: 44px; height: 44px; right: 6px; top: 8px; }
+  .mm-dr__crumb { padding-right: 48px; }
+  .mm-dr__title { padding-right: 34px; }
+
+  /* --- Банк: «Фільтри» — шторка знизу поверх задач. Раніше вони
+     розгорталися над результатами шістдесятьма рядками, і до самих задач
+     треба було гортати кілька екранів. --- */
+  .bk-side.is-open {
+    position: fixed; left: 0; right: 0; bottom: 0; top: auto; z-index: 70;
+    max-height: 85vh; max-height: 85dvh; overflow-y: auto; overscroll-behavior: contain;
+    padding: 0 16px; border: 0; border-radius: 22px 22px 0 0;
+    background: var(--surface); box-shadow: var(--shadow-lg);
+    animation: sheet-up .22s cubic-bezier(.2,.9,.3,1);
+  }
+  .bk-side.is-open + .bk-scrim {
+    display: block; position: fixed; inset: 0; z-index: 69;
+    background: rgba(23, 22, 58, .42); touch-action: none;
+  }
+  .bk-side.is-open .bk-side__head {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    position: sticky; top: 0; z-index: 1; margin: 0 -16px; padding: 12px 10px 8px 16px;
+    background: var(--surface); border-bottom: 1px solid var(--line);
+    font-size: 17px; font-weight: 800; letter-spacing: -.3px;
+  }
+  .bk-side.is-open .bk-side__foot {
+    display: block; position: sticky; bottom: 0; z-index: 1;
+    margin: 0 -16px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    background: var(--surface); border-top: 1px solid var(--line);
+  }
+  .bk-side__foot .btn { width: 100%; min-height: 48px; justify-content: center; }
+  .bk-opt { min-height: 44px; padding: 10px 6px; }
+  .bk-opt input { width: 20px; height: 20px; }
+  .bk-sub .bk-opt { min-height: 40px; padding: 8px 4px; }
+}
+
+/* Дрібні «таблетки» — теги задач, звʼязки формул, теми роудмапу, «скинути» —
+   були заввишки 22–26 px: пальцем у них не влучити з першого разу. На
+   дотиковому екрані — не менше 36 px; миші вистачає й тонших. */
+@media (pointer: coarse) {
+  .bk-chip, .fx-chip, .bk-tag, .fx__link, .mm-chip, .bk-link, .chip--sm {
+    min-height: 36px; padding-top: 7px; padding-bottom: 7px;
+  }
+  .mm-caption__x { width: 40px; height: 40px; }
+  .mm-zoom button { width: 44px; height: 44px; }
+}

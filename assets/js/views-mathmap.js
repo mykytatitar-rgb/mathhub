@@ -358,7 +358,9 @@
         '<div class="tabs">' + tabs + '</div>' +
         scope +
         '<div class="mm-search">' + icon('search', 16) +
-          '<input id="mm-q" type="search" placeholder="Знайти тему…  ( / )" autocomplete="off" spellcheck="false">' +
+          // на телефоні: клавіша «Знайти», без автозаміни й великої літери на початку запиту
+          '<input id="mm-q" type="search" placeholder="Знайти тему…  ( / )" autocomplete="off" spellcheck="false"' +
+            ' enterkeyhint="search" autocapitalize="off" autocorrect="off">' +
           '<div class="mm-qlist" id="mm-qlist" hidden></div>' +
         '</div>' +
       '</div>' +
@@ -831,9 +833,14 @@
           '</div>' +
         '</div>' +
         '<div class="mm-caption" id="mm-caption" hidden></div>' +
-        '<div class="mm-maphint">Колесо — масштаб · тягни — рух · клік по домену, розділу чи темі — пояснення</div>' +
+        '<div class="mm-maphint">' + (touchy()
+          ? 'Тягни — рух · два пальці — масштаб · дотик — пояснення'
+          : 'Колесо — масштаб · тягни — рух · клік по домену, розділу чи темі — пояснення') + '</div>' +
       '</div>';
   }
+
+  /** Сенсорний екран — підказки про пальці, а не про колесо миші. */
+  function touchy() { return !!(window.C && C.touchy && C.touchy()); }
 
   /* Пояснення до домену чи розділу — як у Cognitive Bias Codex: спершу
      навіщо ця частина математики існує, а вже потім її теми. */
@@ -1115,61 +1122,146 @@
     applyView();
   }
 
-  function bindMap() {
-    var drag = null;
+  /* Миша й пальці на карті та на дереві — однаково.
+     Один палець (чи миша) тягне, два — масштабують навколо точки між ними
+     й водночас тягнуть, як карта в телефоні. Коротке торкання без руху —
+     дотик: відкрити тему чи пояснення. Раніше карта знала лише один
+     вказівник і колесо миші, тож на телефоні збільшити її можна було
+     тільки кнопками «+» і «−», а другий палець смикав карту вбік.
+     h: { view() → {tx, ty, k}, apply(), zoom(x, y, factor), tap(element), moved() } */
+  function bindGestures(svg, h) {
+    var pts = {};          // пальці, що зараз на полотні: id → {x, y}
+    var drag = null;       // один палець чи миша: звідки почали тягнути
+    var pinch = null;      // два пальці: відстань і середина на попередньому кроці
 
-    svgEl.addEventListener('wheel', function (e) {
+    function local(x, y) {
+      var r = svg.getBoundingClientRect();
+      return { x: x - r.left, y: y - r.top };
+    }
+    function twoFingers() {
+      var ids = Object.keys(pts), a = pts[ids[0]], b = pts[ids[1]];
+      var m = local((a.x + b.x) / 2, (a.y + b.y) / 2);
+      return { d: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), x: m.x, y: m.y };
+    }
+
+    svg.addEventListener('wheel', function (e) {
       e.preventDefault();
-      var r = svgEl.getBoundingClientRect();
-      zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0016));
+      var p = local(e.clientX, e.clientY);
+      h.moved();
+      h.zoom(p.x, p.y, Math.exp(-e.deltaY * 0.0016));
     }, { passive: false });
 
-    svgEl.addEventListener('pointerdown', function (e) {
+    svg.addEventListener('pointerdown', function (e) {
       if (e.button !== 0) return;
-      drag = { x: e.clientX, y: e.clientY, tx: VIEW.tx, ty: VIEW.ty, moved: false, target: e.target };
-      try { svgEl.setPointerCapture(e.pointerId); } catch (err) { /* не критично */ }
+      pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+      try { svg.setPointerCapture(e.pointerId); } catch (err) { /* не критично */ }
+      var n = Object.keys(pts).length;
+      if (n === 1) {
+        var v = h.view();
+        drag = { id: e.pointerId, x: e.clientX, y: e.clientY, tx: v.tx, ty: v.ty, moved: false, target: e.target,
+                 // палець тремтить сильніше за мишу — дотик не має ставати тягненням через кілька пікселів
+                 slop: e.pointerType === 'mouse' ? 4 : 8 };
+      } else if (n === 2) {
+        // другий палець: це вже масштаб, а не тягнення й не дотик
+        drag = null;
+        svg.classList.remove('is-drag');
+        pinch = twoFingers();
+        h.moved();
+      }
     });
-    svgEl.addEventListener('pointermove', function (e) {
-      if (!drag) return;
+
+    svg.addEventListener('pointermove', function (e) {
+      var p = pts[e.pointerId];
+      if (!p) return;
+      p.x = e.clientX; p.y = e.clientY;
+      if (pinch) {
+        if (Object.keys(pts).length < 2) return;
+        /* Спершу зсув на рух середини, потім масштаб навколо неї: точка карти
+           між пальцями так і лишається між ними. */
+        var now = twoFingers(), v = h.view();
+        v.tx += now.x - pinch.x;
+        v.ty += now.y - pinch.y;
+        h.zoom(now.x, now.y, now.d / pinch.d);
+        pinch = now;
+        return;
+      }
+      if (!drag || drag.id !== e.pointerId) return;
       var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-      if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+      if (!drag.moved && Math.hypot(dx, dy) < drag.slop) return;
       drag.moved = true;
-      svgEl.classList.add('is-drag');
-      VIEW.tx = drag.tx + dx;
-      VIEW.ty = drag.ty + dy;
-      applyView();
+      h.moved();
+      svg.classList.add('is-drag');
+      var vw = h.view();
+      vw.tx = drag.tx + dx;
+      vw.ty = drag.ty + dy;
+      h.apply();
     });
-    svgEl.addEventListener('pointerup', function () {
-      if (!drag) return;
+
+    function lift(e) {
+      if (!pts[e.pointerId]) return;
+      delete pts[e.pointerId];
+      var left = Object.keys(pts);
+      if (pinch) {
+        if (left.length >= 2) return;
+        pinch = null;
+        /* Палець, що лишився, тягне далі з того місця, де карта зараз, — а
+           його відпускання вже не дотик: це кінець жесту, а не вибір теми. */
+        if (left.length === 1) {
+          var p = pts[left[0]], v = h.view();
+          drag = { id: Number(left[0]), x: p.x, y: p.y, tx: v.tx, ty: v.ty, moved: true, target: null, slop: 0 };
+        }
+        return;
+      }
+      if (!drag || drag.id !== e.pointerId) return;
       var d = drag;
       drag = null;
-      svgEl.classList.remove('is-drag');
-      if (d.moved) return;
+      svg.classList.remove('is-drag');
+      // скасування — браузер забрав жест собі (системний свайп), це не дотик
+      if (d.moved || e.type !== 'pointerup') return;
+      h.tap(d.target);
+    }
+    svg.addEventListener('pointerup', lift);
+    svg.addEventListener('pointercancel', lift);
+    /* Палець, про чиє відпускання ми так і не почули, лишився б «на
+       полотні» назавжди — і наступний дотик одним пальцем уже вважався б
+       масштабом двома. Після звичайного відпускання цей виклик нічого не робить. */
+    svg.addEventListener('lostpointercapture', lift);
+  }
 
-      var el = d.target;
-      var t = el.closest && el.closest('[data-id]');
-      if (t) { openTopic(t.getAttribute('data-id'), { keepView: true }); return; }
-
-      var band = el.closest && el.closest('[data-dom]');
-      if (band) {
-        var did = band.getAttribute('data-dom');
-        var dp = layout().dom[did];
-        fitSector(dp.a0, dp.a1, R_BAND - 40, rTopic(6) + 260);
-        showCaption('dom', did);
-        return;
-      }
-      var sec = el.closest && el.closest('[data-sec]');
-      if (sec) {
-        var sid = sec.getAttribute('data-sec');
-        var sp = layout().sec[sid];
-        fitSector(sp.a0 - 1, sp.a1 + 1, R_SEC - 260, rTopic(6) + 300);
-        showCaption('sec', sid);
-        return;
-      }
-      if (el.closest && el.closest('[data-root]')) { VIEW = homeView(); applyView(); hideCaption(); return; }
-      hideCaption();
-      if (selected) closeDrawer();
+  function bindMap() {
+    bindGestures(svgEl, {
+      view: function () { return VIEW; },
+      apply: applyView,
+      zoom: zoomAt,
+      moved: function () {},
+      tap: mapTap
     });
+  }
+
+  /** Дотик чи клік по карті без руху: тема, домен, розділ, центр — або порожнє місце. */
+  function mapTap(el) {
+    var t = el.closest && el.closest('[data-id]');
+    if (t) { openTopic(t.getAttribute('data-id'), { keepView: true }); return; }
+
+    var band = el.closest && el.closest('[data-dom]');
+    if (band) {
+      var did = band.getAttribute('data-dom');
+      var dp = layout().dom[did];
+      fitSector(dp.a0, dp.a1, R_BAND - 40, rTopic(6) + 260);
+      showCaption('dom', did);
+      return;
+    }
+    var sec = el.closest && el.closest('[data-sec]');
+    if (sec) {
+      var sid = sec.getAttribute('data-sec');
+      var sp = layout().sec[sid];
+      fitSector(sp.a0 - 1, sp.a1 + 1, R_SEC - 260, rTopic(6) + 300);
+      showCaption('sec', sid);
+      return;
+    }
+    if (el.closest && el.closest('[data-root]')) { VIEW = homeView(); applyView(); hideCaption(); return; }
+    hideCaption();
+    if (selected) closeDrawer();
   }
 
   /* ============================================================
@@ -1342,7 +1434,10 @@
       }
 
       if (n.children.length) {
-        g.push('<g class="mt-chev" data-tt="' + esc(n.key) + '"><circle cx="' + f1(n.x + n.w) + '" cy="' + f1(n.y) + '" r="11"/>' +
+        // перше коло — невидима ширша ціль для пальця (див. .mt-hit в app.css)
+        g.push('<g class="mt-chev" data-tt="' + esc(n.key) + '">' +
+          '<circle class="mt-hit" cx="' + f1(n.x + n.w) + '" cy="' + f1(n.y) + '" r="22"/>' +
+          '<circle cx="' + f1(n.x + n.w) + '" cy="' + f1(n.y) + '" r="11"/>' +
           '<text x="' + f1(n.x + n.w) + '" y="' + f1(n.y) + '" dy="0.36em" text-anchor="middle">' + (open ? '‹' : '›') + '</text></g>');
       }
       g.push('</g>');
@@ -1468,55 +1563,35 @@
             '<button class="btn btn--ghost btn--sm" data-mm="tree" data-arg="none">Згорнути</button>' +
           '</div>' +
         '</div>' +
-        '<div class="mm-maphint">Стрілка розгортає гілку · клік по темі відкриває конспект · колесо — масштаб</div>' +
+        '<div class="mm-maphint">' + (touchy()
+          ? 'Стрілка розгортає гілку · дотик по темі — конспект · два пальці — масштаб'
+          : 'Стрілка розгортає гілку · клік по темі відкриває конспект · колесо — масштаб') + '</div>' +
       '</div>';
   }
 
   function bindTree() {
-    var drag = null;
-
-    treeSvg.addEventListener('wheel', function (e) {
-      e.preventDefault();
-      var r = treeSvg.getBoundingClientRect();
-      treeMoved = true;
-      treeZoom(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0016));
-    }, { passive: false });
-
-    treeSvg.addEventListener('pointerdown', function (e) {
-      if (e.button !== 0) return;
-      drag = { x: e.clientX, y: e.clientY, tx: TVIEW.tx, ty: TVIEW.ty, moved: false, target: e.target };
-      try { treeSvg.setPointerCapture(e.pointerId); } catch (err) { /* не критично */ }
+    bindGestures(treeSvg, {
+      view: function () { return TVIEW; },
+      apply: applyTreeView,
+      zoom: treeZoom,
+      // рухав дерево сам — не підганяти його під екран без попиту
+      moved: function () { treeMoved = true; },
+      tap: treeTap
     });
-    treeSvg.addEventListener('pointermove', function (e) {
-      if (!drag) return;
-      var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-      if (!drag.moved && Math.hypot(dx, dy) < 4) return;
-      drag.moved = true;
-      treeMoved = true;
-      treeSvg.classList.add('is-drag');
-      TVIEW.tx = drag.tx + dx;
-      TVIEW.ty = drag.ty + dy;
-      applyTreeView();
-    });
-    treeSvg.addEventListener('pointerup', function () {
-      if (!drag) return;
-      var d = drag;
-      drag = null;
-      treeSvg.classList.remove('is-drag');
-      if (d.moved) return;
+  }
 
-      var el = d.target;
-      var chev = el.closest && el.closest('[data-tt]');
-      if (chev) { toggleBranch(chev.getAttribute('data-tt')); return; }
-      var node = el.closest && el.closest('[data-tk]');
-      if (node) {
-        var key = node.getAttribute('data-tk');
-        if (key.indexOf('t:') === 0) openTopic(key.slice(2), { keepView: true });
-        else if (key !== 'root' || !TREE_OPEN.root) toggleBranch(key);
-        return;
-      }
-      if (selected) closeDrawer();
-    });
+  /** Дотик чи клік по дереву без руху: стрілка гілки, вузол — або порожнє місце. */
+  function treeTap(el) {
+    var chev = el.closest && el.closest('[data-tt]');
+    if (chev) { toggleBranch(chev.getAttribute('data-tt')); return; }
+    var node = el.closest && el.closest('[data-tk]');
+    if (node) {
+      var key = node.getAttribute('data-tk');
+      if (key.indexOf('t:') === 0) openTopic(key.slice(2), { keepView: true });
+      else if (key !== 'root' || !TREE_OPEN.root) toggleBranch(key);
+      return;
+    }
+    if (selected) closeDrawer();
   }
 
   /** Після кожного рендеру: оживити карту й шухляду — або прибрати їх, якщо карти на сторінці немає. */
@@ -1897,6 +1972,17 @@
         }).join('')
       : '<div class="mm-qempty">Нічого не знайдено</div>';
     box.hidden = false;
+
+    /* Список ширший за поле й прикладений до його правого краю — так він
+       не вилазить за правий край, коли поле праворуч. Але у вужчому вікні
+       поле переїжджає на початок рядка, і тоді список ховався за лівим
+       краєм сторінки (під бічною панеллю). Тоді — прикладаємо до лівого. */
+    box.style.left = box.style.right = '';
+    var main = document.getElementById('main');
+    if (main && box.getBoundingClientRect().left < main.getBoundingClientRect().left + 8) {
+      box.style.left = '0';
+      box.style.right = 'auto';
+    }
   }
 
   function pickSearch(id) {

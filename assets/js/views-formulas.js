@@ -417,7 +417,8 @@
         '<button class="' + (en() ? 'is-on' : '') + '" data-act="fx-lang" data-arg="en" lang="en">ENG</button>' +
       '</div>' +
       '<input class="ref__q" data-ref-q type="search" placeholder="' + T('Знайти формулу…', 'Find a formula…') + '" ' +
-        'value="' + U.esc(q || '') + '" autocomplete="off">' +
+        // на телефоні: клавіша «Знайти», без автозаміни й великої літери на початку запиту
+        'value="' + U.esc(q || '') + '" autocomplete="off" enterkeyhint="search" autocapitalize="off" autocorrect="off" spellcheck="false">' +
       '<button class="btn btn--ghost btn--sm" data-act="sheet-print">' + icon('download', 15) + T('Друк', 'Print') + '</button>' +
       /* Англійські шпаргалки — лише в англійському режимі: в українському
          це була б єдина англійська річ на сторінці. */

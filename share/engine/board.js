@@ -16,8 +16,19 @@
 
   var MIN_SCALE = 0.02, MAX_SCALE = 32;   // від 2% до 3200%
   var HANDLE_PX = 10;
+  /* Скільки пікселів палець може «проїхати», лишаючись дотиком, а не рухом.
+     Так рахують і самі телефони: менше — і тремтіння руки зривало б дотик. */
+  var TAP_SLOP = 8;
 
   function round(n) { return Math.round(n * 10) / 10; }
+
+  /* Головний вказівник — палець (телефон, планшет), а не миша. Від цього
+     залежать роздільність полотна й те, як воно поводиться, коли екран
+     повернули. Питаємо щоразу: розмір вікна й пристрій можуть змінитися. */
+  function coarse() {
+    try { return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); }
+    catch (e) { return false; }
+  }
 
   function uid(p) { return p + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
@@ -2368,6 +2379,15 @@
     canvas.addEventListener('wheel', this._onWheel, { passive: false });
     canvas.addEventListener('contextmenu', this._onCtx);
     window.addEventListener('resize', this._onResize);
+    /* Полотно міняє розмір не лише разом із вікном: телефон повертають,
+       згортається стрічка слайдів, зʼявляються й зникають панелі браузера.
+       Вікно про це каже не завжди, а саме полотно — завжди. */
+    if (window.ResizeObserver) {
+      try {
+        this._ro = new ResizeObserver(function () { self.resize(); });
+        this._ro.observe(canvas);
+      } catch (e) { this._ro = null; }
+    }
 
     this.resize();
   }
@@ -2380,6 +2400,7 @@
     this.canvas.removeEventListener('wheel', this._onWheel);
     this.canvas.removeEventListener('contextmenu', this._onCtx);
     window.removeEventListener('resize', this._onResize);
+    if (this._ro) { try { this._ro.disconnect(); } catch (e) {} this._ro = null; }
     if (this._raf) cancelAnimationFrame(this._raf);
     this._ink = null;                    // шар — це кілька мегабайтів памʼяті
   };
@@ -2421,6 +2442,8 @@
     svFit = null;
     this.band = null;
     this._placeDown = null;
+    this._tapWait = null;                // точка, лінія чи текст, що чекали, поки палець підніметься
+    this._eraseWait = null;
     ids.forEach(function (id) { delete self._pointers[id]; delete self._kinds[id]; });
     if (!touched) return;
 
@@ -2450,13 +2473,30 @@
 
   Board.prototype.resize = function () {
     var r = this.canvas.getBoundingClientRect();
-    var dpr = window.devicePixelRatio || 1;
+    var touch = coarse();
+    /* На телефоні — щонайбільше два пікселі полотна на точку екрана, а не
+       три: оком різниці не видно, а полотно разом із шаром письма важило
+       втричі більше памʼяті й повільніше малювалось. */
+    var dpr = Math.min(window.devicePixelRatio || 1, touch ? 2 : 3);
+    // нічого не змінилось (спрацювали і вікно, і спостерігач) — полотно не чіпаємо
+    if (r.width === this.cssW && r.height === this.cssH && dpr === this.dpr) return;
+
+    /* Телефон повернули чи сховали панель — посередині екрана лишається те
+       саме місце креслення, а не лівий верхній кут: інакше після повороту
+       написане зʼїжджало за край. На компʼютері — як і було. */
+    var moved = false;
+    if (touch && this.cssW && this.cssH && r.width && r.height && this.scale) {
+      this.cam.x += (this.cssW - r.width) / (2 * this.scale);
+      this.cam.y += (this.cssH - r.height) / (2 * this.scale);
+      moved = true;
+    }
     this.cssW = r.width;
     this.cssH = r.height;
     this.canvas.width = Math.max(1, Math.round(r.width * dpr));
     this.canvas.height = Math.max(1, Math.round(r.height * dpr));
     this.dpr = dpr;
-    this.render();
+    // камера зсунулась — панель над виділеним і масштаб теж мають про це знати
+    if (moved) this.viewChanged(); else this.render();
   };
 
   /* ---------- Слайд ---------- */
@@ -2491,10 +2531,30 @@
     this.syncConstructions();
 
     if (!keepView) {
-      if (slide && slide.view) {
+      var v = slide && slide.view;
+      /* Телефон чи планшет, а слайд готували на ноутбуці: збережений вигляд
+         ширший за цей екран. Досі він відкривався тим самим масштабом від
+         лівого верхнього кута — і на телефоні було видно чверть слайда.
+         Тепер той самий прямокутник креслення вміщується в екран. На
+         компʼютері — як і було: вигляд саме такий, яким його зберегли. */
+      var small = this.cssW && (this.cssW < 700 || coarse());
+      var vs = v ? (v.s || 1) : 1;
+      var fitK = v && v.w && v.h ? Math.min(this.cssW / v.w, this.cssH / v.h) : 1;
+      if (v && v.w && v.h && small && fitK < 1 &&
+          (v.w - this.cssW > 40 || v.h - this.cssH > 40)) {
+        var cx = (v.x || 0) + v.w / (2 * vs), cy = (v.y || 0) + v.h / (2 * vs);
+        this.scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, vs * fitK));
+        this.cam = { x: cx - this.cssW / (2 * this.scale), y: cy - this.cssH / (2 * this.scale) };
+        this.viewChanged();
+      } else if (v && !v.w && this.cssW && this.cssW < 700 && slide.items && slide.items.length) {
+        /* Вигляд, збережений ще без розміру екрана, — майже напевно на
+           ноутбуці: на вузькому телефоні показуємо просто все написане.
+           Планшет відкриває такий вигляд, як і раніше: на ньому теж готують. */
+        this.fit();
+      } else if (v) {
         // слайд відкривається саме там, де його залишили при створенні вмісту
-        this.scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, slide.view.s || 1));
-        this.cam = { x: slide.view.x || 0, y: slide.view.y || 0 };
+        this.scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, vs));
+        this.cam = { x: v.x || 0, y: v.y || 0 };
         this.viewChanged();
       } else if (slide && slide.items && slide.items.length) {
         this.fit();
@@ -2798,7 +2858,11 @@
   Board.prototype.fit = function () {
     var b = unionBounds(this.items());
     if (!b) { this.resetView(); return; }
-    var pad = 60;
+    /* Поля по краях на телефоні — від розміру екрана: 60 px з кожного боку
+       зʼїдали третину ширини. На компʼютері — ті самі 60, що й були. */
+    var pad = this.cssW < 700 || coarse()
+      ? Math.max(12, Math.min(60, Math.min(this.cssW, this.cssH) * 0.06))
+      : 60;
     var w = Math.max(1, b.x2 - b.x1), h = Math.max(1, b.y2 - b.y1);
     this.scale = Math.max(MIN_SCALE, Math.min(2,
       Math.min((this.cssW - pad * 2) / w, (this.cssH - pad * 2) / h)));
@@ -3003,7 +3067,8 @@
   Board.prototype._handleAt = function (x, y) {
     var hs = this._handles();
     if (!hs) return null;
-    var tol = HANDLE_PX / this.scale;
+    // палець закриває маркер, у який цілиться: 24 px замість 10 (маркер і намальовано більшим)
+    var tol = HANDLE_PX * (this._coarse ? 2.4 : 1) / this.scale;
 
     /* Беремо НАЙБЛИЖЧИЙ, а не перший підхожий. На віддаленому масштабі
        допуск у світових одиницях великий, і в нього потрапляє одразу
@@ -3200,7 +3265,8 @@
 
   Board.prototype._hitTest = function (x, y) {
     this.syncConstructions();
-    var tol = 8 / this.scale;
+    // пальцем у тонку лінію з 8 px не влучити — для дотику 18
+    var tol = (this._coarse ? 18 : 8) / this.scale;
     var items = this.items();
 
     /* Точка виграє в лінії, що крізь неї проходить.
@@ -3245,13 +3311,18 @@
     var p = this.eventPos(e);
     this.lastPointer = p;
     var w = this.toWorld(p.x, p.y);
+    var kind = e.pointerType || 'mouse';
+    /* Палець товщий за курсор: у ціль, маркер і точку ним влучають з
+       більшим допуском (див. _hitTest, _handleAt). */
+    this._coarse = kind === 'touch';
 
-    /* Текст: полотно не має ні захоплювати вказівник, ні дозволяти
+    /* Текст мишею: полотно не має ні захоплювати вказівник, ні дозволяти
        стандартну дію mousedown — інакше вона забирає фокус
-       у щойно створеного поля введення, і воно закривається порожнім. */
-    if (!this.readOnly && this.tool === 'text' && e.button === 0 && !this.spaceDown) {
+       у щойно створеного поля введення, і воно закривається порожнім.
+       Пальцем і стилусом — нижче: поле зʼявляється, коли їх піднімуть. */
+    if (!this.readOnly && this.tool === 'text' && e.button === 0 && !this.spaceDown && kind === 'mouse') {
       e.preventDefault();
-      if (this.opts.onTextPlace) this.opts.onTextPlace(w, p);
+      if (this.opts.onTextPlace) this.opts.onTextPlace(w, p, kind);
       return;
     }
 
@@ -3261,7 +3332,6 @@
        не діють; долоня, що лягла раніше за перо, прибирається, щойно перо
        торкнулось. Відколи на цьому пристрої писали стилусом, один палець
        рухає полотно, а не пише (два — як і досі, масштаб). */
-    var kind = e.pointerType || 'mouse';
     var self0 = this;
     if (kind === 'pen') {
       this._penSeen = true;
@@ -3287,12 +3357,29 @@
     this._kinds[e.pointerId] = kind;
 
     var ids = Object.keys(this._pointers);
-    if (ids.length === 2) {
+    /* Третій палець — теж частина жесту, а не новий штрих: досі він починав
+       писати посеред масштабу. Рух і масштаб ведуть перші два. */
+    if (ids.length >= 2) {
       var a = this._pointers[ids[0]], b = this._pointers[ids[1]];
-      this._pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y) };
-      this.draft = null;
-      this.band = null;
-      this._placeDown = null;          // два пальці — це масштаб, а не «поклади тут»
+      /* Другий палець — це рух і масштаб, а не продовження того, що почав
+         перший. Усе, що він устиг почати (штрих, фігуру, гумку, перетягування,
+         рамку), скасовується цілком, разом із кроком історії — так само, як
+         дотик долоні поруч зі стилусом. Досі лишались зайві точки, стерте й
+         порожній «крок назад». */
+      this._dropPalm([]);
+      this._pan = null;
+      // запамʼятовуємо й середину між пальцями: за нею полотно й рухається
+      this._pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+      this.render();
+      return;
+    }
+
+    /* Текст пальцем чи стилусом: поле — коли палець піднімуть. Саме тоді
+       iPhone дозволяє відкрити клавіатуру (це дія людини, а не таймер), і
+       дотик, що виявився початком масштабу, нічого не ставить. */
+    if (!this.readOnly && this.tool === 'text' && !this.spaceDown) {
+      e.preventDefault();
+      this._tapWait = { id: e.pointerId, x: p.x, y: p.y, w: w, what: 'text' };
       return;
     }
 
@@ -3316,10 +3403,18 @@
     }
 
     if (this.tool === 'eraser') {
-      this.snapshot();
-      this._erasing = true;
-      this._erasedIds = [];                 // що стерла саме ця гумка (для _rebaseTop)
-      this._erase(w.x, w.y);
+      /* Пальцем гумка починає стирати з першого руху, а не з дотику: дотик
+         міг виявитися першим пальцем масштабу — і штрих під ним зникав. */
+      if (kind === 'touch') { this._eraseWait = { id: e.pointerId, w: w }; return; }
+      this._startErase(w);
+      return;
+    }
+
+    /* Точку й лінію пальцем ставимо, коли його підняли, а не в мить
+       дотику: дотик міг стати початком масштабу двома пальцями, і на
+       кресленні лишалась би зайва точка. Миша й стилус — одразу, як було. */
+    if ((this.tool === 'point' || this.tool === 'link') && kind === 'touch') {
+      this._tapWait = { id: e.pointerId, x: p.x, y: p.y, w: w, what: this.tool };
       return;
     }
 
@@ -3393,87 +3488,8 @@
       return;
     }
 
-    /* Точка ставиться одним клацанням. Тягнути нічого не треба — і саме
-       тому вона зручна: креслення будується швидше за розмову про нього. */
-    if (this.tool === 'point') {
-      this.snapshot();
-      var snapP = window.Points
-        ? Points.snap(w.x, w.y, this.items())
-        : { p: [w.x, w.y] };
-      var np = { t: 'o', id: uid('pt'), c: this.color, w: this.width,
-                 r: this.pointSize || 0,
-                 n: window.Points ? Points.nameFor(snapP, this.items()) : '',
-                 p: [round(snapP.p[0]), round(snapP.p[1])] };
-      if (snapP.on) np.on = snapP.on;
-      this.slide.items.push(np);
-      this.changed();
-      return;
-    }
-
-    /* Зʼєднання: клацнули першу точку, клацнули другу — між ними відрізок.
-       Проміжний стан живе в самому рушії, бо він скороминущий: перемкнули
-       інструмент — і він зник, нічого по собі не лишивши. */
-    if (this.tool === 'link') {
-      var self = this;
-
-      /* Радіус влучання — у пікселях екрана, а не в координатах дошки.
-         Інакше на віддаленому масштабі точка стає недосяжною: вона на
-         вигляд там само, а зона влучання зменшується разом із кресленням. */
-      var grab = Math.max(14, this.width * 4) / this.scale;
-      var byId = idMap(this.items());
-
-      var hitP = null, bestD = Infinity;
-      this.items().forEach(function (x) {
-        if (x.t !== 'o') return;
-        var q = window.Points ? Points.at(x, byId) : x.p;
-        if (!q) return;
-        var d = Math.hypot(w.x - q[0], w.y - q[1]);
-        // у великої точки зона влучання не менша за саму точку
-        var g = Math.max(grab, pointR(x) * 1.4);
-        if (d <= g && d < bestD) { bestD = d; hitP = x; }
-      });
-
-      /* Точки поруч немає — ставимо її тут же й ведемо далі. Раніше клік
-         повз точку мовчки скасовував початий звʼязок: людина клацала двічі
-         й вирішувала, що інструмент не працює. Тепер провести лінію можна
-         з порожнього місця, а точки зʼявляться самі. */
-      if (!hitP) {
-        var snapL = window.Points
-          ? Points.snap(w.x, w.y, this.items())
-          : { p: [w.x, w.y] };
-        this.snapshot();
-        hitP = { t: 'o', id: uid('pt'), c: this.color, w: this.width,
-                 r: this.pointSize || 0,
-                 n: window.Points ? Points.nameFor(snapL, this.items()) : '',
-                 p: [round(snapL.p[0]), round(snapL.p[1])] };
-        if (snapL.on) hitP.on = snapL.on;
-        this.slide.items.push(hitP);
-      }
-
-      if (!this.linkFrom) { this.linkFrom = hitP.id; this.changed(); return; }
-      if (this.linkFrom === hitP.id) { this.linkFrom = null; this.render(); return; }
-
-      var pair = [this.linkFrom, hitP.id].sort().join('|');
-      var dup = this.items().some(function (x) {
-        return x.t === 'c' && [x.a1, x.a2].sort().join('|') === pair;
-      });
-      if (!dup) {
-        this.snapshot();
-        var aligned = this._alignTangent(byId[this.linkFrom], hitP, byId);
-        var nl = { t: 'c', id: uid('ln'), c: this.color, w: this.linkW(),
-                   a1: this.linkFrom, a2: hitP.id };
-        if (this.linkKind && this.linkKind !== 'seg') nl.k = this.linkKind;
-        if (this.linkDash) nl.dash = 1;
-        this.slide.items.push(nl);
-        this.linkFrom = null;
-        this.changed();
-        if (aligned && this.opts.onTangent) this.opts.onTangent(aligned);
-      } else {
-        this.linkFrom = null;
-        this.changed();          // могла зʼявитися нова точка — її треба зберегти
-      }
-      return;
-    }
+    if (this.tool === 'point') { this._pointAt(w); return; }
+    if (this.tool === 'link') { this._linkAt(w); return; }
 
     if (this.tool === 'solid') {
       this.snapshot();
@@ -3510,6 +3526,93 @@
     }
   };
 
+  /** Гумка торкнулась: крок історії й перше стирання. */
+  Board.prototype._startErase = function (w) {
+    this.snapshot();
+    this._erasing = true;
+    this._erasedIds = [];                 // що стерла саме ця гумка (для _rebaseTop)
+    this._erase(w.x, w.y);
+  };
+
+  /* Точка ставиться одним клацанням. Тягнути нічого не треба — і саме
+     тому вона зручна: креслення будується швидше за розмову про нього. */
+  Board.prototype._pointAt = function (w) {
+    this.snapshot();
+    var snapP = window.Points
+      ? Points.snap(w.x, w.y, this.items())
+      : { p: [w.x, w.y] };
+    var np = { t: 'o', id: uid('pt'), c: this.color, w: this.width,
+               r: this.pointSize || 0,
+               n: window.Points ? Points.nameFor(snapP, this.items()) : '',
+               p: [round(snapP.p[0]), round(snapP.p[1])] };
+    if (snapP.on) np.on = snapP.on;
+    this.slide.items.push(np);
+    this.changed();
+  };
+
+  /* Зʼєднання: клацнули першу точку, клацнули другу — між ними відрізок.
+     Проміжний стан живе в самому рушії, бо він скороминущий: перемкнули
+     інструмент — і він зник, нічого по собі не лишивши. */
+  Board.prototype._linkAt = function (w) {
+    /* Радіус влучання — у пікселях екрана, а не в координатах дошки.
+       Інакше на віддаленому масштабі точка стає недосяжною: вона на
+       вигляд там само, а зона влучання зменшується разом із кресленням.
+       Пальцем — ширший: він закриває саму точку, у яку цілиться. */
+    var grab = Math.max(this._coarse ? 22 : 14, this.width * 4) / this.scale;
+    var byId = idMap(this.items());
+
+    var hitP = null, bestD = Infinity;
+    this.items().forEach(function (x) {
+      if (x.t !== 'o') return;
+      var q = window.Points ? Points.at(x, byId) : x.p;
+      if (!q) return;
+      var d = Math.hypot(w.x - q[0], w.y - q[1]);
+      // у великої точки зона влучання не менша за саму точку
+      var g = Math.max(grab, pointR(x) * 1.4);
+      if (d <= g && d < bestD) { bestD = d; hitP = x; }
+    });
+
+    /* Точки поруч немає — ставимо її тут же й ведемо далі. Раніше клік
+       повз точку мовчки скасовував початий звʼязок: людина клацала двічі
+       й вирішувала, що інструмент не працює. Тепер провести лінію можна
+       з порожнього місця, а точки зʼявляться самі. */
+    if (!hitP) {
+      var snapL = window.Points
+        ? Points.snap(w.x, w.y, this.items())
+        : { p: [w.x, w.y] };
+      this.snapshot();
+      hitP = { t: 'o', id: uid('pt'), c: this.color, w: this.width,
+               r: this.pointSize || 0,
+               n: window.Points ? Points.nameFor(snapL, this.items()) : '',
+               p: [round(snapL.p[0]), round(snapL.p[1])] };
+      if (snapL.on) hitP.on = snapL.on;
+      this.slide.items.push(hitP);
+    }
+
+    if (!this.linkFrom) { this.linkFrom = hitP.id; this.changed(); return; }
+    if (this.linkFrom === hitP.id) { this.linkFrom = null; this.render(); return; }
+
+    var pair = [this.linkFrom, hitP.id].sort().join('|');
+    var dup = this.items().some(function (x) {
+      return x.t === 'c' && [x.a1, x.a2].sort().join('|') === pair;
+    });
+    if (!dup) {
+      this.snapshot();
+      var aligned = this._alignTangent(byId[this.linkFrom], hitP, byId);
+      var nl = { t: 'c', id: uid('ln'), c: this.color, w: this.linkW(),
+                 a1: this.linkFrom, a2: hitP.id };
+      if (this.linkKind && this.linkKind !== 'seg') nl.k = this.linkKind;
+      if (this.linkDash) nl.dash = 1;
+      this.slide.items.push(nl);
+      this.linkFrom = null;
+      this.changed();
+      if (aligned && this.opts.onTangent) this.opts.onTangent(aligned);
+    } else {
+      this.linkFrom = null;
+      this.changed();          // могла зʼявитися нова точка — її треба зберегти
+    }
+  };
+
   /** Напівпрозора заливка з того ж кольору, що й контур. */
   function fillFrom(color) {
     var m = /^#([0-9a-f]{6})$/i.exec(color || '');
@@ -3527,12 +3630,35 @@
     if (this._pointers[e.pointerId]) this._pointers[e.pointerId] = p;
 
     var ids = Object.keys(this._pointers);
-    if (ids.length === 2 && this._pinch) {
+    if (ids.length >= 2 && this._pinch) {
       var a = this._pointers[ids[0]], b = this._pointers[ids[1]];
       var d = Math.hypot(a.x - b.x, a.y - b.y);
-      if (this._pinch.dist > 0) this.zoomAt(d / this._pinch.dist, (a.x + b.x) / 2, (a.y + b.y) / 2);
+      var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      /* Два пальці — і масштаб, і рух, як у будь-якій карті: місце
+         креслення, що було між пальцями, лишається між ними. Досі полотно
+         лише масштабувалося, а рухати його на телефоні без стилуса можна
+         було тільки «рукою» — останньою кнопкою на панелі. */
+      var pin = this.toWorld(this._pinch.mx, this._pinch.my);
+      if (this._pinch.dist > 0) {
+        this.scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, this.scale * d / this._pinch.dist));
+      }
+      this.cam.x = pin.x - mx / this.scale;
+      this.cam.y = pin.y - my / this.scale;
       this._pinch.dist = d;
+      this._pinch.mx = mx;
+      this._pinch.my = my;
+      this.viewChanged();
       return;
+    }
+
+    /* Палець, що мав поставити точку чи текст, поїхав далі за дотик — це
+       рух полотна, а не дотик. Без цього на телефоні без стилуса полотно з
+       точкою чи текстом у руці не рухалось ніяк, крім двох пальців. */
+    var tw = this._tapWait;
+    if (tw && tw.id === e.pointerId && Math.hypot(p.x - tw.x, p.y - tw.y) > TAP_SLOP) {
+      this._tapWait = null;
+      this._pan = { sx: tw.x, sy: tw.y, camx: this.cam.x, camy: this.cam.y,
+                    touch: this._kinds[e.pointerId] === 'touch' };
     }
 
     if (this._pan) {
@@ -3545,6 +3671,13 @@
     var w = this.toWorld(p.x, p.y);
 
     if (this.placing) { this.placing.at = w; this.render(); return; }
+
+    // гумка пальцем: перший рух — і стирає звідти, де торкнулась
+    if (this._eraseWait && this._eraseWait.id === e.pointerId) {
+      var ew = this._eraseWait;
+      this._eraseWait = null;
+      this._startErase(ew.w);
+    }
 
     if (this._erasing) { this._erase(w.x, w.y); return; }
 
@@ -3656,9 +3789,41 @@
   Board.prototype._pointerUp = function (e) {
     // дотик, відкинутий як долоня (у _pointers його немає), нічого не закінчує
     if (!this._pointers[e.pointerId] && e.pointerType === 'touch') return;
+    var upKind = this._kinds[e.pointerId] || e.pointerType || 'mouse';
     delete this._pointers[e.pointerId];
     delete this._kinds[e.pointerId];
-    if (Object.keys(this._pointers).length < 2) this._pinch = null;
+    var left = Object.keys(this._pointers);
+    if (left.length < 2) this._pinch = null;
+    else if (this._pinch) {
+      /* Підняли один із трьох пальців — жест ведуть ті два, що лишились.
+         Відлік беремо від них, інакше полотно стрибнуло б на різницю. */
+      var la = this._pointers[left[0]], lb = this._pointers[left[1]];
+      this._pinch = { dist: Math.hypot(la.x - lb.x, la.y - lb.y), mx: (la.x + lb.x) / 2, my: (la.y + lb.y) / 2 };
+    }
+
+    /* Дотик без руху й без другого пальця — тепер саме час поставити точку,
+       лінію чи поле тексту. Перерваний дотик (дзвінок, системний жест)
+       не ставить нічого. */
+    if (this._tapWait && this._tapWait.id === e.pointerId) {
+      var tw = this._tapWait;
+      this._tapWait = null;
+      if (e.type !== 'pointercancel' && tw.what === this.tool) {
+        if (tw.what === 'point') this._pointAt(tw.w);
+        else if (tw.what === 'link') this._linkAt(tw.w);
+        else if (tw.what === 'text' && this.opts.onTextPlace) {
+          this.opts.onTextPlace(tw.w, { x: tw.x, y: tw.y }, upKind);
+        }
+      }
+      return;
+    }
+
+    // гумку пальцем торкнули й підняли, не ведучи, — стираємо там, де торкнулись
+    if (this._eraseWait && this._eraseWait.id === e.pointerId) {
+      var ew = this._eraseWait;
+      this._eraseWait = null;
+      if (e.type === 'pointercancel') return;
+      this._startErase(ew.w);
+    }
 
     if (this._placeDown) {
       var pd = this._placeDown;
@@ -3770,15 +3935,24 @@
    */
   Board.prototype.rememberInitialView = function () {
     if (!this.slide || this.slide.view) return;
-    this.slide.view = { x: round(this.cam.x), y: round(this.cam.y), s: Math.round(this.scale * 1e4) / 1e4 };
+    this.slide.view = this._viewNow();
   };
 
   /** Перезаписати збережений вигляд слайда поточним. */
   Board.prototype.saveCurrentView = function () {
     if (!this.slide) return false;
-    this.slide.view = { x: round(this.cam.x), y: round(this.cam.y), s: Math.round(this.scale * 1e4) / 1e4 };
+    this.slide.view = this._viewNow();
     if (this.opts.onChange) this.opts.onChange();
     return true;
+  };
+
+  /* Вигляд — разом із розміром екрана, на якому його бачили (w, h). Без
+     нього інший екран не знав, який шматок креслення мали на увазі, і
+     телефон показував слайд з ноутбука тим самим масштабом — чверть. */
+  Board.prototype._viewNow = function () {
+    var v = { x: round(this.cam.x), y: round(this.cam.y), s: Math.round(this.scale * 1e4) / 1e4 };
+    if (this.cssW && this.cssH) { v.w = Math.round(this.cssW); v.h = Math.round(this.cssH); }
+    return v;
   };
 
   Board.prototype._wheel = function (e) {
@@ -4483,6 +4657,7 @@
     this.tool = tool;
     if (tool !== 'select') this.clearSelection();
     this.band = null;
+    this._eraseWait = null;              // гумка, що чекала руху пальця, — уже не гумка
     this.applyCursor();
     this.render();
     if (this.opts.onToolChange) this.opts.onToolChange(tool);
@@ -4696,8 +4871,10 @@
              стоїть десяток однакових кружечків і незрозуміло, за що братися. */
           var isRot = hd.id === 'rot';
           var isV = hd.id.charAt(0) === 'v' && hd.id.length > 1;
+          // після дотику пальцем маркери більші: їх видно з-під пальця, і влучати в них легше
+          var hr = self._coarse ? (isRot ? 8.5 : 7) : (isRot ? 6.5 : 5);
           ctx.beginPath();
-          ctx.arc(hd.x, hd.y, (isRot ? 6.5 : 5) * k, 0, Math.PI * 2);
+          ctx.arc(hd.x, hd.y, hr * k, 0, Math.PI * 2);
           ctx.fillStyle = isRot ? '#F79009' : (isV ? '#17B26A' : '#fff');
           ctx.fill();
           ctx.strokeStyle = isRot || isV ? '#fff' : '#1358F5';

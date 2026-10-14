@@ -140,21 +140,38 @@
   .tool-fly__row { flex-wrap: wrap; max-width: 190px; }
 }
 
+/* Кнопки шапки лише для телефона: крок назад/вперед і «⋯». На компʼютері
+   все це стоїть на своїх місцях — на панелі інструментів і в шапці. */
+.board-top__ph { display: none; }
+.board-top__ph:disabled { opacity: .35; cursor: not-allowed; }
+
 /* Телефон: шапка дошки в один рядок. Кнопок дев'ять, і з підписами вони
    складалися в чотири ряди — третина екрана йшла на шапку, а не на дошку.
-   Тут лише іконки (підказка — у title), а що не влізло, гортається вбік. */
-@media (max-width: 700px) {
+   Стоячи шапка вузька, лежачи — низька: в обох випадках лишаються ←,
+   крок назад і вперед, назва, «Надіслати учню» значком і «⋯», а решта
+   кнопок — у шторці «⋯» з підписами. Досі вони були безіменними значками
+   в смужці, що гортається вбік, і «Надіслати учню» стояла за краєм.
+   Та сама межа — у compactBoard() (views-board.js). */
+@media (max-width: 700px), (max-height: 500px) and (pointer: coarse) {
+  .board-top__ph { display: grid; }
+  .board-top__acts .btn--ghost { display: none; }
+  /* «Немає інтернету» — значком: попередження видно й так (жовте), а
+     текст відбирав місце в назви уроку */
+  .board-top__saved { font-size: 0; gap: 0; padding: 7px; }
   .board-top { flex-wrap: nowrap; gap: 6px; padding: 6px 8px; }
+  /* лежачи телефон ширший за 640 px, і загальне «38 px під палець» сюди не діє */
+  .board-top .icon-btn { min-width: 38px; min-height: 38px; }
   .board-top .avatar { display: none; }
   .board-top__head { flex: 1 1 auto; min-width: 0; }
   .board-top__title { font-size: 14px; }
   .board-top__sub { font-size: 11px; margin-top: 1px; }
+  /* кнопок лишилось дві-три — вони не стискаються й не гортаються:
+     місце поступається назва уроку (вона обрізається трьома крапками) */
   .board-top__acts {
-    flex: 0 1 auto; min-width: 0;
+    flex: 0 0 auto; min-width: 0;
     flex-wrap: nowrap !important; gap: 2px !important;
-    overflow-x: auto; scrollbar-width: none;
+    overflow: visible;
   }
-  .board-top__acts::-webkit-scrollbar { display: none; }
   .board-top__acts .btn {
     font-size: 0; gap: 0; padding: 0;
     flex: 0 0 38px; width: 38px; height: 38px;
@@ -901,6 +918,135 @@
   .slide-card { width: 92px; }
   .slide-card__thumb, .slide-card__empty { height: 36px; }
   .rail-tag { width: 20px; font-size: 9px; }
+}
+
+/* ---------- Телефон: стоячи й лежачи ----------
+
+   Та сама межа, що й у шапки та compactBoard() (views-board.js). */
+@media (max-width: 700px), (max-height: 500px) and (pointer: coarse) {
+  /* На панелі — лише те, чим пишуть. Крок назад і вперед — у шапці,
+     «Очистити» — у «⋯», а «рука» не потрібна: полотно рухають двома
+     пальцями. Інакше панель була ширша за екран, і саме крок назад
+     ховався за краєм. */
+  .board-tools .tool-sep,
+  .board-tools [data-tool="hand"],
+  .board-tools [data-act="board-undo"],
+  .board-tools [data-act="board-redo"],
+  .board-tools [data-act="board-clear"] { display: none; }
+
+  /* Слайди — одним рядком: двома вони зʼїдали пів екрана. Видно рядок
+     відкритого слайда; назва рядка («Урок» / «ДЗ») перемикає на інший. */
+  .board-rails:not(.is-hw) .board-rail-row--hw,
+  .board-rails.is-hw .board-rail-row:not(.board-rail-row--hw) { display: none; }
+  .board-rail-row--hw { border-top: 0; }
+  .rail-tag { width: 28px; font-size: 10px; cursor: pointer; }
+  .rail-tag:active { background: var(--blue-50); color: var(--blue-700); }
+  /* Кнопки правки слайда — шторкою з підписами (дотик до відкритого
+     слайда): поруч зі стрічкою для них немає місця. Три крапки на
+     відкритій картці кажуть, що вона відкриває дії. */
+  .rail-tools { display: none; }
+  .slide-card.is-active .slide-card__foot { padding-right: 20px; }
+  .slide-card.is-active::after {
+    content: '⋯';
+    position: absolute; right: 6px; bottom: 4px;
+    font-size: 15px; font-weight: 800; line-height: 1;
+    color: var(--blue-600);
+  }
+}
+
+/* Стоячи: панель інструментів — смугою внизу, над язичком стрічки
+   слайдів (26 px), масштаб — над нею, налаштування — над інструментами,
+   звідки до них дотягується той самий палець. */
+@media (max-width: 700px) {
+  .board-tools { bottom: 34px; }
+  .board-zoom { bottom: 100px; }
+  .board-opts {
+    top: auto; bottom: 100px;
+    max-height: 45%;
+  }
+  /* налаштування й масштаб стоять в одному місці — поки відкриті перші,
+     масштаб ховається (два пальці однаково масштабують) */
+  .board-body:has(.board-opts:not([hidden])) .board-zoom { display: none; }
+  /* Підказка — згори полотна, де їй нічого не заважає, і в кілька рядків:
+     у рядок вона не влазила, тому була схована зовсім. */
+  .board-hint {
+    display: block;
+    top: 10px; bottom: auto;
+    max-width: calc(100% - 24px);
+    white-space: normal; text-align: center;
+    border-radius: 14px;
+  }
+}
+@media (max-width: 380px) {
+  .board-tools .tool-btn { width: 40px; height: 40px; }
+}
+
+/* Лежачи: телефон 812×375 ширший за 700 px, тож вузька розкладка сюди не
+   доходила — шапка складалася в два-три рядки з підписами, а на полотно
+   лишалось ~120 px. Тепер шапка — один рядок, інструменти — стовпчиком
+   зліва, масштаб — справа вгорі, слайди — рядком без мініатюр. */
+@media (max-height: 500px) and (orientation: landscape) and (pointer: coarse) {
+  .board-top { padding-top: 4px; padding-bottom: 4px; }
+
+  .board-tools {
+    left: 8px; top: 50%; bottom: auto;
+    transform: translateY(-50%);
+    flex-direction: column;
+    max-width: none; max-height: calc(100% - 16px);
+    overflow-x: hidden; overflow-y: auto;
+    padding: 5px; gap: 2px;
+  }
+  .board-tools .tool-btn { width: 40px; height: 40px; }
+  /* картинку вставляють із «⋯» — у стовпчик заввишки з полотно вона вже не влазить */
+  .board-tools [data-act="board-image"] { display: none; }
+
+  .board-opts,
+  .board-opts--wide,
+  .board-opts--stroke {
+    left: 62px; right: auto; top: 8px; bottom: 8px;
+    transform: none;
+    width: 240px; max-height: none;
+  }
+  .board-opts--stroke .strip-group { grid-template-columns: repeat(4, 1fr); }
+
+  .board-zoom { top: 8px; bottom: auto; right: 8px; }
+  .board-hint { display: block; bottom: 12px; border-radius: 14px; }
+
+  /* слайди — назвами, без мініатюр: мініатюри забирали третину висоти;
+     схований від учня видно й так — за пунктирною рамкою */
+  .board-rail { min-height: 0; padding: 3px 8px; }
+  .slide-card { width: auto; max-width: 150px; }
+  .slide-card__thumb, .slide-card__empty, .slide-card__eye { display: none; }
+  .slide-add { width: 36px; height: 30px; border-radius: 10px; }
+}
+
+/* ---------- Під пальцем: цілі завбільшки з палець ----------
+
+   Мишею влучають у 16 px, пальцем — ні: повзунок товщини, кольори, кнопки
+   розміру й панель над виділеним були на межі влучання, і дотик часто
+   діставався сусідові. На компʼютері — без змін. */
+@media (pointer: coarse) {
+  /* Сам повзунок — смужка в 4 px, як і була, але ловить дотик на всю
+     висоту 32 px; бігунок — 26 px */
+  .w-range {
+    height: 32px;
+    background: linear-gradient(var(--line), var(--line)) center / 100% 4px no-repeat;
+  }
+  .w-range::-webkit-slider-thumb { width: 26px; height: 26px; }
+  .w-range::-moz-range-thumb { width: 26px; height: 26px; }
+  .pen-color { width: 34px; height: 34px; }
+  .pen-width { height: 40px; }
+  .size-btn { height: 40px; }
+  .stepper__btn { width: 40px; height: 40px; }
+  .stepper__inp { height: 40px; }
+  .constr-num { min-width: 40px; height: 40px; }
+  .shape-tab { padding: 10px 12px; font-size: 11.5px; }
+  .constr-chip button { width: 32px; height: 32px; }
+  .photo-del { width: 30px; height: 30px; }
+  .sel-bar__btn { width: 40px; height: 40px; }
+  .sel-bar__btn--kind { width: 46px; }
+  .sel-bar__btn--tex { width: auto; padding: 0 9px; }
+  .board-zoom .icon-btn { width: 40px; height: 40px; }
 }
 
 /* ============================================================

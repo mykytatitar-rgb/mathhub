@@ -31,37 +31,45 @@ function makeCtx() {
   });
 }
 
-function makeCanvas() {
+// size — розмір полотна на екрані; його можна змінити посеред сценарію (поворот телефона)
+function makeCanvas(size) {
+  size = size || { w: 1000, h: 700 };
   return {
-    width: 1000, height: 700, style: {},
+    width: size.w, height: size.h, style: {},
     getContext: function () { return makeCtx(); },
-    getBoundingClientRect: function () { return { left: 0, top: 0, width: 1000, height: 700 }; },
+    getBoundingClientRect: function () { return { left: 0, top: 0, width: size.w, height: size.h }; },
     addEventListener: function () {}, removeEventListener: function () {},
     setPointerCapture: function () {}, releasePointerCapture: function () {},
     toDataURL: function () { return 'data:,'; }
   };
 }
 
-function engine() {
+/* o: { w, h — розмір полотна; touch — головний вказівник палець (телефон);
+        dpr — щільність екрана; onTextPlace } */
+function engine(o) {
+  o = o || {};
+  var size = { w: o.w || 1000, h: o.h || 700 };
   var ctx = {
     console: console, Math: Math, JSON: JSON, Date: Date, Object: Object, Array: Array,
     String: String, Number: Number, RegExp: RegExp, Error: Error, isNaN: isNaN, parseFloat: parseFloat,
     setTimeout: setTimeout, clearTimeout: clearTimeout, Promise: Promise, WeakMap: WeakMap, Map: Map, Set: Set,
-    devicePixelRatio: 1,
+    devicePixelRatio: o.dpr || 1,
     requestAnimationFrame: function () { return 1; }, cancelAnimationFrame: function () {},
     addEventListener: function () {}, removeEventListener: function () {},
     document: { createElement: function () { return makeCanvas(); } }
   };
+  if (o.touch) ctx.matchMedia = function (q) { return { matches: /coarse/.test(q) }; };
   ctx.window = ctx;
   vm.createContext(ctx);
   ['share/engine/points.js', 'share/engine/constructions.js', 'share/engine/board.js'].forEach(function (f) {
     vm.runInContext(src(f), ctx, { filename: f });
   });
   var changes = 0;
-  var b = new ctx.Board(makeCanvas(), { onChange: function () { changes++; } });
+  var cv = makeCanvas(size);
+  var b = new ctx.Board(cv, { onChange: function () { changes++; }, onTextPlace: o.onTextPlace });
   b.setSlide({ id: 'sl1', items: [], bg: 'grid' });
   b.scale = 1; b.cam = { x: 0, y: 0 };
-  return { b: b, Board: ctx.Board };
+  return { b: b, Board: ctx.Board, size: size, canvas: cv };
 }
 
 var fails = 0, passes = 0;
@@ -440,6 +448,254 @@ scenario('Долоня, що посунула полотно, поки ляга�
   same(b.cam.x + ',' + b.cam.y, cx + ',' + cy, 'полотно на місці');
   var last = b.items()[b.items().length - 1];
   same(last.d[0] + ',' + last.d[1], '300,300', 'штрих почався там, де торкнулось перо');
+});
+
+/* ---------- Телефон: пальці ---------- */
+
+function finger(id, x, y, extra) { return Object.assign(penEv(id, x, y, 'touch'), extra || {}); }
+
+scenario('Два пальці рухають полотно за серединою між ними, а не лише масштабують', function () {
+  var b = engine().b;
+  b.setTool('pen');
+  b._pointerDown(finger(300, 300, 300));
+  b._pointerDown(finger(301, 500, 300));
+  b._pointerMove(finger(300, 340, 320));
+  b._pointerMove(finger(301, 540, 320));
+  b._pointerUp(finger(300, 340, 320));
+  b._pointerUp(finger(301, 540, 320));
+  same(b.scale, 1, 'відстань між пальцями та сама — масштаб той самий');
+  same(b.cam.x + ',' + b.cam.y, '-40,-20', 'полотно пішло за пальцями');
+  same(b.items().length, 0, 'нічого не написано');
+});
+
+scenario('Розвели пальці — місце креслення між ними лишається між ними', function () {
+  var b = engine().b;
+  b.setTool('select');
+  var before = b.toWorld(500, 300);
+  b._pointerDown(finger(310, 400, 300));
+  b._pointerDown(finger(311, 600, 300));
+  b._pointerMove(finger(310, 350, 300));
+  b._pointerMove(finger(311, 650, 300));
+  same(b.scale, 1.5, 'масштаб за відстанню між пальцями');
+  var now = b.toWorld(500, 300);
+  ok(Math.abs(now.x - before.x) < 1e-6 && Math.abs(now.y - before.y) < 1e-6, 'під серединою — те саме місце');
+  b._pointerUp(finger(310, 350, 300));
+  b._pointerUp(finger(311, 650, 300));
+});
+
+scenario('Точка пальцем ставиться, коли його підняли; початок масштабу — жодної точки', function () {
+  var b = engine().b;
+  b.setTool('point');
+  b._pointerDown(finger(320, 100, 100));
+  same(b.items().length, 0, 'поки палець на склі — точки ще немає');
+  b._pointerUp(finger(320, 100, 100));
+  same(b.items().length, 1, 'підняли — точка є');
+  var steps = b.history.length;
+  b._pointerDown(finger(321, 200, 200));
+  b._pointerDown(finger(322, 400, 400));                    // другий палець — це масштаб
+  b._pointerMove(finger(321, 180, 180));
+  b._pointerMove(finger(322, 420, 420));
+  b._pointerUp(finger(321, 180, 180));
+  b._pointerUp(finger(322, 420, 420));
+  same(b.items().length, 1, 'зайвої точки немає');
+  same(b.history.length, steps, 'і порожнього кроку назад теж');
+});
+
+scenario('Точка пальцем, що поїхав, — рух полотна, а не точка', function () {
+  var b = engine().b;
+  b.setTool('point');
+  b._pointerDown(finger(330, 100, 100));
+  b._pointerMove(finger(330, 130, 100));
+  b._pointerMove(finger(330, 160, 100));
+  b._pointerUp(finger(330, 160, 100));
+  same(b.items().length, 0, 'точки немає');
+  same(b.cam.x, -60, 'полотно пішло за пальцем');
+});
+
+scenario('Лінія пальцем: два дотики — дві точки й відрізок між ними', function () {
+  var b = engine().b;
+  b.setTool('link');
+  b._pointerDown(finger(335, 100, 100)); b._pointerUp(finger(335, 100, 100));
+  b._pointerDown(finger(336, 300, 100)); b._pointerUp(finger(336, 300, 100));
+  same(b.items().filter(function (i) { return i.t === 'o'; }).length, 2, 'дві точки');
+  same(b.items().filter(function (i) { return i.t === 'c'; }).length, 1, 'відрізок між ними');
+});
+
+scenario('Штрих першим пальцем, потім другий — штриха й кроку немає', function () {
+  var b = engine().b;
+  b.setTool('pen');
+  b._pointerDown(finger(340, 100, 100));
+  b._pointerMove(finger(340, 130, 110));
+  b._pointerDown(finger(341, 400, 300));
+  same(b.draft, null, 'почате першим пальцем скасовано');
+  b._pointerMove(finger(340, 120, 120));
+  b._pointerMove(finger(341, 420, 320));
+  b._pointerUp(finger(340, 120, 120));
+  b._pointerUp(finger(341, 420, 320));
+  same(b.items().length, 0, 'на дошці нічого');
+  same(b.history.length, 0, 'в історії нічого');
+});
+
+scenario('Фігура першим пальцем, потім масштаб — порожнього кроку назад немає', function () {
+  var b = engine().b;
+  stroke(b, 100, 100);
+  b.setTool('shape');
+  b._pointerDown(finger(350, 400, 300));
+  b._pointerMove(finger(350, 450, 340));
+  b._pointerDown(finger(351, 600, 500));
+  b._pointerUp(finger(350, 450, 340));
+  b._pointerUp(finger(351, 600, 500));
+  same(b.items().length, 1, 'фігури немає');
+  b.undo();
+  same(b.items().length, 0, 'перший же крок назад прибрав штрих, а не «нічого»');
+});
+
+scenario('Гумка пальцем: дотик першого пальця масштабу нічого не стирає, рух — стирає', function () {
+  var b = engine().b;
+  stroke(b, 100, 100);
+  var steps = b.history.length;
+  b.setTool('eraser');
+  b._pointerDown(finger(360, 130, 105));                   // на штриху
+  same(b.items().length, 1, 'дотик сам по собі не стер');
+  b._pointerDown(finger(361, 500, 500));                   // це був масштаб
+  b._pointerMove(finger(360, 140, 110));
+  b._pointerUp(finger(360, 140, 110));
+  b._pointerUp(finger(361, 500, 500));
+  same(b.items().length, 1, 'штрих цілий');
+  same(b.history.length, steps, 'кроку не додалось');
+
+  b._pointerDown(finger(362, 100, 100));
+  b._pointerMove(finger(362, 130, 105));
+  b._pointerUp(finger(362, 130, 105));
+  same(b.items().length, 0, 'повели гумкою — стерла');
+  b.undo();
+  same(b.items().length, 1, 'крок назад повернув');
+});
+
+scenario('Перетягування першим пальцем, потім масштаб — обʼєкт на своєму місці', function () {
+  var b = engine().b;
+  stroke(b, 100, 100);
+  var x0 = b.items()[0].d[0], steps = b.history.length;
+  b.setTool('select');
+  b._pointerDown(finger(370, 130, 105));
+  b._pointerMove(finger(370, 170, 105));
+  b._pointerDown(finger(371, 500, 500));
+  same(b.items()[0].d[0], x0, 'посунуте вернулось');
+  same(b.history.length, steps, 'кроку не додалось');
+  b._pointerUp(finger(370, 170, 105));
+  b._pointerUp(finger(371, 500, 500));
+});
+
+scenario('Текст пальцем: поле — коли підняли (тоді iPhone відкриває клавіатуру), мишею — одразу', function () {
+  var placed = [];
+  var b = engine({ onTextPlace: function (w, s, kind) { placed.push(kind); } }).b;
+  b.setTool('text');
+  b._pointerDown(finger(380, 200, 200));
+  same(placed.length, 0, 'дотик — ще не поле');
+  b._pointerUp(finger(380, 202, 201));
+  same(placed.join(), 'touch', 'підняли — поле, і рушій каже, що це палець');
+  b._pointerDown(finger(381, 200, 200));
+  b._pointerUp(finger(381, 200, 200, { type: 'pointercancel' }));
+  same(placed.length, 1, 'перерваний дотик поля не відкриває');
+  b._pointerDown(ev(300, 300, { pointerId: 382, pointerType: 'mouse' }));
+  same(placed.join(), 'touch,mouse', 'мишею — одразу, як було');
+});
+
+scenario('Пальцем у тонку лінію влучити легше, ніж мишею', function () {
+  var b = engine().b;
+  stroke(b, 100, 100);                                      // (100,100)→(130,110)→(160,100)
+  b.setTool('select');
+  b._pointerDown(ev(130, 124, { pointerId: 390, pointerType: 'mouse' }));
+  b._pointerUp(ev(130, 124, { pointerId: 390, pointerType: 'mouse' }));
+  same(b.selection.length, 0, 'мишею за 14 px — повз');
+  b._pointerDown(finger(391, 130, 124));
+  b._pointerUp(finger(391, 130, 124));
+  same(b.selection.length, 1, 'пальцем за 14 px — влучив');
+});
+
+/* ---------- Телефон: екран ---------- */
+
+scenario('Вигляд слайда запамʼятовує розмір екрана', function () {
+  var b = engine().b;
+  stroke(b, 100, 100);
+  b.saveCurrentView();
+  same(b.slide.view.w + 'x' + b.slide.view.h, '1000x700', 'ширина й висота екрана в збереженому вигляді');
+});
+
+scenario('Слайд, підготовлений на ноутбуці, на телефоні вміщується, а не обрізається', function () {
+  var b = engine({ w: 375, h: 600 }).b;
+  b.setSlide({ id: 'sl2', items: [{ id: 'q', t: 'l', c: '#000', w: 3, a: [0, 0, 1300, 700] }],
+               view: { x: 0, y: 0, s: 1, w: 1300, h: 700 } });
+  ok(Math.abs(b.scale - 375 / 1300) < 1e-9, 'масштаб — щоб уся ширина влізла');
+  var c = b.toScreen(650, 350);
+  ok(Math.abs(c.x - 187.5) < 1e-6 && Math.abs(c.y - 300) < 1e-6, 'середина збереженого вигляду — посередині екрана');
+
+  var d = engine().b;                                     // компʼютер: як і було
+  d.setSlide({ id: 'sl3', items: [{ id: 'q', t: 'l', c: '#000', w: 3, a: [0, 0, 1300, 700] }],
+               view: { x: 10, y: 20, s: 1, w: 1300, h: 700 } });
+  same(d.scale + ' ' + d.cam.x + ',' + d.cam.y, '1 10,20', 'на компʼютері вигляд саме такий, яким збережений');
+});
+
+scenario('Поворот телефона: посередині екрана те саме місце; полотно не важче за 2× пікселів', function () {
+  var e = engine({ w: 375, h: 700, touch: true, dpr: 3 });
+  var b = e.b;
+  b.resize();
+  same(e.canvas.width, 750, 'щільність полотна — 2, а не 3');
+  b.cam = { x: 40, y: 80 }; b.scale = 2;
+  var mid = b.toWorld(375 / 2, 350);
+  e.size.w = 700; e.size.h = 375;
+  b.resize();
+  var now = b.toWorld(350, 375 / 2);
+  ok(Math.abs(now.x - mid.x) < 1e-9 && Math.abs(now.y - mid.y) < 1e-9, 'центр той самий');
+
+  var pc = engine();                                       // компʼютер: лівий верхній кут на місці
+  pc.b.cam = { x: 40, y: 80 };
+  pc.size.w = 800; pc.size.h = 600;
+  pc.b.resize();
+  same(pc.b.cam.x + ',' + pc.b.cam.y, '40,80', 'на компʼютері камера не зсувається');
+});
+
+scenario('Третій палець посеред масштабу не пише; підняли один із трьох — полотно не стрибає', function () {
+  var b = engine().b;
+  b.setTool('pen');
+  b._pointerDown(finger(400, 300, 300));
+  b._pointerDown(finger(401, 500, 300));
+  b._pointerDown(finger(402, 400, 500));                   // третій
+  b._pointerMove(finger(402, 420, 520));
+  same(b.draft, null, 'третій палець штриха не почав');
+  b._pointerUp(finger(400, 300, 300));                     // підняли один із перших двох
+  var cam = b.cam.x + ',' + b.cam.y + ',' + b.scale;
+  b._pointerMove(finger(401, 500, 300));                   // ті, що лишились, — на місці
+  b._pointerMove(finger(402, 420, 520));
+  same(b.cam.x + ',' + b.cam.y + ',' + b.scale, cam, 'без руху пальців — без руху полотна');
+  b._pointerMove(finger(401, 510, 300));
+  b._pointerMove(finger(402, 430, 520));
+  ok(Math.abs(b.cam.x - (-10)) < 1e-6 && Math.abs(b.scale - 1) < 1e-9, 'два, що лишились, рухають полотно як звичайно');
+  b._pointerUp(finger(401, 510, 300));
+  b._pointerUp(finger(402, 430, 520));
+  same(b.items().length, 0, 'на дошці нічого');
+});
+
+scenario('«Вмістити все»: на компʼютері поля ті самі 60 px, на телефоні — вужчі', function () {
+  var item = { id: 'q', t: 'l', c: '#000', w: 3, a: [0, 0, 1000, 500] };
+  var d = engine().b;
+  d.slide.items.push(JSON.parse(JSON.stringify(item)));
+  d.fit();
+  ok(Math.abs(d.scale - Math.min(880 / 1000, 580 / 500)) < 0.02, 'компʼютер: як і було (60 px з кожного боку)');
+  var p = engine({ w: 375, h: 600 }).b;
+  p.slide.items.push(JSON.parse(JSON.stringify(item)));
+  p.fit();
+  ok(p.scale > (375 - 120) / 1000 + 0.05, 'телефон: креслення займає більше ширини');
+});
+
+scenario('Вигляд без розміру екрана: на телефоні — усе написане, на планшеті — як збережено', function () {
+  var it = [{ id: 'q', t: 'l', c: '#000', w: 3, a: [0, 0, 1300, 700] }];
+  var ph = engine({ w: 375, h: 600 }).b;
+  ph.setSlide({ id: 's1', items: JSON.parse(JSON.stringify(it)), view: { x: 0, y: 0, s: 1 } });
+  ok(ph.scale < 0.5, 'телефон вмістив слайд');
+  var tb = engine({ w: 1024, h: 700, touch: true }).b;
+  tb.setSlide({ id: 's2', items: JSON.parse(JSON.stringify(it)), view: { x: 5, y: 6, s: 1.5 } });
+  same(tb.scale + ' ' + tb.cam.x + ',' + tb.cam.y, '1.5 5,6', 'планшет відкрив збережений вигляд');
 });
 
 console.log('\n' + passes + ' пройдено, ' + fails + ' не пройдено');

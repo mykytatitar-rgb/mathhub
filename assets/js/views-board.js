@@ -60,6 +60,25 @@
   var TOOL_OPTS = {};
   TOOLS.forEach(function (t) { if (t.opts) TOOL_OPTS[t.id] = t.opts; });
 
+  /** Головний вказівник — палець: телефон чи планшет, а не миша. */
+  function fingers() {
+    try { return window.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; }
+  }
+
+  /* Системне «Поділитися» (Telegram, Viber, пошта) — лише під пальцем.
+     Chrome у Windows його теж має, але на компʼютері звичніше копіювати. */
+  function phoneShare() {
+    return !!(navigator.share && fingers());
+  }
+
+  /* Компактна дошка: телефон стоячи (вузько) або лежачи (низько й пальцем).
+     Та сама межа, що й у board.css, — шапка в один рядок, решта кнопок у «⋯»,
+     один рядок слайдів. */
+  function compactBoard() {
+    try { return window.matchMedia('(max-width: 700px), (max-height: 500px) and (pointer: coarse)').matches; }
+    catch (e) { return window.innerWidth <= 700; }
+  }
+
   var cur = null;
 
   /* ============================================================
@@ -116,6 +135,14 @@
 
       '<div class="board-top">' +
         '<button class="icon-btn" data-act="board-exit" title="Вийти з дошки">' + icon('arrowLeft', 20) + '</button>' +
+        /* Телефон: крок назад і вперед — у шапці, де їх видно завжди. На
+           панелі інструментів вони стояли останніми й ховались за краєм
+           екрана, хоча це найчастіші кнопки. На компʼютері їх тут немає
+           (board.css), там вони на панелі, як і були. */
+        '<button class="icon-btn board-top__ph" data-act="board-undo" disabled aria-label="Крок назад" title="Крок назад">' +
+          icon('undo', 20) + '</button>' +
+        '<button class="icon-btn board-top__ph" data-act="board-redo" disabled aria-label="Крок вперед" title="Крок вперед">' +
+          icon('redo', 20) + '</button>' +
         (st ? C.avatar(st, 32) : '') +
         '<div class="board-top__head" style="min-width:0">' +
           '<div class="board-top__title truncate">' +
@@ -156,6 +183,9 @@
               icon('share', 15) + 'Надіслати учню</button>'
             : '<button class="btn btn--primary btn--sm" data-act="nav" data-arg="#/desk">' +
               icon('folder', 15) + 'До моїх справ</button>') +
+          // телефон: решта кнопок шапки — у шторці «⋯» (див. board-more)
+          '<button class="icon-btn board-top__ph" data-act="board-more" aria-label="Ще" title="Ще">' +
+            icon('dots', 20) + '</button>' +
         '</div>' +
       '</div>' +
 
@@ -164,10 +194,15 @@
 
         '<div class="board-empty-hint" data-empty hidden>' +
           '<b>Порожній слайд</b>' +
-          '<span>Пишіть олівцем, додавайте текст, фігури й картинки. ' +
-          'У групі «Геометрія» — точки та лінії між ними, у «Алгебрі» — координатна ' +
-          'площина й числова пряма. Колесо миші — масштаб, пробіл або права кнопка — ' +
-          'рух по полотну. Місця тут стільки, скільки треба.</span>' +
+          /* Пальцем немає ні колеса, ні пробілу — підказка про те, чим тут
+             справді рухають полотно. */
+          (fingers()
+            ? '<span>Пишіть пальцем або стилусом. Двома пальцями — рух і масштаб. ' +
+              'У «Геометрії» й «Алгебрі» — точки, лінії, площина.</span>'
+            : '<span>Пишіть олівцем, додавайте текст, фігури й картинки. ' +
+              'У групі «Геометрія» — точки та лінії між ними, у «Алгебрі» — координатна ' +
+              'площина й числова пряма. Колесо миші — масштаб, пробіл або права кнопка — ' +
+              'рух по полотну. Місця тут стільки, скільки треба.</span>') +
         '</div>' +
 
         '<div class="board-tools">' + tools +
@@ -194,6 +229,8 @@
         // multiple — інакше кілька картинок за раз просто не позначити
         '<input type="file" accept="image/*" multiple data-img-input hidden>' +
         '<input type="file" accept="image/*" multiple data-multi-input hidden>' +
+        // телефон: «Сфотографувати» відкриває камеру одразу, без вибору джерела
+        '<input type="file" accept="image/*" capture="environment" data-cam-input hidden>' +
 
         '<div class="board-zoom">' +
           '<button class="icon-btn" data-act="board-zoom-out" title="Зменшити">' + icon('zoomOut', 18) + '</button>' +
@@ -209,13 +246,18 @@
         '<button class="board-rail__toggle" data-act="board-rail-toggle" ' +
           'title="Згорнути або показати слайди">' +
           icon('chevronD', 15) + '<span data-rail-count></span></button>' +
+        /* На телефоні видно один рядок (board.css), і назва рядка — це
+           перемикач на інший: «Урок» → слайди ДЗ і навпаки. На компʼютері
+           видно обидва, і дотик до назви нічого не змінює. */
         '<div class="board-rails">' +
           '<div class="board-rail-row">' +
-            '<span class="rail-tag">Урок</span>' +
+            '<span class="rail-tag" role="button" data-act="board-rail-kind" data-arg="hw" ' +
+              'title="Показати слайди ДЗ">Урок</span>' +
             '<div class="board-rail" data-rail="lesson"></div>' +
           '</div>' +
           '<div class="board-rail-row board-rail-row--hw">' +
-            '<span class="rail-tag rail-tag--hw">ДЗ</span>' +
+            '<span class="rail-tag rail-tag--hw" role="button" data-act="board-rail-kind" data-arg="lesson" ' +
+              'title="Показати слайди уроку">ДЗ</span>' +
             '<div class="board-rail" data-rail="hw"></div>' +
           '</div>' +
         '</div>' +
@@ -288,7 +330,7 @@
           ? 'Привʼязано до центра кола: ' + n + ' тепер рухається разом із ним'
           : 'Дотичну вирівняно: ' + n + ' стала точкою дотику');
       },
-      onTextPlace: function (world, screen) { openTextInput(world, screen); }
+      onTextPlace: function (world, screen, kind) { openTextInput(world, screen, kind); }
     });
 
     cur = {
@@ -388,11 +430,20 @@
     /* Клік повз панель закриває її. Без цього вона висить над кресленням,
        поки не ткнеш у групу вдруге, — а рука в цей час уже малює. */
     root.addEventListener('pointerdown', function (e) {
-      if (!root.querySelector('.tool-fly:not([hidden])')) return;
-      if (e.target.closest && (e.target.closest('.tool-fly') || e.target.closest('[data-group]'))) return;
-      U.$$('.tool-fly', root).forEach(function (f) { f.hidden = true; });
-      U.$$('[data-group]', root).forEach(function (b) { b.classList.remove('is-open'); });
-      renderOpts();
+      if (root.querySelector('.tool-fly:not([hidden])') &&
+          !(e.target.closest && (e.target.closest('.tool-fly') || e.target.closest('[data-group]')))) {
+        U.$$('.tool-fly', root).forEach(function (f) { f.hidden = true; });
+        U.$$('[data-group]', root).forEach(function (b) { b.classList.remove('is-open'); });
+        renderOpts();
+      }
+      /* Телефон і планшет: панель налаштувань лежить поверх креслення, і
+         досі закривалась лише повторним дотиком до інструмента. Тепер
+         перший штрих її прибирає — колір і товщину обирають до письма, а
+         не під час. Дотик до активного інструмента поверне її. */
+      if (e.target === canvas && (window.innerWidth <= 900 || compactBoard())) {
+        var op = root.querySelector('[data-opts]');
+        if (op && !op.hidden) { op.hidden = true; cur.optsTapHidden = true; }
+      }
     }, true);
 
     U.onClick(root, '[data-group]', function (el) {
@@ -673,7 +724,13 @@
 
     U.onClick(root, '[data-facts]', function (el) { factsModal(el.dataset.facts); });
 
-    U.onClick(root, '[data-slide-index]', function (el) { selectSlide(+el.dataset.slideIndex); });
+    U.onClick(root, '[data-slide-index]', function (el) {
+      var i = +el.dataset.slideIndex;
+      /* Телефон: кнопкам правки слайда поруч зі стрічкою місця немає —
+         дотик до вже відкритого слайда показує їх шторкою. */
+      if (i === cur.index && compactBoard()) { slideSheet(); return; }
+      selectSlide(i);
+    });
 
     /* --- картинки --- */
 
@@ -681,6 +738,13 @@
     fileInput.addEventListener('change', function () {
       var fs = Array.prototype.slice.call(fileInput.files || []);
       fileInput.value = '';
+      if (fs.length) insertImageFiles(fs);
+    });
+
+    var camInput = root.querySelector('[data-cam-input]');
+    camInput.addEventListener('change', function () {
+      var fs = Array.prototype.slice.call(camInput.files || []);
+      camInput.value = '';
       if (fs.length) insertImageFiles(fs);
     });
 
@@ -737,9 +801,42 @@
 
     cur.beforeUnload = function () { flushSave(); };
     window.addEventListener('beforeunload', cur.beforeUnload);
+    /* Телефон не попереджає, що застосунок закривають: beforeunload там не
+       приходить, коли перемкнулись на інший застосунок, а потім система
+       тихо вивантажує вкладку. Тож записуємо все, щойно дошку сховали, —
+       і зміни для учня відправляємо зараз, не чекаючи паузи. */
+    cur.onHide = function () {
+      if (!cur || document.visibilityState !== 'hidden') return;
+      flushSave();
+      snapshot(false);
+      if (cur.board.share && cur.republishTimer) {
+        clearTimeout(cur.republishTimer);
+        cur.republishTimer = null;
+        var l = S.get('lessons', cur.lessonId);
+        var st = l ? S.get('students', l.studentId) : null;
+        var id = cur.lessonId, shared = cur.board.share;
+        cur.structural = false;
+        publishLesson(cur.board, l, st, shared.token).then(function () {
+          // так само, як після звичайного перевидання (scheduleRepublish)
+          if (cur && cur.lessonId === id) {
+            cur.republishedAt = Date.now();
+            if (cur.live) cur.live.send('republished', {});
+          }
+          shared.v = VIEWER_VERSION;
+          publogSet(id, true);
+        }, function (e) {
+          if (cur && cur.lessonId === id) cur.structural = true;   // повернемось — спробуємо ще раз
+          publogSet(id, false, e && e.message ? e.message : 'немає звʼязку');
+        });
+      }
+    };
+    document.addEventListener('visibilitychange', cur.onHide);
+    window.addEventListener('pagehide', cur.beforeUnload);
 
     pinchLock(true);
-    hint('Колесо — масштаб · пробіл або права кнопка — рух по полотну');
+    hint(fingers()
+      ? 'Двома пальцями — рух і масштаб'
+      : 'Колесо — масштаб · пробіл або права кнопка — рух по полотну');
   };
 
   /* На дошці сторінка не масштабується: масштаб — справа полотна, а поле
@@ -758,7 +855,12 @@
     flushSave();
     snapshot(true);           // підсумок уроку — в історію обов'язково
     if (cur.keyHandler) window.removeEventListener('keydown', cur.keyHandler);
-    if (cur.beforeUnload) window.removeEventListener('beforeunload', cur.beforeUnload);
+    if (cur.beforeUnload) {
+      window.removeEventListener('beforeunload', cur.beforeUnload);
+      window.removeEventListener('pagehide', cur.beforeUnload);
+    }
+    if (cur.onHide) document.removeEventListener('visibilitychange', cur.onHide);
+    if (cur.vvOff) { cur.vvOff(); cur.vvOff = null; }
     if (cur.pasteHandler) window.removeEventListener('paste', cur.pasteHandler);
     var body = document.querySelector('.board-body');
     if (body && cur.dragOver) {
@@ -2030,6 +2132,7 @@
     if (!cur || i < 0 || i >= cur.board.slides.length) return;
     flushSave();
     cur.index = i;
+    cur.railKind = null;                 // на телефоні видно рядок того слайда, який відкрили
     cur.engine.setSlide(cur.board.slides[i]);
     renderRail();
     updateZoom();
@@ -2212,7 +2315,7 @@
        лише в тому рядку, де він стоїть — інакше незрозуміло, що видалиться. */
     var isCur = curKind() === kind;
 
-    rail.innerHTML = html +
+    var full = html +
       '<button class="slide-add" data-act="board-slide-add" data-arg="' + kind + '" ' +
         'title="Додати слайд у цей рядок">' + icon('plus', 20) + '</button>' +
       (kind === 'hw'
@@ -2236,14 +2339,45 @@
           '</div>'
         : '');
 
-    var active = rail.querySelector('.slide-card.is-active');
-    if (active && active.scrollIntoView) active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    /* Стрічку перебудовує кожне оновлення — на живому уроці це кожен штрих
+       учня. Досі вона щоразу відскакувала до відкритого слайда, і гортати
+       слайди пальцем посеред уроку було неможливо. Тепер: те саме — не
+       чіпаємо, інше — малюємо, лишаючи прокрутку там, де її залишили. */
+    if (rail._html === full) return;
+    var keep = rail.scrollLeft;
+    rail.innerHTML = full;
+    rail._html = full;
+    rail.scrollLeft = keep;
+  }
+
+  /* До відкритого слайда стрічка прокручується лише тоді, коли відкрили
+     інший слайд, і лише якщо він за краєм — як scrollIntoView «nearest»,
+     але без прокрутки решти сторінки. */
+  function revealActiveCard() {
+    var sid = cur.board.slides[cur.index] && cur.board.slides[cur.index].id;
+    if (!sid || cur.railShown === sid) return;
+    var active = document.querySelector('.board-rail .slide-card.is-active');
+    var rail = active && active.parentNode;
+    if (!rail || !rail.clientWidth) return;          // рядок зараз схований — покажемо, коли зʼявиться
+    cur.railShown = sid;
+    var rb = rail.getBoundingClientRect(), ab = active.getBoundingClientRect();
+    if (ab.left < rb.left) rail.scrollLeft -= (rb.left - ab.left) + 8;
+    else if (ab.right > rb.right) rail.scrollLeft += (ab.right - rb.right) + 8;
+  }
+
+  /* Телефон: видно один рядок слайдів — того, де відкритий слайд, або
+     той, на який перемкнули дотиком до назви рядка. */
+  function paintRailKind() {
+    var rails = document.querySelector('.board-rails');
+    if (rails && cur) rails.classList.toggle('is-hw', (cur.railKind || curKind()) === 'hw');
   }
 
   function renderRail() {
     if (!cur) return;
     renderRailRow('lesson');
     renderRailRow('hw');
+    paintRailKind();
+    revealActiveCard();
 
     var cnt = document.querySelector('[data-rail-count]');
     if (!cnt) return;
@@ -2661,6 +2795,7 @@
     // згорнули — відкриється кліком по тому самому інструменту
     if (optsHidden()) { panel.hidden = true; return; }
     panel.hidden = false;
+    cur.optsTapHidden = false;
 
     var inner = '';
     if (kind === 'stroke') {
@@ -2685,7 +2820,10 @@
   }
 
   function toggleOpts() {
-    setOptsHidden(!optsHidden());
+    /* На телефоні панель ховає перший штрих, нічого не записуючи. Тоді
+       дотик до інструмента має її показати, а не «сховати» вже сховане. */
+    if (cur && cur.optsTapHidden) setOptsHidden(false);
+    else setOptsHidden(!optsHidden());
     renderOpts();
   }
 
@@ -2911,10 +3049,20 @@
     if (bar.style.left && Date.now() - barHold < 900) return;
 
     var w = bar.offsetWidth || 190;
+    var h = bar.offsetHeight || 40;
     var cx = (tl.x + tr.x) / 2;
     var left = Math.max(8, Math.min(e.cssW - w - 8, cx - w / 2));
-    var top = tl.y - bar.offsetHeight - 12;
+    var top = tl.y - h - 12;
     if (top < 8) top = Math.min(e.cssH - 50, e.toScreen(b.x1, b.y2).y + 14);
+    /* Телефон: інструменти лежать смугою внизу, і панель над виділеним, що
+       стоїть низько, ховалась під ними — кнопки було не натиснути. Тримаємо
+       її над смугою. Інструменти збоку (компʼютер) не заважають. */
+    var tools = document.querySelector('.board-tools');
+    var cvs = e.canvas.getBoundingClientRect();
+    var tb = tools ? tools.getBoundingClientRect() : null;
+    if (tb && tb.width > tb.height && tb.top > cvs.top) {
+      top = Math.max(8, Math.min(tb.top - cvs.top - h - 8, top));
+    }
 
     bar.style.left = Math.round(left) + 'px';
     bar.style.top = Math.round(top) + 'px';
@@ -3508,19 +3656,44 @@
      Введення тексту прямо на полотні
      ============================================================ */
 
-  function openTextInput(world, screen) {
+  function openTextInput(world, screen, kind) {
     var body = document.querySelector('.board-body');
     if (!body) return;
 
+    /* Пальцем чи стилусом рушій кличе нас, коли їх підняли (див. _tapWait
+       у board.js), — це дія людини, і лише тоді iPhone відкриває клавіатуру. */
+    var touch = !!kind && kind !== 'mouse';
+
     var old = body.querySelector('.board-text-input');
-    if (old && old._commit) old._commit();
+    if (old && old._commit) {
+      var typed = /\S/.test(old.value || '');
+      old._commit();
+      /* Пальцем дотик поруч із набраним — це «готово», а не «ще одне поле
+         тут»: iPhone, торкнувшись полотна, поле сам не відпускає, і досі
+         кожне «готово» відкривало нове порожнє. Порожнє ж поле просто
+         переїжджає туди, куди торкнулись. Мишею — як було: клік деінде
+         записує набране й одразу починає наступний напис. */
+      if (touch && typed) return;
+    }
 
     var ta = document.createElement('textarea');
     ta.className = 'board-text-input';
     ta.rows = 1;
     var size = cur.engine.fontSize * cur.engine.scale;
-    ta.style.left = screen.x + 'px';
-    ta.style.top = (screen.y - size) + 'px';
+    var left = screen.x, top = screen.y - size;
+    if (touch) {
+      /* Телефон: поле не вилазить за край екрана — інакше набране ховалося
+         б праворуч, а клавіатура вже закрила низ. Сам напис ляже там, де
+         торкнулись. */
+      var bw = body.clientWidth;
+      ta.style.maxWidth = Math.max(120, bw - 16) + 'px';
+      left = Math.max(8, Math.min(left, bw - 168));
+      top = Math.max(8, top);
+      // підпис клавіші «Ввід» — «новий рядок»: готово — дотик повз поле або «Готово» над клавіатурою
+      ta.setAttribute('enterkeyhint', 'enter');
+    }
+    ta.style.left = left + 'px';
+    ta.style.top = top + 'px';
     ta.style.fontSize = Math.max(11, size) + 'px';
     ta.style.color = cur.engine.color;
     ta.placeholder = 'Текст…';
@@ -3534,16 +3707,22 @@
 
     var done = false, armed = false;
 
+    function cleanup() {
+      if (cur && cur.vvOff === unlift) cur.vvOff = null;
+      unlift();
+    }
     function commit() {
       if (done) return;
       done = true;
+      cleanup();
       var v = ta.value.replace(/\s+$/, '');
       ta.remove();
-      if (v) cur.engine.addText(world, v);
+      if (v && cur) cur.engine.addText(world, v);
     }
     function cancel() {
       if (done) return;
       done = true;
+      cleanup();
       ta.remove();
     }
     ta._commit = commit;
@@ -3558,15 +3737,50 @@
 
     ta.addEventListener('keydown', function (e) {
       e.stopPropagation();
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commit(); }
+      /* На клавіатурі телефона немає Shift+Enter, тож «Ввід» там — новий
+         рядок, як у будь-якому полі для тексту. Інакше напис у два рядки
+         пальцем не набрати взагалі. */
+      if (e.key === 'Enter' && !e.shiftKey && !touch) { e.preventDefault(); commit(); }
       else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
     });
+
+    /* Клавіатура телефона наїжджає на полотно, не зменшуючи його. Якщо поле
+       опинилось під нею — піднімаємо креслення разом із полем рівно на
+       стільки, щоб його було видно. Напис однаково ляже туди, де торкнулись. */
+    var vv = touch ? window.visualViewport : null;
+    function lift() {
+      if (done || !vv || !cur) return;
+      var r = ta.getBoundingClientRect();
+      var over = r.bottom - (vv.offsetTop + vv.height) + 12;
+      // не вище за верх полотна: поле має лишитися на екрані
+      var room = r.top - body.getBoundingClientRect().top - 8;
+      over = Math.min(over, room);
+      if (over <= 1) return;
+      var e = cur.engine;
+      e.cam.y += over / e.scale;
+      e.viewChanged();
+      ta.style.top = (parseFloat(ta.style.top) - over) + 'px';
+    }
+    function unlift() { if (vv) vv.removeEventListener('resize', lift); }
+    if (vv) {
+      if (cur.vvOff) cur.vvOff();          // попереднє поле вже закрите — його слухача прибираємо
+      vv.addEventListener('resize', lift);
+      cur.vvOff = unlift;
+    }
+
+    if (touch) {
+      /* Пальцем — фокус одразу, у тій самій дії людини: фокус із таймера
+         iPhone ігнорує, і клавіатура не відкривалась. Таймер нижче —
+         запасний, для браузерів, що таки скасують цей фокус. */
+      ta.focus();
+      lift();
+    }
 
     /* Фокус — наступним тіком. Синхронний focus() браузер скасовує,
        завершуючи обробку mousedown, і поле закривалося б порожнім. */
     setTimeout(function () {
       if (done) return;
-      ta.focus();
+      if (document.activeElement !== ta) ta.focus();
       armed = true;
     }, 0);
     grow();
@@ -4283,6 +4497,100 @@
     });
   }
 
+  /* ============================================================
+     Шторки телефона: «⋯» шапки, дії слайда, джерело картинки
+     ============================================================ */
+
+  function sheetRow(act, ic, label, arg) {
+    return '<button class="act-list__i" data-act="' + act + '"' +
+      (arg ? ' data-arg="' + U.esc(arg) + '"' : '') + '>' +
+      icon(ic, 20) + '<span>' + U.esc(label) + '</span></button>';
+  }
+
+  /* Список дій шторкою. Дотик до рядка спершу закриває шторку, а потім
+     спільний диспетчер виконує саму дію — вона часто відкриває свою шторку
+     (назва слайда, фон, ДЗ), і та стає на місце цієї, а не поверх неї. */
+  function actSheet(title, sub, rows) {
+    C.modal({
+      title: title,
+      sub: sub,
+      body: '<div class="act-list">' + rows + '</div>',
+      onMount: function (wrap, close) {
+        wrap.addEventListener('click', function (e) {
+          if (!e.target.closest) return;
+          /* Посилання (зустріч) — закриваємо після кліку: вийняте зі сторінки
+             посилання браузер уже не відкриває. */
+          if (e.target.closest('a[href]')) { setTimeout(close, 0); return; }
+          if (e.target.closest('[data-act]')) close();
+        });
+      }
+    });
+  }
+
+  /* «⋯» у шапці дошки на телефоні: усе, що на компʼютері стоїть кнопками з
+     підписами. Досі ці дев'ять кнопок були безіменними значками в смужці,
+     що гортається вбік, — і «Надіслати учню» стояла за краєм екрана. */
+  function boardMoreSheet() {
+    if (!cur) return;
+    var lesson = S.get('lessons', cur.lessonId);
+    var meet = lesson ? S.meetUrlFor(lesson.studentId) : '';
+    var hwN = lesson ? lessonHomework().length : 0;
+    var s = slide();
+    actSheet('Дошка', s.title || ('Слайд ' + (cur.index + 1)),
+      (meet
+        ? '<a class="act-list__i" href="' + U.esc(meet) + '" target="_blank" rel="noopener">' +
+          icon('present', 20) + '<span>Зустріч</span></a>'
+        : '') +
+      (lesson ? sheetRow('board-hw', 'note', 'Домашнє завдання' + (hwN ? ' · ' + hwN : '')) : '') +
+      sheetRow('board-mats', 'folder', 'Матеріали') +
+      sheetRow('board-image', 'image', 'Вставити картинку') +
+      sheetRow('board-rename', 'edit', 'Назва слайда') +
+      sheetRow('board-bg', 'grid', 'Фон слайда') +
+      sheetRow('board-measures', 'checklist', 'Розміри сторін і кутів') +
+      sheetRow('board-save-view', 'target', 'Запамʼятати цей вигляд слайда') +
+      sheetRow('board-png', 'download', 'Слайд картинкою') +
+      sheetRow('board-history', 'refresh', 'Попередні версії') +
+      sheetRow('board-clear', 'trash', 'Очистити слайд'));
+  }
+
+  /* Дотик до вже відкритого слайда на телефоні: усе, що на компʼютері
+     стоїть кнопками праворуч від стрічки. */
+  function slideSheet() {
+    if (!cur) return;
+    var s = slide();
+    var kind = curKind();
+    var row = railIndexes(kind), pos = row.indexOf(cur.index);
+    actSheet(s.title || ('Слайд ' + (pos + 1)),
+      (kind === 'hw' ? 'ДЗ' : 'Урок') + ' · ' + (pos + 1) + ' з ' + row.length,
+      sheetRow('board-rename', 'edit', 'Назва слайда') +
+      sheetRow('board-slide-hide', s.hidden ? 'eye' : 'eyeOff',
+        s.hidden ? 'Показувати учневі' : 'Сховати від учня') +
+      sheetRow('board-slide-dup', 'copy', 'Дублювати') +
+      sheetRow('board-slide-move-row', 'swap', kind === 'hw' ? 'Перенести в урок' : 'Перенести в ДЗ') +
+      (pos > 0 ? sheetRow('board-slide-left', 'chevronL', 'Пересунути ліворуч') : '') +
+      (pos >= 0 && pos < row.length - 1 ? sheetRow('board-slide-right', 'chevronR', 'Пересунути праворуч') : '') +
+      sheetRow('board-slide-del', 'trash', 'Видалити слайд'));
+  }
+
+  /* Картинка пальцем: найчастіше це фото зошита чи підручника просто
+     зараз, тож камера — першою й одразу, без системного вибору джерела. */
+  function imageSourceSheet() {
+    C.modal({
+      title: 'Картинка на слайд',
+      body: '<div class="act-list">' +
+        '<button class="act-list__i" data-pick="cam">' + icon('camera', 20) + '<span>Сфотографувати</span></button>' +
+        '<button class="act-list__i" data-pick="file">' + icon('image', 20) + '<span>З галереї або файлів</span></button>' +
+      '</div>',
+      onMount: function (wrap, close) {
+        U.onClick(wrap, '[data-pick]', function (el) {
+          var inp = document.querySelector(el.dataset.pick === 'cam' ? '[data-cam-input]' : '[data-img-input]');
+          close();
+          if (inp) inp.click();             // той самий дотик — інакше браузер вікно вибору не відкриє
+        });
+      }
+    });
+  }
+
   V.boardActions = {
     /* Вихід — туди, звідки прийшли (розклад, учень, «Моє»), тією ж
        історією, що й «Назад» телефона: досі ← додавала новий запис сторінки
@@ -4298,7 +4606,17 @@
     },
     'board-undo': function () { cur.engine.undo(); refreshUndo(); refreshEmpty(); scheduleThumb(); },
     'board-redo': function () { cur.engine.redo(); refreshUndo(); refreshEmpty(); scheduleThumb(); },
-    'board-image': function () { document.querySelector('[data-img-input]').click(); },
+    'board-image': function () {
+      // пальцем — спершу звідки: камера чи галерея (див. imageSourceSheet)
+      if (fingers()) { imageSourceSheet(); return; }
+      document.querySelector('[data-img-input]').click();
+    },
+    'board-more': function () { boardMoreSheet(); },
+    'board-rail-kind': function (arg) {
+      if (!cur) return;
+      cur.railKind = arg === 'hw' ? 'hw' : 'lesson';
+      paintRailKind();
+    },
     'board-rail-toggle': function () { toggleRail(); },
     'board-save-view': function () {
       if (cur.engine.saveCurrentView()) {
@@ -4986,8 +5304,25 @@
     window.Board.preloadImages([s]).then(function () {
       var cv = window.Board.renderToCanvas(s, 2400);
       cv.toBlob(function (blob) {
-        download(lessonSlug() + '-слайд-' + n + '.png', blob);
-        U.toast('Зображення збережено', 'ok');
+        var name = lessonSlug() + '-слайд-' + n + '.png';
+        function save() {
+          download(name, blob);
+          U.toast('Зображення збережено', 'ok');
+        }
+        /* Телефон: «завантажене» там губиться в теці завантажень, а слайд
+           картинкою зазвичай одразу шлють учневі. Тож — системне
+           «Поділитися»: Telegram, Viber чи «Зберегти зображення». Якщо
+           браузер не дав (минуло забагато часу від дотику) — звичайне
+           збереження файлом. */
+        var file = null;
+        try { file = phoneShare() && blob ? new File([blob], name, { type: 'image/png' }) : null; } catch (e) { file = null; }
+        if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+          navigator.share({ files: [file] }).catch(function (e) {
+            if (!(e && e.name === 'AbortError')) save();   // відмовились у меню — нічого не робимо
+          });
+          return;
+        }
+        save();
       }, 'image/png');
     });
   }
@@ -5482,6 +5817,15 @@
       markDirty(); flushSave();
       joinLive();
       if (cur.live) cur.live.send('republished', {});
+      /* Телефон: iPhone не дає писати в буфер після мережевого запиту —
+         дотик, що його дозволяв, уже «прохолов», і посилання не копіювалось.
+         Тож нове посилання показуємо у вікні з «Поділитися…»: це свіжий
+         дотик, і системне меню (Telegram, Viber, пошта) відкривається. */
+      if (phoneShare()) {
+        if (isUpdate) U.toast('Урок оновлено', 'ok');
+        else shareDialog();
+        return url;
+      }
       // копіюємо одразу: людина щойно натиснула кнопку, отже дозвіл є
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(url).then(function () {
@@ -5581,8 +5925,18 @@
                   doRevoke, 'Все одно відкликати');
               });
             } },
-          { label: 'Оновити', kind: 'btn--primary', act: 'go', icon: 'refresh',
-            onClick: function (root) { publishShare(l, st, share.token, true, root); } }
+          { label: 'Оновити', kind: phoneShare() ? 'btn--ghost' : 'btn--primary', act: 'go', icon: 'refresh',
+            onClick: function (root) { publishShare(l, st, share.token, true, root); } },
+          /* Телефон: посилання — одразу в Telegram чи Viber системним
+             «Поділитися», без копіювання з поля. Вікно лишається: якщо
+             людина передумала в системному меню, посилання на місці. */
+          phoneShare()
+            ? { label: 'Поділитися…', kind: 'btn--primary', act: 'share', icon: 'share', close: false,
+                onClick: function () {
+                  navigator.share({ title: (l && l.topic) || 'Урок', url: url }).catch(function () {});
+                  return false;
+                } }
+            : null
         ]
       });
       return;

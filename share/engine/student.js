@@ -79,7 +79,7 @@
     '.sb-meta{font-size:12px;color:#7E90AE;margin-top:3px}.sb-sent{color:#16A34A;font-weight:700}' +
     '.sb-desc{font-size:13px;line-height:1.6;margin-top:7px;white-space:pre-wrap;background:#F1EFFE;padding:10px 12px;border-radius:10px}' +
     '.sb-shots{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}.sb-shots a{display:block;width:90px;height:90px;border:1.5px solid #E7E5F2;border-radius:10px;overflow:hidden}.sb-shots img{width:100%;height:100%;object-fit:cover;display:block}' +
-    '.sb-add{display:inline-block;margin-top:9px;cursor:pointer}.sb-add input{display:none}.sb-add span{display:inline-block;border:1.5px dashed #8FB4FF;border-radius:999px;padding:7px 14px;font-size:12.5px;font-weight:650;color:#3A31B0;background:#F7FAFF}.sb-add.busy span{opacity:.55}' +
+    '.sb-add{display:inline-block;margin-top:9px;cursor:pointer}.sb-add input{display:none}.sb-add span{display:inline-block;border:1.5px dashed #8FB4FF;border-radius:999px;padding:7px 14px;font-size:12.5px;font-weight:650;color:#3A31B0;background:#F7FAFF}.sb-add.busy span{opacity:.55}.sb-cam{margin-left:6px}@media (pointer:fine){.sb-cam,.sb-camtl{display:none}}' +
     '.sb-mats{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}.sb-matf{display:inline-block;border:1.5px solid #E7E5F2;border-radius:10px;padding:7px 13px;font-size:12.5px;font-weight:650;color:#3A31B0;text-decoration:none;background:#fff}' +
     '.sb-sheet{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin-top:10px}' +
     '.sb-rule{border:1px solid #E7E5F2;border-radius:12px;padding:10px;background:#fff}.sb-rule__h{font-weight:700;font-size:12px;color:#3A31B0;margin-bottom:7px}' +
@@ -132,6 +132,10 @@
                 }).join('') +
                 '<label class="sb-tl" title="Додати фото або скріншот (можна Ctrl+V)">🖼' +
                   '<input type="file" accept="image/*" multiple hidden id="sb-pic"></label>' +
+                /* Телефон: розвʼязання в зошиті фотографують просто зараз —
+                   камера одразу, без вибору джерела. Мишею кнопки немає. */
+                '<label class="sb-tl sb-camtl" title="Сфотографувати">📷' +
+                  '<input type="file" accept="image/*" capture="environment" hidden id="sb-cam"></label>' +
               '</div>' +
               '<div class="sb-opts" id="sb-opts"></div>' +
               /* На телефоні клавіші Delete немає, а гумка бере лише штрихи:
@@ -268,7 +272,12 @@
         html += '<button class="sb-sc' + (i === idx ? ' on' : '') + '" data-go="' + i + '">' +
           esc(s.title || ('Слайд ' + (i + 1))) + '</button>';
       });
-      el('sb-rail').innerHTML = html;
+      /* Те саме — не перемальовуємо: стрічку перебудовувало кожне чуже
+         оновлення, і гортання пальцем по слайдах відскакувало на початок. */
+      var rail = el('sb-rail');
+      if (rail._html === html) return;
+      rail._html = html;
+      rail.innerHTML = html;
     }
 
     el('sb-rail').addEventListener('click', function (e) {
@@ -332,17 +341,29 @@
 
     /* ---------- Текст ---------- */
 
-    function placeText(world, screen) {
+    function placeText(world, screen, kind) {
       if (!canWrite) return;
       var body = el('sb-body');
       var ta = document.createElement('textarea');
       ta.className = 'sb-tin';
-      ta.style.left = screen.x + 'px';
-      ta.style.top = screen.y + 'px';
+      var x = screen.x, y = screen.y;
+      if (kind && kind !== 'mouse') {
+        /* Телефон: поле не вилазить за правий край — інакше набране
+           ховалося б за екраном. Напис однаково ляже, де торкнулись. */
+        var bw = body.clientWidth;
+        ta.style.maxWidth = Math.max(170, bw - 16) + 'px';
+        x = Math.max(8, Math.min(x, bw - 178));       // поле щонайменше 170 px завширшки (.sb-tin)
+      }
+      ta.style.left = x + 'px';
+      ta.style.top = y + 'px';
       ta.style.fontSize = Math.max(12, engine.fontSize * engine.scale) + 'px';
       ta.style.color = engine.color;
       body.appendChild(ta);
-      setTimeout(function () { ta.focus(); }, 0);
+      /* Пальцем рушій кличе нас, коли палець підняли, — це дія людини, і
+         лише тоді iPhone відкриває клавіатуру; фокус із таймера він ігнорує.
+         Мишею — наступним тіком, як було: інакше mousedown забрав би фокус. */
+      if (kind && kind !== 'mouse') ta.focus();
+      else setTimeout(function () { ta.focus(); }, 0);
 
       var done = false;
       function finish() {
@@ -770,7 +791,11 @@
             }).join('') + '</div>' +
             (canWrite
               ? '<label class="sb-add"><input type="file" accept="image/*" multiple data-hw="' + esc(h.id || '') + '">' +
-                '<span>+ Додати фото розвʼязання</span></label>'
+                '<span>+ Додати фото розвʼязання</span></label>' +
+                /* На телефоні — одразу камера: розвʼязання в зошиті фотографують,
+                   а не шукають у галереї. capture відкриває її без вибору. */
+                '<label class="sb-add sb-cam"><input type="file" accept="image/*" capture="environment" data-hw="' +
+                  esc(h.id || '') + '"><span>📷 Сфотографувати</span></label>'
               : '') +
             '</div>';
         }).join('') + '</div>';
@@ -783,14 +808,15 @@
       var inp = e.target.closest('input[data-hw]');
       if (!inp || !inp.files || !inp.files.length) return;
       var label = inp.closest('.sb-add');
+      var cam = label.classList.contains('sb-cam');
       label.classList.add('busy');
       label.querySelector('span').textContent = 'Надсилаю…';
       env.sendHomework(inp.getAttribute('data-hw'), [].slice.call(inp.files)).then(function () {
         toast('Фото надіслано репетитору');
-        label.querySelector('span').textContent = '+ Додати ще фото';
+        label.querySelector('span').textContent = cam ? '📷 Сфотографувати ще' : '+ Додати ще фото';
       }).catch(function () {
         toast('Не вдалося надіслати фото — спробуйте ще раз');
-        label.querySelector('span').textContent = '+ Додати фото розвʼязання';
+        label.querySelector('span').textContent = cam ? '📷 Сфотографувати' : '+ Додати фото розвʼязання';
       }).then(function () {
         label.classList.remove('busy');
         inp.value = '';
@@ -825,6 +851,10 @@
         addPics([].slice.call(e.target.files || []));
         e.target.value = '';
       });
+      el('sb-cam').addEventListener('change', function (e) {
+        addPics([].slice.call(e.target.files || []));
+        e.target.value = '';
+      });
       window.addEventListener('paste', function (e) {
         var files = [].slice.call((e.clipboardData && e.clipboardData.files) || []);
         if (files.length) { e.preventDefault(); addPics(files); }
@@ -836,11 +866,16 @@
     /* Полотно міняє розмір не лише разом із вікном: розгортаються панелі
        домашнього, телефон повертають. Рушій про це сам не дізнається. */
     if (window.ResizeObserver) {
+      /* «Був нуль» памʼятаємо тут, а не питаємо в рушія: рушій тепер і сам
+         стежить за полотном і міг уже взяти новий розмір раніше за нас —
+         тоді слайд, вміщений у нуль, так і лишався б невидимим. */
+      var zeroSeen = !engine.cssW || !engine.cssH;
       new ResizeObserver(function () {
-        var wasZero = !engine.cssW || !engine.cssH;
         engine.resize();
+        var zero = !engine.cssW || !engine.cssH;
         // сторінку відкрили у згорнутій вкладці: слайд вмістили в нуль — вміщуємо заново
-        if (wasZero && engine.cssW && engine.cssH && currentSlide()) go(idx, false);
+        if (zeroSeen && !zero && currentSlide()) go(idx, false);
+        zeroSeen = zero;
       }).observe(el('sb-body'));
     }
 

@@ -144,6 +144,11 @@
 
     var layout = box.querySelector('.bk-layout');
     if (!layout) {
+      /* Фільтри лишились розгорнутими з ширшого екрана (телефон лежав
+         боком, а там вони просто над задачами, без запису в історії), а
+         тепер він стоїть. Відкрити банк одразу шторкою, яку «Назад» не
+         закриває, не можна — тож на телефоні банк завжди приходить без неї. */
+      if (mobileOpen && !sheetEntry && C && C.phone && C.phone()) mobileOpen = false;
       box.innerHTML = '<div class="bk-layout">' +
         '<aside class="bk-side' + (mobileOpen ? ' is-open' : '') + '">' + sideHtml(list.length) + '</aside>' +
         // затемнення під шторкою фільтрів (телефон): дотик по ньому — закрити
@@ -476,6 +481,25 @@
       if (on) side.scrollTop = 0;
     }
   }
+
+  /* Телефон, покладений боком, буває ширшим за 640 px: там «Фільтри»
+     розгортаються над задачами без запису в історії. Повернули його
+     стоячи — і ті самі фільтри стали шторкою, тож запис для «Назад»
+     ставимо саме тепер. Інакше «Назад» ішов би з банку, а шторка, що
+     лишилась відкритою, зустрічала б і наступного разу. Назад, із
+     шторки на ширший екран, нічого не треба: «Назад» тоді просто згорне
+     фільтри над задачами. */
+  try {
+    var phoneMq = window.matchMedia('(max-width: 640px)');
+    var onPhoneMq = function () {
+      if (!phoneMq.matches || !mobileOpen || sheetEntry || !C || !C.overlay) return;
+      if (!document.querySelector('[data-bk] .bk-side.is-open')) return;
+      C.overlay.open();
+      sheetEntry = true;
+    };
+    if (phoneMq.addEventListener) phoneMq.addEventListener('change', onPhoneMq);
+    else if (phoneMq.addListener) phoneMq.addListener(onPhoneMq);   // старі Safari
+  } catch (e) { /* без matchMedia лишається як було */ }
 
   document.addEventListener('change', function (e) {
     if (!document.querySelector('[data-bk]')) return;

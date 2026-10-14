@@ -565,11 +565,16 @@
         return Math.abs(start(a) - now) - Math.abs(start(b) - now);
       })[0];
     }
-    /* Спершу — урок, що ще не скінчився: той, що йде, чи наступний. Раніше
-       брався найближчий за часом початку, і о 14:00 задача лягала на дошку
-       уроку, що вже скінчився о 13:00, а не того, що о 17:00. Минулі —
-       лише коли попереду уроків немає зовсім. */
-    var ahead = all.filter(function (l) { return end(l) >= now; });
-    return near(ahead.length ? ahead : all);
+    /* Спершу — урок, що йде просто зараз; далі — найближчий з тих, що
+       попереду; минулі — лише коли попереду уроків немає зовсім. Раніше
+       брався найближчий за часом початку серед тих, що не скінчились, і в
+       другій половині уроку 14:00–15:00 задача лягала на дошку учня, чий
+       урок о 15:00, — бо його початок ближчий. Двоє, що йдуть разом
+       (стик 15:00), — пізніший: той, хто щойно прийшов. */
+    var live = all.filter(function (l) { return start(l) <= now && now <= end(l); });
+    if (live.length) return live.sort(function (a, b) { return start(b) - start(a); })[0];
+    var next = all.filter(function (l) { return start(l) > now; })
+      .sort(function (a, b) { return start(a) - start(b); })[0];
+    return next || near(all);
   }
 })();

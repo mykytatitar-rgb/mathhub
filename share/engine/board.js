@@ -426,6 +426,14 @@
 
   /** Зібрати підписи вимірів у світових координатах (+ зсув у пікселях екрана). */
   function collectMeasureLabels(it, out) {
+    // дуга: її градуси — посередині, ззовні
+    if (it.t === 'q') {
+      if (!it.o || !(it.r > 0) || !it.s) return;
+      var mid = (it.a0 + it.s / 2) * D2R;
+      out.push({ w: arcAt(it, it.a0 + it.s / 2), off: [Math.cos(mid), Math.sin(mid)], offPx: 14,
+                 text: roundDeg(Math.abs(it.s)).toString().replace('.', ',') + '°', kind: 'a' });
+      return;
+    }
     var m = shapeMeasure(it);
     if (!m) return;
 
@@ -461,11 +469,143 @@
   }
 
   /* ============================================================
+     Дуга (t: 'q')
+     ============================================================
+
+     Дуга кола: центр o, радіус r, від кута a0 на s градусів. s — зі
+     знаком: це напрям, у який її вели; |s| до 360 (повне коло). Кути — у
+     градусах полотна: y іде донизу, тож додатний напрям на екрані — за
+     годинниковою стрілкою. Малюють її як циркулем (див. _pointerDown):
+     центр, далі до початку дуги, далі по колу. Так і дуга радіусом, і
+     позначка будь-якого кута — гострого, розгорнутого, більшого за 180°. */
+
+  var D2R = Math.PI / 180;
+
+  function arcAt(it, deg) {
+    return [it.o[0] + it.r * Math.cos(deg * D2R), it.o[1] + it.r * Math.sin(deg * D2R)];
+  }
+
+  function normDeg(d) { d = d % 360; return d < 0 ? d + 360 : d; }
+
+  /** Чи кут deg лежить на дузі. */
+  function onArc(it, deg) {
+    if (Math.abs(it.s) >= 360) return true;
+    var d = normDeg(deg - it.a0);                       // скільки від початку в додатний бік
+    return it.s >= 0 ? d <= it.s + 1e-6 : (d === 0 || 360 - d <= -it.s + 1e-6);
+  }
+
+  function arcBounds(it) {
+    var pts = [arcAt(it, it.a0), arcAt(it, it.a0 + it.s)];
+    [0, 90, 180, 270].forEach(function (a) { if (onArc(it, a)) pts.push(arcAt(it, a)); });
+    var xs = pts.map(function (p) { return p[0]; }), ys = pts.map(function (p) { return p[1]; });
+    return {
+      x1: Math.min.apply(null, xs), y1: Math.min.apply(null, ys),
+      x2: Math.max.apply(null, xs), y2: Math.max.apply(null, ys)
+    };
+  }
+
+  function arcHit(it, x, y, tol) {
+    var dx = x - it.o[0], dy = y - it.o[1];
+    if (Math.abs(Math.hypot(dx, dy) - it.r) > tol + (it.w || 3) / 2) return false;
+    return onArc(it, Math.atan2(dy, dx) / D2R);
+  }
+
+  /* Напрямки від точки o, уздовж яких варто класти початок і кінець дуги:
+     лінії, відрізки й сторони фігур, що виходять з o або проходять через
+     неї. Пряма через точку — це два протилежні промені, тобто саме
+     розгорнутий кут. */
+  function arcDirs(items, o, tol) {
+    var out = [];
+    var map = idMap(items);
+    function seg(A, B) {
+      if (!A || !B) return;
+      if (distToSegment(o[0], o[1], A[0], A[1], B[0], B[1]) > tol) return;
+      if (Math.hypot(A[0] - o[0], A[1] - o[1]) > tol) out.push(Math.atan2(A[1] - o[1], A[0] - o[0]) / D2R);
+      if (Math.hypot(B[0] - o[0], B[1] - o[1]) > tol) out.push(Math.atan2(B[1] - o[1], B[0] - o[0]) / D2R);
+    }
+    items.forEach(function (it) {
+      if (it.t === 'l' || it.t === 'a') seg([it.a[0], it.a[1]], [it.a[2], it.a[3]]);
+      else if (it.t === 'c' && window.Points) {
+        seg(Points.at(map[it.a1], map), Points.at(map[it.a2], map));
+      } else if (it.t === 'g') {
+        var pts = shapePoints(it);
+        if (pts && pts.length > 1) {
+          for (var i = 0; i < pts.length; i++) seg(pts[i], pts[(i + 1) % pts.length]);
+        }
+      }
+    });
+    return out;
+  }
+
+  /** Найближчий до deg напрямок із dirs у межах lim градусів, або null. */
+  function nearDir(deg, dirs, lim) {
+    var best = null, bd = lim;
+    dirs.forEach(function (a) {
+      var d = Math.abs(((deg - a) % 360 + 540) % 360 - 180);
+      if (d <= bd) { bd = d; best = a; }
+    });
+    return best;
+  }
+
+  /* Розмах дуги від a0 до кута «туди, куди веде рука»: прилипає до ліній і
+     до 90°, 180°, 270°, 360° (з Shift — кожні 15°). sign — напрям обходу. */
+  function snapSweep(s, a0, dirs, shift) {
+    var end = a0 + s;
+    var to = nearDir(end, dirs, 8);
+    if (to != null) {
+      var d = normDeg(to - a0);
+      if (s >= 0) s = d === 0 ? (s > 180 ? 360 : 0) : d;
+      else s = d === 0 ? (s < -180 ? -360 : 0) : d - 360;
+      return s;
+    }
+    var mag = Math.abs(s), sg = s < 0 ? -1 : 1;
+    if (shift) return sg * Math.round(mag / 15) * 15;
+    [90, 180, 270, 360].forEach(function (k) { if (Math.abs(mag - k) <= 5) mag = k; });
+    return sg * mag;
+  }
+
+  function roundDeg(v) { return Math.round(v * 10) / 10; }
+
+  /* Рамка дуги в полі a — для рушіїв, які дуги ще не знають (учень із
+     відкритою раніше сторінкою): вони рахують межі будь-якого обʼєкта по
+     a, і без нього падали б — разом з усією дошкою. Самі ми її не
+     читаємо, лише оновлюємо після кожної зміни дуги. */
+  function arcBox(it) {
+    if (!it || it.t !== 'q' || !it.o || !(it.r > 0)) return it;
+    var b = arcBounds(it);
+    it.a = [round(b.x1), round(b.y1), round(b.x2), round(b.y2)];
+    return it;
+  }
+
+  /* Поки дугу малюють: центр, тонке коло радіуса й перший промінь —
+     щоб було видно, по чому піде дуга, ще до другого руху. */
+  function drawArcGuide(ctx, g, scale) {
+    var k = 1 / (scale || 1);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(75,63,219,.5)';
+    ctx.fillStyle = '#4B3FDB';
+    ctx.lineWidth = 1.2 * k;
+    if (g.r > 0) {
+      ctx.setLineDash([5 * k, 4 * k]);
+      ctx.globalAlpha = 0.45;
+      ctx.beginPath(); ctx.arc(g.o[0], g.o[1], g.r, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+      var st = arcAt(g, g.a0);
+      ctx.beginPath(); ctx.moveTo(g.o[0], g.o[1]); ctx.lineTo(st[0], st[1]); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(st[0], st[1], 3 * k, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.beginPath(); ctx.arc(g.o[0], g.o[1], 3.5 * k, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  /* ============================================================
      Геометрія об'єктів
      ============================================================ */
 
   function itemBounds(it) {
     var xs = [], ys = [], i;
+    if (it.t === 'q') return it.o && it.r > 0 ? arcBounds(it) : null;
     if (it.t === 'd') {
       var g = prims.get(it);
       if (!g) return null;
@@ -568,6 +708,7 @@
   /** Чи потрапляє точка (світові координати) в об'єкт. */
   function hitItem(it, x, y, tol) {
     var i, b;
+    if (it.t === 'q') return it.o && it.r > 0 ? arcHit(it, x, y, tol) : false;
     if (it.t === 'd') {
       var g = prims.get(it);
       if (!g) return false;
@@ -1497,6 +1638,11 @@
       it.p[1] = round(it.p[1] + dy);
       return;
     }
+    if (it.t === 'q') {
+      it.o = [round(it.o[0] + dx), round(it.o[1] + dy)];
+      arcBox(it);
+      return;
+    }
     if (it.t === 'p') {
       for (i = 0; i < it.d.length; i += 2) { it.d[i] = round(it.d[i] + dx); it.d[i + 1] = round(it.d[i + 1] + dy); }
     } else if (it.t === 'x') {
@@ -1526,7 +1672,11 @@
       it.p = [sx(src.p[0]), sy(src.p[1])];
       return;
     }
-    if (it.t === 'p' && src.d) {
+    if (it.t === 'q' && src.o) {
+      it.o = [sx(src.o[0]), sy(src.o[1])];
+      it.r = Math.max(1, round(src.r * k));
+      arcBox(it);
+    } else if (it.t === 'p' && src.d) {
       it.d = src.d.map(function (v, i) { return i % 2 ? sy(v) : sx(v); });
     } else if (it.t === 'x' && src.p) {
       // точка тексту — лінія основи; верх = p[1] − s, тож масштабується разом
@@ -1541,7 +1691,7 @@
 
   /** Знімок геометрії для scaleItemFrom. */
   function geomOf(it) {
-    return JSON.parse(JSON.stringify({ p: it.p, d: it.d, a: it.a, s: it.s, w: it.w }));
+    return JSON.parse(JSON.stringify({ p: it.p, d: it.d, a: it.a, s: it.s, w: it.w, o: it.o, r: it.r }));
   }
 
   /* ============================================================
@@ -1776,6 +1926,15 @@
         ctx.quadraticCurveTo(it.d[i], it.d[i + 1], mx, my);
       }
       ctx.lineTo(it.d[it.d.length - 2], it.d[it.d.length - 1]);
+      ctx.stroke();
+      return;
+    }
+
+    if (it.t === 'q') {
+      if (!it.o || !(it.r > 0) || !it.s) return;
+      ctx.beginPath();
+      // canvas веде дугу за годинниковою (y донизу) — це й наш додатний напрям
+      ctx.arc(it.o[0], it.o[1], it.r, it.a0 * D2R, (it.a0 + it.s) * D2R, it.s < 0);
       ctx.stroke();
       return;
     }
@@ -2511,6 +2670,7 @@
   /* ---------- Слайд ---------- */
 
   Board.prototype.setSlide = function (slide, keepView) {
+    if (this.slide && slide && this.slide.id !== slide.id && this.cancelArc) this.cancelArc();
     // ідемо з цього слайда — закріплюємо, яким він був після останньої власної дії
     if (this.slide && this.slide !== slide && this.history) this._closeTop();
 
@@ -2678,7 +2838,7 @@
       Штрих пера сюди не входить: його крок записується, лише коли перо
       піднялось (див. _pointerUp), тож перераховувати посеред нього нічого. */
   Board.prototype._gesture = function () {
-    return !!((this.draft && this.draft.t !== 'p') || this._drag || this._resize || this._gscale || this._erasing);
+    return !!((this.draft && this.draft.t !== 'p' && this.draft.t !== 'q') || this._drag || this._resize || this._gscale || this._erasing);
   };
 
   /**
@@ -2913,7 +3073,7 @@
   /* Обʼєкти зі своїми маркерами розміру (кути рамки, кінці лінії, вершини).
      Решту — насамперед рукописний штрих — один виділений обʼєкт масштабує
      тією самою рамкою, що й група: інакше його не було як збільшити. */
-  var OWN_RESIZE = { o: 1, l: 1, a: 1, n: 1, r: 1, e: 1, i: 1, g: 1, s: 1, f: 1, x: 1 };
+  var OWN_RESIZE = { o: 1, l: 1, a: 1, n: 1, r: 1, e: 1, i: 1, g: 1, s: 1, f: 1, x: 1, q: 1 };
   var NO_SCALE = { c: 1, d: 1 };
 
   Board.prototype._framed = function () {
@@ -2989,6 +3149,11 @@
     }
     if (it.t === 'l' || it.t === 'a' || it.t === 'n') {
       return [{ id: 'p1', x: it.a[0], y: it.a[1] }, { id: 'p2', x: it.a[2], y: it.a[3] }];
+    }
+    // дуга: два кінці й радіус посередині
+    if (it.t === 'q' && it.o && it.r > 0) {
+      var q0 = arcAt(it, it.a0), q1 = arcAt(it, it.a0 + it.s), qm = arcAt(it, it.a0 + it.s / 2);
+      return [{ id: 'q0', x: q0[0], y: q0[1] }, { id: 'q1', x: q1[0], y: q1[1] }, { id: 'qr', x: qm[0], y: qm[1] }];
     }
     if (it.t === 'r' || it.t === 'e' || it.t === 'i' || it.t === 'g') {
       var a = it.a;
@@ -3128,6 +3293,25 @@
 
   function resizeByHandle(it, id, wx, wy, free) {
     if (it.t === 'x') { resizeText(it, id, wx, wy); return; }
+    /* Дуга: кінець веде свій промінь, другий лишається на місці, напрям
+       обходу той самий; середина — радіус. Прилипає до 90°/180°/270°. */
+    if (it.t === 'q') {
+      var ang = Math.atan2(wy - it.o[1], wx - it.o[0]) / D2R;
+      if (id === 'qr') { it.r = Math.max(1, round(Math.hypot(wx - it.o[0], wy - it.o[1]))); arcBox(it); return; }
+      var pos = it.s >= 0;
+      if (id === 'q1') {
+        var dd = normDeg(ang - it.a0);
+        it.s = pos ? (dd || 360) : (dd ? dd - 360 : -360);
+      } else if (id === 'q0') {
+        var end = it.a0 + it.s;
+        var d2 = normDeg(end - ang);
+        it.a0 = roundDeg(free ? Math.round(ang / 15) * 15 : ang);
+        it.s = pos ? (d2 || 360) : (d2 ? d2 - 360 : -360);
+      }
+      it.s = roundDeg(snapSweep(it.s, it.a0, [], free));
+      arcBox(it);
+      return;
+    }
 
     /* Точка ходить лише вздовж графіка: вертикаль задає сама функція.
        Тому беремо з миші тільки x — інакше точка зʼїжджала б із кривої,
@@ -3512,6 +3696,8 @@
     }
 
     if (this.tool === 'point') { this._pointAt(w); return; }
+
+    if (this.tool === 'arc') { this._arcDown(w, e); return; }
     if (this.tool === 'link') { this._linkAt(w); return; }
 
     if (this.tool === 'solid') {
@@ -3559,6 +3745,138 @@
 
   /* Точка ставиться одним клацанням. Тягнути нічого не треба — і саме
      тому вона зручна: креслення будується швидше за розмову про нього. */
+  /* ---------- Дуга, як циркулем ----------
+     Перший рух: натиснути в центрі (липне до точок, вершин, кінців ліній) і
+     вести до початку дуги — це радіус і перший промінь; початок липне до
+     ліній, що виходять із центра. Другий рух: вести по колу — дуга йде за
+     рукою в будь-який бік, до повного кола, і прилипає до ліній та до 90°,
+     180°, 270°. Так малюють і дугу «радіусом», і позначку кута — будь-якого,
+     зокрема розгорнутого. Escape чи інший інструмент — скасувати. */
+
+  Board.prototype._arcCentre = function (w) {
+    var tol = 14 / this.scale;
+    var best = null, bd = tol;
+    function offer(p) {
+      if (!p) return;
+      var d = Math.hypot(p[0] - w.x, p[1] - w.y);
+      if (d <= bd) { bd = d; best = p; }
+    }
+    var items = this.items();
+    var map = idMap(items);
+    items.forEach(function (it) {
+      if (it.t === 'o' && window.Points) offer(Points.at(it, map));
+      else if (it.t === 'l' || it.t === 'a') { offer([it.a[0], it.a[1]]); offer([it.a[2], it.a[3]]); }
+      else if (it.t === 'q' && it.o) offer(it.o);
+    });
+    if (!best && window.Points) {
+      var sp = Points.snap(w.x, w.y, items, tol);
+      if (sp && sp.on) best = sp.p;
+    }
+    /* Поруч лише лінія — центр сідає на неї: вершина розгорнутого кута
+       лежить на самій прямій, і тоді обидва промені — рівно 0° і 180°. */
+    if (!best) {
+      var bl = tol;
+      var onSeg = function (A, B) {
+        if (!A || !B) return;
+        var vx = B[0] - A[0], vy = B[1] - A[1], L = vx * vx + vy * vy;
+        if (!L) return;
+        var t = Math.max(0, Math.min(1, ((w.x - A[0]) * vx + (w.y - A[1]) * vy) / L));
+        var q = [A[0] + vx * t, A[1] + vy * t];
+        var dq = Math.hypot(q[0] - w.x, q[1] - w.y);
+        if (dq <= bl) { bl = dq; best = q; }
+      };
+      items.forEach(function (it) {
+        if (it.t === 'l' || it.t === 'a') onSeg([it.a[0], it.a[1]], [it.a[2], it.a[3]]);
+        else if (it.t === 'c' && window.Points) onSeg(Points.at(map[it.a1], map), Points.at(map[it.a2], map));
+      });
+    }
+    var p = best || [w.x, w.y];
+    return [round(p[0]), round(p[1])];
+  };
+
+  Board.prototype._arcDown = function (w, e) {
+    var arm = this._arcArm;
+    if (!arm) {
+      var o = this._arcCentre(w);
+      this.draft = { t: 'q', c: this.color, w: this.width, m: this.showMeasures ? 1 : 0,
+                     o: o, r: 0, a0: 0, s: 0 };
+      this._draftBy = e.pointerId;
+      this._arcStage = 1;
+      this._arcDirs = arcDirs(this.items(), o, 10 / this.scale);
+      this.render();
+      return;
+    }
+    // другий рух: ведемо по колу від першого променя
+    this.draft = { t: 'q', c: arm.c, w: arm.w, m: arm.m, o: arm.o, r: arm.r, a0: arm.a0, s: 0 };
+    this._draftBy = e.pointerId;
+    this._arcStage = 2;
+    var a = Math.atan2(w.y - arm.o[1], w.x - arm.o[0]) / D2R;
+    // рух почався не біля початку — одразу з того кута (найкоротшим шляхом)
+    var d0 = ((a - arm.a0) % 360 + 540) % 360 - 180;
+    this.draft.s = Math.abs(d0) > 3 ? d0 : 0;
+    this._arcLast = a;
+    this._arcRaw = this.draft.s;
+    this.render();
+  };
+
+  Board.prototype._arcMove = function (w, e) {
+    var d = this.draft;
+    if (this._arcStage === 1) {
+      var dx = w.x - d.o[0], dy = w.y - d.o[1];
+      d.r = round(Math.hypot(dx, dy));
+      var a0 = Math.atan2(dy, dx) / D2R;
+      var near = nearDir(a0, this._arcDirs || [], 7);
+      if (near != null) a0 = near;
+      else if (e.shiftKey) a0 = Math.round(a0 / 15) * 15;
+      d.a0 = roundDeg(a0);
+      this.render();
+      return;
+    }
+    // розмах — накопичений поворот руки навколо центра (може бути й понад 180°)
+    var a = Math.atan2(w.y - d.o[1], w.x - d.o[0]) / D2R;
+    var step = ((a - this._arcLast) % 360 + 540) % 360 - 180;
+    this._arcLast = a;
+    this._arcRaw = Math.max(-360, Math.min(360, (this._arcRaw || 0) + step));
+    d.s = roundDeg(snapSweep(this._arcRaw, d.a0, this._arcDirs || [], e.shiftKey));
+    this.render();
+  };
+
+  Board.prototype._arcUp = function () {
+    var d = this.draft;
+    this.draft = null;
+    this._draftBy = null;
+    if (this._arcStage === 1) {
+      this._arcStage = 0;
+      // замалий радіус — це дотик, а не циркуль
+      if (!d || d.r * this.scale < 6) { this._arcArm = null; this.render(); return; }
+      this._arcArm = { o: d.o, r: d.r, a0: d.a0, c: d.c, w: d.w, m: d.m };
+      if (this.opts.onArcStage) this.opts.onArcStage(2);
+      this.render();
+      return;
+    }
+    this._arcStage = 0;
+    this._arcArm = null;
+    if (this.opts.onArcStage) this.opts.onArcStage(0);
+    if (!d || !d.s || Math.abs(d.s) < 0.5) { this.render(); return; }
+    this.snapshot();
+    var it = { t: 'q', c: d.c, w: d.w, o: d.o, r: d.r, a0: d.a0, s: d.s };
+    if (d.m) it.m = 1;
+    this.slide.items.push(ided(arcBox(it)));
+    this.rememberInitialView();
+    this.changed();
+  };
+
+  /** Скасувати недомальовану дугу (Escape, інший інструмент, інший слайд). */
+  Board.prototype.cancelArc = function () {
+    if (!this._arcArm && !(this.draft && this.draft.t === 'q')) return false;
+    this._arcArm = null;
+    this._arcStage = 0;
+    if (this.draft && this.draft.t === 'q') { this.draft = null; this._draftBy = null; }
+    if (this.opts.onArcStage) this.opts.onArcStage(0);
+    this.render();
+    return true;
+  };
+
   Board.prototype._pointAt = function (w) {
     this.snapshot();
     var snapP = window.Points
@@ -3700,6 +4018,11 @@
       var ew = this._eraseWait;
       this._eraseWait = null;
       this._startErase(ew.w);
+    }
+
+    if (this.draft && this.draft.t === 'q') {
+      if (this._draftBy == null || e.pointerId === this._draftBy) this._arcMove(w, e);
+      return;
     }
 
     if (this._erasing) { this._erase(w.x, w.y); return; }
@@ -3902,6 +4225,12 @@
       this.band = null;
       if (this.opts.onSelect) this.opts.onSelect(this.selection);
       this.render();
+      return;
+    }
+
+    if (this.draft && this.draft.t === 'q') {
+      if (this._draftBy != null && e.pointerId !== this._draftBy) return;
+      this._arcUp();
       return;
     }
 
@@ -4681,6 +5010,7 @@
   Board.prototype.setTool = function (tool) {
     // незавершене зʼєднання не має переживати перемикання інструмента
     if (tool !== 'link') this.linkFrom = null;
+    if (tool !== this.tool || tool !== 'arc') this.cancelArc();
     this.tool = tool;
     if (tool !== 'select') this.clearSelection();
     this.band = null;
@@ -4809,6 +5139,8 @@
     var self0 = this;
     for (var i = 0; i < items.length; i++) drawItem(ctx, items[i], this.scale);
     if (this.draft && !noDraft) drawItem(ctx, this.draft, this.scale);
+    var arcG = this.draft && this.draft.t === 'q' ? this.draft : this._arcArm;
+    if (arcG && arcG.o && !noDraft) drawArcGuide(ctx, arcG, this.scale);
 
     // набір, який переносять з іншої дошки, — напівпрозорий під вказівником
     if (this.placing && this.placing.at) {
@@ -4928,9 +5260,9 @@
     /* Підписи вимірів. Малюємо вже без світового перетворення, щоб текст
        мав однаковий розмір на будь-якому масштабі. */
     var labels = [];
-    if (this.draft && this.draft.t === 'g') collectMeasureLabels(this.draft, labels);
+    if (this.draft && (this.draft.t === 'g' || this.draft.t === 'q')) collectMeasureLabels(this.draft, labels);
     for (i = 0; i < items.length; i++) {
-      if (items[i].t === 'g' && items[i].m) collectMeasureLabels(items[i], labels);
+      if ((items[i].t === 'g' || items[i].t === 'q') && items[i].m) collectMeasureLabels(items[i], labels);
     }
     if (labels.length) {
       ctx.save();

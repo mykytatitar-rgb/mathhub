@@ -27,6 +27,8 @@
     { id: 'point',   icon: 'dot',        label: 'Точка (O)',        opts: 'point',  group: 'geo' },
     { id: 'link',    icon: 'link2',      label: 'Провести від точки (C)', opts: 'link', group: 'geo' },
     { id: 'line',    icon: 'shapeLine',  label: 'Лінія (L)',        opts: 'stroke', group: 'geo' },
+    // як циркулем: центр → початок → по колу; і дуга радіусом, і позначка будь-якого кута
+    { id: 'arc',     icon: 'arc',        label: 'Дуга (U)',         opts: 'stroke', group: 'geo' },
     { id: 'arrow',   icon: 'arrowRight', label: 'Стрілка (A)',      opts: 'stroke', group: 'geo' },
     { id: 'solid',   icon: 'cube3d',     label: 'Стереометрія (J)', opts: 'stroke', group: 'geo' },
 
@@ -326,7 +328,14 @@
       onChange: function () { markDirty(); refreshUndo(); refreshEmpty(); scheduleThumb(); updateSelBar(); },
       onViewChange: function () { updateZoom(); updateSelBar(); },
       onSelect: function () { refreshUndo(); updateSelBar(); },
-      onToolChange: function (t) { syncToolButtons(t); renderOpts(); },
+      onToolChange: function (t) {
+        syncToolButtons(t); renderOpts();
+        if (t === 'arc') hint('Дуга: натисніть у центрі й ведіть до початку дуги, далі — ведіть по колу');
+      },
+      // перший рух дуги закінчено — підказати другий, тихо, внизу дошки
+      onArcStage: function (n) {
+        if (n === 2) hint('Тепер ведіть по колу — дуга піде за рукою; біля 90°, 180° і ліній прилипає');
+      },
       /* Точку підвели до місця дотику — про це треба сказати. Але тихо:
          підказкою внизу дошки, а не повідомленням поверх креслення посеред
          уроку. Скасовується, як і все, кроком назад. */
@@ -3907,7 +3916,8 @@
     if (e.altKey) return;
 
     var map = { v: 'select', p: 'pen', e: 'eraser', t: 'text', s: 'shape',
-                l: 'line', a: 'arrow', n: 'numline', k: 'plane', j: 'solid', o: 'point', c: 'link', h: 'hand' };
+                l: 'line', a: 'arrow', n: 'numline', k: 'plane', j: 'solid', o: 'point', c: 'link', h: 'hand',
+                u: 'arc' };
     var kk = e.key.toLowerCase();
     if (map[kk]) { e.preventDefault(); setTool(map[kk]); return; }
     if (kk === 'r') { e.preventDefault(); eng.setShape('rect'); renderOpts(); return; }
@@ -3919,6 +3929,7 @@
       return;
     }
     if (e.key === 'Escape') {
+      if (eng.cancelArc && eng.cancelArc()) return;     // недомальована дуга — лише її
       if (eng.selection.length) { eng.clearSelection(); eng.render(); return; }
       document.querySelector('[data-act="board-exit"]').click();
       return;

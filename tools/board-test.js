@@ -769,5 +769,71 @@ scenario('Вигляд без розміру екрана: на телефоні
   same(tb.scale + ' ' + tb.cam.x + ',' + tb.cam.y, '1.5 5,6', 'планшет відкрив збережений вигляд');
 });
 
+/* ---------- Дуга ---------- */
+
+function arcGesture(b, cx, cy, sx, sy, path) {
+  b.setTool('arc');
+  pid++;
+  b._pointerDown(ev(cx, cy));                 // центр
+  b._pointerMove(ev(sx, sy));                 // до початку дуги
+  b._pointerUp(ev(sx, sy));
+  pid++;
+  b._pointerDown(ev(sx, sy));                 // по колу
+  path.forEach(function (q) { b._pointerMove(ev(q[0], q[1])); });
+  var last = path[path.length - 1];
+  b._pointerUp(ev(last[0], last[1]));
+}
+function arcs(b) { return b.items().filter(function (i) { return i.t === 'q'; }); }
+
+scenario('Дуга як циркулем: центр, радіус, розмах за рукою', function () {
+  var b = engine().b;
+  var steps = b.history.length;
+  arcGesture(b, 100, 100, 200, 100, [[171, 171], [100, 200], [29, 171], [1, 103]]);
+  var q = arcs(b)[0];
+  ok(!!q, 'дугу намальовано');
+  same(q && q.o.join(','), '100,100', 'центр там, де натиснули');
+  same(q && q.r, 100, 'радіус — до початку дуги');
+  same(q && q.a0, 0, 'початок — праворуч від центра');
+  same(q && q.s, 180, 'розмах ~180° прилип точно до 180°');
+  same(b.history.length, steps + 1, 'один крок історії на всю дугу');
+  ok(b.items().some(function (it) { return it.t === 'q'; }) && b.undo() && arcs(b).length === 0, 'крок назад прибрав дугу цілком');
+});
+
+scenario('Розгорнутий кут: точка на прямій — дуга від променя до протилежного', function () {
+  var b = engine().b;
+  b.slide.items.push({ id: 'ln', t: 'l', c: '#000', w: 3, a: [0, 100, 300, 100] });
+  // центр трохи повз пряму, початок трохи під кутом — усе прилипає
+  arcGesture(b, 101, 101, 160, 106, [[130, 150], [100, 160], [60, 140], [42, 108]]);
+  var q = arcs(b)[0];
+  ok(!!q, 'дугу намальовано');
+  same(q && q.a0, 0, 'початок прилип до прямої');
+  same(q && Math.abs(q.s), 180, 'кінець — на протилежному промені: рівно 180°');
+});
+
+scenario('Дуга: влучання лише в саму дугу, кінцем міняється розмах, Escape скасовує', function () {
+  var b = engine().b;
+  arcGesture(b, 100, 100, 200, 100, [[171, 171], [100, 200]]);
+  var q = arcs(b)[0];
+  same(q && q.s, 90, 'чверть кола');
+  b.setTool('select');
+  ok(b._hitTest(171, 171) === q, 'точка на дузі — влучання');
+  ok(b._hitTest(100, 0) !== q, 'протилежний бік кола — повз');
+  b.setSelection([q]);
+  var h = b._handles().filter(function (x) { return x.id === 'q1'; })[0];
+  ok(!!h, 'у дуги є ручка кінця');
+  pid++;
+  b._pointerDown(ev(h.x, h.y));
+  b._pointerMove(ev(1, 101));
+  b._pointerUp(ev(1, 101));
+  same(q.s, 180, 'кінцем дотягнули до 180°');
+  // недомальована дуга скасовується
+  var n = b.items().length;
+  b.setTool('arc');
+  pid++;
+  b._pointerDown(ev(300, 300)); b._pointerMove(ev(380, 300)); b._pointerUp(ev(380, 300));
+  ok(b.cancelArc(), 'Escape: є що скасувати');
+  same(b.items().length, n, 'нічого не додалось');
+});
+
 console.log('\n' + passes + ' пройдено, ' + fails + ' не пройдено');
 process.exit(fails ? 1 : 0);

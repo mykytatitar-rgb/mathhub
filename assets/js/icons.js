@@ -71,6 +71,7 @@
     eraser:    '<path d="M8.5 20H20"/><path d="M15.5 4.5 20 9a1.7 1.7 0 0 1 0 2.4L12.4 19a1.7 1.7 0 0 1-2.4 0l-5-5a1.7 1.7 0 0 1 0-2.4l8.1-7.1a1.7 1.7 0 0 1 2.4 0z"/><path d="M8 8.5 15.5 16"/>',
     textT:     '<path d="M4 6V4h16v2"/><path d="M12 4v16"/><path d="M8.5 20h7"/>',
     shapeLine: '<path d="M5 19 19 5"/>',
+    arc:       '<path d="M4 19a15 15 0 0 1 15-15"/><circle cx="19" cy="19" r="1.6"/><path d="M19 19 4 19" stroke-dasharray="2 2.4"/>',
     shapes:    '<path d="M8.2 3.5 13.4 12H3z"/><rect x="12.5" y="12.5" width="8.5" height="8" rx="1.6"/><circle cx="17" cy="7" r="3.6"/>',
     globe:     '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/>',
     mathmap:   '<circle cx="12" cy="12" r="2.6"/><path d="M12 9.4V4.6M14.3 13.3l4.4 2.5M9.7 13.3l-4.4 2.5"/><circle cx="12" cy="3.2" r="1.6"/><circle cx="20" cy="16.6" r="1.6"/><circle cx="4" cy="16.6" r="1.6"/>',

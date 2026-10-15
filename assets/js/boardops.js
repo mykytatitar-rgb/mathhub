@@ -187,8 +187,8 @@
     try {
       var s = b._sync;
       if (!s) return (b.slides || []).some(function (sl) { return (sl.items || []).length; });
-      var from = s.base ? known(b) : (s.ref || { slides: [] });
-      return K().diff(from, K().strip(b)).length > 0;
+      if (s.base) return localDiff(b).length > 0;
+      return K().diff(s.ref || { slides: [] }, b).length > 0;
     } catch (e) { return true; }                  // не змогли порівняти — краще вважати невідправленим
   };
 
@@ -226,20 +226,35 @@
     touched = {};
     touchedAll = false;
   }
+  /* Лише дошки: стан обміну живе в самій дошці. Досі тут був S.save() —
+     уся база кабінету в localStorage разом з усіма слухачами (перегляд
+     записів, календар, портали) після кожного штриха й кожного читання. На
+     великій базі це й були паузи посеред письма. */
+  function writeTouched() {
+    flushTouch();
+    if (S.saveBoards) S.saveBoards(); else S.save();
+  }
+  var saveIdle = null;
   function persistSoon(id) {
     touch(id);
-    if (saveTimer) return;
+    if (saveTimer || saveIdle) return;
     saveTimer = setTimeout(function () {
       saveTimer = null;
-      flushTouch();
-      S.save();
+      /* Запис дошки текстом на списаному уроці — мілісекунди; робимо його,
+         коли браузер вільний (між штрихами), а не посеред наступної
+         літери. Не пізніше ніж за 2 с. */
+      if (window.requestIdleCallback) {
+        saveIdle = requestIdleCallback(function () { saveIdle = null; writeTouched(); }, { timeout: 2000 });
+        return;
+      }
+      writeTouched();
     }, 800);
   }
   function persistNow(id) {
     touch(id);
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-    flushTouch();
-    S.save();
+    if (saveIdle) { if (window.cancelIdleCallback) cancelIdleCallback(saveIdle); saveIdle = null; }
+    writeTouched();
   }
 
   /* ============================================================
@@ -256,6 +271,68 @@
     (s.fly || []).forEach(function (op) { K().apply(k, op); });
     return k;
   }
+
+  /* ---------- Порівняння без копій ----------
+     Після кожного штриха дошку порівнюють з «відомим серверу» (відправка,
+     читання, запис) — і щоразу робили дві повні копії всієї дошки й
+     переписували в текст кожен обʼєкт на кожному слайді. На справжньому
+     уроці (кілька слайдів, сотні штрихів, фото) це десятки мілісекунд за
+     раз і мегабайти сміття, яке браузер потім прибирав помітною паузою —
+     посеред письма.
+
+     Тепер «відоме серверу» тримається готовим (knownView) і оновлюється
+     лише новими діями, жива дошка не копіюється (diff лише читає її), а
+     текст незмінних обʼєктів «відомого» памʼятається: K.apply щоразу кладе
+     новий обʼєкт, тож старий текст не застаріває. Готове дозволено лише
+     читати — для змін є known(). */
+  var knownCache = new WeakMap();      // дошка → { s, base, bv, fly, n, kn }
+  var textOf = new WeakMap();          // обʼєкт «відомого» → його текст
+
+  function wasJson(x) {
+    if (!x || typeof x !== 'object') return JSON.stringify(x);
+    var j = textOf.get(x);
+    if (j === undefined) { j = JSON.stringify(x); textOf.set(x, j); }
+    return j;
+  }
+
+  /** base змінили на місці — готове «відоме» вже не те. */
+  function touchBase(s) { if (s) s._bv = (s._bv || 0) + 1; }
+
+  function knownView(board) {
+    var s = board._sync;
+    var fly = s.fly || [];
+    var c = knownCache.get(board);
+    if (c && c.s === s && c.base === s.base && c.bv === (s._bv || 0) && c.fly === fly && c.n <= fly.length) {
+      // своє щойно поїхало — дописуємо лише нове
+      for (var i = c.n; i < fly.length; i++) K().apply(c.kn, fly[i]);
+      c.n = fly.length;
+      return c.kn;
+    }
+    var kn = known(board);
+    knownCache.set(board, { s: s, base: s.base, bv: s._bv || 0, fly: fly, n: fly.length, kn: kn });
+    return kn;
+  }
+
+  /* Свої дії підтвердились: base + fly дають те саме, що й до того, лише
+     дія перейшла з fly в base. Готове «відоме» лишається чинним. */
+  function keepKnown(board) {
+    var s = board._sync, c = knownCache.get(board);
+    if (!c || c.s !== s) return;
+    c.base = s.base;
+    c.bv = s._bv || 0;
+    c.fly = s.fly || [];
+    c.n = c.fly.length;
+  }
+
+  /** Що намальовано тут і ще не відоме серверу (дії). */
+  function localDiff(board) {
+    return K().diff(knownView(board), board, wasJson);
+  }
+  /** Те саме ззовні (перевірки, тести): дії дошки boardId, ще не відомі серверу, або null. */
+  O.localDiff = function (boardId) {
+    var b = S.getBoard(boardId);
+    return b && b._sync && b._sync.base ? localDiff(b) : null;
+  };
 
   /**
    * Підготувати дошку до обміну.
@@ -281,10 +358,18 @@
    * посилання (виділення, поточний слайд), і підміна кожного дрібного
    * обʼєкта заради одного чужого штриха збивала б роботу під рукою.
    */
+  /* Вміст дошки текстом — те саме, що JSON.stringify(strip(дошка)), але без
+     копії всієї дошки: лише її властивості й слайди як є. */
+  function contentText(b) {
+    var p = {};
+    Object.keys(b).forEach(function (key) { if (key !== 'slides' && K().isProp(key)) p[key] = b[key]; });
+    return JSON.stringify([p, b.slides || []]);
+  }
+
   function putContent(board, fresh) {
     var k = K();
-    var before = JSON.stringify(k.strip(board));
-    if (before === JSON.stringify(k.strip(fresh))) return false;
+    var before = contentText(board);
+    if (before === contentText(fresh)) return false;
 
     // відкрита дошка має знати, що зараз ляже чуже, — для «кроку назад»
     if (O.view && O.view.id === board.lessonId && O.view.before) {
@@ -313,7 +398,8 @@
     });
     if (!board.slides.length) board.slides.push(S.newSlide());
 
-    return JSON.stringify(k.strip(board)) !== before;
+    // вміст відрізнявся (див. на початку), а тепер дошка — це fresh: отже, змінилась
+    return true;
   }
 
   /**
@@ -566,8 +652,17 @@
       rows = rows.filter(function (r) { return r.id > (s.floor || 0) && !recent[r.id]; });
       if (!rows.length) return 0;
 
-      var before = known(board);
-      var loc = k.diff(before, k.strip(board));      // тут намальоване й ще не відправлене
+      /* Лише свої ж дії повернулися з журналу — так буває після кожної
+         відправки. «Відоме серверу» від цього не міняється: дія переходить
+         із «в дорозі» в base. Досі й тут щоразу робились копії всієї дошки
+         й повне порівняння — після кожного штриха, на рівному місці. */
+      var flyU = {};
+      s.fly.forEach(function (f) { if (f && f.u) flyU[f.u] = 1; });
+      var ownOnly = rows.every(function (r) { return r.op && r.op.u && flyU[r.op.u] && r.op.t !== 's-'; });
+
+      // готове «відоме» — до стану перед читанням (з усім, що встигло поїхати), щоб keepKnown лишив його вірним
+      if (ownOnly) knownView(board);
+      var loc = ownOnly ? null : localDiff(board);   // тут намальоване й ще не відправлене
       var sent = s.fly.slice();                      // своє, що вже в дорозі
 
       rows.forEach(function (r) {
@@ -585,13 +680,21 @@
       }
       // запобіжник: дія, чий номер уже позаду, точно прочитана
       s.fly = s.fly.filter(function (f) { return !(f._upto && s.seen >= f._upto); });
+      touchBase(s);
 
-      var fresh = overlay(known(board), loc, k.strip(board), sent);
+      if (ownOnly) {
+        keepKnown(board);                            // те саме «відоме», лише інакше розкладене
+        persistSoon(id);
+        return 0;
+      }
+
+      // overlay лише читає дошку (шукає слайди за номером) — копія їй не потрібна
+      var fresh = overlay(known(board), loc, board, sent);
       var changed = putContent(board, fresh);
       if (changed) persistNow(id); else persistSoon(id);
 
       // тут лишилось своє, чого сервер ще не має (зокрема повернений слайд) — везти
-      if (k.diff(known(board), k.strip(board)).length) sendSoon(id);
+      if (localDiff(board).length) sendSoon(id);
       return changed ? 1 : 0;
     });
   }
@@ -642,7 +745,7 @@
 
   function recordNow(board) {
     var id = board.lessonId, k = K(), s = board._sync;
-    var ops = k.diff(known(board), k.strip(board));
+    var ops = localDiff(board);
     if (!ops.length) { setPending(id, false); delete errs[id]; return Promise.resolve(0); }
 
     /* Запобіжник від кола: та сама різниця щойно вже їздила, а стан так і
@@ -1002,12 +1105,12 @@
           var ks = kS[bs.id];
           if (!ks || after['s:' + bs.id]) return;       // ще не відправлене — звичайна черга
           var ts = tS[bs.id];
-          if (!ts) { k.apply(s.base, { t: 's-', s: bs.id }); lost++; return; }
+          if (!ts) { k.apply(s.base, { t: 's-', s: bs.id }); touchBase(s); lost++; return; }
           var tI = byId(ts.items), kI = byId(ks.items), gone = [];
           (bs.items || []).forEach(function (it) {
             if (it && it.id && kI[it.id] && !tI[it.id] && !after['i:' + it.id]) gone.push(it.id);
           });
-          if (gone.length) { k.apply(s.base, { t: 'i-', s: bs.id, ids: gone }); lost += gone.length; }
+          if (gone.length) { k.apply(s.base, { t: 'i-', s: bs.id, ids: gone }); touchBase(s); lost += gone.length; }
         });
 
         // 2) на сервері є, а пристрій про це не знав
@@ -1025,6 +1128,7 @@
           var loc = k.diff(kn, B);                      // тут намальоване й ще не відправлене
           var sent = (s.fly || []).slice();
           down.forEach(function (op) { k.apply(s.base, op); });
+          touchBase(s);
           putContent(board, overlay(known(board), loc, B, sent));
           found = down.length;
         }

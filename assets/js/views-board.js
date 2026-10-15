@@ -2260,27 +2260,69 @@
      тримав лише одну: кожне оновлення рейки перемальовувало й кодувало в
      PNG усі слайди, а на живому уроці — після кожного штриха учня. Ще й
      ключ брав лише кількість обʼєктів, і пересунуте мініатюра не бачила. */
+  /* Відбиток — переписати в текст усі обʼєкти слайда й пройти рядок
+     посимвольно; для всіх слайдів після кожного штриха це було понад 10 мс.
+     Тому для слайдів, крім того, де пишуть, памʼятаємо відбиток разом зі
+     списком самих обʼєктів: чуже (putContent) кладе змінене новими
+     обʼєктами, тож ті самі обʼєкти — той самий вміст. Слайд під рукою
+     рушій змінює на місці — його рахуємо щоразу. */
+  var sigMemo = new WeakMap();      // слайд → { bg, refs, sig }
+  function slideSigFast(s, isCurrent) {
+    var items = s.items || [];
+    var m = sigMemo.get(s);
+    if (!isCurrent && m && m.bg === s.bg && m.refs.length === items.length &&
+        m.refs.every(function (x, i) { return x === items[i]; })) return m.sig;
+    var sig = slideSig(s);
+    sigMemo.set(s, { bg: s.bg, refs: items.slice(), sig: sig });
+    return sig;
+  }
+
   function thumbFor(i) {
     var s = cur.board.slides[i];
     if (!(s.items || []).length) return null;
-    var sig = slideSig(s);
+    var sig = slideSigFast(s, i === cur.index);
     var got = cur.thumbs[s.id];
     if (got && got.sig === sig) return got.url;
-    var url;
-    try { url = window.Board.renderToCanvas(s, 420).toDataURL('image/png'); }
+    if (got && got.pending === sig) return got.url;     // ця вже малюється у фоні
+    var canvas;
+    try { canvas = window.Board.renderToCanvas(s, 420); }
     catch (e) { return null; }
     /* Фото ще вантажаться — на мініатюрі замість них заглушки. Таку не
        запамʼятовуємо, а перемальовуємо, щойно фото приїдуть. */
-    if (window.Board.imagesReady && !window.Board.imagesReady([s])) {
-      if (window.Board.preloadImages) window.Board.preloadImages([s]).then(function () { scheduleThumb(); });
-      return url;
-    }
+    var loading = window.Board.imagesReady && !window.Board.imagesReady([s]);
+    if (loading && window.Board.preloadImages) window.Board.preloadImages([s]).then(function () { scheduleThumb(); });
     /* Фото не завантажилось (ще не доїхало на сервер) — теж не
        запамʼятовуємо: повтор (retryFailedImages) його підтягне, і мініатюра
        має показати фото, а не лишитися з заглушкою до наступної правки. */
-    if (window.Board.imagesFailed && window.Board.imagesFailed([s])) return url;
-    cur.thumbs[s.id] = { sig: sig, url: url };
-    return url;
+    var keep = !loading && !(window.Board.imagesFailed && window.Board.imagesFailed([s]));
+
+    /* Уже є попередня — кодуємо нову у фоні (toBlob не тримає сторінку), а
+       поки показуємо стару. Кодування PNG — понад 20 мс, і досі воно
+       припадало саме на паузу між штрихами. Першу — одразу, щоб у стрічці
+       не мигнуло «порожній». */
+    if (got && got.url && canvas.toBlob) {
+      var slideId = s.id;
+      got.pending = sig;
+      canvas.toBlob(function (blob) {
+        if (!cur || !blob) return;
+        var now = cur.thumbs[slideId];
+        if (!now || now.pending !== sig) return;          // тим часом намалювали новішу
+        var url = URL.createObjectURL(blob);
+        if (now.url && now.url.indexOf('blob:') === 0) URL.revokeObjectURL(now.url);
+        cur.thumbs[slideId] = keep ? { sig: sig, url: url } : { sig: null, url: url };
+        U.$$('.slide-card[data-slide-index]').forEach(function (card) {
+          var k = +card.getAttribute('data-slide-index');
+          var img = card.querySelector('.slide-card__thumb');
+          if (img && cur.board.slides[k] && cur.board.slides[k].id === slideId) img.src = url;
+        });
+      }, 'image/png');
+      return got.url;
+    }
+
+    var first;
+    try { first = canvas.toDataURL('image/png'); } catch (e) { return null; }
+    cur.thumbs[s.id] = keep ? { sig: sig, url: first } : { sig: null, url: first };
+    return first;
   }
 
   /** Номери слайдів одного рядка — у порядку загального масиву. */

@@ -66,11 +66,17 @@
     return true;
   }
 
-  /** Чим стан now відрізняється від was. Повертає список дій, можливо порожній. */
-  K.diff = function (was, now) {
+  /**
+   * Чим стан now відрізняється від was. Повертає список дій, можливо порожній.
+   * now лише читається (можна передати саму дошку, без копії). wasJson —
+   * необовʼязковий: як записати обʼєкт із was у текст; дає змогу памʼятати
+   * текст незмінних обʼєктів між порівняннями (див. boardops.js).
+   */
+  K.diff = function (was, now, wasJson) {
     var ops = [];
     if (!now) return ops;
     was = was || { slides: [] };
+    var wj = wasJson || JSON.stringify;
     var wasList = was.slides || [], nowList = now.slides || [];
 
     // властивості самої дошки
@@ -121,7 +127,7 @@
         if (!it || !it.id) return;
         var before = wasItems[it.id];
         if (!before) ops.push({ t: 'i+', s: sl.id, it: clone(it), at: at });
-        else if (JSON.stringify(before) !== JSON.stringify(it)) ops.push({ t: 'i~', s: sl.id, it: clone(it) });
+        else if (wj(before) !== JSON.stringify(it)) ops.push({ t: 'i~', s: sl.id, it: clone(it) });
       });
 
       // що над чим: без цього «на передній план» лишався б лише тут

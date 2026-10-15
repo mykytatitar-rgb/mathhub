@@ -713,6 +713,35 @@ scenario('Дошка, відправлена у фоні одразу після
   });
 });
 
+scenario('Свій штрих повернувся з журналу — «відоме серверу» не ламається, новий штрих лишається невідправленим', function () {
+  var srv = new Server(), A = new Device('A', srv);
+  var O = A.ctx.BoardOps;
+  A.newBoard('L');
+  A.draw('L', 0, 'a1');
+  return A.send('L').then(function () {
+    A.draw('L', 0, 'a2');                              // намальовано, поки перший штрих їхав
+    var d0 = O.localDiff('L').map(function (o) { return o.t + ':' + (o.it && o.it.id); }).join(',');
+    same(d0, 'i+:a2', 'до читання невідправлене — лише a2');
+    return A.pull('L');                                // повертається свій a1
+  }).then(function () {
+    var d1 = O.localDiff('L').map(function (o) { return o.t + ':' + (o.it && o.it.id); }).join(',');
+    same(d1, 'i+:a2', 'після читання — так само лише a2, a1 не задвоївся');
+    return A.send('L');
+  }).then(function () { return A.pull('L'); })
+  .then(function () {
+    same(O.localDiff('L').length, 0, 'усе на сервері — різниці немає');
+    ok(onServer(srv, 'L', 'a1') && onServer(srv, 'L', 'a2'), 'на сервері обидва штрихи');
+    // кожен — один раз: окремою дією чи разом зі слайдом, але не двічі
+    function times(id) {
+      return srv.ops.filter(function (o) {
+        return o.board === 'L' && ((o.op.it && o.op.it.id === id) ||
+          (o.op.sl && (o.op.sl.items || []).some(function (it) { return it.id === id; })));
+      }).length;
+    }
+    same(times('a1') + ',' + times('a2'), '1,1', 'жоден не поїхав двічі');
+  });
+});
+
 scenario('Видалене тут, поки видалення не дійшло, не повертається з сервера', function () {
   var srv = new Server(), A = new Device('A', srv);
   var RA = A.ctx.RecSync;
@@ -871,6 +900,10 @@ function believe(dev, id, slideIdx, item) {
   var b = dev.board(id);
   b.slides[slideIdx].items.push(JSON.parse(JSON.stringify(item)));
   b._sync.base.slides[slideIdx].items.push(JSON.parse(JSON.stringify(item)));
+  /* Хибна памʼять пристрою насправді приходить із диска — новим обʼєктом.
+     Так і тут: інакше готове «відоме серверу» (boardops knownView) не
+     знало б про підміну, якої жоден код кабінету не робить. */
+  b._sync.base = JSON.parse(JSON.stringify(b._sync.base));
 }
 function onServer(srv, id, itemId) {
   return srv.ops.some(function (o) {

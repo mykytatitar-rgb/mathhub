@@ -137,3 +137,15 @@ def test_claude_refusal_is_not_an_event(monkeypatch):
     monkeypatch.setattr(parser, "_anthropic_client", lambda: Client())
     with pytest.raises(parser.NotAnEvent):
         parser.parse_event("x", now=NOW)
+
+
+@pytest.mark.parametrize("path,name", [
+    ("voice/file_1.oga", "audio.ogg"),
+    ("music/file_2.MP3", "audio.mp3"),
+    ("music/file_3.m4a", "audio.m4a"),
+    ("documents/file_4", "audio.ogg"),
+    ("", "audio.ogg"),
+])
+def test_stt_upload_name(path, name):
+    from bot.stt import upload_name
+    assert upload_name(path) == name

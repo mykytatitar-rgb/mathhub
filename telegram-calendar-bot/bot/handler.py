@@ -60,8 +60,8 @@ def _on_message(msg: dict) -> None:
                 tg.send_message(chat_id, "Задовге голосове — до 5 хвилин, будь ласка.")
                 return
             tg.typing(chat_id)
-            audio, _path = tg.download_file(voice["file_id"])
-            transcript = stt.transcribe(audio)
+            audio, path = tg.download_file(voice["file_id"])
+            transcript = stt.transcribe(audio, path)
             text = transcript
         if not text:
             tg.send_message(chat_id, "Надішли голосове або текст з подією 🙂" if not voice else "Нічого не розчув 🤷")

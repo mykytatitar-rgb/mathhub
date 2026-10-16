@@ -33,7 +33,7 @@ class World:
                 return httpx2.Response(200, json={"ok": True, "result": {"message_id": self.next_message_id}})
             return httpx2.Response(200, json={"ok": True, "result": True})
         if path.endswith("/audio/transcriptions"):
-            assert b'filename="voice.ogg"' in req.content
+            assert b'filename="audio.ogg"' in req.content
             return httpx2.Response(200, json={"text": self.transcript})
         if path.endswith("/chat/completions"):
             return httpx2.Response(200, json={"choices": [{"message": {"content": json.dumps(self.llm)}}]})

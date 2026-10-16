@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from .config import settings
-from .http import http
+from .http import HTTPError, http
 
 API = "https://api.telegram.org"
 MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024  # Bot API getFile limit
@@ -13,7 +13,10 @@ class TelegramError(RuntimeError):
 
 
 def call(method: str, **params) -> dict:
-    r = http.post(f"{API}/bot{settings().telegram_bot_token}/{method}", json=params)
+    try:
+        r = http.post(f"{API}/bot{settings().telegram_bot_token}/{method}", json=params)
+    except HTTPError as e:  # never let the URL (it holds the token) into a message
+        raise TelegramError(f"{method}: {type(e).__name__}") from None
     data = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
     if not data.get("ok"):
         raise TelegramError(f"{method}: {r.status_code} {data.get('description', r.text[:200])}")
@@ -57,7 +60,10 @@ def download_file(file_id: str) -> tuple[bytes, str]:
     path = info.get("file_path")
     if not path:
         raise TelegramError("getFile returned no file_path (file too big?)")
-    r = http.get(f"{API}/file/bot{settings().telegram_bot_token}/{path}")
+    try:
+        r = http.get(f"{API}/file/bot{settings().telegram_bot_token}/{path}")
+    except HTTPError as e:
+        raise TelegramError(f"download: {type(e).__name__}") from None
     if r.status_code != 200:
         raise TelegramError(f"download failed: {r.status_code}")
     return r.content, path

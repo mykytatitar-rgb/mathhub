@@ -5,6 +5,7 @@ import httpx2
 import pytest
 
 from bot.handler import process_update
+from test_calendar import FakeCalendar
 
 EVENT_JSON = {"error": "", "title": "Зустріч з Олею", "date": "2026-10-17", "time": "15:00",
               "duration_minutes": 60, "location": "кафе", "notes": ""}
@@ -13,7 +14,7 @@ EVENT_JSON = {"error": "", "title": "Зустріч з Олею", "date": "2026-
 class World:
     def __init__(self):
         self.tg = []          # (method, params)
-        self.inserted = []    # google event bodies
+        self.calendar = FakeCalendar()
         self.transcript = "завтра о 15 зустріч з Олею в кафе"
         self.llm = EVENT_JSON
         self.next_message_id = 100
@@ -37,17 +38,13 @@ class World:
             return httpx2.Response(200, json={"text": self.transcript})
         if path.endswith("/chat/completions"):
             return httpx2.Response(200, json={"choices": [{"message": {"content": json.dumps(self.llm)}}]})
-        if host == "oauth2.googleapis.com":
-            return httpx2.Response(200, json={"access_token": "at"})
-        if host == "www.googleapis.com" and req.method == "POST":
-            body = json.loads(req.content)
-            if any(b["id"] == body["id"] for b in self.inserted):
-                return httpx2.Response(409, json={})
-            self.inserted.append(body)
-            return httpx2.Response(200, json={"htmlLink": "https://calendar.google.com/e/1"})
-        if host == "www.googleapis.com":
-            return httpx2.Response(200, json={"htmlLink": "https://calendar.google.com/e/1"})
+        if host in ("oauth2.googleapis.com", "www.googleapis.com"):
+            return self.calendar(req)
         raise AssertionError(f"unexpected request {req.method} {req.url}")
+
+    @property
+    def inserted(self):
+        return [e for e in self.calendar.events.values() if e["status"] != "cancelled"]
 
     def sent(self, method):
         return [p for m, p in self.tg if m == method]
@@ -91,7 +88,7 @@ def test_confirm_writes_calendar_and_is_idempotent(world):
     assert len(world.inserted) == 1
     body = world.inserted[0]
     assert body["summary"] == "Зустріч з Олею" and body["location"] == "кафе"
-    assert body["start"] == {"dateTime": "2026-10-17T15:00:00", "timeZone": "Europe/Kyiv"}
+    assert body["start"] == {"dateTime": "2026-10-17T15:00:00+03:00", "timeZone": "Europe/Kyiv"}
     edits = world.sent("editMessageText")
     assert edits[0]["text"].startswith("✅ Додано в календар")
     assert edits[1]["text"].startswith("✅ Вже в календарі")
@@ -163,4 +160,67 @@ def test_upstream_failure_is_reported_not_raised(mock_http):
 
     mock_http(handler)
     process_update(voice_update())
-    assert "Не вдалося обробити" in w.sent("sendMessage")[0]["text"]
+    assert "Не вдалося розпізнати голос" in w.sent("sendMessage")[0]["text"]
+
+
+def test_cancel_right_after_confirm_removes_event(world):
+    process_update(voice_update())
+    confirmation = world.sent("sendMessage")[0]["text"]
+    process_update(button_update(confirmation, "ok"))
+    process_update(button_update(confirmation, "no"))  # tapped before the ✅ edit arrived
+    assert world.inserted == []
+    assert world.sent("editMessageText")[-1]["text"].startswith("❌ Скасовано (прибрав з календаря)")
+
+
+@pytest.mark.parametrize("where", ["/audio/transcriptions", "/chat/completions", "/getFile", "/sendChatAction"])
+def test_network_errors_still_get_a_reply(mock_http, where):
+    w = World()
+
+    def handler(req):
+        if req.url.path.endswith(where):
+            raise httpx2.ReadTimeout("slow")
+        return w(req)
+
+    mock_http(handler)
+    process_update(voice_update())
+    texts = [m["text"] for m in w.sent("sendMessage")]
+    if where == "/sendChatAction":  # typing indicator is cosmetic: flow continues
+        assert "📌 Зустріч з Олею" in texts[0]
+    else:
+        assert texts and texts[0].startswith("⚠️")
+
+
+def test_calendar_network_error_on_confirm(mock_http):
+    w = World()
+    mock_http(w)
+    process_update(voice_update())
+    confirmation = w.sent("sendMessage")[0]["text"]
+
+    def handler(req):
+        if req.url.host == "www.googleapis.com":
+            raise httpx2.ConnectError("down")
+        return w(req)
+
+    mock_http(handler)
+    process_update(button_update(confirmation))
+    assert w.sent("sendMessage")[-1]["text"].startswith("⚠️ Google Calendar зараз не відповідає")
+
+
+def test_unexpected_error_still_notifies_owner(world, monkeypatch):
+    from bot import handler
+    monkeypatch.setattr(handler.parser, "parse_event", lambda text: 1 / 0)
+    process_update(voice_update())
+    assert world.sent("sendMessage")[-1]["text"] == handler.GENERIC_ERROR
+
+
+def test_prompt_echo_counts_as_silence(world):
+    world.transcript = "Календар, зустріч, нагадування."
+    process_update(voice_update())
+    assert "Нічого не розчув" in world.sent("sendMessage")[0]["text"]
+
+
+def test_oversized_voice_rejected_before_download(world):
+    upd = voice_update()
+    upd["message"]["voice"]["file_size"] = 30 * 1024 * 1024
+    process_update(upd)
+    assert "Задовге" in world.sent("sendMessage")[0]["text"] and world.sent("getFile") == []

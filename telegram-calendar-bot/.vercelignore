@@ -1,0 +1,9 @@
+# Upload only what the function needs (matters for `vercel` CLI deploys from this
+# folder, which would otherwise also upload .env / google_token.json).
+/*
+!/api
+!/bot
+!/public
+!/requirements.txt
+!/vercel.json
+!/.python-version

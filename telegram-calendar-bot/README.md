@@ -18,62 +18,73 @@
 
 ## Налаштування (один раз, ~30 хв)
 
+### 0. Код у гілці `main`
+Vercel бере код із головної гілки, а бот зараз лежить в окремій гілці.
+1. GitHub → репозиторій → **Pull requests → New pull request** → base: `main`, compare: гілка з ботом → **Create** → **Merge**.
+2. На комп'ютері: `git checkout main && git pull`. Тепер у тебе є папка `telegram-calendar-bot`.
+3. Потрібен Python 3.10+ (python.org; на Windows під час встановлення постав галочку *Add python.exe to PATH*).
+
 ### 1. Telegram
 1. @BotFather → `/newbot` → скопіюй **токен** → `TELEGRAM_BOT_TOKEN`.
 2. @userinfobot → твій **id** → `ALLOWED_USER_ID` (усіх інших бот ігнорує).
 3. Придумай секрет для вебхука → `TELEGRAM_WEBHOOK_SECRET`:
-   `python -c "import secrets; print(secrets.token_urlsafe(32))"`
+   `python -c "import secrets; print(secrets.token_urlsafe(32))"` (Windows: `py -c "..."`)
 
 ### 2. Groq (без картки)
 console.groq.com → **API Keys** → Create → `GROQ_API_KEY`.
 
 ### 3. Google Calendar
 1. console.cloud.google.com → створи проєкт → **APIs & Services → Enable APIs** → *Google Calendar API* → Enable.
-2. **Google Auth Platform / OAuth consent screen** → External → назва будь-яка, твій email.
-   **Audience → Publish app** (статус *In production*).
+2. **Google Auth Platform** (раніше *OAuth consent screen*) → Get started → External → назва будь-яка, твій email.
+   Потім **Audience → Publish app** (статус *In production*).
    ⚠️ Якщо лишити *Testing*, Google вимкне доступ через 7 днів.
-3. **Clients → Create client → Desktop app** → Download JSON → збережи як `telegram-calendar-bot/credentials.json`.
-4. На своєму комп'ютері (один раз):
-   ```
-   cd telegram-calendar-bot
-   python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
-   pip install -r requirements-dev.txt
-   python scripts/google_auth.py
-   ```
+3. **Clients → Create client → Desktop app** → одразу натисни **Download JSON** (пізніше скачати вже не вийде) →
+   поклади файл у папку `telegram-calendar-bot/`. Перейменовувати не обов'язково: скрипт сам знайде `client_secret_….json`.
+4. Отримай токен (один раз, з папки `telegram-calendar-bot`):
+
+   | macOS / Linux | Windows (PowerShell) |
+   |---|---|
+   | `python3 -m venv .venv` | `py -m venv .venv` |
+   | `.venv/bin/python -m pip install -r requirements-dev.txt` | `.venv\Scripts\python -m pip install -r requirements-dev.txt` |
+   | `.venv/bin/python scripts/google_auth.py` | `.venv\Scripts\python scripts\google_auth.py` |
+
    Відкриється браузер. На екрані «Google hasn't verified this app» натисни **Advanced → Go to … (unsafe)**: це твій власний застосунок, тож усе гаразд. Потім дозволь доступ.
-   Скрипт надрукує один рядок JSON → це `GOOGLE_TOKEN_JSON`.
+   Скрипт надрукує один рядок JSON → це `GOOGLE_TOKEN_JSON` (копія лежить у `google_token.json`; у git цей файл не потрапить).
 
 ### 4. Vercel
 1. vercel.com → **Sign up with GitHub** (план Hobby).
-2. **Add New → Project** → вибери репозиторій `mathhub` →
-   **Root Directory** = `telegram-calendar-bot`, Framework Preset = **Other**.
-3. **Environment Variables**: додай усе з `.env.example` (мінімум: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`,
-   `ALLOWED_USER_ID`, `GROQ_API_KEY`, `GOOGLE_TOKEN_JSON`) → **Deploy**.
-4. Код має бути в **production-гілці** (зазвичай `main`). Або злий гілку з ботом у `main`, або в
-   Settings → Environments → Production → *Branch Tracking* вибери гілку з ботом.
-5. **Settings → Domains** → скопіюй домен, наприклад `mathhub-bot.vercel.app`.
+2. **Add New → Project** → вибери репозиторій →
+   **Root Directory → Edit** → `telegram-calendar-bot`, Framework Preset = **Other**.
+3. **Environment Variables**: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `ALLOWED_USER_ID`, `GROQ_API_KEY`, `GOOGLE_TOKEN_JSON`
+   (інші з `.env.example` необов'язкові) → **Deploy**.
+4. **Settings → Domains** → скопіюй домен, наприклад `mathhub-bot.vercel.app`.
    Перевір: `https://<домен>/api/telegram` має показати `bot is alive`.
    ⚠️ Бери саме домен із *Domains*. Preview-адреси (`…-git-…vercel.app`) закриті паролем Vercel, і Telegram до них не достукається.
+
+Деплой роби тільки так, через GitHub. Команда `vercel` з папки на комп'ютері теж працює, але легко випадково завантажить зайве.
 
 ### 5. Під'єднати Telegram до Vercel
 Відкрий у браузері (підстав свої значення):
 ```
-https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<домен>/api/telegram&secret_token=<SECRET>&max_connections=1&allowed_updates=["message","callback_query"]
+https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<домен>/api/telegram&secret_token=<SECRET>&max_connections=1
 ```
-Має бути `"ok":true`. (Або `python scripts/set_webhook.py https://<домен>` з `.env`.)
+Має бути `"ok":true`.
 
 ### 6. Перевірка
 Надішли боту голосове «завтра о 15 зустріч з Олею на годину» → ✅ → подія в календарі.
 
 ## Якщо не працює
 
-| Симптом | Де дивитись | Причина |
+| Симптом | Де дивитись | Причина / що робити |
 |---|---|---|
-| Бот мовчить | `https://api.telegram.org/bot<TOKEN>/getWebhookInfo` → `last_error_message` | — |
-| `401` | там само | `secret_token` у вебхуку ≠ `TELEGRAM_WEBHOOK_SECRET` у Vercel |
-| `500` | Vercel → Project → Logs | не задана змінна оточення (`Missing env var …`) |
-| Змінив змінну, нічого не змінилось | — | після зміни змінних треба **Redeploy** |
-| «Google відкликав доступ» | — | застосунок у статусі *Testing* (крок 3.2) → Publish і повтори `google_auth.py` |
+| Бот мовчить | `https://api.telegram.org/bot<TOKEN>/getWebhookInfo` → `last_error_message` | див. рядки нижче |
+| там `"url":""` | — | вебхук знято (наприклад, після `poll.py`) → повтори крок 5 |
+| `401 Unauthorized` | там само | `secret_token` у вебхуку ≠ `TELEGRAM_WEBHOOK_SECRET` у Vercel |
+| `500` | Vercel → Project → Logs | не задана змінна (`Missing env var …`) або `Invalid TIMEZONE` |
+| `404` | — | у Vercel не вказано Root Directory = `telegram-calendar-bot` |
+| Змінив змінну, нічого не змінилось | — | після зміни змінних: Deployments → ⋯ → **Redeploy** |
+| «Google відкликав доступ» | — | застосунок у статусі *Testing* (крок 3.2) → Publish, повтори 3.4, онови `GOOGLE_TOKEN_JSON`, Redeploy |
+| «Календар не знайдено» | — | `GOOGLE_CALENDAR_ID`: залиш порожнім або `primary` |
 | Бот плутає слова | — | постав `STT_LANGUAGE=uk` або спробуй `LLM_BACKEND=claude` |
 
 ## Варіант: Claude замість Groq для розбору тексту
@@ -81,11 +92,13 @@ https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<домен>/api/tele
 Краще розуміє складні фрази на кшталт «перенеси на після обіду в четвер через тиждень».
 
 ## Для розробки
+Скопіюй `.env.example` у `.env` і заповни: його читають скрипти нижче (Vercel його не бачить).
 ```
-pip install -r requirements-dev.txt
-pytest                       # тести, без мережі
-python scripts/poll.py       # запустити бота локально (тимчасово знімає вебхук: --delete-webhook)
+.venv/bin/python -m pytest                              # тести, без мережі
+.venv/bin/python scripts/poll.py --delete-webhook       # бот локально, без Vercel
+.venv/bin/python scripts/set_webhook.py https://<домен> # повернути вебхук на Vercel
 ```
+`poll.py --delete-webhook` знімає вебхук назовсім: поки не запустиш `set_webhook.py` (або крок 5), Vercel-бот мовчатиме.
 
 | Файл | Що робить |
 |---|---|
@@ -93,4 +106,5 @@ python scripts/poll.py       # запустити бота локально (т�
 | `bot/handler.py` | логіка: голос → текст → подія → кнопки ✅/❌ |
 | `bot/event.py` | подія; зберігається в тексті повідомлення (Vercel нічого не пам'ятає між запитами) |
 | `bot/stt.py`, `bot/parser.py` | Groq Whisper; Groq / Claude → JSON події |
-| `bot/calendar_client.py` | Google Calendar REST; повторне ✅ не створює дубль |
+| `bot/calendar_client.py` | Google Calendar REST; повторне ✅ не створює дубль, ❌ після ✅ прибирає подію |
+| `public/`, `.vercelignore` | щоб Vercel не віддавав файли бота як статичні |

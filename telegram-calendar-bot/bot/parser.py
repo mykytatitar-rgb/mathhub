@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 from .config import settings
 from .event import Event
-from .http import http
+from .http import LLM_TIMEOUT, HTTPError, http
 
 SCHEMA = {
     "type": "object",
@@ -71,17 +71,25 @@ def parse_event(text: str, now: datetime | None = None) -> Event:
     return event_from_json(data)
 
 
+def _text(data: dict, key: str) -> str:
+    """Field as one clean line; tolerates null/number from a non-strict model."""
+    value = data.get(key)
+    return "" if value is None else " ".join(str(value).split())
+
+
 def event_from_json(data: dict) -> Event:
-    if (data.get("error") or "").strip():
-        raise NotAnEvent(data["error"].strip())
-    title = " ".join(str(data.get("title", "")).split())
+    if not isinstance(data, dict):
+        raise ParseError("LLM answer is not a JSON object")
+    if error := _text(data, "error"):
+        raise NotAnEvent(error)
+    title = _text(data, "title")
     if not title:
         raise NotAnEvent("Не зрозумів, що саме записати.")
     try:
-        day = date.fromisoformat(str(data.get("date", "")).strip())
+        day = date.fromisoformat(_text(data, "date"))
     except ValueError:
         raise NotAnEvent("Не зрозумів дату.") from None
-    raw_time = str(data.get("time", "")).strip()
+    raw_time = _text(data, "time")
     start = None
     if raw_time:
         m = _TIME_RE.match(raw_time)
@@ -92,7 +100,7 @@ def event_from_json(data: dict) -> Event:
         if start is None:
             raise NotAnEvent("Не зрозумів час.")
     try:
-        duration = int(data.get("duration_minutes") or 60)
+        duration = int(float(data.get("duration_minutes") or 60))
     except (TypeError, ValueError):
         duration = 60
     duration = min(max(duration, 5), 24 * 60)
@@ -101,8 +109,8 @@ def event_from_json(data: dict) -> Event:
         day=day,
         start=start,
         duration_minutes=duration,
-        location=" ".join(str(data.get("location", "")).split())[:200],
-        notes=" ".join(str(data.get("notes", "")).split())[:500],
+        location=_text(data, "location")[:200],
+        notes=_text(data, "notes")[:500],
     )
 
 
@@ -123,12 +131,15 @@ def _ask_groq(system: str, text: str) -> dict:
         payload["reasoning_effort"] = "low"  # simple task; keeps latency and free-tier tokens down
     headers = {"Authorization": f"Bearer {s.groq_api_key}"}
     url = f"{s.groq_base_url}/chat/completions"
-    r = http.post(url, json=payload, headers=headers, timeout=60.0)
-    if r.status_code == 400 and "response_format" in r.text:
-        # Model without strict structured outputs: fall back to JSON mode.
-        payload["response_format"] = {"type": "json_object"}
-        payload["messages"][0]["content"] += "\nJSON schema:\n" + json.dumps(SCHEMA)
-        r = http.post(url, json=payload, headers=headers, timeout=60.0)
+    try:
+        r = http.post(url, json=payload, headers=headers, timeout=LLM_TIMEOUT)
+        if r.status_code == 400 and "response_format" in r.text:
+            # Model without strict structured outputs (fails fast): fall back to JSON mode.
+            payload["response_format"] = {"type": "json_object"}
+            payload["messages"][0]["content"] += "\nJSON schema:\n" + json.dumps(SCHEMA)
+            r = http.post(url, json=payload, headers=headers, timeout=LLM_TIMEOUT)
+    except HTTPError as e:
+        raise ParseError(f"Groq request failed: {type(e).__name__}") from e
     if r.status_code != 200:
         raise ParseError(f"Groq chat failed: {r.status_code} {r.text[:300]}")
     try:
@@ -143,7 +154,8 @@ def _ask_groq(system: str, text: str) -> dict:
 def _anthropic_client():
     import anthropic
 
-    return anthropic.Anthropic(api_key=settings().anthropic_api_key, timeout=60.0)
+    # No retries: the whole update must finish within Telegram's ~60 s webhook wait.
+    return anthropic.Anthropic(api_key=settings().anthropic_api_key, timeout=25.0, max_retries=0)
 
 
 def _ask_claude(system: str, text: str) -> dict:

@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from functools import lru_cache
+from zoneinfo import ZoneInfo
 
 
 def _required(name: str) -> str:
@@ -31,24 +32,33 @@ class Settings:
     google_calendar_id: str
 
 
+def _timezone() -> str:
+    name = os.environ.get("TIMEZONE", "").strip() or "Europe/Kyiv"
+    try:
+        ZoneInfo(name)
+    except (KeyError, ValueError):
+        raise RuntimeError(f"Invalid TIMEZONE {name!r}, expected e.g. Europe/Kyiv") from None
+    return name
+
+
 @lru_cache(maxsize=1)
 def settings() -> Settings:
-    llm_backend = os.environ.get("LLM_BACKEND", "groq").strip().lower()
+    llm_backend = os.environ.get("LLM_BACKEND", "").strip().lower() or "groq"
     if llm_backend not in ("groq", "claude"):
         raise RuntimeError("LLM_BACKEND must be 'groq' or 'claude'")
     return Settings(
         telegram_bot_token=_required("TELEGRAM_BOT_TOKEN"),
         telegram_webhook_secret=os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip(),
         allowed_user_id=int(_required("ALLOWED_USER_ID")),
-        timezone=os.environ.get("TIMEZONE", "Europe/Kyiv"),
+        timezone=_timezone(),
         groq_api_key=_required("GROQ_API_KEY"),
-        groq_base_url=os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1").rstrip("/"),
-        stt_model=os.environ.get("STT_MODEL", "whisper-large-v3-turbo"),
+        groq_base_url=(os.environ.get("GROQ_BASE_URL", "").strip() or "https://api.groq.com/openai/v1").rstrip("/"),
+        stt_model=os.environ.get("STT_MODEL", "").strip() or "whisper-large-v3-turbo",
         stt_language=os.environ.get("STT_LANGUAGE", "").strip(),
         llm_backend=llm_backend,
-        groq_llm_model=os.environ.get("GROQ_LLM_MODEL", "openai/gpt-oss-120b"),
+        groq_llm_model=os.environ.get("GROQ_LLM_MODEL", "").strip() or "openai/gpt-oss-120b",
         anthropic_api_key=_required("ANTHROPIC_API_KEY") if llm_backend == "claude" else "",
-        anthropic_model=os.environ.get("ANTHROPIC_MODEL", "claude-opus-5-5"),
+        anthropic_model=os.environ.get("ANTHROPIC_MODEL", "").strip() or "claude-opus-5-5",
         google_token_json=_required("GOOGLE_TOKEN_JSON"),
-        google_calendar_id=os.environ.get("GOOGLE_CALENDAR_ID", "primary"),
+        google_calendar_id=os.environ.get("GOOGLE_CALENDAR_ID", "").strip() or "primary",
     )

@@ -149,3 +149,31 @@ def test_claude_refusal_is_not_an_event(monkeypatch):
 def test_stt_upload_name(path, name):
     from bot.stt import upload_name
     assert upload_name(path) == name
+
+
+@pytest.mark.parametrize("data", [
+    GOOD | {"location": None, "notes": None},
+    GOOD | {"duration_minutes": 30.0},
+    GOOD | {"error": None},
+])
+def test_event_from_json_tolerates_nulls_and_floats(data):
+    ev = parser.event_from_json(data)
+    assert ev.location == "" and ev.notes == "" and ev.duration_minutes == 30
+
+
+def test_event_from_json_non_dict():
+    with pytest.raises(parser.ParseError):
+        parser.event_from_json(["not", "a", "dict"])
+
+
+def test_invalid_timezone_is_a_clear_config_error(monkeypatch):
+    monkeypatch.setenv("TIMEZONE", "Europe/Nowhere")
+    parser.settings.cache_clear()
+    with pytest.raises(RuntimeError, match="Invalid TIMEZONE"):
+        parser.settings()
+
+
+def test_timezone_is_stripped(monkeypatch):
+    monkeypatch.setenv("TIMEZONE", " Europe/Kyiv \n")
+    parser.settings.cache_clear()
+    assert parser.settings().timezone == "Europe/Kyiv"

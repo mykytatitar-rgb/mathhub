@@ -16,8 +16,10 @@ def main() -> None:
     load_dotenv()
     if len(sys.argv) != 2 or not sys.argv[1].startswith("https://"):
         sys.exit("usage: python scripts/set_webhook.py https://<your-project>.vercel.app")
-    token = os.environ["TELEGRAM_BOT_TOKEN"]
-    secret = os.environ["TELEGRAM_WEBHOOK_SECRET"]
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    secret = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip()
+    if not token or not secret:
+        sys.exit("Fill TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_SECRET in .env (copy .env.example to .env)")
     url = sys.argv[1].rstrip("/") + "/api/telegram"
     api = f"https://api.telegram.org/bot{token}"
     r = httpx2.post(f"{api}/setWebhook", json={

@@ -26,15 +26,34 @@ CONFIRM_KEYBOARD = [[
 ]]
 
 
+GENERIC_ERROR = "⚠️ Щось пішло не так. Спробуй ще раз за хвилину."
+
+
 def process_update(update: dict) -> None:
-    """Never raises: Telegram re-sends updates that fail, which would spam the chat."""
+    """Never raises: Telegram re-sends updates that fail, which would spam the chat.
+    On an unexpected error the user still gets a short notice."""
+    chat_id = None
     try:
         if "callback_query" in update:
+            chat_id = ((update["callback_query"].get("message") or {}).get("chat") or {}).get("id")
             _on_button(update["callback_query"])
         elif "message" in update:
+            chat_id = (update["message"].get("chat") or {}).get("id")
             _on_message(update["message"])
     except Exception:
         log.exception("unhandled error for update %s", update.get("update_id"))
+        if chat_id is not None and _is_owner_chat(chat_id):
+            try:
+                tg.send_message(chat_id, GENERIC_ERROR)
+            except Exception:
+                log.exception("could not report the error")
+
+
+def _is_owner_chat(chat_id: int) -> bool:
+    try:
+        return chat_id == settings().allowed_user_id  # private chat id == user id
+    except RuntimeError:
+        return False
 
 
 def _allowed(user: dict | None) -> bool:
@@ -56,7 +75,8 @@ def _on_message(msg: dict) -> None:
     transcript = None
     try:
         if voice:
-            if (voice.get("duration") or 0) > MAX_VOICE_SECONDS:
+            too_big = (voice.get("file_size") or 0) > tg.MAX_DOWNLOAD_BYTES
+            if too_big or (voice.get("duration") or 0) > MAX_VOICE_SECONDS:
                 tg.send_message(chat_id, "Задовге голосове — до 5 хвилин, будь ласка.")
                 return
             tg.typing(chat_id)
@@ -74,7 +94,8 @@ def _on_message(msg: dict) -> None:
         return
     except (stt.SttError, parser.ParseError, tg.TelegramError) as e:
         log.exception("processing failed")
-        tg.send_message(chat_id, f"⚠️ Не вдалося обробити: {type(e).__name__}. Спробуй ще раз за хвилину.")
+        what = {"SttError": "розпізнати голос", "ParseError": "розібрати текст"}.get(type(e).__name__, "обробити")
+        tg.send_message(chat_id, f"⚠️ Не вдалося {what}. Спробуй ще раз за хвилину.")
         return
 
     heard = f"🗣 «{_short(transcript)}»\n\n" if transcript else ""
@@ -97,23 +118,31 @@ def _on_button(cq: dict) -> None:
         return
 
     if cq.get("data") != "ok":
-        tg.edit_message(chat_id, message_id, f"❌ Скасовано\n\n{event.render()}")
+        _cancel(event, chat_id, message_id)
         return
 
     try:
         result = calendar_client.insert_event(event, chat_id, message_id)
-    except calendar_client.GoogleAuthExpired:
-        tg.send_message(chat_id, "⚠️ Google відкликав доступ. Запусти scripts/google_auth.py ще раз "
-                                 "і онови GOOGLE_TOKEN_JSON у Vercel.")
-        return
-    except calendar_client.CalendarError:
+    except calendar_client.CalendarError as e:
         log.exception("calendar insert failed")
-        tg.send_message(chat_id, "⚠️ Google Calendar не прийняв подію. Спробуй ✅ ще раз за хвилину.")
+        tg.send_message(chat_id, f"⚠️ {e.hint}")
         return
 
     status = "✅ Вже в календарі" if result.already_existed else "✅ Додано в календар"
     link = f"\n\n{result.link}" if result.link else ""
     tg.edit_message(chat_id, message_id, f"{status}\n\n{event.render()}{link}")
+
+
+def _cancel(event, chat_id: int, message_id: int) -> None:
+    # ❌ can arrive right after ✅ (both carry the original text), so undo a
+    # write that may already have happened. Best effort: the cancel itself stands.
+    removed = False
+    try:
+        removed = calendar_client.delete_event(event, chat_id, message_id)
+    except calendar_client.CalendarError:
+        log.exception("could not check for an event to remove")
+    note = " (прибрав з календаря)" if removed else ""
+    tg.edit_message(chat_id, message_id, f"❌ Скасовано{note}\n\n{event.render()}")
 
 
 def _short(s: str | None) -> str:

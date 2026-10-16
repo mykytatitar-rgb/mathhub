@@ -1,3 +1,5 @@
 # Deployed to Vercel
 httpx2>=2.0,<3
 anthropic>=1,<2
+# time zone data for zoneinfo where the OS has none (Windows, minimal images)
+tzdata

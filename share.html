@@ -409,8 +409,9 @@
       wait = Math.min(wait * 2, 30000);
     }
 
-    function send(event, payload) {
-      if (!joined) { queue.push([event, payload]); if (queue.length > 20) queue.shift(); return false; }
+    // now — лише зараз (курсор): до приєднання не відкладаємо, доїхало б застарілим
+    function send(event, payload, now) {
+      if (!joined) { if (now) return false; queue.push([event, payload]); if (queue.length > 20) queue.shift(); return false; }
       return raw('broadcast', { type: 'broadcast', event: event, payload: payload || {} });
     }
 
@@ -746,7 +747,7 @@
   /* Номер версії рушія — його піднімає tools/bump.js разом із кабінетом.
      Без номера кожен файл брався окремо «мережа або кеш за 1,5 с», і на
      повільному інтернеті рушій складався з файлів різних версій. */
-  var ENGINE_V = 167;
+  var ENGINE_V = 168;
 
   function loadScript(src) {
     return new Promise(function (resolve, reject) {

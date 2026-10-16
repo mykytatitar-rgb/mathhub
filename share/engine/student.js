@@ -288,8 +288,11 @@
       },
       onViewChange: paintZoom,
       onToolChange: paintTools,
-      onTextPlace: placeText
+      onTextPlace: placeText,
+      // свій курсор — репетиторові, як у Miro (лише коли він на дошці)
+      onCursor: function (w, sid) { if (pres) pres.cursor(w, sid); }
     });
+    var pres = null;                 // хто ще на дошці — див. startPresence
     engine.color = COLORS[0];
     engine.width = WIDTHS[0];
     SB.engine = engine;              // для перевірки на стенді
@@ -311,6 +314,7 @@
       var s = list[idx];
       s.items = s.items || [];
       engine.setSlide(s, keepView);
+      if (pres) pres.slide(s.id);
       el('sb-pos').textContent = (idx + 1) + ' / ' + list.length;
       el('sb-prev').disabled = idx === 0;
       el('sb-next').disabled = idx === list.length - 1;
@@ -822,6 +826,7 @@
     /* Живий канал: зміни репетитора — одразу; сигнал «перевидано» — свіжі
        матеріали й адреси картинок. */
     env.live.onMessage = function (event, data) {
+      if (pres && pres.message(event, data)) return;   // «я тут» репетитора
       if (event === 'ops' && data.ops) {
         applyRemote(data.ops.map(function (op) { return { op: op, author: 'tutor' }; }));
       } else if (event === 'ops' && data.from === 'student') {
@@ -830,6 +835,19 @@
         refreshMeta();
       }
     };
+
+    /* Репетитор бачить, де учень на дошці, — як у Miro: курсор учня їде
+       йому тим самим каналом, але лише коли кабінет сказав «я тут». Сам
+       учень курсора репетитора не бачить (theirs: false) — так задумано.
+       Старий рушій без присутності — просто нічого з цього. */
+    function startPresence() {
+      if (pres || !Board.presence || !env.live || !env.live.send) return;
+      pres = Board.presence(engine, {
+        me: 'student', other: 'tutor', theirs: false,
+        send: function (ev, d, now) { env.live.send(ev, d, now); }
+      });
+      // закрили вкладку чи сховали — «бувай» шле сама присутність (visibilitychange)
+    }
 
     /* ---------- Повне перезавантаження стану ---------- */
 
@@ -1059,6 +1077,7 @@
       engine.resize();                          // розмір відомий лише тепер, коли панелі на місці
       go(at, false);
       if (queue.length) push();                 // те, що не доїхало минулого разу
+      startPresence();
       env.live.connect();
       pollLoop();
     });

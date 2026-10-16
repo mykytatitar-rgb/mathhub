@@ -46,6 +46,27 @@
 .board-top__saved.is-warn { color: #8A5409; background: var(--amber-bg); border-color: var(--amber); }
 .board-top__saved.is-fail { color: var(--red); background: var(--red-bg); border-color: var(--red); }
 
+/* Учень на дошці — як аватари в Miro: кружечок його кольору (такого ж,
+   як його курсор) та ім'я; на іншому слайді — ще й котрому. Натиснули —
+   дошка переходить до нього. */
+.board-peer {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 4px 11px 4px 4px; border-radius: 999px;
+  border: 1px solid var(--line); background: #fff;
+  font-family: inherit; font-size: 12.5px; font-weight: 650; color: var(--ink-2);
+  white-space: nowrap; cursor: pointer; max-width: 220px;
+}
+.board-peer[hidden] { display: none; }
+.board-peer__dot {
+  flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: #E5484D; color: #fff; font-size: 11px; font-weight: 750;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px rgba(229, 72, 77, .35);
+}
+.board-peer__txt { overflow: hidden; text-overflow: ellipsis; }
+.board-peer.is-away { border-color: rgba(229, 72, 77, .45); color: #B42318; }
+@media (hover: hover) { .board-peer:hover { border-color: rgba(229, 72, 77, .6); } }
+
 /* ---------- Робоча область ---------- */
 
 .board-body { flex: 1; position: relative; overflow: hidden; min-height: 0; }
@@ -158,6 +179,9 @@
   /* «Немає інтернету» — значком: попередження видно й так (жовте), а
      текст відбирав місце в назви уроку */
   .board-top__saved { font-size: 0; gap: 0; padding: 7px; }
+  /* учень — лише кружечком з першою літерою: ім'я забирало б місце в назви */
+  .board-peer { padding: 0; border: 0; background: none; width: 38px; height: 38px; justify-content: center; flex: 0 0 38px; }
+  .board-peer__txt { display: none; }
   .board-top { flex-wrap: nowrap; gap: 6px; padding: 6px 8px; }
   /* лежачи телефон ширший за 640 px, і загальне «38 px під палець» сюди не діє */
   .board-top .icon-btn { min-width: 38px; min-height: 38px; }
@@ -853,6 +877,17 @@
   background: rgba(23, 22, 58, .78);
   color: #fff;
 }
+/* на якому слайді зараз учень — на місці «ока»: на прихованому слайді учня не буває */
+.slide-card__peer {
+  position: absolute;
+  right: 5px; top: 5px;
+  width: 18px; height: 18px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: #E5484D; color: #fff;
+  font-size: 10px; font-weight: 750;
+  box-shadow: 0 0 0 2px #fff;
+}
 
 .slide-add {
   flex: 0 0 auto;
@@ -1060,7 +1095,7 @@
      схований від учня видно й так — за пунктирною рамкою */
   .board-rail { min-height: 0; padding: 3px 8px; }
   .slide-card { width: auto; max-width: 150px; }
-  .slide-card__thumb, .slide-card__empty, .slide-card__eye { display: none; }
+  .slide-card__thumb, .slide-card__empty, .slide-card__eye, .slide-card__peer { display: none; }
   .slide-add { width: 36px; height: 30px; border-radius: 10px; }
   /* перемикач «Урок · ДЗ» — правіше за стовпчик інструментів, що сягає
      низу полотна; відкриті налаштування лягають поверх нього, а не навпаки */

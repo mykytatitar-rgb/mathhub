@@ -2539,6 +2539,11 @@
     this._onWheel = function (e) { self._wheel(e); };
     this._onResize = function () { self.resize(); };
     this._onCtx = function (e) { e.preventDefault(); };
+    // мишу прибрали з дошки — курсор ховається; палець і перо після дотику лишають його на місці
+    this._onLeave = function (e) {
+      if (e && e.pointerType && e.pointerType !== 'mouse') return;
+      if (self.opts.onCursor) { try { self.opts.onCursor(null); } catch (err) {} }
+    };
 
     canvas.addEventListener('pointerdown', this._onDown);
     canvas.addEventListener('pointermove', this._onMove);
@@ -2546,6 +2551,7 @@
     canvas.addEventListener('pointercancel', this._onUp);
     canvas.addEventListener('wheel', this._onWheel, { passive: false });
     canvas.addEventListener('contextmenu', this._onCtx);
+    canvas.addEventListener('pointerleave', this._onLeave);
     window.addEventListener('resize', this._onResize);
     /* Полотно міняє розмір не лише разом із вікном: телефон повертають,
        згортається стрічка слайдів, зʼявляються й зникають панелі браузера.
@@ -2567,6 +2573,10 @@
     this.canvas.removeEventListener('pointercancel', this._onUp);
     this.canvas.removeEventListener('wheel', this._onWheel);
     this.canvas.removeEventListener('contextmenu', this._onCtx);
+    this.canvas.removeEventListener('pointerleave', this._onLeave);
+    if (this._peersEl) { this._peersEl.remove(); this._peersEl = null; }
+    for (var pid in (this.peers || {})) { if (this.peers[pid].timer) clearTimeout(this.peers[pid].timer); }
+    this.peers = {};
     window.removeEventListener('resize', this._onResize);
     if (this._ro) { try { this._ro.disconnect(); } catch (e) {} this._ro = null; }
     if (this._raf) cancelAnimationFrame(this._raf);
@@ -3039,6 +3049,14 @@
       Math.min((this.cssW - pad * 2) / w, (this.cssH - pad * 2) / h)));
     this.cam.x = (b.x1 + b.x2) / 2 - this.cssW / (2 * this.scale);
     this.cam.y = (b.y1 + b.y2) / 2 - this.cssH / (2 * this.scale);
+    this.viewChanged();
+  };
+
+  /** Поставити точку світу в середину екрана, не змінюючи масштабу. */
+  Board.prototype.lookAt = function (wx, wy) {
+    if (!isFinite(wx) || !isFinite(wy)) return;
+    this.cam.x = wx - this.cssW / (2 * this.scale);
+    this.cam.y = wy - this.cssH / (2 * this.scale);
     this.viewChanged();
   };
 
@@ -3866,6 +3884,308 @@
     this.changed();
   };
 
+  /* ---------- Інші на дошці: курсори, як у Miro ----------
+     Курсор учня в кабінеті — тонкий шар елементів
+     над полотном, а не малювання на ньому: рух чужої руки ніколи не
+     змушує перемальовувати дошку, тож і письму не заважає. Між
+     повідомленнями (≈10 на секунду) курсор пливе сам — переходом CSS.
+     Показуємо лише, коли інший на тому самому слайді; хто довго мовчить —
+     зникає. peer: { x, y (світ), sl (номер слайда), name, color }. */
+
+  /* Курсор, що стоїть, не зникає: учень думає над задачею, а рука лежить
+     там, куди він дивиться. Ховається він, коли мишу прибрали з дошки
+     (повідомлення від того боку), а сам — лише якщо з того боку довго
+     немає жодного слова (кожні 20 с приходить «я тут» — див. presence). */
+  var PEER_IDLE_MS = 50000;
+
+  Board.prototype._peerHost = function () {
+    if (this._peersEl) return this._peersEl;
+    var cv = this.canvas, host = cv && cv.parentElement;
+    if (!host || typeof document === 'undefined' || !document.createElement) return null;
+    try {
+      if (window.getComputedStyle && getComputedStyle(host).position === 'static') host.style.position = 'relative';
+      var el = document.createElement('div');
+      el.className = 'board-peers';
+      el.setAttribute('aria-hidden', 'true');
+      el.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;pointer-events:none;z-index:6';
+      host.appendChild(el);
+      this._peersEl = el;
+      return el;
+    } catch (e) { return null; }
+  };
+
+  Board.prototype.setPeer = function (id, d) {
+    this.peers = this.peers || {};
+    var p = this.peers[id];
+    if (!d || d.gone) {
+      if (p && p.timer) clearTimeout(p.timer);
+      if (p && p.el) p.el.remove();
+      delete this.peers[id];
+      return;
+    }
+    if (!p) p = this.peers[id] = {};
+    p.x = d.x; p.y = d.y; p.sl = d.sl;
+    if (d.name) p.name = d.name;
+    p.color = d.color || p.color || '#E5484D';
+    p.at = Date.now();
+    this._placePeer(id, true);
+    var self = this;
+    if (p.timer) clearTimeout(p.timer);
+    p.timer = setTimeout(function () { self._placePeer(id, false); }, PEER_IDLE_MS + 50);
+  };
+
+  /** Де інший востаннє: { sl, x, y, name, age } або null. x, y — NaN, коли курсора на дошці немає. */
+  Board.prototype.peer = function (id) {
+    var p = this.peers && this.peers[id];
+    return p ? { sl: p.sl, x: p.x, y: p.y, name: p.name, age: Date.now() - p.at } : null;
+  };
+
+  Board.prototype._placePeer = function (id, glide) {
+    var p = this.peers && this.peers[id];
+    if (!p) return;
+    var host = this._peerHost();
+    if (!host) return;
+    if (!p.el) {
+      p.el = document.createElement('div');
+      p.el.style.cssText = 'position:absolute;left:0;top:0;will-change:transform;transition:opacity .25s';
+      p.el.innerHTML =
+        '<svg width="20" height="20" viewBox="0 0 20 20" style="display:block;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.25))">' +
+        '<path d="M3 2 L16.5 10 L10.2 11.4 L7.4 17.6 Z" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>' +
+        '<span style="position:absolute;left:15px;top:17px;color:#fff;font:650 11.5px Manrope,\'Segoe UI\',system-ui,sans-serif;' +
+        'padding:2px 8px;border-radius:9px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.18)"></span>';
+      host.appendChild(p.el);
+    }
+    var path = p.el.querySelector('path'), tag = p.el.querySelector('span');
+    path.setAttribute('fill', p.color);
+    tag.style.background = p.color;
+    tag.textContent = p.name || '';
+    var cv = this.canvas;
+    host.style.left = (cv.offsetLeft || 0) + 'px';
+    host.style.top = (cv.offsetTop || 0) + 'px';
+    var s = this.toScreen(p.x, p.y);
+    var known = isFinite(s.x) && isFinite(s.y);
+    var here = !!this.slide && p.sl === this.slide.id;
+    var fresh = Date.now() - p.at < PEER_IDLE_MS;
+    var inView = known && s.x > -20 && s.y > -20 && s.x < (this.cssW || 0) + 20 && s.y < (this.cssH || 0) + 20;
+    var show = here && fresh && inView;
+    p.el.style.opacity = show ? '1' : '0';
+    /* Чужа рука — плавно; рух власного полотна — одразу, інакше курсор
+       «відставав» би від дошки. Щойно з'явився — теж одразу, а не пливе
+       через усю дошку з місця, де зник. */
+    p.el.style.transition = glide && p.vis ? 'transform .11s linear, opacity .25s' : 'opacity .25s';
+    if (known) p.el.style.transform = 'translate(' + Math.round(s.x) + 'px,' + Math.round(s.y) + 'px)';
+    p.vis = show;
+  };
+
+  Board.prototype._placePeers = function () {
+    if (!this.peers) return;
+    for (var id in this.peers) this._placePeer(id, false);
+  };
+
+  /* Присутність поверх живого каналу уроку — одна на кабінет і сторінку учня.
+
+     Курсор їде не частіше ніж раз на 90 мс і лише тоді, коли на тому боці
+     хтось є: кожен бік раз на 20 с каже «я тут» (hi) разом зі своїм
+     слайдом, а хто вперше почув іншого — одразу відповідає тим самим.
+     Нікого немає — нічого й не шлемо. Мишу прибрали з дошки — курсор
+     ховається, але слайд лишається відомим; вкладку сховали чи дошку
+     закрили (bye) — інший бік прибирає гостя негайно.
+
+     Повідомлення: cur { sl, x?, y? } — де я (без x, y — курсора на дошці
+     немає); cur { gone } — мене не показувати (прихований слайд);
+     hi { sl, x?, y?, re? }; bye. У кожному who — хто надіслав (другий
+     пристрій того самого боку гостем не вважається) і id — котрий пристрій.
+
+     o: { me: 'tutor'|'student', other: 'student'|'tutor',
+          send(event, data) — у канал; name() і color — підпис іншого;
+          mayShow(slideId) — чи можна показувати свій слайд і курсор;
+          mine: false — свого курсора й слайда не показувати зовсім, лише
+            «я тут» (так кабінет: учень репетитора не бачить);
+          theirs: false — чужого курсора не малювати (так сторінка учня);
+          onPeer(info|null) — інший з'явився, перейшов на інший слайд, зник } */
+  var CUR_MS = 90, HI_MS = 20000, SEEN_MS = 45000;
+
+  Board.presence = function (engine, o) {
+    var showMine = o.mine !== false, showTheirs = o.theirs !== false;
+    var last = 0, pend = null, timer = null, hi = null, stopped = false;
+    var mySl = null;                    // свій слайд, якщо його можна показувати
+    var at = null;                      // свій курсор на ньому { x, y }
+    /* Свій пристрій. Учень може сидіти і з телефона, і з компʼютера — тоді
+       в кабінеті два курсори, як у Miro, а не один, що стрибає між ними. */
+    var me = Math.random().toString(36).slice(2, 10);
+    var devs = {};                      // пристрій іншого → коли чули востаннє
+    var moved = {};                     // … і коли востаннє рухав курсор
+    var told = null;                    // що востаннє сказали onPeer
+
+    function now() { return Date.now(); }
+    function visibleNow() { return typeof document === 'undefined' || document.visibilityState !== 'hidden'; }
+    /* now — лише зараз: курсор і регулярне «я тут» до приєднання до каналу
+       не відкладаються, інакше після довгого обриву вони вилетіли б пачкою
+       застарілих. Схована вкладка курсора не шле взагалі: вона вже сказала
+       «бувай», і запізнілий курсор повернув би її на тому боці. */
+    function out(ev, d, now) {
+      if (stopped) return;
+      if (ev === 'cur' && !visibleNow()) return;
+      d.who = o.me; d.id = me;
+      try { o.send(ev, d, !!now || ev === 'cur'); } catch (e) {}
+    }
+    function may(sl) { return !!sl && (!o.mayShow || !!o.mayShow(sl)); }
+    function there() { var t = now(); for (var k in devs) if (t - devs[k] < SEEN_MS) return true; return false; }
+
+    function where() {
+      if (!showMine) return {};           // лише «я тут» — без слайда й курсора
+      if (!mySl) return { gone: 1 };
+      var d = { sl: mySl };
+      if (at) { d.x = at.x; d.y = at.y; }
+      return d;
+    }
+
+    function cancel() { pend = null; if (timer) { clearTimeout(timer); timer = null; } }
+
+    function flush() {
+      timer = null;
+      if (!pend) return;
+      pend = null;
+      last = now();
+      out('cur', where());
+    }
+
+    function soon() {
+      if (!there()) return;
+      pend = true;
+      if (timer) return;
+      var wait = CUR_MS - (now() - last);
+      if (wait <= 0) flush(); else timer = setTimeout(flush, wait);
+    }
+
+    /** Свій слайд змінився (стрілки, стрічка слайдів, перевидання). */
+    function slide(sl) {
+      if (!showMine) return;
+      var next = may(sl) ? String(sl) : null;
+      if (next === mySl) return;
+      mySl = next;
+      at = null;
+      cancel();
+      if (there()) out('cur', where());
+    }
+
+    /** Рух свого курсора над дошкою; w = null — курсор пішов з дошки. */
+    function cursor(w, sl) {
+      if (stopped || !showMine) return;
+      if (sl && String(sl) !== mySl) slide(sl);
+      if (!w || !mySl) {
+        if (!at) return;
+        at = null;
+        cancel();
+        if (there()) out('cur', where());
+        return;
+      }
+      at = { x: Math.round(w.x * 10) / 10, y: Math.round(w.y * 10) / 10 };
+      soon();
+    }
+
+    function hello(re, now) {
+      if (!visibleNow()) return;
+      var d = where();
+      if (re) d.re = 1;
+      out('hi', d, now);
+    }
+
+    /** Головний пристрій іншого — той, що рухав курсор останнім (або озивався). */
+    function main() {
+      var best = null, bt = -1, t = now();
+      for (var k in devs) {
+        if (t - devs[k] >= SEEN_MS) continue;
+        var w = moved[k] || 0;
+        if (w > bt || (w === bt && best && devs[k] > devs[best])) { best = k; bt = w; }
+      }
+      return best;
+    }
+
+    function peerInfo() { var k = main(); return k ? engine.peer(k) : null; }
+
+    // onPeer — лише коли справді щось змінилось: з'явився, перейшов, зник
+    function tell() {
+      var info = peerInfo();
+      var sig = info ? main() + '|' + (info.sl || '') : '';
+      if (sig === told) return;
+      told = sig;
+      if (o.onPeer) { try { o.onPeer(info); } catch (e) {} }
+    }
+
+    function num(v) { return typeof v === 'number' && isFinite(v); }
+
+    function place(k, d, ev) {
+      if (!showTheirs) return;            // знаємо, що інший тут, але не малюємо його
+      // з каналу — лише рядок і числа: будь-що інше (обʼєкт із пастками) — ніби слайда немає
+      var sl = !d.gone && typeof d.sl === 'string' && d.sl ? d.sl.slice(0, 80) : null;
+      var has = !!sl && num(d.x) && num(d.y);
+      // «головний» — той, хто РУХАЄ курсор; «я тут» із курсором, що стоїть, не рахується
+      if (has && ev === 'cur') moved[k] = now();
+      engine.setPeer(k, {
+        x: has ? d.x : NaN, y: has ? d.y : NaN, sl: sl,
+        name: o.name ? o.name() : '', color: o.color
+      });
+    }
+
+    function drop(k) { delete devs[k]; delete moved[k]; engine.setPeer(k, null); }
+
+    /** Повідомлення з каналу. true — це було про присутність (далі не розбирати). */
+    function message(ev, d) {
+      if (ev !== 'cur' && ev !== 'hi' && ev !== 'bye') return false;
+      if (stopped || !d || d.who !== o.other) return true;
+      var k = o.other + (typeof d.id === 'string' && d.id ? ':' + d.id.slice(0, 16) : '');
+      if (ev === 'bye') { drop(k); tell(); return true; }
+      /* Більше кількох пристроїв не буває — решта, мабуть, сміття в каналі.
+         Місце звільняє той, кого найдовше не чути, а не новенький: інакше
+         хтось із посиланням забив би всі місця й справжнього учня не пустило б. */
+      if (!(k in devs)) {
+        var ks = Object.keys(devs);
+        if (ks.length >= 6) { ks.sort(function (a, b) { return devs[a] - devs[b]; }); drop(ks[0]); }
+      }
+      devs[k] = now();
+      place(k, d, ev);
+      if (ev === 'hi' && !d.re) hello(true);
+      tell();
+      return true;
+    }
+
+    // «бувай» — завжди: той бік може нас ще пам'ятати, навіть коли ми його вже ні
+    function onVis() {
+      if (visibleNow()) { hello(false); return; }
+      cancel();
+      out('bye', {});
+    }
+
+    if (engine.slide) mySl = may(engine.slide.id) ? String(engine.slide.id) : null;
+    hello(false);
+    hi = setInterval(function () {
+      hello(false, true);
+      // хтось зник без «бувай» (згас ноутбук, пропав інтернет) — прибираємо
+      var t = now();
+      for (var k in devs) if (t - devs[k] >= SEEN_MS) drop(k);
+      tell();
+    }, HI_MS);
+    if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('visibilitychange', onVis);
+
+    return {
+      cursor: cursor,
+      slide: slide,
+      message: message,
+      here: there,
+      peer: peerInfo,
+      stop: function () {
+        if (stopped) return;
+        out('bye', {});
+        stopped = true;
+        cancel();
+        if (hi) clearInterval(hi);
+        if (typeof document !== 'undefined' && document.removeEventListener) document.removeEventListener('visibilitychange', onVis);
+        for (var k in devs) drop(k);
+      }
+    };
+  };
+
   /** Скасувати недомальовану дугу (Escape, інший інструмент, інший слайд). */
   Board.prototype.cancelArc = function () {
     if (!this._arcArm && !(this.draft && this.draft.t === 'q')) return false;
@@ -4010,6 +4330,7 @@
     }
 
     var w = this.toWorld(p.x, p.y);
+    if (this.opts.onCursor && this.slide) { try { this.opts.onCursor(w, this.slide.id); } catch (err) {} }
 
     if (this.placing) { this.placing.at = w; this.render(); return; }
 
@@ -5079,6 +5400,7 @@
       return;
     }
     this._draw();
+    this._placePeers();
     this._inkSoon();
   };
 

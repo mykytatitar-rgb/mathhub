@@ -44,19 +44,38 @@ function makeCanvas(size) {
   };
 }
 
+// найпростіший елемент сторінки — для шару курсорів поверх полотна
+function fakeEl() {
+  var path = { attrs: {}, setAttribute: function (k, v) { this.attrs[k] = v; } };
+  var span = { style: {}, textContent: '' };
+  return {
+    style: {}, className: '', attrs: {}, children: [], parentNode: null, innerHTML: '',
+    setAttribute: function (k, v) { this.attrs[k] = v; },
+    appendChild: function (c) { this.children.push(c); c.parentNode = this; return c; },
+    remove: function () {
+      var p = this.parentNode;
+      if (p) { var i = p.children.indexOf(this); if (i >= 0) p.children.splice(i, 1); }
+      this.parentNode = null;
+    },
+    querySelector: function (q) { return q === 'path' ? path : span; }
+  };
+}
+
 /* o: { w, h — розмір полотна; touch — головний вказівник палець (телефон);
-        dpr — щільність екрана; onTextPlace } */
+        dpr — щільність екрана; onTextPlace; dom — у полотна є батьківський
+        елемент (для курсорів інших); onCursor } */
 function engine(o) {
   o = o || {};
   var size = { w: o.w || 1000, h: o.h || 700 };
   var ctx = {
     console: console, Math: Math, JSON: JSON, Date: Date, Object: Object, Array: Array,
     String: String, Number: Number, RegExp: RegExp, Error: Error, isNaN: isNaN, parseFloat: parseFloat,
-    setTimeout: setTimeout, clearTimeout: clearTimeout, Promise: Promise, WeakMap: WeakMap, Map: Map, Set: Set,
+    setTimeout: setTimeout, clearTimeout: clearTimeout, setInterval: setInterval, clearInterval: clearInterval, Promise: Promise, WeakMap: WeakMap, Map: Map, Set: Set,
     devicePixelRatio: o.dpr || 1,
     requestAnimationFrame: function () { return 1; }, cancelAnimationFrame: function () {},
     addEventListener: function () {}, removeEventListener: function () {},
-    document: { createElement: function () { return makeCanvas(); } }
+    // div — шар курсорів інших (присутність); решта — полотна
+    document: { createElement: function (tag) { return tag === 'div' ? fakeEl() : makeCanvas(); } }
   };
   if (o.touch) ctx.matchMedia = function (q) { return { matches: /coarse/.test(q) }; };
   ctx.window = ctx;
@@ -66,7 +85,8 @@ function engine(o) {
   });
   var changes = 0;
   var cv = makeCanvas(size);
-  var b = new ctx.Board(cv, { onChange: function () { changes++; }, onTextPlace: o.onTextPlace });
+  if (o.dom) cv.parentElement = fakeEl();
+  var b = new ctx.Board(cv, { onChange: function () { changes++; }, onTextPlace: o.onTextPlace, onCursor: o.onCursor });
   b.setSlide({ id: 'sl1', items: [], bg: 'grid' });
   b.scale = 1; b.cam = { x: 0, y: 0 };
   return { b: b, Board: ctx.Board, size: size, canvas: cv };
@@ -833,6 +853,176 @@ scenario('Дуга: влучання лише в саму дугу, кінцем
   b._pointerDown(ev(300, 300)); b._pointerMove(ev(380, 300)); b._pointerUp(ev(380, 300));
   ok(b.cancelArc(), 'Escape: є що скасувати');
   same(b.items().length, n, 'нічого не додалось');
+});
+
+/* ---------- Присутність: курсор учня в кабінеті й навпаки ---------- */
+
+// курсор гостя на дошці (перший, якщо їх кілька)
+function peerEl(b) { for (var k in b.peers) return b.peers[k].el; return null; }
+
+/* Два рушії (кабінет і сторінка учня), між ними — уявний канал: повідомлення
+   копіюється, як через мережу. */
+function presencePair() {
+  var pT = null, pS = null, sent = [], sentData = [], peersT = [];
+  var T = engine({ dom: true, onCursor: function (w, sl) { if (pT) pT.cursor(w, sl); } });
+  var St = engine({ dom: true, onCursor: function (w, sl) { if (pS) pS.cursor(w, sl); } });
+  // мережа: повідомлення доходять не в ту ж мить, а коли «дійде черга» (net)
+  var wireQ = [];
+  function wire(from, to) {
+    return function (ev, d) {
+      sent.push(from + ':' + ev);
+      sentData.push({ from: from, ev: ev, d: JSON.parse(JSON.stringify(d)) });
+      wireQ.push(function () { var p = to(); if (p) p.message(ev, JSON.parse(JSON.stringify(d))); });
+    };
+  }
+  function net() { for (var k = 0; wireQ.length && k < 100; k++) wireQ.shift()(); }
+  // як у справжніх сторінках: кабінет свого не показує, учень чужого не малює
+  pT = T.Board.presence(T.b, {
+    me: 'tutor', other: 'student', color: '#E5484D', name: function () { return 'Марія'; }, mine: false,
+    send: wire('T', function () { return pS; }),
+    onPeer: function (info) { peersT.push(info); }
+  });
+  pS = St.Board.presence(St.b, {
+    me: 'student', other: 'tutor', theirs: false,
+    send: wire('S', function () { return pT; })
+  });
+  net();
+  return { T: T.b, S: St.b, pT: pT, pS: pS, sent: sent, sentData: sentData, peersT: peersT, net: net };
+}
+
+scenario('Присутність: обидва знають одне про одного, курсор учня їде в кабінет', function () {
+  var x = presencePair();
+  ok(x.pT.here() && x.pS.here(), 'обидва знають, що інший на дошці (hi і відповідь)');
+  same(x.pT.peer() && x.pT.peer().sl, 'sl1', 'репетитор знає слайд учня ще до руху мишею');
+  pid++;
+  x.S._pointerMove(ev(300, 200)); x.net();
+  var p = x.pT.peer();
+  same(p && p.x + ',' + p.y, '300,200', 'курсор учня приїхав у кабінет у координатах дошки');
+  var el = peerEl(x.T);
+  same(el && el.style.opacity, '1', 'той самий слайд — курсор видно');
+  same(el && el.style.transform, 'translate(300px,200px)', 'курсор стоїть там, де рука учня');
+  same(el && el.querySelector('span').textContent, 'Марія', 'на курсорі — ім’я учня');
+  var n = x.sent.length;
+  x.S._pointerMove(ev(310, 205)); x.net();
+  same(x.sent.length, n, 'наступний рух у межах 90 мс чекає — канал не засипаємо');
+  x.T.cam = { x: 100, y: 50 };
+  x.T._placePeers();
+  same(el.style.transform, 'translate(200px,150px)', 'зсунули свою дошку — курсор учня на тому ж місці креслення');
+  x.pT.stop(); x.pS.stop(); x.net();
+});
+
+scenario('Присутність: інший слайд, мишу прибрали, свій же другий пристрій', function () {
+  var x = presencePair();
+  pid++;
+  x.S._pointerMove(ev(300, 200)); x.net();
+  x.S.setSlide({ id: 'sl2', items: [] });
+  x.pS.slide('sl2'); x.net();
+  var p = x.pT.peer();
+  same(p && p.sl, 'sl2', 'учень перейшов на інший слайд — кабінет знає котрий');
+  same(peerEl(x.T).style.opacity, '0', 'на чужому слайді курсора не видно');
+  same(x.peersT[x.peersT.length - 1] && x.peersT[x.peersT.length - 1].sl, 'sl2', 'кабінету сказали про перехід (позначка в шапці)');
+  x.pT.stop(); x.pS.stop();
+  // свіжа пара: перший рух їде одразу, без 90 мс очікування
+  x = presencePair();
+  pid++;
+  x.S._pointerMove(ev(320, 220)); x.net();
+  x.S._onLeave({ pointerType: 'touch' }); x.net();
+  ok(isFinite(x.pT.peer().x), 'палець відпустили — курсор лишається');
+  x.S._onLeave({ pointerType: 'mouse' }); x.net();
+  p = x.pT.peer();
+  ok(p && !isFinite(p.x) && p.sl === 'sl1', 'мишу прибрали з дошки — курсор сховано, слайд відомий');
+  ok(x.pT.message('cur', { who: 'tutor', sl: 'sl1', x: 5, y: 5 }) && x.pT.peer().x !== 5,
+    'свій же другий пристрій учнем не вважається');
+  same(x.pT.message('ops', {}), false, 'чужі події (ops) присутність не забирає');
+  x.pT.stop(); x.pS.stop(); x.net();
+});
+
+scenario('Присутність в один бік: учень репетитора не бачить; «бувай»', function () {
+  var x = presencePair();
+  ok(x.pS.here(), 'сторінка учня знає, що репетитор тут (є кому слати свій курсор)');
+  var n = x.sent.length;
+  pid++;
+  x.T._pointerMove(ev(100, 100)); x.net();
+  same(x.sent.length, n, 'курсор репетитора нікуди не їде');
+  x.T.setSlide({ id: 'sl2', items: [] });
+  x.pT.slide('sl2'); x.net();
+  same(x.sent.length, n, 'і його слайд теж');
+  var fromT = x.sentData.filter(function (m) { return m.from === 'T'; });
+  ok(fromT.length > 0 && fromT.every(function (m) {
+    return (m.ev === 'hi' || m.ev === 'bye') && !('sl' in m.d) && !('x' in m.d) && !('gone' in m.d);
+  }), 'від кабінету — лише «я тут», без слайда й курсора');
+  // навіть якби старий кабінет надіслав свій курсор — сторінка учня його не малює
+  x.pS.message('cur', { who: 'tutor', id: 'old', sl: 'sl1', x: 5, y: 5 });
+  same(Object.keys(x.S.peers || {}).length, 0, 'на дошці учня жодного чужого курсора');
+  same(x.pS.peer(), null, 'і нічого про те, де репетитор');
+  x.pS.stop(); x.net();
+  ok(!x.pT.peer() && !x.pT.here(), 'учень закрив дошку — кабінет одразу прибрав його');
+  same(x.peersT[x.peersT.length - 1], null, 'і позначку в шапці теж');
+  x.pT.stop(); x.net();
+});
+
+scenario('Присутність: репетитор пішов — учень свого курсора нікуди не шле', function () {
+  var x = presencePair();
+  x.pT.stop(); x.net();
+  ok(!x.pS.here(), 'сторінка учня знає, що репетитора немає');
+  var n = x.sent.length;
+  pid++;
+  x.S._pointerMove(ev(200, 200)); x.net();
+  same(x.sent.length, n, 'рух учня нікуди не їде');
+  x.pS.stop(); x.net();
+});
+
+scenario('Присутність: сміття в каналі, «бувай» завжди, курсор, що стоїть, не головний', function () {
+  var x = presencePair();
+  var threw = false;
+  try {
+    // обʼєкт, який не можна навіть перетворити на рядок (так буває лише навмисно)
+    x.pT.message('cur', JSON.parse('{"who":"student","id":"evil","sl":{"toString":1,"valueOf":1},"x":1,"y":1}'));
+  } catch (e) { threw = true; }
+  ok(!threw, 'підступне повідомлення нічого не ламає');
+  for (var i = 0; i < 8; i++) x.pT.message('hi', { who: 'student', id: 'junk' + i, re: 1 });
+  ok(Object.keys(x.T.peers).length <= 6, 'чужих «пристроїв» не більше шести');
+  ok(x.T.peers['student:junk7'], 'новенький не відкинутий — місце звільнив найстаріший');
+  x.pT.stop(); x.pS.stop();
+
+  x = presencePair();
+  pid++;
+  x.S._pointerMove(ev(300, 200)); x.net();
+  for (var t0 = Date.now(); Date.now() - t0 < 3;) {}
+  // другий пристрій учня озивається «я тут» зі своїм курсором, що стоїть
+  x.pT.message('hi', { who: 'student', id: 'tablet', sl: 'sl1', x: 5, y: 5, re: 1 });
+  same(x.pT.peer() && x.pT.peer().x, 300, 'головний — той, хто рухає курсор, а не той, хто озвався');
+  x.pT.stop(); x.pS.stop();
+
+  // ніхто ще не відповів, а дошку вже закрили — «бувай» однаково йде
+  var sent = [];
+  var lone = engine({ dom: true });
+  var p = lone.Board.presence(lone.b, { me: 'student', other: 'tutor', theirs: false,
+    send: function (ev) { sent.push(ev); } });
+  p.stop();
+  same(sent.join(','), 'hi,bye', '«бувай» іде, навіть коли того боку ще не чули');
+});
+
+scenario('Присутність: учень з двох пристроїв — два курсори, головний той, що рухається', function () {
+  var x = presencePair();
+  // другий пристрій учня (телефон) у тому ж каналі
+  var St2 = engine({ dom: true });
+  var pS2 = St2.Board.presence(St2.b, {
+    me: 'student', other: 'tutor', theirs: false,
+    send: function (ev, d) { x.pT.message(ev, JSON.parse(JSON.stringify(d))); }
+  });
+  // відповідь кабінету в каналі чують усі пристрої учня
+  pS2.message('hi', { who: 'tutor', id: 'tut1', sl: 'sl1', re: 1 });
+  pid++;
+  x.S._pointerMove(ev(300, 200)); x.net();
+  for (var t0 = Date.now(); Date.now() - t0 < 3;) {}      // телефон рухнув пізніше, а не в ту ж мілісекунду
+  pS2.cursor({ x: 50, y: 60 }, 'sl1');
+  same(Object.keys(x.T.peers).length, 2, 'у кабінеті два курсори учня, а не один, що стрибає');
+  same(x.pT.peer() && x.pT.peer().x, 50, 'значок у шапці веде до того, хто рухав курсор останнім');
+  pS2.stop();
+  same(Object.keys(x.T.peers).length, 1, 'телефон закрили — його курсор зник, компʼютерний лишився');
+  same(x.pT.peer() && x.pT.peer().x, 300, 'головним знову став компʼютер');
+  x.pT.stop(); x.pS.stop();
 });
 
 console.log('\n' + passes + ' пройдено, ' + fails + ' не пройдено');

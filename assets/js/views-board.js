@@ -158,6 +158,8 @@
 
         '<div class="spacer row board-top__acts" style="gap:8px;flex-wrap:wrap">' +
           '<button class="board-top__saved" data-saved data-act="board-saved" hidden></button>' +
+          // учень зараз на дошці: де він — і перейти туди (як аватари в Miro)
+          '<button class="board-peer" data-peer data-act="board-peer" hidden></button>' +
           // зустріч і поділитися — лише для уроку: власну справу нікому не шлють
           (lesson && S.meetUrlFor(lesson.studentId)
             ? '<a class="btn btn--ghost btn--sm" href="' + U.esc(S.meetUrlFor(lesson.studentId)) +
@@ -890,6 +892,7 @@
     if (cur.thumbTimer) clearTimeout(cur.thumbTimer);
     if (cur.pullTimer) clearInterval(cur.pullTimer);
     if (cur.savedOff) { cur.savedOff(); cur.savedOff = null; }
+    if (cur.pres) { cur.pres.stop(); cur.pres = null; }     // «бувай» — до виходу з каналу
     if (cur.live) { cur.live.leave(); cur.live = null; }
     if (cur.own) { cur.own.leave(); cur.own = null; }
 
@@ -1171,15 +1174,30 @@
     setTimeout(pullOps, 800);
   }
 
+  /* Канал уроку прив'язаний до коду посилання: посилання відкликали чи
+     видали нове — старий канал покидаємо, інакше курсор і «я тут» далі
+     їхали б туди, де сидить учень зі скасованим посиланням. */
+  function leaveLive() {
+    if (!cur) return;
+    if (cur.pres) { cur.pres.stop(); cur.pres = null; }
+    if (cur.live) { cur.live.leave(); cur.live = null; }
+    cur.liveToken = null;
+    paintPeer();
+  }
+
   function joinLive() {
     joinOwn();
-    if (!cur || cur.live || !window.Live) return;
+    if (!cur || !window.Live) return;
     var token = cur.board.share && cur.board.share.token;
+    if (cur.live && cur.liveToken === token) return;
+    if (cur.live) leaveLive();
     if (!token) return;
     var lessonId = cur.lessonId;
 
+    cur.liveToken = token;
     cur.live = Live.join(token, function (event, data) {
       if (!cur || cur.lessonId !== lessonId) return;
+      if (cur.pres && cur.pres.message(event, data)) return;     // курсор і «я тут» учня
       if (event === 'ink' || event === 'hw') pullContributions();
       // хтось (учень чи інший пристрій) записав дії в журнал — забираємо одразу
       if (event === 'ops') pullSoon();
@@ -1191,6 +1209,99 @@
         scheduleRepublish();
       }
     });
+    startPresence();
+  }
+
+  /* ---------- Учень на дошці: його курсор і де він, як у Miro ----------
+     Рушій малює курсор учня поверх дошки; тут — канал і позначки: значок
+     учня в шапці (натиснули — дошка переходить туди, де він) і крапка на
+     мініатюрі слайда, де він зараз. В один бік: учень ні курсора
+     репетитора, ні його слайда не бачить — кабінет каже лише «я тут»,
+     щоб сторінка учня знала, що курсор є кому показувати. */
+  var PEER_COLOR = '#E5484D';
+
+  function startPresence() {
+    if (!cur || cur.pres || !cur.live || !window.Board || !Board.presence) return;
+    var live = cur.live;
+    cur.pres = Board.presence(cur.engine, {
+      me: 'tutor', other: 'student', color: PEER_COLOR, mine: false,
+      send: function (ev, d, now) { live.send(ev, d, now); },
+      name: peerName,
+      onPeer: paintPeer
+    });
+  }
+
+  function peerStudent() {
+    var l = cur && S.get('lessons', cur.lessonId);
+    return l && l.studentId ? S.get('students', l.studentId) : null;
+  }
+
+  /** Ім'я учня на курсорі — лише ім'я, без прізвища. */
+  function peerName() {
+    var st = peerStudent();
+    var n = st && st.name ? String(st.name).trim().split(/\s+/)[0] : '';
+    return n || 'Учень';
+  }
+
+  function slideIndexById(id) {
+    if (!cur || !id) return -1;
+    for (var i = 0; i < cur.board.slides.length; i++) if (cur.board.slides[i].id === id) return i;
+    return -1;
+  }
+
+  /** «слайд 3» або «ДЗ 2» — як підписано в стрічці слайдів. */
+  function slidePlace(i) {
+    var kind = S.slideKind(cur.board.slides[i]);
+    var n = railIndexes(kind).indexOf(i) + 1;
+    return (kind === 'hw' ? 'ДЗ ' : 'слайд ') + n;
+  }
+
+  function paintPeer() {
+    if (!cur) return;
+    var info = cur.pres ? cur.pres.peer() : null;
+    var sl = info && info.sl ? info.sl : null;
+    if ((cur.peerSl || null) !== sl) { cur.peerSl = sl; paintPeerMark(); }
+    var b = document.querySelector('[data-peer]');
+    if (!b) return;
+    if (!info) { b.hidden = true; return; }
+    var i = slideIndexById(sl);
+    var away = i >= 0 && i !== cur.index;
+    var name = peerName();
+    var label = name + (away ? ' · ' + slidePlace(i) : '');
+    if (b._label !== label) {
+      b._label = label;
+      b.innerHTML = '<span class="board-peer__dot">' + U.esc(name.charAt(0).toUpperCase()) + '</span>' +
+        '<span class="board-peer__txt">' + U.esc(label) + '</span>';
+    }
+    b.classList.toggle('is-away', away);
+    // слайда учня тут ще немає (щойно доданий на іншому пристрої) — просто «на дошці»
+    b.title = i < 0 ? name + ' зараз на дошці'
+      : away ? name + ' зараз на іншому слайді — перейти туди' : name + ' на цьому слайді — показати, де';
+    b.hidden = false;
+  }
+
+  /* Крапку учня переставляємо в готовій стрічці, а не перебудовуємо її:
+     учень перейшов на інший слайд, поки ми пишемо, — і перебудова з
+     мініатюрами посеред штриха смикнула б перо. renderRail малює ту саму
+     крапку сам (slideCardHtml), тож одне одному вони не суперечать. */
+  function paintPeerMark() {
+    U.$$('.board-rail .slide-card__peer').forEach(function (e) { e.remove(); });
+    var i = slideIndexById(cur.peerSl);
+    var card = i >= 0 && document.querySelector('.board-rail .slide-card[data-slide-index="' + i + '"]');
+    if (card) {
+      card.insertAdjacentHTML('beforeend', '<span class="slide-card__peer" title="Тут зараз учень">' +
+        U.esc(peerName().charAt(0).toUpperCase()) + '</span>');
+    }
+  }
+
+  /** До учня: його слайд і його курсор посередині екрана. */
+  function goToPeer() {
+    var info = cur && cur.pres ? cur.pres.peer() : null;
+    if (!info) return;
+    var i = slideIndexById(info.sl);
+    if (i < 0) return;                    // його слайда тут немає — і вести нікуди
+    if (i !== cur.index) selectSlide(i);
+    if (isFinite(info.x) && isFinite(info.y)) cur.engine.lookAt(info.x, info.y);
   }
 
   if (window.BoardOps) {
@@ -2158,6 +2269,7 @@
     refreshUndo();
     updateSlideName();
     updateSelBar();
+    paintPeer();
   }
 
   /** Наступний або попередній слайд у тому самому рядку. */
@@ -2358,6 +2470,9 @@
            : '<div class="slide-card__empty">порожній</div>') +
       (s.hidden ? '<span class="slide-card__eye" title="Прихований від учня">' +
         icon('eyeOff', 13) + '</span>' : '') +
+      (cur.peerSl && cur.peerSl === s.id
+        ? '<span class="slide-card__peer" title="Тут зараз учень">' + U.esc(peerName().charAt(0).toUpperCase()) + '</span>'
+        : '') +
       '<div class="slide-card__foot">' +
         '<span class="slide-card__num">' + nInRow + '</span>' +
         '<span class="slide-card__name">' + U.esc(name) + '</span>' +
@@ -4804,6 +4919,7 @@
     'board-slides-photos': function () { document.querySelector('[data-multi-input]').click(); },
     'board-slide-dup': function () { addSlide(slide()); },
     'board-slide-hide': function () { toggleSlideHidden(); },
+    'board-peer': function () { goToPeer(); },
     'board-slide-move-row': function () { moveSlideRow(); },
     'board-slide-del': function () { deleteSlide(); },
     'board-slide-left': function () { moveSlide(-1); },
@@ -5998,6 +6114,7 @@
                 function doRevoke() {
                   window.Cloud.revokeShare(share.token).then(function () {
                     delete cur.board.share;
+                    leaveLive();
                     markDirty(); flushSave();
                     U.toast('Посилання більше не працює', 'ok');
                   }).catch(function (e) {

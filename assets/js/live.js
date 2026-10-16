@@ -127,10 +127,13 @@
     retryMs = Math.min(retryMs * 2, 30000);
   }
 
-  function send(topic, event, payload) {
+  /* now — повідомлення має сенс лише зараз (курсор): до приєднання до
+     каналу його не відкладаємо, бо доїхало б уже застарілим. */
+  function send(topic, event, payload, now) {
     var t = topics[topic];
     if (!t) return false;
     if (!t.joined) {
+      if (now) return false;
       t.queue.push({ event: event, payload: payload });
       if (t.queue.length > 50) t.queue.shift();     // у черзі тримаємо лише свіже
       return false;
@@ -151,7 +154,7 @@
     if (isOpen) join(topic); else connect();
 
     return {
-      send: function (event, payload) { return send(topic, event, payload); },
+      send: function (event, payload, now) { return send(topic, event, payload, now); },
       leave: function () {
         if (!topics[topic]) return;
         raw(topic, 'phx_leave', {});

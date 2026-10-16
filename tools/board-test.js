@@ -867,9 +867,10 @@ function presencePair() {
   var T = engine({ dom: true, onCursor: function (w, sl) { if (pT) pT.cursor(w, sl); } });
   var St = engine({ dom: true, onCursor: function (w, sl) { if (pS) pS.cursor(w, sl); } });
   // мережа: повідомлення доходять не в ту ж мить, а коли «дійде черга» (net)
-  var wireQ = [];
+  var wireQ = [], down = false;          // down — зʼєднання впало: усе, що шлють, губиться
   function wire(from, to) {
     return function (ev, d) {
+      if (down) return;
       sent.push(from + ':' + ev);
       sentData.push({ from: from, ev: ev, d: JSON.parse(JSON.stringify(d)) });
       wireQ.push(function () { var p = to(); if (p) p.message(ev, JSON.parse(JSON.stringify(d))); });
@@ -887,7 +888,8 @@ function presencePair() {
     send: wire('S', function () { return pT; })
   });
   net();
-  return { T: T.b, S: St.b, pT: pT, pS: pS, sent: sent, sentData: sentData, peersT: peersT, net: net };
+  return { T: T.b, S: St.b, pT: pT, pS: pS, sent: sent, sentData: sentData, peersT: peersT, net: net,
+    setDown: function (v) { down = v; } };
 }
 
 scenario('Присутність: обидва знають одне про одного, курсор учня їде в кабінет', function () {
@@ -1001,6 +1003,20 @@ scenario('Присутність: сміття в каналі, «бувай» �
     send: function (ev) { sent.push(ev); } });
   p.stop();
   same(sent.join(','), 'hi,bye', '«бувай» іде, навіть коли того боку ще не чули');
+});
+
+scenario('Присутність: зв’язок учня блимнув саме тоді, як він перегорнув слайд', function () {
+  var x = presencePair();
+  pid++;
+  x.S._pointerMove(ev(300, 200)); x.net();
+  x.setDown(true);
+  x.S.setSlide({ id: 'sl2', items: [] });
+  x.pS.slide('sl2'); x.net();
+  same(x.pT.peer() && x.pT.peer().sl, 'sl1', 'поки зв’язку немає, кабінет ще думає, що учень на першому слайді');
+  x.setDown(false);
+  x.pS.joined(); x.net();                       // канал приєднано знову
+  same(x.pT.peer() && x.pT.peer().sl, 'sl2', 'щойно зв’язок повернувся — кабінет знає, де учень');
+  x.pT.stop(); x.pS.stop();
 });
 
 scenario('Присутність: учень з двох пристроїв — два курсори, головний той, що рухається', function () {

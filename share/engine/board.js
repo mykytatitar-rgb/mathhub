@@ -4158,7 +4158,8 @@
     }
 
     if (engine.slide) mySl = may(engine.slide.id) ? String(engine.slide.id) : null;
-    hello(false);
+    // канал зазвичай ще не приєднано — тоді «я тут» скаже joined(), а не черга (без повтору)
+    hello(false, true);
     hi = setInterval(function () {
       hello(false, true);
       // хтось зник без «бувай» (згас ноутбук, пропав інтернет) — прибираємо
@@ -4174,6 +4175,9 @@
       message: message,
       here: there,
       peer: peerInfo,
+      /** Канал щойно (повторно) приєднано: поки зʼєднання не було, свіже
+          (курсор, перехід на інший слайд) нікуди не пішло — кажемо наново. */
+      joined: function () { if (!stopped) hello(false, true); },
       stop: function () {
         if (stopped) return;
         out('bye', {});

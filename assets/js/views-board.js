@@ -1208,6 +1208,8 @@
         cur.republishedAt = 0;
         scheduleRepublish();
       }
+    }, function () {
+      if (cur && cur.lessonId === lessonId && cur.pres) cur.pres.joined();
     });
     startPresence();
   }

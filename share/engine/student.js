@@ -846,6 +846,8 @@
         me: 'student', other: 'tutor', theirs: false,
         send: function (ev, d, now) { env.live.send(ev, d, now); }
       });
+      // зʼєднання впало й повернулось — одразу сказати, де учень зараз
+      env.live.onJoin = function () { if (pres) pres.joined(); };
       // закрили вкладку чи сховали — «бувай» шле сама присутність (visibilitychange)
     }
 

@@ -381,6 +381,8 @@
           joined = true;
           var q = queue; queue = [];
           q.forEach(function (x) { send(x[0], x[1]); });
+          // (повторно) приєднались — дошка скаже «я тут» наново
+          if (api.onJoin) { try { api.onJoin(); } catch (e) { console.warn(e); } }
           return;
         }
         if (msg.event !== 'broadcast' || !msg.payload) return;
@@ -417,7 +419,7 @@
 
     window.addEventListener('online', function () { if (!ws) { wait = 1000; connect(); } });
 
-    var api = { connect: connect, send: send, alive: function () { return joined; }, onMessage: null };
+    var api = { connect: connect, send: send, alive: function () { return joined; }, onMessage: null, onJoin: null };
     return api;
   })();
 
@@ -747,7 +749,7 @@
   /* Номер версії рушія — його піднімає tools/bump.js разом із кабінетом.
      Без номера кожен файл брався окремо «мережа або кеш за 1,5 с», і на
      повільному інтернеті рушій складався з файлів різних версій. */
-  var ENGINE_V = 168;
+  var ENGINE_V = 169;
 
   function loadScript(src) {
     return new Promise(function (resolve, reject) {

@@ -93,6 +93,9 @@
         var q = t.queue;
         t.queue = [];
         q.forEach(function (item) { send(msg.topic, item.event, item.payload); });
+        // після (повторного) приєднання — сказати «я тут» наново: поки зʼєднання
+        // не було, свіже (курсор, перехід на інший слайд) нікуди не пішло
+        if (t.onJoin) { try { t.onJoin(); } catch (e) {} }
         return;
       }
 
@@ -143,13 +146,14 @@
 
   /**
    * Приєднатися до каналу уроку.
-   * on(подія, дані) викликається на кожне повідомлення з каналу.
-   * Повертає { send(подія, дані), leave() }.
+   * on(подія, дані) викликається на кожне повідомлення з каналу;
+   * onJoin() — щоразу, як канал приєднано (і після обриву зʼєднання).
+   * Повертає { send(подія, дані, now), leave() }.
    */
-  L.join = function (name, on) {
+  L.join = function (name, on, onJoin) {
     if (!available() || !name) return { send: function () { return false; }, leave: function () {} };
     var topic = 'realtime:vektor-' + name;
-    topics[topic] = { on: on || function () {}, joined: false, queue: [] };
+    topics[topic] = { on: on || function () {}, onJoin: onJoin || null, joined: false, queue: [] };
 
     if (isOpen) join(topic); else connect();
 

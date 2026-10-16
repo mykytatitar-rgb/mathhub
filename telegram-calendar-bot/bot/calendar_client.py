@@ -17,6 +17,7 @@ from .http import HTTPError, http
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/{cal}/events"
 ID_SLOTS = 3
+MARKER = "tg_confirmation"
 
 
 class CalendarError(RuntimeError):
@@ -38,15 +39,23 @@ class Inserted:
 
 
 def _error_for(status: int, text: str) -> CalendarError:
+    msg = f"{status} {text[:300]}"
+    if status == 403 and ("accessNotConfigured" in text or "SERVICE_DISABLED" in text):
+        return CalendarError(msg, "Google Calendar API не увімкнено. Увімкни його (README, крок 3.1) у тому ж "
+                                  "проєкті Google Cloud, де створено OAuth client, і зачекай кілька хвилин.")
+    if status == 403 and "requiredAccessLevel" in text:
+        return CalendarError(msg, "Немає права запису в цей календар — перевір GOOGLE_CALENDAR_ID у Vercel.")
+    if status == 403 and any(r in text for r in ("rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded")):
+        return CalendarError(msg, "Google тимчасово обмежив запити. Спробуй ✅ ще раз за кілька хвилин.")
     if status in (401, 403):
-        return CalendarError(f"{status} {text[:300]}", "Google не дає доступу до календаря. Запусти scripts/google_auth.py "
-                                                       "ще раз, онови GOOGLE_TOKEN_JSON у Vercel і зроби Redeploy.")
+        return CalendarError(msg, "Google не дає доступу до календаря. Запусти scripts/google_auth.py "
+                                  "ще раз, онови GOOGLE_TOKEN_JSON у Vercel і зроби Redeploy.")
     if status == 404:
-        return CalendarError(f"{status} {text[:300]}", "Календар не знайдено — перевір GOOGLE_CALENDAR_ID у Vercel "
+        return CalendarError(msg, "Календар не знайдено — перевір GOOGLE_CALENDAR_ID у Vercel "
                                                        "(для основного календаря: primary).")
     if status == 400:
-        return CalendarError(f"{status} {text[:300]}", "Google не прийняв подію (неправильні дані). Перевір TIMEZONE у Vercel.")
-    return CalendarError(f"{status} {text[:300]}")
+        return CalendarError(msg, "Google не прийняв подію (неправильні дані). Перевір TIMEZONE у Vercel.")
+    return CalendarError(msg)
 
 
 def _access_token() -> str:
@@ -78,28 +87,27 @@ def _access_token() -> str:
     return r.json()["access_token"]
 
 
-def event_ids(chat_id: int, message_id: int) -> list[str]:
-    """Deterministic ids for one confirmation message, so a double tap on ✅ or
-    a Telegram retry hits 409 instead of creating a duplicate. The bot id is
-    mixed in because a new bot restarts message ids in the same chat; extra
-    slots cover ids already taken by an unrelated event. Hex digits are valid
-    base32hex, as the Calendar API requires."""
+def confirmation_key(chat_id: int, message_id: int) -> str:
+    """Identifies one confirmation message. The bot id is mixed in because a
+    new bot restarts message ids in the same chat."""
     bot_id = settings().telegram_bot_token.split(":", 1)[0]
-    base = f"tg:{bot_id}:{chat_id}:{message_id}"
-    return [hashlib.sha1(f"{base}:{slot}".encode()).hexdigest() for slot in range(ID_SLOTS)]
+    return f"tg:{bot_id}:{chat_id}:{message_id}"
 
 
-def _same_event(existing: dict, body: dict) -> bool:
-    return (
-        existing.get("status") != "cancelled"
-        and existing.get("summary") == body.get("summary")
-        and _start_key(existing.get("start") or {}) == _start_key(body["start"])
-    )
+def event_ids(chat_id: int, message_id: int) -> list[str]:
+    """Deterministic ids, so a double tap on ✅ or a Telegram retry hits 409
+    instead of creating a duplicate. Extra slots cover an id already taken by
+    an unrelated or deleted event. Hex digits are valid base32hex, as the
+    Calendar API requires."""
+    key = confirmation_key(chat_id, message_id)
+    return [hashlib.sha1(f"{key}:{slot}".encode()).hexdigest() for slot in range(ID_SLOTS)]
 
 
-def _start_key(start: dict) -> str:
-    # Google echoes dateTime with an offset ("...T15:00:00+03:00"); compare wall-clock part.
-    return start.get("date") or (start.get("dateTime") or "")[:19]
+def _ours(existing: dict, key: str) -> bool:
+    """Created from this confirmation and not deleted. Matching on a private
+    marker, not on title/time, survives time zone rendering and later edits."""
+    marker = ((existing.get("extendedProperties") or {}).get("private") or {}).get(MARKER)
+    return existing.get("status") != "cancelled" and marker == key
 
 
 def _request(method: str, url: str, token: str, **kw):
@@ -115,7 +123,8 @@ def _events_url() -> str:
 
 def insert_event(ev: Event, chat_id: int, message_id: int) -> Inserted:
     url, token = _events_url(), _access_token()
-    body = ev.google_body(settings().timezone)
+    key = confirmation_key(chat_id, message_id)
+    body = ev.google_body(settings().timezone) | {"extendedProperties": {"private": {MARKER: key}}}
     for eid in event_ids(chat_id, message_id):
         r = _request("POST", url, token, json=body | {"id": eid})
         if r.status_code in (200, 201):
@@ -123,20 +132,20 @@ def insert_event(ev: Event, chat_id: int, message_id: int) -> Inserted:
         if r.status_code != 409:
             raise _error_for(r.status_code, r.text)
         g = _request("GET", f"{url}/{eid}", token)
-        if g.status_code == 200 and _same_event(g.json(), body):
+        if g.status_code == 200 and _ours(g.json(), key):
             return Inserted(link=g.json().get("htmlLink", ""), already_existed=True)
         # id taken by something else (an old bot's event, or a deleted one): next slot
     raise CalendarError("all event id slots are taken")
 
 
-def delete_event(ev: Event, chat_id: int, message_id: int) -> bool:
+def delete_event(chat_id: int, message_id: int) -> bool:
     """Removes the event a ✅ tap on this message may already have created
     (❌ pressed right after ✅). Returns True if something was deleted."""
     url, token = _events_url(), _access_token()
-    body = ev.google_body(settings().timezone)
+    key = confirmation_key(chat_id, message_id)
     for eid in event_ids(chat_id, message_id):
         g = _request("GET", f"{url}/{eid}", token)
-        if g.status_code == 200 and _same_event(g.json(), body):
+        if g.status_code == 200 and _ours(g.json(), key):
             d = _request("DELETE", f"{url}/{eid}", token)
             if d.status_code not in (200, 204, 404, 410):
                 raise _error_for(d.status_code, d.text)

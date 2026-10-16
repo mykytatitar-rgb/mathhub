@@ -21,7 +21,14 @@
 ### 0. Код у гілці `main`
 Vercel бере код із головної гілки, а бот зараз лежить в окремій гілці.
 1. GitHub → репозиторій → **Pull requests → New pull request** → base: `main`, compare: гілка з ботом → **Create** → **Merge**.
-2. На комп'ютері: `git checkout main && git pull`. Тепер у тебе є папка `telegram-calendar-bot`.
+   (Сайт mathhub від цього не зміниться: папку бота на ньому закриває правило в `_redirects`.)
+2. На комп'ютері, у папці репозиторію (кожну команду окремо):
+   ```
+   git checkout main
+   git pull
+   cd telegram-calendar-bot
+   ```
+   Якщо репозиторію на комп'ютері ще немає: `git clone https://github.com/mykytatitar-rgb/mathhub`, потім `cd mathhub`.
 3. Потрібен Python 3.10+ (python.org; на Windows під час встановлення постав галочку *Add python.exe to PATH*).
 
 ### 1. Telegram
@@ -40,7 +47,7 @@ console.groq.com → **API Keys** → Create → `GROQ_API_KEY`.
    ⚠️ Якщо лишити *Testing*, Google вимкне доступ через 7 днів.
 3. **Clients → Create client → Desktop app** → одразу натисни **Download JSON** (пізніше скачати вже не вийде) →
    поклади файл у папку `telegram-calendar-bot/`. Перейменовувати не обов'язково: скрипт сам знайде `client_secret_….json`.
-4. Отримай токен (один раз, з папки `telegram-calendar-bot`):
+4. Отримай токен (один раз; команди запускай з папки `telegram-calendar-bot`):
 
    | macOS / Linux | Windows (PowerShell) |
    |---|---|
@@ -85,6 +92,7 @@ https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<домен>/api/tele
 | Змінив змінну, нічого не змінилось | — | після зміни змінних: Deployments → ⋯ → **Redeploy** |
 | «Google відкликав доступ» | — | застосунок у статусі *Testing* (крок 3.2) → Publish, повтори 3.4, онови `GOOGLE_TOKEN_JSON`, Redeploy |
 | «Календар не знайдено» | — | `GOOGLE_CALENDAR_ID`: залиш порожнім або `primary` |
+| «Google Calendar API не увімкнено» | — | крок 3.1 у **тому ж** проєкті Google Cloud, де створено client (крок 3.3) |
 | Бот плутає слова | — | постав `STT_LANGUAGE=uk` або спробуй `LLM_BACKEND=claude` |
 
 ## Варіант: Claude замість Groq для розбору тексту
@@ -93,6 +101,7 @@ https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<домен>/api/tele
 
 ## Для розробки
 Скопіюй `.env.example` у `.env` і заповни: його читають скрипти нижче (Vercel його не бачить).
+На Windows заміни `.venv/bin/python` на `.venv\Scripts\python`.
 ```
 .venv/bin/python -m pytest                              # тести, без мережі
 .venv/bin/python scripts/poll.py --delete-webhook       # бот локально, без Vercel

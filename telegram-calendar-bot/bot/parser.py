@@ -80,8 +80,9 @@ def _text(data: dict, key: str) -> str:
 def event_from_json(data: dict) -> Event:
     if not isinstance(data, dict):
         raise ParseError("LLM answer is not a JSON object")
-    if error := _text(data, "error"):
-        raise NotAnEvent(error)
+    error = data.get("error")
+    if isinstance(error, str) and error.strip():
+        raise NotAnEvent(" ".join(error.split()))
     title = _text(data, "title")
     if not title:
         raise NotAnEvent("Не зрозумів, що саме записати.")

@@ -36,7 +36,7 @@ def _timezone() -> str:
     name = os.environ.get("TIMEZONE", "").strip() or "Europe/Kyiv"
     try:
         ZoneInfo(name)
-    except (KeyError, ValueError):
+    except (KeyError, ValueError, OSError):  # OSError: a bare region like "Europe"
         raise RuntimeError(f"Invalid TIMEZONE {name!r}, expected e.g. Europe/Kyiv") from None
     return name
 

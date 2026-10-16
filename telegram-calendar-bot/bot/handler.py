@@ -138,7 +138,7 @@ def _cancel(event, chat_id: int, message_id: int) -> None:
     # write that may already have happened. Best effort: the cancel itself stands.
     removed = False
     try:
-        removed = calendar_client.delete_event(event, chat_id, message_id)
+        removed = calendar_client.delete_event(chat_id, message_id)
     except calendar_client.CalendarError:
         log.exception("could not check for an event to remove")
     note = " (прибрав з календаря)" if removed else ""

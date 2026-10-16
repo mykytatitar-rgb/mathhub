@@ -155,6 +155,7 @@ def test_stt_upload_name(path, name):
     GOOD | {"location": None, "notes": None},
     GOOD | {"duration_minutes": 30.0},
     GOOD | {"error": None},
+    GOOD | {"error": False},
 ])
 def test_event_from_json_tolerates_nulls_and_floats(data):
     ev = parser.event_from_json(data)
@@ -168,6 +169,14 @@ def test_event_from_json_non_dict():
 
 def test_invalid_timezone_is_a_clear_config_error(monkeypatch):
     monkeypatch.setenv("TIMEZONE", "Europe/Nowhere")
+    parser.settings.cache_clear()
+    with pytest.raises(RuntimeError, match="Invalid TIMEZONE"):
+        parser.settings()
+
+
+@pytest.mark.parametrize("tz", ["Europe", "Kyiv", "UTC+3"])
+def test_invalid_timezone_variants(monkeypatch, tz):
+    monkeypatch.setenv("TIMEZONE", tz)
     parser.settings.cache_clear()
     with pytest.raises(RuntimeError, match="Invalid TIMEZONE"):
         parser.settings()

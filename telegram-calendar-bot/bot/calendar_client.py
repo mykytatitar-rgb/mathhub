@@ -1,69 +1,74 @@
-"""Google Calendar writer.
+"""Google Calendar via plain REST (no heavy google-api-python-client in the bundle).
 
-Credentials come from GOOGLE_TOKEN_JSON (servers) or token.json (local).
-Create them once on your own PC with `python -m bot.calendar_client`.
+GOOGLE_TOKEN_JSON is the line printed by scripts/google_auth.py: it holds the
+refresh_token, which never expires as long as the OAuth app is "In production".
 """
 from __future__ import annotations
 
+import hashlib
 import json
-from datetime import date, timedelta
-from pathlib import Path
+from dataclasses import dataclass
+from urllib.parse import quote
 
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
+from .config import settings
+from .event import Event
+from .http import http
 
-from .config import GOOGLE_CALENDAR_ID, GOOGLE_TOKEN_JSON, TIMEZONE
-from .parser import Event
-
-SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
-ROOT = Path(__file__).resolve().parent.parent
-CREDS = ROOT / "credentials.json"
-TOKEN = ROOT / "token.json"
+TOKEN_URL = "https://oauth2.googleapis.com/token"
+EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/{cal}/events"
 
 
-def _load_creds() -> Credentials:
-    if GOOGLE_TOKEN_JSON:
-        creds = Credentials.from_authorized_user_info(json.loads(GOOGLE_TOKEN_JSON), SCOPES)
-    elif TOKEN.exists():
-        creds = Credentials.from_authorized_user_file(str(TOKEN), SCOPES)
-    else:
-        raise RuntimeError("No Google token: run `python -m bot.calendar_client` on your PC first")
-    if not creds.valid:
-        creds.refresh(Request())  # access token lives 1h; refresh_token renews it
-    return creds
+class CalendarError(RuntimeError):
+    pass
 
 
-def _service():
-    return build("calendar", "v3", credentials=_load_creds(), cache_discovery=False)
+class GoogleAuthExpired(CalendarError):
+    pass
 
 
-def event_body(ev: Event) -> dict:
-    body = {"summary": ev.title, "location": ev.location, "description": ev.description}
-    if ev.all_day_date:
-        d = date.fromisoformat(ev.all_day_date)
-        body["start"] = {"date": d.isoformat()}
-        body["end"] = {"date": (d + timedelta(days=1)).isoformat()}
-    else:
-        body["start"] = {"dateTime": ev.start.isoformat(), "timeZone": TIMEZONE}
-        body["end"] = {"dateTime": ev.end.isoformat(), "timeZone": TIMEZONE}
-    return body
+@dataclass(frozen=True)
+class Inserted:
+    link: str
+    already_existed: bool
 
 
-def add_event(ev: Event) -> str:
-    created = _service().events().insert(calendarId=GOOGLE_CALENDAR_ID, body=event_body(ev)).execute()
-    return created.get("htmlLink", "")
+def _access_token() -> str:
+    try:
+        tok = json.loads(settings().google_token_json)
+        data = {
+            "client_id": tok["client_id"],
+            "client_secret": tok["client_secret"],
+            "refresh_token": tok["refresh_token"],
+            "grant_type": "refresh_token",
+        }
+    except (ValueError, KeyError) as e:
+        raise CalendarError(f"GOOGLE_TOKEN_JSON is not valid: {e}") from e
+    r = http.post(tok.get("token_uri") or TOKEN_URL, data=data)
+    if r.status_code in (400, 401) and "invalid_grant" in r.text:
+        raise GoogleAuthExpired("refresh token revoked or expired")
+    if r.status_code != 200:
+        raise CalendarError(f"token refresh failed: {r.status_code} {r.text[:200]}")
+    return r.json()["access_token"]
 
 
-def authorize() -> None:
-    """One-time interactive OAuth in a browser; saves token.json and prints it for a server."""
-    from google_auth_oauthlib.flow import InstalledAppFlow
-
-    creds = InstalledAppFlow.from_client_secrets_file(str(CREDS), SCOPES).run_local_server(port=0)
-    TOKEN.write_text(creds.to_json())
-    print("token.json saved. For a server, set GOOGLE_TOKEN_JSON to this line:\n")
-    print(creds.to_json())
+def event_id(chat_id: int, message_id: int) -> str:
+    """Deterministic id per confirmation message: a double tap on ✅ or a
+    Telegram retry hits 409 instead of creating a duplicate event.
+    Hex digits are valid base32hex, as the Calendar API requires."""
+    return hashlib.sha1(f"tg:{chat_id}:{message_id}".encode()).hexdigest()
 
 
-if __name__ == "__main__":
-    authorize()
+def insert_event(ev: Event, chat_id: int, message_id: int) -> Inserted:
+    s = settings()
+    url = EVENTS_URL.format(cal=quote(s.google_calendar_id, safe=""))
+    eid = event_id(chat_id, message_id)
+    headers = {"Authorization": f"Bearer {_access_token()}"}
+    body = ev.google_body(s.timezone) | {"id": eid}
+    r = http.post(url, json=body, headers=headers)
+    if r.status_code == 409:  # already created by an earlier tap
+        g = http.get(f"{url}/{eid}", headers=headers)
+        link = g.json().get("htmlLink", "") if g.status_code == 200 else ""
+        return Inserted(link=link, already_existed=True)
+    if r.status_code not in (200, 201):
+        raise CalendarError(f"insert failed: {r.status_code} {r.text[:300]}")
+    return Inserted(link=r.json().get("htmlLink", ""), already_existed=False)

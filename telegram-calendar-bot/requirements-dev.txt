@@ -1,0 +1,5 @@
+# Local only: tests and the one-time Google login
+-r requirements.txt
+pytest>=8
+python-dotenv>=1.0
+google-auth-oauthlib>=1.2

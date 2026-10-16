@@ -1,27 +1,54 @@
+"""Settings from environment variables (Vercel → Project → Settings → Environment Variables)."""
+from __future__ import annotations
+
 import os
-
-from dotenv import load_dotenv
-
-load_dotenv()
+from dataclasses import dataclass
+from functools import lru_cache
 
 
 def _required(name: str) -> str:
-    value = os.getenv(name)
+    value = os.environ.get(name, "").strip()
     if not value:
         raise RuntimeError(f"Missing env var {name} (see .env.example)")
     return value
 
 
-TELEGRAM_BOT_TOKEN = _required("TELEGRAM_BOT_TOKEN")
-ALLOWED_USER_ID = int(_required("ALLOWED_USER_ID"))
-ANTHROPIC_API_KEY = _required("ANTHROPIC_API_KEY")
-ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-haiku-5-5")
-TIMEZONE = os.getenv("TIMEZONE", "Europe/Kyiv")
-GOOGLE_CALENDAR_ID = os.getenv("GOOGLE_CALENDAR_ID", "primary")
-GOOGLE_TOKEN_JSON = os.getenv("GOOGLE_TOKEN_JSON", "")
+@dataclass(frozen=True)
+class Settings:
+    telegram_bot_token: str
+    telegram_webhook_secret: str
+    allowed_user_id: int
+    timezone: str
+    groq_api_key: str
+    groq_base_url: str
+    stt_model: str
+    stt_language: str
+    llm_backend: str  # "groq" (free) or "claude"
+    groq_llm_model: str
+    anthropic_api_key: str
+    anthropic_model: str
+    google_token_json: str
+    google_calendar_id: str
 
-STT_BACKEND = os.getenv("STT_BACKEND", "api")
-STT_API_KEY = os.getenv("STT_API_KEY", "")
-STT_API_BASE = os.getenv("STT_API_BASE", "https://api.groq.com/openai/v1")
-STT_API_MODEL = os.getenv("STT_API_MODEL", "whisper-large-v3-turbo")
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "small")
+
+@lru_cache(maxsize=1)
+def settings() -> Settings:
+    llm_backend = os.environ.get("LLM_BACKEND", "groq").strip().lower()
+    if llm_backend not in ("groq", "claude"):
+        raise RuntimeError("LLM_BACKEND must be 'groq' or 'claude'")
+    return Settings(
+        telegram_bot_token=_required("TELEGRAM_BOT_TOKEN"),
+        telegram_webhook_secret=os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip(),
+        allowed_user_id=int(_required("ALLOWED_USER_ID")),
+        timezone=os.environ.get("TIMEZONE", "Europe/Kyiv"),
+        groq_api_key=_required("GROQ_API_KEY"),
+        groq_base_url=os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1").rstrip("/"),
+        stt_model=os.environ.get("STT_MODEL", "whisper-large-v3-turbo"),
+        stt_language=os.environ.get("STT_LANGUAGE", "").strip(),
+        llm_backend=llm_backend,
+        groq_llm_model=os.environ.get("GROQ_LLM_MODEL", "openai/gpt-oss-120b"),
+        anthropic_api_key=_required("ANTHROPIC_API_KEY") if llm_backend == "claude" else "",
+        anthropic_model=os.environ.get("ANTHROPIC_MODEL", "claude-opus-5-5"),
+        google_token_json=_required("GOOGLE_TOKEN_JSON"),
+        google_calendar_id=os.environ.get("GOOGLE_CALENDAR_ID", "primary"),
+    )

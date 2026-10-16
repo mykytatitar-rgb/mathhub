@@ -1,33 +1,33 @@
-"""Speech-to-text. Language is auto-detected, so a uk/ru/en mix works.
+"""Speech-to-text via Groq's hosted Whisper (OpenAI-compatible endpoint, free tier).
 
-STT_BACKEND=api   -> OpenAI-compatible cloud endpoint (Groq by default); for servers
-STT_BACKEND=local -> faster-whisper on this machine (pip install -r requirements-local.txt)
+Language is auto-detected unless STT_LANGUAGE is set, so a uk/ru/en mix works.
 """
-from functools import lru_cache
+from __future__ import annotations
 
-from . import config
+from .config import settings
+from .http import http
 
-
-@lru_cache(maxsize=1)
-def _local_model():
-    from faster_whisper import WhisperModel
-
-    return WhisperModel(config.WHISPER_MODEL, device="auto", compute_type="int8")
+# Nudges Whisper toward the vocabulary of scheduling requests.
+PROMPT = "Зустріч завтра о 15:00. Встреча в пятницу. Meeting on Monday at 10 am."
 
 
-@lru_cache(maxsize=1)
-def _api_client():
-    from openai import OpenAI
-
-    if not config.STT_API_KEY:
-        raise RuntimeError("STT_BACKEND=api needs STT_API_KEY")
-    return OpenAI(api_key=config.STT_API_KEY, base_url=config.STT_API_BASE)
+class SttError(RuntimeError):
+    pass
 
 
-def transcribe(path: str) -> str:
-    if config.STT_BACKEND == "local":
-        segments, _info = _local_model().transcribe(path, vad_filter=True, beam_size=5)
-        return " ".join(s.text.strip() for s in segments).strip()
-    with open(path, "rb") as f:
-        result = _api_client().audio.transcriptions.create(model=config.STT_API_MODEL, file=f)
-    return result.text.strip()
+def transcribe(audio: bytes) -> str:
+    s = settings()
+    data = {"model": s.stt_model, "response_format": "json", "prompt": PROMPT}
+    if s.stt_language:
+        data["language"] = s.stt_language
+    r = http.post(
+        f"{s.groq_base_url}/audio/transcriptions",
+        headers={"Authorization": f"Bearer {s.groq_api_key}"},
+        data=data,
+        # Telegram names voice notes *.oga, which Groq rejects; it is the same Ogg container.
+        files={"file": ("voice.ogg", audio, "audio/ogg")},
+        timeout=60.0,
+    )
+    if r.status_code != 200:
+        raise SttError(f"transcription failed: {r.status_code} {r.text[:300]}")
+    return (r.json().get("text") or "").strip()

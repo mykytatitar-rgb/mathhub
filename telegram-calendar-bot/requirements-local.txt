@@ -1,3 +1,0 @@
-# Only for STT_BACKEND=local (Whisper on your own machine)
--r requirements.txt
-faster-whisper==1.0.3

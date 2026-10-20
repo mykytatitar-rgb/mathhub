@@ -48,8 +48,9 @@
       phone: '', parent: '', telegram: '', target: '', meetUrl: '', schedule: []
     };
 
+    // день → усі його часи: уроків в один день буває два й більше
     var sched = {};
-    (data.schedule || []).forEach(function (s) { sched[s.day] = s.time; });
+    (data.schedule || []).forEach(function (s) { (sched[s.day] = sched[s.day] || []).push(s.time); });
 
     /* Якщо колір учня не з нашого набору (старий запис, інша версія програми),
        треба все одно щось виділити. Інакше жоден кружечок не активний —
@@ -62,12 +63,21 @@
         '" data-color="' + c + '" style="background:' + c + '"></button>';
     }).join('');
 
+    /* Кожен день — стовпчик полів часу. «+» під ним додає ще один урок
+       того ж дня; видно його, лише коли всі поля дня вже заповнені, —
+       інакше сім плюсів під порожніми днями були б просто шумом. */
+    function slotInput(d, t) {
+      return '<input class="input" type="time" data-day="' + d + '" value="' + U.esc(t || '') + '">';
+    }
     var days = [1, 2, 3, 4, 5, 6, 7].map(function (d) {
       var label = U.DAYS_SHORT[d % 7];
-      return '<div style="text-align:center">' +
-        '<div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px">' + label + '</div>' +
-        '<input class="input" type="time" data-day="' + d + '" value="' + (sched[d] || '') +
-        '" style="padding:8px 4px;text-align:center;font-size:12.5px">' +
+      var times = (sched[d] || []).slice().sort();
+      return '<div class="week-day">' +
+        '<div class="week-day__l">' + label + '</div>' +
+        (times.length ? times : ['']).map(function (t) { return slotInput(d, t); }).join('') +
+        '<button type="button" class="week-day__add" data-add-slot="' + d + '"' +
+          (times.length ? '' : ' hidden') +
+          ' title="Ще один урок у ' + U.esc(label) + '" aria-label="Ще один урок цього дня">+</button>' +
         '</div>';
     }).join('');
 
@@ -95,7 +105,8 @@
       '<div class="field"><label class="field__label">Постійний розклад</label>' +
         // сім полів часу в ряд не влазили в телефон — там вони йдуть у два ряди
         '<div class="week-slots">' + days + '</div>' +
-        '<div class="field__hint">Залиште порожнім, якщо в цей день уроку немає. ' +
+        '<div class="field__hint">Залиште порожнім, якщо в цей день уроку немає; ' +
+        'два й більше уроків в один день — «+» під часом. ' +
         'Уроки за цим розкладом створюються самі — одразу після збереження й далі ' +
         'на чотири тижні вперед щоразу, коли ви відкриваєте програму.</div>' +
       '</div>' +
@@ -164,9 +175,17 @@
                збереження цілком — не зберігалися ні розклад, ні решта полів. */
             var swatch = root.querySelector('.swatch.is-active') || root.querySelector('.swatch');
             v.color = swatch ? swatch.dataset.color : (data.color || S.COLORS[0]);
+            // той самий час двічі — один урок; порядок — за днем і часом
+            var seenSlot = {};
             v.schedule = U.$$('[data-day]', root)
-              .filter(function (el) { return el.value; })
-              .map(function (el) { return { day: +el.dataset.day, time: el.value }; });
+              .filter(function (el) {
+                var k = el.dataset.day + '@' + el.value;
+                if (!el.value || seenSlot[k]) return false;
+                seenSlot[k] = 1;
+                return true;
+              })
+              .map(function (el) { return { day: +el.dataset.day, time: el.value }; })
+              .sort(function (a, b) { return a.day - b.day || (a.time < b.time ? -1 : a.time > b.time ? 1 : 0); });
             var oldSchedule = JSON.stringify((data.schedule || []));
             var newSchedule = JSON.stringify(v.schedule);
 
@@ -231,6 +250,24 @@
         U.onClick(root, '.swatch', function (el) {
           U.$$('.swatch', root).forEach(function (x) { x.classList.remove('is-active'); });
           el.classList.add('is-active');
+        });
+
+        // «+» дня видно, коли всі його поля заповнені
+        function paintAdd(day) {
+          var add = root.querySelector('[data-add-slot="' + day + '"]');
+          if (!add) return;
+          add.hidden = U.$$('[data-day="' + day + '"]', root).some(function (el) { return !el.value; });
+        }
+        root.addEventListener('input', function (e) {
+          var d = e.target && e.target.dataset && e.target.dataset.day;
+          if (d) paintAdd(d);
+        });
+        U.onClick(root, '[data-add-slot]', function (btn) {
+          var d = btn.dataset.addSlot;
+          btn.insertAdjacentHTML('beforebegin', slotInput(d, ''));
+          btn.hidden = true;
+          var fresh = btn.previousElementSibling;
+          if (fresh) fresh.focus();
         });
       }
     });

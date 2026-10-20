@@ -1721,8 +1721,18 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* Постійний розклад у формі учня: сім полів часу */
-.week-slots { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 7px; }
+.week-slots { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 7px; align-items: start; }
 .week-slots .input { min-width: 0; width: 100%; padding: 8px 4px; text-align: center; font-size: 12.5px; }
+/* день — стовпчик: кілька уроків в один день ідуть один під одним */
+.week-day { display: flex; flex-direction: column; gap: 5px; min-width: 0; text-align: center; }
+.week-day__l { font-size: 11px; font-weight: 700; color: var(--muted); }
+.week-day__add {
+  height: 26px; border: 1px dashed var(--line); border-radius: 9px;
+  background: none; color: var(--muted); font: inherit; font-size: 16px; line-height: 1;
+  cursor: pointer;
+}
+.week-day__add[hidden] { display: none; }
+@media (hover: hover) { .week-day__add:hover { color: var(--blue-700); border-color: var(--blue-600); } }
 @media (max-width: 640px) { .week-slots { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 10px; } }
 
 /* «Ще N файлів» */

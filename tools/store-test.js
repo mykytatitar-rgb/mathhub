@@ -162,6 +162,26 @@ scenario('Заповнення не створює уроків у минуло�
   same(lessonsAt(S, x.st.id, x.iso).length, 0, 'урок позавчора не створено');
 });
 
+scenario('Два уроки в один день: обидва створюються, прибирається лише знятий', function () {
+  var S = freshStore().S;
+  var morning = isoIn(3, '08:17'), evening = isoIn(3, '18:43');
+  var day = weekday(morning);
+  var st = S.add('students', { name: 'Двічі на день', grade: '9 клас', price: 500, currency: 'UAH',
+    schedule: [{ day: day, time: '08:17' }, { day: day, time: '18:43' }] });
+  S.fillStudentTemplate(st.id, 7);
+  same(lessonsAt(S, st.id, morning).length, 1, 'ранковий урок створено');
+  same(lessonsAt(S, st.id, evening).length, 1, 'вечірній урок того самого дня — теж');
+  ok(lessonsAt(S, st.id, morning)[0].id !== lessonsAt(S, st.id, evening)[0].id, 'це два різні уроки');
+  S.fillStudentTemplate(st.id, 7);
+  same(lessonsAt(S, st.id, morning).length + lessonsAt(S, st.id, evening).length, 2,
+    'повторне заповнення двійників не дає');
+  // вечірній зняли з розкладу — ранковий лишається
+  S.update('students', st.id, { schedule: [{ day: day, time: '08:17' }] });
+  S.pruneStudentTemplate(st.id);
+  same(lessonsAt(S, st.id, morning).length, 1, 'ранковий лишився');
+  same(lessonsAt(S, st.id, evening).length, 0, 'вечірній прибрано');
+});
+
 scenario('Зміна розкладу не прибирає урок із вписаною темою', function () {
   var S = freshStore().S;
   var x = studentWithSlot(S, 3, '14:21');

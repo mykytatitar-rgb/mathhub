@@ -120,6 +120,15 @@
      Огляд
      ============================================================ */
 
+  /** «Пн 07:00, 15:00<br>Нд 01:30» — кілька уроків одного дня в одному рядку. */
+  function scheduleText(st) {
+    var byDay = {};
+    (st.schedule || []).forEach(function (x) { (byDay[x.day] = byDay[x.day] || []).push(x.time); });
+    return Object.keys(byDay).sort(function (a, b) { return a - b; }).map(function (d) {
+      return U.DAYS_SHORT[d % 7] + ' ' + byDay[d].sort().join(', ');
+    }).join('<br>');
+  }
+
   function overview(st, stat) {
     var boards = S.boardsOf(st.id);
     var recent = S.lessonsOf(st.id).filter(function (l) { return l.status === 'done'; }).slice(0, 4);
@@ -258,7 +267,7 @@
             '<span class="small muted">Тривалість</span><span class="bold">' + (st.duration || 60) + ' хв</span></div>' +
           '<div class="row" style="justify-content:space-between;padding:8px 0">' +
             '<span class="small muted">Розклад</span><span class="bold small" style="text-align:right">' +
-            ((st.schedule || []).map(function (x) { return U.DAYS_SHORT[x.day % 7] + ' ' + x.time; }).join('<br>') || '—') +
+            (scheduleText(st) || '—') +
             '</span></div>' +
         '</div>' +
       '</div>' +

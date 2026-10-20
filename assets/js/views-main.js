@@ -341,25 +341,7 @@
             '<div class="chart">' + chart + '</div>' +
           '</div>' +
 
-          /* Скільки з нарахованого вже дійшло. Раніше тут повторювалися ті
-             самі суми, що й у плитках зверху; питання «а скільки з цього
-             вже в кишені» відповіді не мало ніде. */
-          (function () {
-            var pc = earnedUah > 0 ? Math.round(Math.min(incomeUah.uah, earnedUah) / earnedUah * 100) : 0;
-            return '<div class="card">' +
-              '<div class="card-head"><div><h2 class="card-title">Скільки вже зібрано</h2>' +
-              '<div class="card-sub">' + U.MONTHS_NOM[today.getMonth()].toLowerCase() + '</div></div></div>' +
-              (earnedUah > 0
-                ? '<div class="row" style="justify-content:space-between;margin-bottom:8px">' +
-                    '<span class="bold" style="font-size:24px;letter-spacing:-.8px">' + pc + '%</span>' +
-                    '<span class="small muted">' + U.esc(U.money(Math.round(incomeUah.uah), 'UAH')) + ' з ' +
-                    U.esc(U.money(Math.round(earnedUah), 'UAH')) + '</span></div>' +
-                  C.bar(pc, pc >= 90 ? 'bar--green' : pc >= 60 ? '' : 'bar--amber') +
-                  '<div class="field__hint mt-2">Нараховано за проведені уроки проти отриманих оплат. ' +
-                  'Більше за 100 % — значить платять наперед.</div>'
-                : '<div class="field__hint">Цього місяця ще не було проведених уроків.</div>') +
-              '</div>';
-          })() +
+          // «Скільки вже зібрано» прибрано на прохання власника — не потрібне
 
           '<div class="card">' +
             '<div class="card-head"><div><h2 class="card-title">Учні</h2>' +
@@ -629,9 +611,10 @@
      Дашборди: з чого складається місяць
      ============================================================
 
-     Стовпчики показують, СКІЛЬКИ, але не показують, ЗВІДКИ. Три питання,
-     на які стовпчиками не відповісти: хто приносить дохід, скільки з
-     нарахованого вже дійшло, і як розподілені борги.
+     Стовпчики показують, СКІЛЬКИ, але не показують, ЗВІДКИ. Два питання,
+     на які стовпчиками не відповісти: хто приносить дохід і як розподілені
+     борги. (Третє, «скільки з нарахованого вже дійшло», власнику не
+     потрібне — кільце прибрано.)
 
      Усі суми зводимо в гривні за курсом — інакше сектори різних валют
      не можна порівнювати між собою. Валюти без курсу відкидаємо: краще
@@ -907,22 +890,13 @@
       return { label: s ? s.name : 'Видалений учень', value: byStudent[id], act: 'fin-student', arg: id + '|' + key };
     });
 
-    /* 2. Скільки з нарахованого дійшло. Порівнюємо за той самий місяць:
-       нараховано за проведені уроки проти отриманих оплат. */
-    var earnedUah = 0;
-    S.doneLessonsBetween(mStart, mEnd).forEach(function (l) {
-      var v = S.uahOf(l, l.price || 0, S.lessonCur(l));
-      if (v != null) earnedUah += v;
-    });
     var paidUah = studentSlices.reduce(function (a, s) { return a + s.value; }, 0);
-    var owedUah = Math.max(0, earnedUah - paidUah);
-    var collectSlices = [
-      { label: 'Оплачено', value: Math.min(paidUah, earnedUah), color: '#12A268', act: 'fin-month', arg: key },
-      { label: 'Ще не оплачено', value: owedUah, color: '#E07C0B', act: 'fin-month', arg: key }
-    ];
-    var collected = earnedUah > 0 ? Math.round(Math.min(paidUah, earnedUah) / earnedUah * 100) : 0;
 
-    /* 3. Борги за учнями — видно, з ким саме говорити */
+    /* Кільце «Скільки вже зібрано» прибрано на прохання власника: не
+       потрібне. Хто недоплатив за місяць, видно в «Звідки дохід»
+       (стовпчик місяця), а хто винен узагалі — у кільці нижче. */
+
+    /* 2. Борги за учнями — видно, з ким саме говорити */
     var debtSlices = S.debtors().map(function (d) {
       var v = toUah(d.debt, d.cur);
       return v == null ? null
@@ -938,16 +912,6 @@
         '<div class="card-head"><div><h2 class="card-title">Хто приносить дохід</h2>' +
         '<div class="card-sub">оплати цього місяця, ' + U.esc(inCur) + ' за курсом</div></div></div>' +
         p1 + '</div>');
-    }
-
-    // без нарахувань частка не має сенсу: ділити нема на що
-    var p2 = earnedUah > 0 ? C.donut(collectSlices, { size: 168, fmt: uah, minShare: 0,
-      centerTop: collected + '%', center: 'зібрано' }) : '';
-    if (p2) {
-      cards.push('<div class="card">' +
-        '<div class="card-head"><div><h2 class="card-title">Скільки вже зібрано</h2>' +
-        '<div class="card-sub">нараховано за проведені уроки: ' + U.esc(uah(earnedUah)) +
-        '</div></div></div>' + p2 + '</div>');
     }
 
     var p3 = C.donut(debtSlices, { size: 168, fmt: uah,

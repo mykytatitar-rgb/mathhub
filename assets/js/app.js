@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v170';
+  App.BUILD = 'v171';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -1533,6 +1533,8 @@
   if (V.olympActions) Object.keys(V.olympActions).forEach(function (k) { ACTIONS[k] = V.olympActions[k]; });
   if (V.bankActions) Object.keys(V.bankActions).forEach(function (k) { ACTIONS[k] = V.bankActions[k]; });
   if (V.formulaActions) Object.keys(V.formulaActions).forEach(function (k) { ACTIONS[k] = V.formulaActions[k]; });
+  // деталі за графіками фінансів: стовпчик місяця, сектор учня
+  if (V.financeActions) Object.keys(V.financeActions).forEach(function (k) { ACTIONS[k] = V.financeActions[k]; });
 
   /* ============================================================
      Слухачі

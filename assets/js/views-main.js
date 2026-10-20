@@ -49,17 +49,20 @@
       var ms = new Date(today.getFullYear(), today.getMonth() - i, 1);
       var me = new Date(today.getFullYear(), today.getMonth() - i + 1, 0);
       var sum = S.incomeUAHBetween(ms, me);
-      months.push({ label: U.MONTHS_NOM[ms.getMonth()].slice(0, 3), value: sum.uah, cur: i === 0 });
+      months.push({ label: U.MONTHS_NOM[ms.getMonth()].slice(0, 3), value: sum.uah, cur: i === 0,
+                    key: monthKey(ms), name: U.MONTHS_NOM[ms.getMonth()] });
     }
     var max = Math.max(1, Math.max.apply(null, months.map(function (m) { return m.value; })));
+    // стовпчик натискається: хто скільки приніс того місяця (V.finMonth)
     return months.map(function (m) {
       var cap = m.value ? U.esc(Math.round(m.value).toLocaleString('uk-UA').replace(/[\u00A0\u202F ]/g, '\u00A0')) : '';
-      return '<div class="chart__col">' +
-        '<div class="chart__top">' + cap + '</div>' +
-        '<div class="chart__bar" style="height:' + Math.max(4, (m.value / max) * 100) + '%' +
-        (m.cur ? '' : ';background:linear-gradient(180deg,#9CC0FF,#6E9DFF)') + '"></div>' +
-        '<div class="chart__cap"' + (m.cur ? ' style="color:var(--blue-600);font-weight:800"' : '') + '>' +
-        m.label + '</div></div>';
+      return '<button type="button" class="chart__col chart__col--btn" data-act="fin-month" data-arg="' + m.key + '" ' +
+        'title="' + U.esc(m.name) + ': хто скільки приніс">' +
+        '<span class="chart__top">' + cap + '</span>' +
+        '<span class="chart__bar" style="height:' + Math.max(4, (m.value / max) * 100) + '%' +
+        (m.cur ? '' : ';background:linear-gradient(180deg,#9CC0FF,#6E9DFF)') + '"></span>' +
+        '<span class="chart__cap"' + (m.cur ? ' style="color:var(--blue-600);font-weight:800"' : '') + '>' +
+        m.label + '</span></button>';
     }).join('');
   }
 
@@ -71,13 +74,16 @@
       if (v == null) return;
       by[p.studentId] = (by[p.studentId] || 0) + v;
     });
+    // сектори натискаються: учень → його місяць, «Інші» → увесь місяць по учнях
+    var key = monthKey(mStart);
     var slices = Object.keys(by).map(function (id) {
       var st = S.get('students', id);
-      return { label: st ? st.name : 'Видалений учень', value: by[id] };
+      return { label: st ? st.name : 'Видалений учень', value: by[id], act: 'fin-student', arg: id + '|' + key };
     });
     var total = slices.reduce(function (a, x) { return a + x.value; }, 0);
     var pie = C.donut(slices, { size: 168, fmt: function (v) { return U.money(Math.round(v), 'UAH'); },
-      centerTop: U.money(Math.round(total), 'UAH'), center: 'за місяць' });
+      centerTop: U.money(Math.round(total), 'UAH'), center: 'за місяць',
+      othersAct: 'fin-month', othersArg: key });
     if (!pie) return '';
     return '<div class="card">' +
       '<div class="card-head"><div><h2 class="card-title">Хто приносить дохід</h2>' +
@@ -636,6 +642,245 @@
     return R.toUAH(amount, code);
   }
 
+  /* ============================================================
+     Деталі за графіками: натиснули стовпчик чи сектор — і видно,
+     звідки ці гроші
+     ============================================================
+
+     Стовпчик місяця → хто скільки приніс того місяця (оплати й
+     проведені уроки по учнях). Учень у кільці чи в цьому списку → його
+     місяць: оплати, уроки, частка, баланс і пів року його оплат.
+
+     Одне вікно на все: гортання місяців і перехід «місяць ↔ учень»
+     міняють його вміст на місці. Інакше вікно ставало б на вікно, і
+     «Назад» на телефоні довелося б тиснути стільки разів, скільки
+     клацали. Суми — у гривнях за курсом дня кожної оплати (як і в
+     стовпчиках), а поруч — у валюті, в якій платили. */
+
+  function monthKey(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2); }
+
+  function monthBounds(key) {
+    var m = /^(\d{4})-(\d{2})$/.exec(key || '');
+    var t = U.today();
+    var y = m ? +m[1] : t.getFullYear(), mo = m ? +m[2] - 1 : t.getMonth();
+    return { y: y, m: mo, key: monthKey(new Date(y, mo, 1)),
+             start: new Date(y, mo, 1), end: new Date(y, mo + 1, 0) };
+  }
+
+  function shiftMonth(key, n) {
+    var b = monthBounds(key);
+    return monthKey(new Date(b.y, b.m + n, 1));
+  }
+
+  function monthTitle(b) { return U.MONTHS_NOM[b.m] + ' ' + b.y; }
+  function uahText(v) { return U.money(Math.round(v), 'UAH'); }
+
+  /** Не лише гривні — показати, у чому саме платили. */
+  function origText(map) {
+    var keys = Object.keys(map).filter(function (k) { return Math.abs(map[k]) > 0.005; });
+    if (!keys.length || (keys.length === 1 && keys[0] === 'UAH')) return '';
+    return U.moneyMap(map);
+  }
+
+  /** Місяць по учнях: оплати й проведені уроки, у гривнях за курсом. */
+  function monthByStudent(b) {
+    var by = {};
+    function row(id) {
+      return by[id] || (by[id] = { id: id, uah: 0, cur: {}, pays: [], lessons: [], earned: 0, noRate: false });
+    }
+    S.paymentsBetween(b.start, b.end).forEach(function (p) {
+      var r = row(p.studentId), c = S.paymentCur(p);
+      r.cur[c] = (r.cur[c] || 0) + (Number(p.amount) || 0);
+      r.pays.push(p);
+      var v = S.uahOf(p, p.amount, c);
+      if (v == null) r.noRate = true; else r.uah += v;
+    });
+    S.doneLessonsBetween(b.start, b.end).forEach(function (l) {
+      var r = row(l.studentId);
+      r.lessons.push(l);
+      var v = S.uahOf(l, l.price || 0, S.lessonCur(l));
+      if (v != null) r.earned += v;
+    });
+    return Object.keys(by).map(function (k) { return by[k]; });
+  }
+
+  function finShow(title, sub, body) {
+    var box = document.querySelector('#modal-root [data-fin]');
+    var sheet = box && box.closest('.modal');
+    if (sheet) {
+      sheet.querySelector('.modal__title').textContent = title;
+      var s = sheet.querySelector('.modal__sub');
+      if (s) s.textContent = sub;
+      box.outerHTML = body;
+      var mb = sheet.querySelector('.modal__body');
+      if (mb) mb.scrollTop = 0;
+      return;
+    }
+    C.modal({ title: title, sub: sub, wide: true, body: body });
+  }
+
+  // ‹ Вересень 2026 › — гортання місяців у тому самому вікні
+  function finNav(act, argOf, b) {
+    var now = monthKey(U.today());
+    var next = shiftMonth(b.key, 1);
+    return '<div class="fin-nav">' +
+      '<button type="button" class="icon-btn" data-act="' + act + '" data-arg="' + argOf(shiftMonth(b.key, -1)) +
+        '" aria-label="Попередній місяць" title="Попередній місяць">' + icon('chevronL', 18) + '</button>' +
+      '<b>' + U.esc(monthTitle(b)) + '</b>' +
+      '<button type="button" class="icon-btn" data-act="' + act + '" data-arg="' + argOf(next) + '"' +
+        (next > now ? ' disabled' : '') + ' aria-label="Наступний місяць" title="Наступний місяць">' +
+        icon('chevronR', 18) + '</button>' +
+    '</div>';
+  }
+
+  function finRow(r, total, key) {
+    var st = S.get('students', r.id);
+    var name = st ? st.name : 'Видалений учень';
+    var share = total > 0 ? r.uah / total : 0;
+    var meta = [];
+    if (r.pays.length) meta.push(U.pl(r.pays.length, 'оплата', 'оплати', 'оплат'));
+    else meta.push('оплат не було');
+    if (r.lessons.length) meta.push(U.pl(r.lessons.length, 'урок', 'уроки', 'уроків') + ' на ' + uahText(r.earned));
+    var owed = r.earned - r.uah;
+    if (r.lessons.length && owed > 0.5) meta.push('<span class="fin-owe">не оплачено ' + U.esc(uahText(owed)) + '</span>');
+    if (r.noRate) meta.push('частина без курсу');
+    var sub = [origText(r.cur), total > 0 && r.uah > 0 ? Math.round(share * 100) + '%' : ''].filter(Boolean).join(' · ');
+    return '<button type="button" class="fin-row" data-act="fin-student" data-arg="' + U.esc(r.id + '|' + key) + '">' +
+      (st ? C.avatar(st, 34) : '<span class="fin-row__ph"></span>') +
+      '<span class="fin-row__main">' +
+        '<span class="fin-row__name">' + U.esc(name) +
+          (st && st.archived ? ' <span class="badge badge--grey">архів</span>' : '') + '</span>' +
+        '<span class="fin-row__meta">' + meta.join(' · ') + '</span>' +
+        (r.uah > 0 ? '<span class="fin-row__bar"><i style="width:' + Math.max(2, share * 100).toFixed(1) + '%;' +
+          'background:' + U.esc((st && st.color) || '#6E9DFF') + '"></i></span>' : '') +
+      '</span>' +
+      '<span class="fin-row__sum"><b>' + U.esc(uahText(r.uah)) + '</b>' +
+        (sub ? '<span>' + U.esc(sub) + '</span>' : '') + '</span>' +
+      icon('chevronR', 16) +
+    '</button>';
+  }
+
+  /** Хто скільки приніс за місяць. */
+  V.finMonth = function (key) {
+    var b = monthBounds(key);
+    var rows = monthByStudent(b);
+    var total = U.sum(rows, function (r) { return r.uah; });
+    var earned = U.sum(rows, function (r) { return r.earned; });
+    var pays = U.sum(rows, function (r) { return r.pays.length; });
+    var lessons = U.sum(rows, function (r) { return r.lessons.length; });
+    var paid = U.sortBy(rows.filter(function (r) { return r.pays.length; }), function (r) { return r.uah; }, true);
+    var unpaid = U.sortBy(rows.filter(function (r) { return !r.pays.length; }), function (r) { return r.earned; }, true);
+    var usd = usdOf(total);
+
+    var body = '<div data-fin>' +
+      finNav('fin-month', function (k) { return k; }, b) +
+      '<div class="fin-sum">' +
+        '<div class="fin-sum__big"><b>' + U.esc(uahText(total)) + '</b>' +
+          (usd ? '<span>' + U.esc(usd) + '</span>' : '') + '</div>' +
+        '<div class="fin-sum__facts">' +
+          (pays ? U.pl(paid.length, 'учень', 'учні', 'учнів') + ' · ' + U.pl(pays, 'оплата', 'оплати', 'оплат')
+                : 'оплат не було') +
+          (lessons ? '<br>проведено ' + U.pl(lessons, 'урок', 'уроки', 'уроків') + ' на ' + U.esc(uahText(earned)) : '') +
+        '</div>' +
+      '</div>' +
+      (paid.length
+        ? '<div class="fin-list">' + paid.map(function (r) { return finRow(r, total, b.key); }).join('') + '</div>'
+        : '<div class="muted" style="padding:10px 0 4px">Цього місяця оплат не було.</div>') +
+      (unpaid.length
+        ? '<div class="fin-h">Були уроки, а оплат цього місяця не було</div>' +
+          '<div class="fin-list">' + unpaid.map(function (r) { return finRow(r, total, b.key); }).join('') + '</div>'
+        : '') +
+      '</div>';
+    finShow('Звідки дохід', 'по учнях, у гривнях за курсом дня оплати', body);
+  };
+
+  /** Один учень за місяць: оплати, уроки, частка, баланс і пів року оплат. */
+  V.finStudent = function (arg) {
+    var parts = String(arg || '').split('|');
+    var id = parts[0], b = monthBounds(parts[1]);
+    var st = S.get('students', id);
+    var name = st ? st.name : 'Видалений учень';
+    var rows = monthByStudent(b);
+    var total = U.sum(rows, function (r) { return r.uah; });
+    var r = rows.filter(function (x) { return x.id === id; })[0] ||
+      { id: id, uah: 0, cur: {}, pays: [], lessons: [], earned: 0 };
+    var share = total > 0 ? Math.round(r.uah / total * 100) : 0;
+
+    // пів року його оплат, до цього місяця включно; стовпчик — у його місяць
+    var hist = [];
+    for (var i = 5; i >= 0; i--) {
+      var hb = monthBounds(shiftMonth(b.key, -i));
+      var v = 0;
+      S.paymentsBetween(hb.start, hb.end).forEach(function (p) {
+        if (p.studentId !== id) return;
+        var u = S.uahOf(p, p.amount, S.paymentCur(p));
+        if (u != null) v += u;
+      });
+      hist.push({ b: hb, v: v });
+    }
+    var maxH = Math.max(1, Math.max.apply(null, hist.map(function (h) { return h.v; })));
+    var chart = hist.map(function (h) {
+      var on = h.b.key === b.key;
+      return '<button type="button" class="chart__col chart__col--btn' + (on ? ' is-on' : '') + '" ' +
+        'data-act="fin-student" data-arg="' + U.esc(id + '|' + h.b.key) + '" title="' + U.esc(monthTitle(h.b)) + '">' +
+        '<span class="chart__top">' + (h.v ? U.esc(Math.round(h.v).toLocaleString('uk-UA').replace(/[   ]/g, ' ')) : '') + '</span>' +
+        '<span class="chart__bar" style="height:' + (h.v ? Math.max(6, h.v / maxH * 100) : 3) + '%' +
+          (h.v ? (on ? '' : ';background:linear-gradient(180deg,#9CC0FF,#6E9DFF)') : ';background:var(--line)') + '"></span>' +
+        '<span class="chart__cap">' + U.MONTHS_NOM[h.b.m].slice(0, 3) + '</span></button>';
+    }).join('');
+
+    var bal = st ? S.balance(id) : 0;
+    var cur = st ? S.curOf(id) : 'UAH';
+    var balText = Math.abs(bal) < 0.005 ? 'розраховано'
+      : bal > 0 ? 'наперед ' + U.money(bal, cur) : 'борг ' + U.money(-bal, cur);
+
+    var payRows = U.sortBy(r.pays.slice(), function (p) { return p.date; }).map(function (p) {
+      var c = S.paymentCur(p);
+      var u = S.uahOf(p, p.amount, c);
+      return '<div class="fin-line"><span class="nowrap">' + U.fmtDate(p.date) + '</span>' +
+        '<span class="muted small fin-line__note">' + U.esc(p.note || p.method || '') + '</span>' +
+        '<span class="bold nowrap">' + U.esc(U.money(p.amount, c)) +
+        (c !== 'UAH' && u != null ? ' <span class="muted small">≈' + U.esc(uahText(u)) + '</span>' : '') + '</span></div>';
+    }).join('');
+    var lessonRows = U.sortBy(r.lessons.slice(), function (l) { return l.date; }).map(function (l) {
+      return '<div class="fin-line"><span class="nowrap">' + U.fmtDate(l.date) + '</span>' +
+        '<span class="muted small fin-line__note">' + U.esc(l.topic || 'без теми') + '</span>' +
+        '<span class="nowrap">' + U.esc(U.money(l.price || 0, S.lessonCur(l))) + '</span></div>';
+    }).join('');
+
+    var body = '<div data-fin>' +
+      finNav('fin-student', function (k) { return U.esc(id + '|' + k); }, b) +
+      '<div class="fin-tiles">' +
+        '<div class="fin-tile"><span>Оплатив</span><b>' + U.esc(uahText(r.uah)) + '</b>' +
+          '<small>' + U.esc(origText(r.cur) || U.pl(r.pays.length, 'оплата', 'оплати', 'оплат')) + '</small></div>' +
+        '<div class="fin-tile"><span>Частка місяця</span><b>' + share + '%</b>' +
+          '<small>з ' + U.esc(uahText(total)) + '</small></div>' +
+        '<div class="fin-tile"><span>Уроків проведено</span><b>' + r.lessons.length + '</b>' +
+          '<small>на ' + U.esc(uahText(r.earned)) + '</small></div>' +
+        '<div class="fin-tile"><span>Баланс зараз</span><b class="' +
+          (bal < -0.005 ? 'fin-neg' : bal > 0.005 ? 'fin-pos' : '') + '">' + U.esc(balText) + '</b>' +
+          '<small>оплати мінус проведені</small></div>' +
+      '</div>' +
+      '<div class="fin-h">Оплати за пів року</div>' +
+      '<div class="chart chart--mini">' + chart + '</div>' +
+      '<div class="fin-h">Оплати · ' + U.esc(U.MONTHS_NOM[b.m].toLowerCase()) + '</div>' +
+      (payRows || '<div class="muted small">Оплат цього місяця не було.</div>') +
+      (lessonRows ? '<div class="fin-h">Проведені уроки</div>' + lessonRows : '') +
+      '<div class="fin-links">' +
+        '<button type="button" class="btn btn--ghost btn--sm" data-act="fin-month" data-arg="' + b.key + '">' +
+          icon('chevronL', 15) + 'Усі учні за ' + U.esc(U.MONTHS_NOM[b.m].toLowerCase()) + '</button>' +
+        (st ? '<button type="button" class="btn btn--soft btn--sm" data-act="student-open" data-arg="' + U.esc(id) + '">' +
+          'Картка учня</button>' : '') +
+      '</div>' +
+      '</div>';
+    finShow(name, monthTitle(b) + ' · у гривнях за курсом дня оплати', body);
+  };
+
+  V.financeActions = {
+    'fin-month': function (arg) { V.finMonth(arg); },
+    'fin-student': function (arg) { V.finStudent(arg); }
+  };
+
   function financePies(mStart, mEnd, code) {
     /* Рахуємо в гривнях — інакше сектори різних валют не порівняти між
        собою. Показуємо в тій валюті, яку обрано перемикачем: частки від
@@ -655,9 +900,11 @@
       if (v == null) return;
       byStudent[p.studentId] = (byStudent[p.studentId] || 0) + v;
     });
+    // сектори натискаються: учень → його місяць, решта → увесь місяць по учнях
+    var key = monthKey(mStart);
     var studentSlices = Object.keys(byStudent).map(function (id) {
       var s = S.get('students', id);
-      return { label: s ? s.name : 'Видалений учень', value: byStudent[id] };
+      return { label: s ? s.name : 'Видалений учень', value: byStudent[id], act: 'fin-student', arg: id + '|' + key };
     });
 
     /* 2. Скільки з нарахованого дійшло. Порівнюємо за той самий місяць:
@@ -670,8 +917,8 @@
     var paidUah = studentSlices.reduce(function (a, s) { return a + s.value; }, 0);
     var owedUah = Math.max(0, earnedUah - paidUah);
     var collectSlices = [
-      { label: 'Оплачено', value: Math.min(paidUah, earnedUah), color: '#12A268' },
-      { label: 'Ще не оплачено', value: owedUah, color: '#E07C0B' }
+      { label: 'Оплачено', value: Math.min(paidUah, earnedUah), color: '#12A268', act: 'fin-month', arg: key },
+      { label: 'Ще не оплачено', value: owedUah, color: '#E07C0B', act: 'fin-month', arg: key }
     ];
     var collected = earnedUah > 0 ? Math.round(Math.min(paidUah, earnedUah) / earnedUah * 100) : 0;
 
@@ -679,13 +926,13 @@
     var debtSlices = S.debtors().map(function (d) {
       var v = toUah(d.debt, d.cur);
       return v == null ? null
-        : { label: d.s.name + (d.s.archived ? ' · в архіві' : ''), value: v };
+        : { label: d.s.name + (d.s.archived ? ' · в архіві' : ''), value: v, act: 'fin-student', arg: d.s.id + '|' + key };
     }).filter(Boolean);
 
     var cards = [];
 
     var p1 = C.donut(studentSlices, { size: 168, fmt: uah,
-      centerTop: uah(paidUah), center: 'за місяць' });
+      centerTop: uah(paidUah), center: 'за місяць', othersAct: 'fin-month', othersArg: key });
     if (p1) {
       cards.push('<div class="card">' +
         '<div class="card-head"><div><h2 class="card-title">Хто приносить дохід</h2>' +
@@ -781,7 +1028,8 @@
     for (var i = 5; i >= 0; i--) {
       var ms = new Date(today.getFullYear(), today.getMonth() - i, 1);
       var me = new Date(today.getFullYear(), today.getMonth() - i + 1, 0);
-      months.push({ label: U.MONTHS_NOM[ms.getMonth()].slice(0, 3), value: monthValue(ms, me) });
+      months.push({ label: U.MONTHS_NOM[ms.getMonth()].slice(0, 3), value: monthValue(ms, me),
+                    key: monthKey(ms), name: U.MONTHS_NOM[ms.getMonth()] });
     }
     var maxM = Math.max(1, Math.max.apply(null, months.map(function (m) { return m.value; })));
     var chart = months.map(function (m, idx) {
@@ -796,11 +1044,13 @@
          сумою, — виходило «щось було», хоча не було нічого. Порожній місяць
          тепер ледь помітна риска, і сплутати їх не можна. */
       var empty = !m.value;
-      return '<div class="chart__col">' +
-        '<div class="chart__top">' + cap + '</div>' +
-        '<div class="chart__bar" style="height:' + (empty ? 3 : Math.max(6, (m.value / maxM) * 100)) + '%' +
-        (empty ? ';background:var(--line)' : (isCur ? '' : ';background:linear-gradient(180deg,#9CC0FF,#6E9DFF)')) + '"></div>' +
-        '<div class="chart__cap">' + m.label + '</div></div>';
+      // стовпчик натискається: хто скільки приніс того місяця (V.finMonth)
+      return '<button type="button" class="chart__col chart__col--btn" data-act="fin-month" data-arg="' + m.key + '" ' +
+        'title="' + U.esc(m.name) + ': хто скільки приніс">' +
+        '<span class="chart__top">' + cap + '</span>' +
+        '<span class="chart__bar" style="height:' + (empty ? 3 : Math.max(6, (m.value / maxM) * 100)) + '%' +
+        (empty ? ';background:var(--line)' : (isCur ? '' : ';background:linear-gradient(180deg,#9CC0FF,#6E9DFF)')) + '"></span>' +
+        '<span class="chart__cap">' + m.label + '</span></button>';
     }).join('');
 
     /* Усі оплати, незалежно від валюти.

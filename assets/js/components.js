@@ -97,7 +97,8 @@
       big.push({
         label: 'Інші · ' + small.length,
         value: small.reduce(function (a, s) { return a + Number(s.value); }, 0),
-        color: '#AAA8C2'
+        color: '#AAA8C2',
+        act: opts.othersAct, arg: opts.othersArg
       });
     } else if (small.length === 1) {
       big.push(small[0]);
@@ -108,11 +109,18 @@
     var r = (sz - sw) / 2;
     var circ = 2 * Math.PI * r;
 
+    /* Сектор чи рядок легенди з act — натискається (деталі за ним): той
+       самий спільний диспетчер data-act, що й для кнопок. */
+    function actAttrs(s) {
+      return s.act ? ' data-act="' + U.esc(s.act) + '" data-arg="' + U.esc(s.arg || '') + '"' : '';
+    }
+
     var at = 0;
     var arcs = big.map(function (s, i) {
       var frac = s.value / total;
       var col = s.color || C.PIE_COLORS[i % C.PIE_COLORS.length];
-      var seg = '<circle cx="' + sz / 2 + '" cy="' + sz / 2 + '" r="' + r + '" fill="none" ' +
+      var seg = '<circle' + (s.act ? ' class="pie__seg"' + actAttrs(s) : '') +
+        ' cx="' + sz / 2 + '" cy="' + sz / 2 + '" r="' + r + '" fill="none" ' +
         'stroke="' + col + '" stroke-width="' + sw + '" ' +
         // проміжок між секторами — щоб сусідні кольори не зливалися
         'stroke-dasharray="' + Math.max(0, circ * frac - 2).toFixed(2) + ' ' + circ.toFixed(2) + '" ' +
@@ -128,15 +136,17 @@
     }).join('');
 
     var legend = big.map(function (s) {
-      return '<div class="pie__row">' +
+      var tag = s.act ? 'button' : 'div';
+      return '<' + tag + (s.act ? ' type="button"' : '') +
+        ' class="pie__row' + (s.act ? ' pie__row--btn' : '') + '"' + actAttrs(s) + '>' +
         '<span class="pie__dot" style="background:' + s._col + '"></span>' +
         '<span class="pie__name">' + U.esc(s.label) + '</span>' +
         '<span class="pie__pct">' + s._pct + '</span>' +
         (opts.fmt ? '<span class="pie__val">' + U.esc(opts.fmt(s.value)) + '</span>' : '') +
-        '</div>';
+        '</' + tag + '>';
     }).join('');
 
-    return '<div class="pie">' +
+    return '<div class="pie' + (big.some(function (s) { return s.act; }) ? ' pie--live' : '') + '">' +
       '<div class="pie__chart" style="width:' + sz + 'px;height:' + sz + 'px">' +
       '<svg width="' + sz + '" height="' + sz + '" role="img">' + arcs + '</svg>' +
       (opts.centerTop || opts.center

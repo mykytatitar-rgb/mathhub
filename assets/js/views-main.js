@@ -1888,7 +1888,23 @@
     } else {
       var line = st.ok === false
         ? '<div class="guard guard--off"><span class="guard__dot"></span><span>Не оновився: ' + U.esc(st.err) +
-          '. Спробую ще раз за хвилину.</span></div>'
+          '. Спробую ще раз за хвилину.</span></div>' +
+          /* Найчастіше — після переходу акаунта в Google Workspace: доступ до
+             вебзастосунку стає «лише в домені», і кабінет без входу не пускає. */
+          (st.access
+            ? '<ol class="gcal-steps mt-2">' +
+                '<li>Відкрийте <a href="https://script.google.com/home" target="_blank" rel="noopener">script.google.com</a> ' +
+                  'тим акаунтом, де календар «Уроки · Вектор», і проєкт із кодом Вектора.</li>' +
+                '<li>Угорі <b>«Розгорнути» → «Керувати розгортаннями»</b> → олівець. «Версія» — <b>«Нова версія»</b>, ' +
+                  '«Хто має доступ» — <b>«Усі»</b> → «Розгорнути». Адреса лишається та сама ' +
+                  '(якщо ж створили нове розгортання з новою адресою — «Вимкнути» нижче й підключіть нову).</li>' +
+                '<li>Якщо «Усі» в списку немає (лише люди вашого домену) — у ' +
+                  '<a href="https://admin.google.com" target="_blank" rel="noopener">admin.google.com</a> → ' +
+                  'Програми → Google Workspace → Диск і Документи → Налаштування спільного доступу ' +
+                  'дозвольте доступ за межами домену й повторіть крок 2.</li>' +
+                '<li>Тут натисніть «Оновити зараз».</li>' +
+              '</ol>'
+            : '')
         : '<div class="guard guard--on"><span class="guard__dot"></span><span>Працює. ' +
           (st.at ? 'Востаннє оновлено о ' + U.fmtTime(new Date(st.at)) + ' · ' +
             U.pl(st.n, 'урок', 'уроки', 'уроків') + ' у календарі'
@@ -1903,8 +1919,8 @@
         'разом із постійним розкладом. Скасоване й перенесене з нього зникає.</div>';
     }
     return '<div class="card mt-3">' +
-      '<div class="card-head"><div><h2 class="card-title">Google Календар — одразу</h2>' +
-      '<div class="card-sub">перенесений урок — у календарі за кілька секунд</div></div></div>' +
+      '<div class="card-head"><div><h2 class="card-title">Google Календар</h2>' +
+      '<div class="card-sub">уроки в календарі «Уроки · Вектор» — за кілька секунд після зміни</div></div></div>' +
       body + '</div>';
   };
 
@@ -2528,8 +2544,14 @@
           })() +
           V.accountCard() +
           V.telegramCard() +
-          V.calendarCard() +
-          V.gcalCard() +
+          /* Одна картка Google Календаря, а не дві поруч. Підключено напряму —
+             підписка посиланням (повільна, Google перечитує її раз на кілька
+             годин) лише згорнутим запасним способом. */
+          (window.GCal && GCal.enabled()
+            ? V.gcalCard() +
+              '<details class="tech-zone mt-2"><summary>Запасний спосіб — підписка посиланням (оновлюється повільно)</summary>' +
+                V.calendarCard() + '</details>'
+            : V.gcalCard() + V.calendarCard()) +
           (window.App && App.installCard ? App.installCard() : '') +
           /* У встановленому застосунку немає адресного рядка, і службову
              сторінку за адресою вже не відкрити — а там копії, «Чи все

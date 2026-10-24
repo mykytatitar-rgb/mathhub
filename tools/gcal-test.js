@@ -351,6 +351,25 @@ scenario('Помилка Google — зрозумілим текстом, а не
   });
 });
 
+scenario('Адреса скрипта з Google Workspace (…/a/macros/<домен>/…) — приймається', function () {
+  var c = cabinet();
+  ok(c.GCal.validUrl('https://script.google.com/macros/s/AKfy123/exec'), 'звичайна адреса');
+  ok(c.GCal.validUrl('https://script.google.com/a/macros/tituha.com/s/AKfy123/exec'), 'адреса Workspace з доменом');
+  ok(!c.GCal.validUrl('https://script.google.com/macros/s/AKfy123/dev'), '/dev — ні (лише розгорнута /exec)');
+  ok(!c.GCal.validUrl('https://evil.example/macros/s/AKfy123/exec'), 'чужий сайт — ні');
+});
+
+scenario('Запит не дійшов («Failed to fetch») — пояснення й кроки, а не загадка', function () {
+  var c = cabinet();
+  c.fetch = function () { return Promise.reject(new TypeError('Failed to fetch')); };
+  var t = c.S.db().tutor; t.gcal = { secret: c.GCal.secret(), url: URL };
+  return c.GCal.push(true).then(function (r) {
+    same(r, null, 'відправка не вдалась');
+    ok(/не пускає кабінет до скрипта/.test(c.GCal.state().err), 'причина зрозуміла: ' + c.GCal.state().err);
+    same(c.GCal.state().access, true, 'картка покаже кроки виправлення доступу');
+  });
+});
+
 /* ============================================================ */
 
 queue.reduce(function (chain, s) {

@@ -124,6 +124,16 @@
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(body),
       redirect: 'follow'
+    }).catch(function () {
+      /* Запит не дійшов зовсім («Failed to fetch»). Інтернет є — значить,
+         Google не пускає до скрипта без входу: у розгортанні вже не «Хто
+         має доступ: усі». Так стається, коли акаунт перейшов у Google
+         Workspace — там доступ за замовчуванням лише всередині домену. */
+      var offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+      var e = new Error(offline ? 'немає інтернету'
+        : 'Google не пускає кабінет до скрипта — у розгортанні вже не «Хто має доступ: усі»');
+      e.access = !offline;
+      throw e;
     }).then(function (res) {
       if (!res.ok) throw new Error('Google відповів ' + res.status);
       return res.text();
@@ -181,7 +191,8 @@
         }
         return j;
       }, function (e) {
-        state = { at: Date.now(), ok: false, err: (e && e.message) || 'немає звʼязку', n: b.events.length };
+        state = { at: Date.now(), ok: false, err: (e && e.message) || 'немає звʼязку', n: b.events.length,
+                  access: !!(e && e.access) };
         console.warn('Google Календар не оновився:', state.err);
         retry = setTimeout(function () { retry = null; G.push(); }, 60000);
         return null;
@@ -194,10 +205,16 @@
     return sending;
   };
 
+  /* Адреса вебзастосунку. В акаунті Google Workspace вона з доменом:
+     …/a/macros/<домен>/s/…/exec — досі таку кабінет не приймав. */
+  G.validUrl = function (url) {
+    return /^https:\/\/script\.google\.com\/(a\/macros\/[^/\s]+\/|macros\/)s\/[^/\s]+\/exec$/.test(String(url || '').trim());
+  };
+
   G.connect = function (url) {
     url = String(url || '').trim();
-    if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(url)) {
-      return Promise.reject(new Error('Потрібна адреса вебзастосунку: https://script.google.com/macros/s/…/exec'));
+    if (!G.validUrl(url)) {
+      return Promise.reject(new Error('Потрібна адреса вебзастосунку: https://script.google.com/…/s/…/exec'));
     }
     return G.ping(url).then(function () {
       var t = S.db().tutor;

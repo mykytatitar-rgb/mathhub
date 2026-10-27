@@ -1,0 +1,38 @@
+name: Deploy Hola (Spanish) to GitHub Pages
+
+on:
+  push:
+    branches:
+      - claude/english-learning-android-app-0t7gdm
+    paths:
+      - 'spanish/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+      - name: Upload Hola app (spanish/)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./spanish
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

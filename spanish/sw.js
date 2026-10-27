@@ -1,5 +1,5 @@
 /* Hola — service worker для офлайн-режиму. */
-const CACHE = 'hola-v37';
+const CACHE = 'hola-v38';
 const ASSETS = [
   './',
   './index.html',
@@ -17,7 +17,7 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', e=>{
-  e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then(c=>Promise.all(ASSETS.map(u=>c.add(u).catch(()=>{})))).then(()=>self.skipWaiting()));
 });
 self.addEventListener('activate', e=>{
   e.waitUntil(

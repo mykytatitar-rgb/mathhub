@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "dev.pages.hola_ei1.twa",
+        "sha256_cert_fingerprints": ["33:92:04:71:CE:62:04:4E:EB:0F:E6:94:A2:C6:4B:0C:2F:DF:01:F3:36:CB:C8:02:38:C6:42:1E:AB:2B:86:63"]
+      }
+    }]

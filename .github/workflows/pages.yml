@@ -3,7 +3,7 @@ name: Deploy Hola (Spanish) to GitHub Pages
 on:
   push:
     branches:
-      - claude/english-learning-android-app-0t7gdm
+      - main
     paths:
       - 'spanish/**'
       - '.github/workflows/pages.yml'

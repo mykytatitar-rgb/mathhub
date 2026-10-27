@@ -7,7 +7,7 @@
 
    Версію треба піднімати щоразу, коли змінюється склад файлів. */
 
-var VERSION = 'vektor-v173';
+var VERSION = 'vektor-v174';
 
 /* Банк задач — окремий кеш: він не залежить від версії кабінету й не
    чиститься з кожним оновленням. Кожен файл банку приходить з відбитком
@@ -94,6 +94,13 @@ var CODE = [
 
 var SHELL = PAGES.concat(CODE.map(function (u) { return u + '?v=' + V; }));
 
+/* «Справи» (tasks/) — окремий застосунок із власним service worker і
+   кешами spravy-*. Цей їх не обслуговує й не чистить: інакше перше
+   відкриття «Справ» на повільному інтернеті показало б кабінет, а кожне
+   оновлення кабінету стирало б їхню копію для роботи без мережі. */
+var TASKS = new URL('tasks/', self.registration.scope).pathname;
+function isTasks(url) { return url.pathname.indexOf(TASKS) === 0 || url.pathname + '/' === TASKS; }
+
 self.addEventListener('install', function (e) {
   e.waitUntil(
     caches.open(VERSION)
@@ -107,7 +114,7 @@ self.addEventListener('activate', function (e) {
   e.waitUntil(
     caches.keys()
       .then(function (keys) {
-        return Promise.all(keys.filter(function (k) { return k !== VERSION && k !== BANK; })
+        return Promise.all(keys.filter(function (k) { return k !== VERSION && k !== BANK && k.indexOf('spravy-') !== 0; })
           .map(function (k) { return caches.delete(k); }));
       })
       .then(function () { return self.clients.claim(); })
@@ -120,6 +127,7 @@ self.addEventListener('fetch', function (e) {
 
   var url = new URL(req.url);
   if (url.origin !== self.location.origin) return;   // курс НБУ й інші зовнішні — повз кеш
+  if (isTasks(url)) return;                           // «Справи» — їхній власний service worker
 
   // Файл банку з відбитком: кеш банку, мережа — лише вперше
   if (url.pathname.indexOf('/assets/bank/') >= 0 && url.searchParams.has('h')) {

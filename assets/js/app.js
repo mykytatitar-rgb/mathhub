@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v173';
+  App.BUILD = 'v174';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -1218,12 +1218,12 @@
 
       if (window.caches && caches.keys) {
         jobs.push(caches.keys().then(function (ks) {
-          return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+          return Promise.all(ks.filter(notTasksCache).map(function (k) { return caches.delete(k); }));
         }).catch(function () {}));
       }
       if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
         jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
-          return Promise.all(rs.map(function (r) { return r.unregister(); }));
+          return Promise.all(rs.filter(notTasksWorker).map(function (r) { return r.unregister(); }));
         }).catch(function () {}));
       }
 
@@ -1821,6 +1821,12 @@
   // повернулись у застосунок — це теж дія: не перезавантажувати під пальцем
   document.addEventListener('visibilitychange', function () { if (!document.hidden) lastInput = Date.now(); });
 
+  /* «Справи» (tasks/) живуть поруч зі своїм service worker і кешем spravy-*.
+     Свіжий код кабінету їх не стосується — чистити їх тут означало б
+     залишити «Справи» без роботи офлайн до наступного відкриття з мережею. */
+  function notTasksCache(k) { return k.indexOf('spravy-') !== 0; }
+  function notTasksWorker(r) { return !/\/tasks\/$/.test(r.scope); }
+
   function reloadNow() {
     var jobs = [];
     try { if (window.Cloud && Cloud.flush) jobs.push(Cloud.flush()); } catch (e) {}
@@ -1840,12 +1846,12 @@
       // код на сервері новіший за кеш — кеш прибираємо, інакше знову відкрився б старий
       if (window.caches && caches.keys) {
         jobs.push(caches.keys().then(function (ks) {
-          return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+          return Promise.all(ks.filter(notTasksCache).map(function (k) { return caches.delete(k); }));
         }).catch(function () {}));
       }
       if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
         jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
-          return Promise.all(rs.map(function (r) { return r.unregister(); }));
+          return Promise.all(rs.filter(notTasksWorker).map(function (r) { return r.unregister(); }));
         }).catch(function () {}));
       }
     }

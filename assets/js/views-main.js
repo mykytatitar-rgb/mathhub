@@ -42,6 +42,11 @@
     return { uah: uah, n: n, partial: partial };
   }
 
+  /* Висота стовпчика — частка не всієї колонки, а місця під сам стовпчик:
+     над ним число, під ним місяць. Від усієї колонки високі стовпчики не
+     вміщались і стискались до однакової висоти. */
+  function barH(pct) { return 'calc((100% - var(--chart-labels, 46px)) * ' + (pct / 100).toFixed(4) + ')'; }
+
   /** Дохід за півроку стовпчиками — той самий погляд, що й у фінансах. */
   function incomeBars(today) {
     var months = [];
@@ -59,7 +64,7 @@
       return '<button type="button" class="chart__col chart__col--btn" data-act="fin-month" data-arg="' + m.key + '" ' +
         'title="' + U.esc(m.name) + ': хто скільки приніс">' +
         '<span class="chart__top">' + cap + '</span>' +
-        '<span class="chart__bar" style="height:' + Math.max(4, (m.value / max) * 100) + '%' +
+        '<span class="chart__bar" style="height:' + barH(Math.max(4, (m.value / max) * 100)) +
         (m.cur ? '' : ';background:linear-gradient(180deg,#9CC0FF,#6E9DFF)') + '"></span>' +
         '<span class="chart__cap"' + (m.cur ? ' style="color:var(--blue-600);font-weight:800"' : '') + '>' +
         m.label + '</span></button>';
@@ -200,7 +205,7 @@
       var isToday = U.isSameDay(x.date, today);
       return '<div class="chart__col">' +
         '<div class="chart__top">' + (x.count || '') + '</div>' +
-        '<div class="chart__bar" style="height:' + Math.max(4, (x.count / maxDay) * 100) + '%' +
+        '<div class="chart__bar" style="height:' + barH(Math.max(4, (x.count / maxDay) * 100)) +
         (isToday ? '' : ';background:linear-gradient(180deg,#9CC0FF,#6E9DFF)') + '"></div>' +
         '<div class="chart__cap"' + (isToday ? ' style="color:var(--blue-600);font-weight:800"' : '') + '>' +
         U.DAYS_SHORT[x.date.getDay()] + '</div></div>';
@@ -807,7 +812,7 @@
       return '<button type="button" class="chart__col chart__col--btn' + (on ? ' is-on' : '') + '" ' +
         'data-act="fin-student" data-arg="' + U.esc(id + '|' + h.b.key) + '" title="' + U.esc(monthTitle(h.b)) + '">' +
         '<span class="chart__top">' + (h.v ? U.esc(Math.round(h.v).toLocaleString('uk-UA').replace(/[   ]/g, ' ')) : '') + '</span>' +
-        '<span class="chart__bar" style="height:' + (h.v ? Math.max(6, h.v / maxH * 100) : 3) + '%' +
+        '<span class="chart__bar" style="height:' + barH(h.v ? Math.max(6, h.v / maxH * 100) : 3) +
           (h.v ? (on ? '' : ';background:linear-gradient(180deg,#9CC0FF,#6E9DFF)') : ';background:var(--line)') + '"></span>' +
         '<span class="chart__cap">' + U.MONTHS_NOM[h.b.m].slice(0, 3) + '</span></button>';
     }).join('');
@@ -1012,7 +1017,7 @@
       return '<button type="button" class="chart__col chart__col--btn" data-act="fin-month" data-arg="' + m.key + '" ' +
         'title="' + U.esc(m.name) + ': хто скільки приніс">' +
         '<span class="chart__top">' + cap + '</span>' +
-        '<span class="chart__bar" style="height:' + (empty ? 3 : Math.max(6, (m.value / maxM) * 100)) + '%' +
+        '<span class="chart__bar" style="height:' + barH(empty ? 3 : Math.max(6, (m.value / maxM) * 100)) +
         (empty ? ';background:var(--line)' : (isCur ? '' : ';background:linear-gradient(180deg,#9CC0FF,#6E9DFF)')) + '"></span>' +
         '<span class="chart__cap">' + m.label + '</span></button>';
     }).join('');

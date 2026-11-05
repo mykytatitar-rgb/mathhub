@@ -546,11 +546,17 @@
       if (engine.draft || engine.band) { sendTimer = setTimeout(flushSend, 250); return; }
 
       // нове, що зʼявилось на цьому пристрої, — учнівське за визначенням
+      var marked = false;
       board.slides.forEach(function (sl) {
         (sl.items || []).forEach(function (it) {
-          if (it && it.id && !it.by && !findItem(base, sl.id, it.id)) it.by = 'student';
+          if (it && it.id && !it.by && !findItem(base, sl.id, it.id)) {
+            it.by = 'student';
+            if (sl === engine.slide) marked = true;
+          }
         });
       });
+      // позначка змінює вигляд (ореол учнівського) — показуємо її зараз, у паузі
+      if (marked) engine.render();
 
       var ops = core().diff(base, board);
       var ownedBefore = ownerIn(base), ownedNow = ownerIn(board);

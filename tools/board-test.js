@@ -1209,5 +1209,40 @@ scenario('Письмо підряд: «крок назад» не перевод
   same(b.items()[302].d[0], 180, 'на те саме місце');
 });
 
+scenario('Чуже, що лягло посеред штриха, видно одразу після відриву пера', function () {
+  var b = engine().b;
+  busySlide(b, 20);
+  b.setTool('pen');
+  paint = [];
+  b.render(); frameNow(b);
+  write(b, 100, 100);
+  pid++;
+  b._pointerDown(penEv(pid, 200, 200)); frameNow(b);
+  b._pointerMove(penEv(pid, 210, 205)); frameNow(b);
+  // відповідь сервера підмінила список обʼєктів, поки перо на склі
+  var fresh = b.slide.items.slice(1);                  // перший старий штрих стерли
+  fresh.push({ id: 'stud', t: 'p', c: '#f00', w: 3, d: [600, 500, 610, 505] });
+  b.sealHistory();
+  b.slide.items = fresh;
+  b._pointerUp(penEv(pid, 220, 200)); frameNow(b);
+  var v = seen(paint, b.canvas);
+  paint = null;
+  ok(v.indexOf('path@600.0,500.0') >= 0, 'новий штрих учня на екрані');
+  ok(v.indexOf('path@0.0,400.0') < 0, 'стертий — зник');
+});
+
+scenario('Долоня поверх незакритого жесту, коли нагорі крок штриха, — перо не губиться', function () {
+  var b = engine({ touch: true }).b;
+  b.setTool('pen');
+  write(b, 100, 100);
+  b.setTool('select');
+  b._pointerDown(finger(901, 112, 100));
+  b._pointerMove(finger(901, 112, 140));
+  b.undo();                                            // посеред жесту
+  var threw = null;
+  try { b._pointerDown(penEv(902, 300, 300)); } catch (e) { threw = e; }
+  ok(!threw, 'перо торкнулось без помилки' + (threw ? ': ' + threw.message : ''));
+});
+
 console.log('\n' + passes + ' пройдено, ' + fails + ' не пройдено');
 process.exit(fails ? 1 : 0);

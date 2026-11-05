@@ -5186,8 +5186,11 @@
         { label: 'Застосувати', kind: 'btn--primary', act: 'ok', icon: 'check',
           onClick: function (root) {
             /* Підписи кутів застосовуємо завжди — навіть якщо розміри
-               лишили без змін: людина могла зайти саме заради них. */
-            var angEls = U.$$('[data-ang]', root);
+               лишили без змін: людина могла зайти саме заради них.
+               Крок назад — до будь-якої зміни, інакше підписи не скасовувались. */
+            cur.engine.snapshot();
+            var was = { ang: it.ang, m: it.m };
+            var angEls = U.$('[data-ang]', root);
             if (angEls.length) {
               var ang = {};
               angEls.forEach(function (el) {
@@ -5207,9 +5210,9 @@
             else if (mode === 'side') spec = { scaleToSide: { i: +v.idx, len: v.len } };
             else if (mode === 'circle') spec = it.sh === 'circle' ? { r: v.r } : { rx: v.rx, ry: v.ry };
 
-            cur.engine.snapshot();
             var ok = cur.engine.setShapeGeometry(it, spec);
             if (!ok) {
+              it.ang = was.ang; it.m = was.m;  // нічого не застосовано — і підписи як були
               cur.engine.history.pop();
               U.toast(mode === 'sss'
                 ? 'Такого трикутника не існує: перевірте нерівність трикутника'

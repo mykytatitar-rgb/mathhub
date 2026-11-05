@@ -1699,6 +1699,9 @@
      ============================================================ */
 
   var imgCache = {};
+  /* Скільки картинок догрузилось чи впало — для основи кадру: картинку,
+     що догрузилась пізніше, основа мала б показати, хоч би хто її вантажив. */
+  var imgVer = 0;
 
   /* Звідки брати файл картинки.
 
@@ -1718,7 +1721,7 @@
     var src = sourceOf(key, item);
     if (!src) { e.state = 'fail'; return e; }
 
-    function fail() { e.state = 'fail'; e.at = Date.now(); }
+    function fail() { e.state = 'fail'; e.at = Date.now(); imgVer++; }
 
     Promise.resolve(src).then(function (got) {
       if (!got) { fail(); if (onReady) onReady(); return; }
@@ -1726,7 +1729,7 @@
       var url = own ? URL.createObjectURL(got) : got;
       var img = new Image();
       if (!own) img.crossOrigin = 'anonymous';
-      img.onload = function () { e.img = img; e.url = url; e.state = 'ok'; if (onReady) onReady(); };
+      img.onload = function () { e.img = img; e.url = url; e.state = 'ok'; imgVer++; if (onReady) onReady(); };
       img.onerror = function () { fail(); if (own) URL.revokeObjectURL(url); if (onReady) onReady(); };
       img.src = url;
     }).catch(function () { fail(); if (onReady) onReady(); });
@@ -2628,7 +2631,7 @@
     // повернути зроблене долонею; чуже, що лягло тим часом, лишається (див. _rebaseTop)
     this._rebaseTop(touched);
     var top = this.history[this.history.length - 1];
-    if (top && typeof top === 'object' && top.after == null) {
+    if (top && typeof top === 'object' && !top.add && top.after == null) {
       var now = JSON.stringify(this.slide.items);
       if (top.before !== now) this.slide.items = carry(this.slide.items, JSON.parse(now), JSON.parse(top.before));
       this.history.pop();
@@ -2979,6 +2982,7 @@
        назад після чужої зміни прибирав чуже. */
     this._closeTop();
     this._ext = (this._ext || 0) + 1;
+    this._inkOk = false;                       // і основа кадру вже не та
   };
 
   Board.prototype.undo = function () {
@@ -5422,10 +5426,11 @@
        перемальовується. Поки пишуть пером, основу варто зробити, навіть
        якщо її ще немає: далі кожен кадр — лише штрих. */
     var pen = this.draft && this.draft.t === 'p';
+    if (this._inkOk && !this._inkFresh()) this._inkOk = false;
     if ((pen || this._inkOk) && this._inkLayer()) {
       if (!this._inkOk) {
         this._drawBase(this._ink.getContext('2d'));
-        this._inkOk = true;
+        this._inkMark();
       }
       var ctx = this.ctx;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -5458,9 +5463,23 @@
           lc.setTransform(1, 0, 0, 1, 0, 0);
           lc.drawImage(self.canvas, 0, 0);
         }
-        self._inkOk = true;
+        self._inkMark();
       } catch (e) { self._inkOk = false; }
     }, 150);
+  };
+
+  /* Основу зібрано: з якого списку обʼєктів, скількох і за яких картинок.
+     Відповідь сервера може підмінити список посеред штриха, а картинка —
+     догрузитись пізніше; тоді основа вже не та, і її малюють заново. */
+  Board.prototype._inkMark = function () {
+    this._inkOk = true;
+    this._inkArr = this.items();
+    this._inkN = this._inkArr.length;
+    this._inkImg = imgVer;
+  };
+
+  Board.prototype._inkFresh = function () {
+    return this.items() === this._inkArr && this._inkArr.length === this._inkN && imgVer === this._inkImg;
   };
 
   /* Штрих ліг на слайд — домальовуємо лише його в готову основу, і вона
@@ -5468,7 +5487,10 @@
      всього слайда. false — основи немає чи вона застаріла: тоді, як і
      досі, малюється все. */
   Board.prototype._inkAppend = function (it) {
-    if (!this._inkOk || !this._ink) return false;
+    // основа — саме з цього списку, і в ньому з того часу додався лише цей штрих
+    if (!this._inkOk || !this._ink || this.items() !== this._inkArr ||
+        this._inkArr.length !== this._inkN + 1 || imgVer !== this._inkImg) return false;
+    this._inkN++;
     var lc = this._ink.getContext('2d');
     lc.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     lc.save();

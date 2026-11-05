@@ -1111,14 +1111,19 @@ scenario('Письмо підряд на списаному слайді: між
   var b = engine().b;
   busySlide(b, 300);
   b.setTool('pen');
+  paint = [];
   b.render(); frameNow(b);
   write(b, 100, 100);                    // перший штрих — тут шар слайда ще будується
-  paint = [];
+  var from = paint.length;
   write(b, 140, 100); write(b, 180, 100); write(b, 220, 100);
-  var n = paint.filter(function (p) { return p.op === 'stroke'; }).length;
+  var n = paint.slice(from).filter(function (p) { return p.op === 'stroke'; }).length;
+  var v = seen(paint, b.canvas);
   paint = null;
   same(b.items().length, 304, 'усі чотири штрихи лягли на слайд');
-  ok(n < 60, 'три штрихи підряд — малюється лише нове: ' + n + ' ліній, а не всі 300 старих щоразу');
+  same(b.items().filter(function (it) {
+    return v.indexOf('path@' + it.d[0].toFixed(1) + ',' + it.d[1].toFixed(1)) < 0;
+  }).length, 0, 'і всі 304 на екрані');
+  ok(n > 0 && n < 60, 'три штрихи підряд — малюється лише нове: ' + n + ' ліній, а не всі 300 старих щоразу');
 });
 
 scenario('Написане видно одразу й таким самим, як після повного перемальовування', function () {

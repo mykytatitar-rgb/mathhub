@@ -2997,7 +2997,9 @@
   Board.prototype.canUndo = function () { return this.history.length > 0; };
   Board.prototype.canRedo = function () { return this.future.length > 0; };
 
-  Board.prototype.changed = function () {
+  /* inked — зміна вже домальована в основу кадру (штрих пера, див.
+     _inkAppend): решту слайда не перемальовуємо. */
+  Board.prototype.changed = function (inked) {
     this.syncConstructions();
     /* Стан одразу після власної дії — для «кроку назад». Лише поки між
        дією й цим моментом не приходило чуже: інакше скасування вважало б
@@ -3006,7 +3008,7 @@
       var top = this.history[this.history.length - 1];
       if (top && typeof top === 'object' && top.ext === (this._ext || 0)) top.open = true;
     }
-    this.render();
+    if (inked === true) this.renderInk(); else this.render();
     if (this.opts.onChange) this.opts.onChange();
   };
 
@@ -4574,7 +4576,7 @@
       this.snapshot();
       this.slide.items.push(ided(pd2));
       this.rememberInitialView();
-      this.changed();
+      this.changed(this._inkAppend(pd2));
       return;
     }
 
@@ -5371,10 +5373,11 @@
   /* Поки пишуть пером, змінюється лише сам штрих. Перемальовувати заради
      нього весь слайд (фон, картинки, сотні штрихів) — це кілька
      мілісекунд щокадру, а на списаному слайді й більше: лінія відставала
-     від пера й смикалась. Тому на початку штриха слайд один раз
-     малюється в окремий шар, а далі щокадру — лише шар і поверх нього
-     штрих. Будь-яка інша зміна (чуже, масштаб) кличе render() і шар
-     малюється заново. */
+     від пера й смикалась. Тому кадр — це основа (фон і всі обʼєкти
+     слайда), готова в окремому шарі, і те, що поверх неї (див. _draw).
+     Штрих, що ліг, домальовується в основу (_inkAppend), тож і межа між
+     штрихами не перемальовує слайд. Будь-яка інша зміна (чуже, масштаб)
+     кличе render(), і основа малюється заново. */
   Board.prototype.renderInk = function () { this._schedule(); };
 
   Board.prototype._schedule = function () {
@@ -5387,47 +5390,65 @@
   };
 
   Board.prototype._frame = function () {
-    if (this.draft && this.draft.t === 'p' && this._inkLayer()) {
+    /* Основа готова — кадр складається з неї й верхнього, слайд не
+       перемальовується. Поки пишуть пером, основу варто зробити, навіть
+       якщо її ще немає: далі кожен кадр — лише штрих. */
+    var pen = this.draft && this.draft.t === 'p';
+    if ((pen || this._inkOk) && this._inkLayer()) {
       if (!this._inkOk) {
-        this._draw(this._ink.getContext('2d'), true);
+        this._drawBase(this._ink.getContext('2d'));
         this._inkOk = true;
       }
       var ctx = this.ctx;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.drawImage(this._ink, 0, 0);
-      ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-      ctx.save();
-      ctx.scale(this.scale, this.scale);
-      ctx.translate(-this.cam.x, -this.cam.y);
-      drawItem(ctx, this.draft, this.scale);
-      ctx.restore();
+      this._drawOver(ctx);
       return;
     }
-    this._draw();
+    this._overDrawn = this._draw();
     this._placePeers();
     this._inkSoon();
   };
 
-  /* Перо в руці — намальований слайд стає й шаром для наступного штриха:
-     копія готового полотна, а не ще одне малювання, тож і перший кадр
-     штриха нічого не перемальовує. Копіюємо в паузі, а не щокадру (тоді
-     сповільнилися б масштаб і рух полотна), і лише якщо відтоді нічого не
-     змінилось і поверх слайда нічого немає (виділення, набір під
-     вказівником). */
+  /* Перо в руці — основу для наступного штриха готуємо в паузі, тож і
+     перший кадр штриха нічого не перемальовує. Поверх слайда нічого не
+     було — полотно і є основа, і копія дешевша за малювання; було
+     (підписи вимірів, виділення) — малюємо саму основу. У паузі, а не
+     щокадру: інакше сповільнилися б масштаб і рух полотна. */
   Board.prototype._inkSoon = function () {
     var self = this;
     var seq = this._inkSeq = (this._inkSeq || 0) + 1;
     if (this.tool !== 'pen' || this.readOnly) return;
     setTimeout(function () {
       if (seq !== self._inkSeq || self._raf || self.draft || self._inkOk || self.tool !== 'pen') return;
-      if (self.selection.length || self.placing || self.band || !self._inkLayer()) return;
+      if (!self._inkLayer()) return;
       try {
         var lc = self._ink.getContext('2d');
-        lc.setTransform(1, 0, 0, 1, 0, 0);
-        lc.drawImage(self.canvas, 0, 0);
+        if (self._overDrawn) {
+          self._drawBase(lc);
+        } else {
+          lc.setTransform(1, 0, 0, 1, 0, 0);
+          lc.drawImage(self.canvas, 0, 0);
+        }
         self._inkOk = true;
       } catch (e) { self._inkOk = false; }
     }, 150);
+  };
+
+  /* Штрих ліг на слайд — домальовуємо лише його в готову основу, і вона
+     лишається дійсною: наступний штрих починається без перемальовування
+     всього слайда. false — основи немає чи вона застаріла: тоді, як і
+     досі, малюється все. */
+  Board.prototype._inkAppend = function (it) {
+    if (!this._inkOk || !this._ink) return false;
+    var lc = this._ink.getContext('2d');
+    lc.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    lc.save();
+    lc.scale(this.scale, this.scale);
+    lc.translate(-this.cam.x, -this.cam.y);
+    drawItem(lc, it, this.scale);
+    lc.restore();
+    return true;
   };
 
   /** Шар слайда для письма — того самого розміру, що й полотно. null — не вийшло. */
@@ -5445,10 +5466,17 @@
     } catch (e) { return null; }
   };
 
-  /* target — куди малювати (за замовчуванням — саме полотно);
-     noDraft — без штриха, що зараз пишеться (для шару слайда). */
-  Board.prototype._draw = function (target, noDraft) {
-    var ctx = target || this.ctx;
+  /* Увесь кадр на полотні: основа й те, що поверх неї. true — поверх
+     основи щось намальовано (див. _inkSoon). */
+  Board.prototype._draw = function () {
+    if (!this.cssW || !this.cssH) return false;
+    this._drawBase(this.ctx);
+    return this._drawOver(this.ctx);
+  };
+
+  /* Основа кадру — фон і всі обʼєкти слайда. Від руху руки вона не
+     залежить, тому її й тримають готовою в шарі (див. _frame). */
+  Board.prototype._drawBase = function (ctx) {
     var w = this.cssW, h = this.cssH;
     if (!w || !h) return;
 
@@ -5462,14 +5490,33 @@
     this.syncConstructions();
     var items = this.items();
     setDrawScope(items);
-    var self0 = this;
     for (var i = 0; i < items.length; i++) drawItem(ctx, items[i], this.scale);
-    if (this.draft && !noDraft) drawItem(ctx, this.draft, this.scale);
+    ctx.restore();
+  };
+
+  /* Те, що поверх основи: штрих чи фігура, що зараз малюються, дуга,
+     набір під вказівником, виділення, рамка — і підписи вимірів, які
+     лишаються над усім, що намальовано. true — щось намальовано. */
+  Board.prototype._drawOver = function (ctx) {
+    var w = this.cssW, h = this.cssH;
+    var items = this.items();
+    var drew = false;
+    // між кадрами могли малювати інший слайд (мініатюри) — точки й звʼязки шукаються в цьому
+    if (drawItems !== items) setDrawScope(items);
+
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.save();
+    ctx.scale(this.scale, this.scale);
+    ctx.translate(-this.cam.x, -this.cam.y);
+
+    var self0 = this, i;
+    if (this.draft) { drawItem(ctx, this.draft, this.scale); drew = true; }
     var arcG = this.draft && this.draft.t === 'q' ? this.draft : this._arcArm;
-    if (arcG && arcG.o && !noDraft) drawArcGuide(ctx, arcG, this.scale);
+    if (arcG && arcG.o) { drawArcGuide(ctx, arcG, this.scale); drew = true; }
 
     // набір, який переносять з іншої дошки, — напівпрозорий під вказівником
     if (this.placing && this.placing.at) {
+      drew = true;
       var pl = this.placing, pk = 1 / this.scale;
       ctx.save();
       ctx.translate(pl.at.x - (pl.b.x1 + pl.b.x2) / 2, pl.at.y - (pl.b.y1 + pl.b.y2) / 2);
@@ -5490,6 +5537,7 @@
     /* Перша обрана точка зʼєднання. Без цієї позначки незрозуміло, чи
        клацання взагалі влучило, — і друге клацання робиться навмання. */
     if (this.tool === 'link') {
+      drew = true;
       var lm = idMap(items);
 
       /* Поки інструмент активний, кожна точка обведена кільцем. Без цього
@@ -5525,6 +5573,7 @@
 
     // підсвітка виділених
     if (this.selection.length) {
+      drew = true;
       ctx.strokeStyle = '#1358F5';
       ctx.lineWidth = 1.5 * k;
       ctx.setLineDash([5 * k, 4 * k]);
@@ -5570,6 +5619,7 @@
 
     // рамка виділення, яку зараз тягнуть
     if (this.band) {
+      drew = true;
       var bx = Math.min(this.band.x0, this.band.x1), by = Math.min(this.band.y0, this.band.y1);
       var bw = Math.abs(this.band.x1 - this.band.x0), bh = Math.abs(this.band.y1 - this.band.y0);
       ctx.fillStyle = 'rgba(75,63,219,.08)';
@@ -5591,6 +5641,7 @@
       if ((items[i].t === 'g' || items[i].t === 'q') && items[i].m) collectMeasureLabels(items[i], labels);
     }
     if (labels.length) {
+      drew = true;
       ctx.save();
       ctx.font = '700 11.5px Manrope, "Segoe UI", system-ui, sans-serif';
       ctx.textAlign = 'center';
@@ -5610,7 +5661,7 @@
       }
       ctx.restore();
     }
-
+    return drew;
   };
 
   /* ---------- Статичний рендер для експорту ---------- */

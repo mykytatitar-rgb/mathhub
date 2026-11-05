@@ -15,7 +15,11 @@ var vm = require('vm');
 var ROOT = path.join(__dirname, '..');
 function src(p) { return fs.readFileSync(path.join(ROOT, p), 'utf8'); }
 
-function makeCtx() {
+/* Що й куди малювали. paint = [] — і кожен виклик на будь-якому полотні
+   ляже сюди: { cv: номер полотна, op: що зроблено, a: з чим }. null — не пишемо. */
+var paint = null, canvasSeq = 0;
+
+function makeCtx(cvId) {
   var noop = function () {};
   var target = {
     measureText: function (s) { return { width: String(s).length * 8 }; },
@@ -26,17 +30,23 @@ function makeCtx() {
     setLineDash: noop, getLineDash: function () { return []; }
   };
   return new Proxy(target, {
-    get: function (t, k) { return k in t ? t[k] : noop; },
+    get: function (t, k) {
+      if (k in t) return t[k];
+      return function () { if (paint) paint.push({ cv: cvId, op: k, a: Array.prototype.slice.call(arguments) }); };
+    },
     set: function (t, k, v) { t[k] = v; return true; }
   });
 }
 
 // size — розмір полотна на екрані; його можна змінити посеред сценарію (поворот телефона)
+// контекст у полотна один, як у браузері: getContext щоразу дає той самий
 function makeCanvas(size) {
   size = size || { w: 1000, h: 700 };
+  var id = ++canvasSeq, ctx = makeCtx(id);
   return {
+    id: id,
     width: size.w, height: size.h, style: {},
-    getContext: function () { return makeCtx(); },
+    getContext: function () { return ctx; },
     getBoundingClientRect: function () { return { left: 0, top: 0, width: size.w, height: size.h }; },
     addEventListener: function () {}, removeEventListener: function () {},
     setPointerCapture: function () {}, releasePointerCapture: function () {},
@@ -1039,6 +1049,110 @@ scenario('Присутність: учень з двох пристроїв — 
   same(Object.keys(x.T.peers).length, 1, 'телефон закрили — його курсор зник, компʼютерний лишився');
   same(x.pT.peer() && x.pT.peer().x, 300, 'головним знову став компʼютер');
   x.pT.stop(); x.pS.stop();
+});
+
+/* ---------- Плавність пера: межа між штрихами ---------- */
+
+// кадр, як його зробив би браузер: що просили намалювати — малюється зараз
+function frameNow(b) { if (b._raf) { b._raf = null; b._frame(); } }
+
+// штрих так, як пише людина: дотик, рух, відрив — і кадр після кожного
+function write(b, x, y) {
+  pid++;
+  b._pointerDown(penEv(pid, x, y));
+  frameNow(b);
+  for (var i = 1; i <= 5; i++) { b._pointerMove(penEv(pid, x + i * 6, y + (i % 2) * 4)); frameNow(b); }
+  b._pointerUp(penEv(pid, x + 30, y));
+  frameNow(b);
+}
+
+// списаний слайд: n коротких штрихів
+function busySlide(b, n) {
+  for (var i = 0; i < n; i++) {
+    b.slide.items.push({ id: 'old' + i, t: 'p', c: '#222', w: 3, d: [i * 3, 400, i * 3 + 5, 405, i * 3 + 9, 402] });
+  }
+}
+
+/* Що видно на полотні — за журналом малювання. Фон на все полотно чи копія
+   іншого полотна на все полотно затирають старе; кожна лінія й заливка лягає
+   поверх як «path@x,y» (де почалась), напис — як «text:…». Знизу догори. */
+function seen(log, canvas) {
+  var content = {}, start = {};
+  log.forEach(function (p) {
+    var c = content[p.cv] || (content[p.cv] = []);
+    if (p.op === 'fillRect' && p.a[0] === 0 && p.a[1] === 0 && p.a[2] >= 1000 && p.a[3] >= 700) { content[p.cv] = ['bg']; return; }
+    if (p.op === 'drawImage' && p.a[0] && p.a[0].id && p.a[1] === 0 && p.a[2] === 0) {
+      content[p.cv] = (content[p.a[0].id] || []).slice();
+      return;
+    }
+    if (p.op === 'beginPath') { start[p.cv] = null; return; }
+    if ((p.op === 'moveTo' || p.op === 'arc') && start[p.cv] == null) {
+      start[p.cv] = (+p.a[0]).toFixed(1) + ',' + (+p.a[1]).toFixed(1);
+      return;
+    }
+    if (p.op === 'stroke' || p.op === 'fill') { c.push('path@' + start[p.cv]); return; }
+    if (p.op === 'fillText') c.push('text:' + p.a[0]);
+  });
+  return content[canvas.id] || [];
+}
+
+scenario('Письмо підряд на списаному слайді: між штрихами не перемальовується весь слайд', function () {
+  var b = engine().b;
+  busySlide(b, 300);
+  b.setTool('pen');
+  b.render(); frameNow(b);
+  write(b, 100, 100);                    // перший штрих — тут шар слайда ще будується
+  paint = [];
+  write(b, 140, 100); write(b, 180, 100); write(b, 220, 100);
+  var n = paint.filter(function (p) { return p.op === 'stroke'; }).length;
+  paint = null;
+  same(b.items().length, 304, 'усі чотири штрихи лягли на слайд');
+  ok(n < 60, 'три штрихи підряд — малюється лише нове: ' + n + ' ліній, а не всі 300 старих щоразу');
+});
+
+scenario('Написане видно одразу й таким самим, як після повного перемальовування', function () {
+  var b = engine().b;
+  busySlide(b, 40);
+  b.setTool('pen');
+  paint = [];
+  b.render(); frameNow(b);
+  write(b, 100, 100);
+  write(b, 300, 120);
+  var now = seen(paint, b.canvas);
+  b.render(); frameNow(b);                // повне перемальовування — еталон
+  var full = seen(paint, b.canvas);
+  paint = null;
+  ok(now.indexOf('path@300.0,120.0') >= 0, 'щойно написаний штрих на екрані');
+  ok(now.indexOf('path@100.0,100.0') >= 0, 'попередній теж');
+  var lost = b.items().filter(function (it) {
+    return now.indexOf('path@' + it.d[0].toFixed(1) + ',' + it.d[1].toFixed(1)) < 0;
+  });
+  same(lost.length, 0, 'усі 40 старих штрихів і 2 нові на екрані — нічого не загубилось');
+  same(now.join('|'), full.join('|'), 'на екрані те саме й у тому самому порядку, що й після повного перемальовування');
+});
+
+scenario('Підпис виміру лишається поверх написаного — і поки пишуть, і після', function () {
+  var b = engine().b;
+  b.slide.items.push({ id: 'arcM', t: 'q', o: [200, 200], r: 80, a0: 0, s: 90, m: 1, c: '#222', w: 2 });
+  b.setTool('pen');
+  paint = [];
+  b.render(); frameNow(b);
+  function labelOnTop(when) {
+    var v = seen(paint, b.canvas);
+    var lab = -1, lastPath = -1;
+    v.forEach(function (x, i) { if (x === 'text:90°') lab = i; if (/^path@/.test(x)) lastPath = i; });
+    ok(lab >= 0 && lab > lastPath, when + ': підпис «90°» над лініями (' + v.slice(-4).join(' · ') + ')');
+  }
+  pid++;
+  b._pointerDown(penEv(pid, 250, 250)); frameNow(b);
+  b._pointerMove(penEv(pid, 262, 262)); frameNow(b);
+  b._pointerMove(penEv(pid, 274, 270)); frameNow(b);
+  labelOnTop('поки пишуть');
+  b._pointerUp(penEv(pid, 280, 274)); frameNow(b);
+  labelOnTop('після відриву пера');
+  write(b, 240, 240);
+  labelOnTop('наступний штрих');
+  paint = null;
 });
 
 console.log('\n' + passes + ' пройдено, ' + fails + ' не пройдено');

@@ -734,7 +734,7 @@
     if (r.noRate) meta.push('частина без курсу');
     var sub = [origText(r.cur), total > 0 && r.uah > 0 ? Math.round(share * 100) + '%' : ''].filter(Boolean).join(' · ');
     return '<button type="button" class="fin-row" data-act="fin-student" data-arg="' + U.esc(r.id + '|' + key) + '">' +
-      (st ? C.avatar(st, 34) : '<span class="fin-row__ph"></span>') +
+      (st ? C.avatar(st, 32) : '<span class="fin-row__ph"></span>') +
       '<span class="fin-row__main">' +
         '<span class="fin-row__name">' + U.esc(name) +
           (st && st.archived ? ' <span class="badge badge--grey">архів</span>' : '') + '</span>' +
@@ -771,6 +771,14 @@
           (lessons ? '<br>проведено ' + U.pl(lessons, 'урок', 'уроки', 'уроків') + ' на ' + U.esc(uahText(earned)) : '') +
         '</div>' +
       '</div>' +
+      // кільце «хто приносить дохід» — за цей місяць, як на сторінці за поточний
+      (paid.length > 1
+        ? '<div class="fin-pie">' + C.donut(paid.filter(function (r) { return r.uah > 0; }).map(function (r) {
+            var st = S.get('students', r.id);
+            return { label: st ? st.name : 'Видалений учень', value: r.uah, act: 'fin-student', arg: r.id + '|' + b.key };
+          }), { size: 150, fmt: uahText, centerTop: uahText(total), center: U.MONTHS_NOM[b.m].toLowerCase(),
+                othersAct: 'fin-month', othersArg: b.key }) + '</div>'
+        : '') +
       (paid.length
         ? '<div class="fin-list">' + paid.map(function (r) { return finRow(r, total, b.key); }).join('') + '</div>'
         : '<div class="muted" style="padding:10px 0 4px">Цього місяця оплат не було.</div>') +

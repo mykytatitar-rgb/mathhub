@@ -2844,6 +2844,19 @@
     this.future.length = 0;
   };
 
+  /* Крок штриха пера — лише «додано цей штрих», а не копія всього слайда:
+     копія — це весь слайд у тексті, на списаному слайді мілісекунди саме
+     тоді, коли перо піднялось і от-от торкнеться знову. Крок назад
+     прибирає штрих, крок уперед ставить його на те саме місце; чуже, що
+     лягло потім, так само не зачіпається. Кликати до того, як штрих ляже. */
+  Board.prototype._stepAdd = function (it) {
+    if (this.readOnly || !this.slide) return;
+    this._closeTop();                          // попередній крок (не штрих) закривається, як і досі
+    this.history.push({ add: JSON.stringify(it), id: it.id, at: this.slide.items.length });
+    if (this.history.length > 40) this.history.shift();
+    this.future.length = 0;
+  };
+
   /** Рука на дошці: жест почався, а його результат ще не лягав на слайд.
       Штрих пера сюди не входить: його крок записується, лише коли перо
       піднялось (див. _pointerUp), тож перераховувати посеред нього нічого. */
@@ -2912,6 +2925,7 @@
   Board.prototype._closeTop = function () {
     var top = this.history[this.history.length - 1];
     if (!top || typeof top !== 'object' || !this.slide) return null;
+    if (top.add) return null;                  // крок штриха знає, що зробив, — закривати нічого
     if (top.after != null && !top.open) return null;
     /* Жест ще триває (перетягування, гумка, фігура): його крок не закривати
        й не викидати — інакше чуже, що прийшло посеред жесту, забирало б у
@@ -2971,11 +2985,17 @@
     if (!this.slide) return false;
     this._closeTop();                          // порожній верхній крок — не крок
     if (!this.history.length) return false;
-    var now = JSON.stringify(this.slide.items);
-    var e = stepOf(this.history.pop(), now);
+    var top = this.history.pop();
     this._replay = true;
-    this.slide.items = carry(this.slide.items, JSON.parse(e.after), JSON.parse(e.before));
-    this.future.push({ before: e.before, after: e.after });
+    if (top.add) {
+      // штрих — прибрати його самого; що лягло потім, лишається як є
+      this.slide.items = this.slide.items.filter(function (it) { return !(it && it.id === top.id); });
+      this.future.push(top);
+    } else {
+      var e = stepOf(top, JSON.stringify(this.slide.items));
+      this.slide.items = carry(this.slide.items, JSON.parse(e.after), JSON.parse(e.before));
+      this.future.push({ before: e.before, after: e.after });
+    }
     this.clearSelection(true);
     this.changed();
     this._replay = false;
@@ -2986,8 +3006,15 @@
     if (!this.future.length || !this.slide) return false;
     var e = this.future.pop();
     this._replay = true;
-    this.slide.items = carry(this.slide.items, JSON.parse(e.before), JSON.parse(e.after));
-    this.history.push({ before: e.before, after: e.after, ext: this._ext || 0 });
+    if (e.add) {
+      // штрих — на те саме місце серед інших, якщо його там ще немає
+      var it = JSON.parse(e.add), items = this.slide.items;
+      if (!items.some(function (x) { return x && x.id === it.id; })) items.splice(Math.min(e.at, items.length), 0, it);
+      this.history.push(e);
+    } else {
+      this.slide.items = carry(this.slide.items, JSON.parse(e.before), JSON.parse(e.after));
+      this.history.push({ before: e.before, after: e.after, ext: this._ext || 0 });
+    }
     this.clearSelection(true);
     this.changed();
     this._replay = false;
@@ -4570,13 +4597,14 @@
          пером: жодного «доведення» після відпускання — від нього буква
          помітно змінювала форму. */
       if (this.smoothing) pd2.d = smoothStroke(pd2.d, pd2.w, this.smoothing);
-      /* Крок назад — зараз, коли перо піднялось: «до» — це слайд таким,
-         яким він є в цю мить без штриха, разом із чужим, що могло лягти
-         посеред нього. Тож і перераховувати нічого не треба. */
-      this.snapshot();
-      this.slide.items.push(ided(pd2));
+      /* Крок назад — зараз, коли перо піднялось, і лише «додано цей штрих»
+         (див. _stepAdd): чуже, що могло лягти посеред штриха, ним не
+         зачіпається, і перераховувати нічого не треба. */
+      var stroke = ided(pd2);
+      this._stepAdd(stroke);
+      this.slide.items.push(stroke);
       this.rememberInitialView();
-      this.changed(this._inkAppend(pd2));
+      this.changed(this._inkAppend(stroke));
       return;
     }
 

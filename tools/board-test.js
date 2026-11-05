@@ -74,11 +74,22 @@ function fakeEl() {
 /* o: { w, h — розмір полотна; touch — головний вказівник палець (телефон);
         dpr — щільність екрана; onTextPlace; dom — у полотна є батьківський
         елемент (для курсорів інших); onCursor } */
+/* Скільки разів рушій переводив у текст великий список (увесь слайд, від
+   100 обʼєктів) — це й є важка частина «кроку назад». */
+var bigJson = 0;
+var countedJSON = {
+  parse: JSON.parse,
+  stringify: function (v, r, s) {
+    if (Array.isArray(v) && v.length >= 100) bigJson++;
+    return JSON.stringify(v, r, s);
+  }
+};
+
 function engine(o) {
   o = o || {};
   var size = { w: o.w || 1000, h: o.h || 700 };
   var ctx = {
-    console: console, Math: Math, JSON: JSON, Date: Date, Object: Object, Array: Array,
+    console: console, Math: Math, JSON: countedJSON, Date: Date, Object: Object, Array: Array,
     String: String, Number: Number, RegExp: RegExp, Error: Error, isNaN: isNaN, parseFloat: parseFloat,
     setTimeout: setTimeout, clearTimeout: clearTimeout, setInterval: setInterval, clearInterval: clearInterval, Promise: Promise, WeakMap: WeakMap, Map: Map, Set: Set,
     devicePixelRatio: o.dpr || 1,
@@ -1153,6 +1164,44 @@ scenario('Підпис виміру лишається поверх написа
   write(b, 240, 240);
   labelOnTop('наступний штрих');
   paint = null;
+});
+
+scenario('Штрихи, переміщення й чуже: назад і вперед — лише своє і на ті самі місця', function () {
+  var b = engine().b;
+  b.setTool('pen');
+  write(b, 100, 100);                         // A
+  write(b, 200, 100);                         // B
+  var A = b.items()[0];
+  drag(b, 112, 100, 0, 60);                   // A посунули вниз
+  same(A.d[1], 160, 'A посунуто');
+  remote(b, REMOTE());                        // лягло чуже
+  b.setTool('pen');
+  write(b, 300, 100);                         // C
+  function ids() { return b.items().map(function (it) { return it.id === 'remote-T' ? 'R' : it.d[0]; }).join(','); }
+  same(ids(), '100,200,R,300', 'на слайді A, B, чуже, C');
+  b.undo(); b.undo(); b.undo();
+  same(ids(), '100,R', 'три кроки назад: без C, A на старому місці, без B — чуже лишилось');
+  same(b.items()[0].d[1], 100, 'A повернулось туди, де його написали');
+  b.redo(); b.redo(); b.redo();
+  same(ids(), '100,200,R,300', 'три кроки вперед: B на своєму місці (перед чужим), A посунуто, C у кінці');
+  same(b.items()[0].d[1], 160, 'A знову посунуте');
+});
+
+scenario('Письмо підряд: «крок назад» не переводить у текст увесь слайд після кожного штриха', function () {
+  var b = engine().b;
+  busySlide(b, 300);
+  b.setTool('pen');
+  b.render(); frameNow(b);
+  write(b, 100, 100);
+  bigJson = 0;
+  write(b, 140, 100); write(b, 180, 100); write(b, 220, 100);
+  same(bigJson, 0, 'три штрихи підряд — увесь слайд у текст не переводився жодного разу');
+  b.undo(); b.undo();
+  same(b.items().length, 302, 'два кроки назад прибрали два останні штрихи');
+  same(b.items()[301].d[0], 140, 'лишились старі й перші два нові');
+  b.redo();
+  same(b.items().length, 303, 'крок уперед повернув передостанній');
+  same(b.items()[302].d[0], 180, 'на те саме місце');
 });
 
 console.log('\n' + passes + ' пройдено, ' + fails + ' не пройдено');

@@ -633,7 +633,10 @@ a { color: inherit; text-decoration: none; }
 
 /* Стовпчикова діаграма */
 .chart { display: flex; align-items: flex-end; gap: 10px; height: 150px; padding-top: 10px; }
-.chart__col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; height: 100%; justify-content: flex-end; min-width: 0; }
+/* колонка не ширша за 72 px, і всі разом — посередині картки: у широкій
+   картці стовпчики стояли далеко один від одного */
+.chart { justify-content: center; }
+.chart__col { flex: 1; max-width: 72px; display: flex; flex-direction: column; align-items: center; gap: 8px; height: 100%; justify-content: flex-end; min-width: 0; }
 .chart__bar {
   width: 100%; max-width: 42px; border-radius: 8px 8px 4px 4px;
   background: linear-gradient(180deg, var(--blue-500), var(--blue-700));

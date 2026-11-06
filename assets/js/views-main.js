@@ -1052,7 +1052,7 @@
             ? 'усі валюти разом за курсом свого місяця, ' + U.esc(inWords(chartCur).toLowerCase())
             : 'сума отриманих оплат по місяцях, ' + U.esc(inWords(code).toLowerCase())) +
           '</div></div></div>' +
-          '<div class="chart">' + chart + '</div>' +
+          '<div class="chart chart--wide">' + chart + '</div>' +
           (chartPartial
             ? '<div class="field__hint mt-2">Для якоїсь із валют немає курсу — ці оплати ' +
               'у стовпчики не входять. Курс можна вписати вручну в Налаштуваннях.</div>'

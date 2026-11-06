@@ -3540,3 +3540,11 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 /* кільце місяця у «Звідки дохід»; кружечок учня в рядку не стискається */
 .fin-pie { margin: 4px 0 14px; }
 .fin-row > .avatar { flex: 0 0 auto; }
+
+/* «Дохід за півроку» у фінансах — на всю ширину сторінки: вищий графік,
+   стовпчики розставлені ширше (ширина самих стовпчиків та сама) */
+.chart--wide { height: 260px; gap: 16px; }
+.chart--wide .chart__col { max-width: 96px; }
+.chart--wide .chart__top { font-size: 13px; }
+.chart--wide .chart__cap { font-size: 12px; }
+@media (max-width: 640px) { .chart--wide { height: 190px; gap: 8px; } }

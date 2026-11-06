@@ -95,37 +95,6 @@
       '<div class="card-sub">оплати цього місяця, у гривнях за курсом</div></div></div>' + pie + '</div>';
   }
 
-  /** Кому нагадати про оплату — з сумами, найбільші згори. */
-  function debtorsCard() {
-    var list = U.sortBy(S.debtors().map(function (d) {
-      var uah = toUah(d.debt, d.cur);
-      return { s: d.s, debt: d.debt, cur: d.cur, uah: uah == null ? 0 : uah };
-    }), function (x) { return x.uah; }, true);
-
-    if (!list.length) {
-      return '<div class="card">' +
-        '<div class="card-head"><div><h2 class="card-title">Борги</h2>' +
-        '<div class="card-sub">усі розрахувалися</div></div></div>' +
-        '<div class="field__hint">Ніхто нічого не винен — можна не нагадувати.</div></div>';
-    }
-
-    var rows = list.slice(0, 5).map(function (x) {
-      return '<button class="list__item list__item--btn" data-act="student-open" data-arg="' + x.s.id + '">' +
-        C.avatar(x.s, 32) +
-        '<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:14px">' +
-        U.esc(x.s.name) + (x.s.archived ? ' <span class="badge badge--grey">архів</span>' : '') + '</div></div>' +
-        '<span class="bold" style="color:var(--red-ink)">' + U.esc(U.money(x.debt, x.cur)) + '</span>' +
-        '</button>';
-    }).join('');
-
-    var total = list.reduce(function (a, x) { return a + x.uah; }, 0);
-    return '<div class="card card--pad0">' +
-      '<div class="card-head" style="padding:22px 24px 10px;margin:0">' +
-        '<div><h2 class="card-title">Кому нагадати про оплату</h2>' +
-        '<div class="card-sub">' + U.pl(list.length, 'боржник', 'боржники', 'боржників') +
-        ' · разом ' + U.esc(U.money(Math.round(total), 'UAH')) + '</div></div>' +
-      '</div><div class="list">' + rows + '</div></div>';
-  }
 
 
   /* Телефон: найближчий урок першим на Огляді — хто, о котрій, за скільки,
@@ -337,7 +306,7 @@
              видно у фінансах, прострочені ДЗ — в учнів, а картка з написом
              «усе під контролем» щодня займала пів екрана ні за що. */
 
-          debtorsCard() +
+          // картку «Борги» прибрано на прохання власника
           whoPaysCard(monthStart, monthEnd) +
 
           '<div class="card">' +
@@ -907,14 +876,7 @@
 
     /* Кільце «Скільки вже зібрано» прибрано на прохання власника: не
        потрібне. Хто недоплатив за місяць, видно в «Звідки дохід»
-       (стовпчик місяця), а хто винен узагалі — у кільці нижче. */
-
-    /* 2. Борги за учнями — видно, з ким саме говорити */
-    var debtSlices = S.debtors().map(function (d) {
-      var v = toUah(d.debt, d.cur);
-      return v == null ? null
-        : { label: d.s.name + (d.s.archived ? ' · в архіві' : ''), value: v, act: 'fin-student', arg: d.s.id + '|' + key };
-    }).filter(Boolean);
+       (стовпчик місяця). Кільце й картку «Борги» теж прибрано: не потрібні. */
 
     var cards = [];
 
@@ -927,15 +889,6 @@
         p1 + '</div>');
     }
 
-    var p3 = C.donut(debtSlices, { size: 168, fmt: uah,
-      centerTop: uah(debtSlices.reduce(function (a, s) { return a + s.value; }, 0)),
-      center: 'борг' });
-    if (p3) {
-      cards.push('<div class="card">' +
-        '<div class="card-head"><div><h2 class="card-title">Хто винен</h2>' +
-        '<div class="card-sub">поточна заборгованість, ' + U.esc(inCur) + ' за курсом</div></div></div>' +
-        p3 + '</div>');
-    }
 
     if (!cards.length) return '';
     return '<div class="grid grid--' + Math.min(3, cards.length) + ' mb-3">' +
@@ -1086,7 +1039,8 @@
 
       financePies(mStart, mEnd, code) +
 
-      '<div class="grid grid--main mb-3">' +
+      // картку «Борги» поруч прибрано на прохання власника — графік на всю ширину
+      '<div class="mb-3">' +
         '<div class="card">' +
           '<div class="card-head"><div><h2 class="card-title">Дохід за півроку</h2>' +
           /* Валюту треба назвати. Стовпчики рахують лише вибрану, і без
@@ -1103,25 +1057,6 @@
             ? '<div class="field__hint mt-2">Для якоїсь із валют немає курсу — ці оплати ' +
               'у стовпчики не входять. Курс можна вписати вручну в Налаштуваннях.</div>'
             : '') +
-        '</div>' +
-
-        '<div class="card card--pad0">' +
-          '<div class="card-head" style="padding:22px 24px 14px;margin:0">' +
-            '<div><h2 class="card-title">Борги</h2><div class="card-sub">' +
-            (debts.length ? 'потрібно нагадати' : 'усе сплачено') + '</div></div>' +
-          '</div>' +
-          '<div class="list">' +
-          (debts.length ? debts.map(function (x) {
-            return '<button class="list__item list__item--btn" data-act="student-open" data-arg="' + x.s.id + '">' +
-              C.avatar(x.s, 32) +
-              '<div style="flex:1;min-width:0"><div style="font-weight:650;font-size:14px">' +
-              U.esc(x.s.name) +
-              (x.s.archived ? ' <span class="badge badge--grey">в архіві</span>' : '') + '</div>' +
-              '<div class="small muted">' + U.pl(Math.ceil(-x.b / (x.s.price || 1)),
-                'неоплачений урок', 'неоплачені уроки', 'неоплачених уроків') + '</div></div>' +
-              '<span class="bold" style="color:var(--red-ink)">' + U.money(-x.b, code) + '</span></button>';
-          }).join('') : C.empty('check', 'Боргів немає', 'Усі учні мають додатний або нульовий баланс.')) +
-          '</div>' +
         '</div>' +
       '</div>' +
 

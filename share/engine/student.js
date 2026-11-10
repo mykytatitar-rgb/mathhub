@@ -670,6 +670,11 @@
       } catch (e) {}
     });
     window.addEventListener('online', function () { retryMs = 800; push(); });
+    /* Телефон: застосунок згорнули — pagehide може й не прийти, а вкладку
+       система закриє. Написане за останню третину секунди — в чергу зараз. */
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') flushSend();
+    });
 
     /* ---------- Скасувати й повернути — лише своє ---------- */
 
@@ -859,27 +864,53 @@
 
     /* ---------- Повне перезавантаження стану ---------- */
 
-    function loadOps(since) {
-      return env.rpc('share_board_ops', { p_token: token, p_since: since })
-        .then(function (res) { return res.ok ? res.json() : []; })
+    /* Запит, без відповіді на який дошку показувати не можна. Збій мережі
+       чи сервера (5xx) — повторюємо, доки не відповість: досі невдалий
+       запит мовчки вважався «дій немає», і учень бачив дошку без свого ж
+       написаного. Відмова (4xx) — посилання недійсне, повторювати нема чого. */
+    function rpcSure(name, body) {
+      var wait = 600;
+      return new Promise(function (resolve, reject) {
+        (function ask() {
+          env.rpc(name, body).then(function (res) {
+            if (res.ok) return res.json().then(resolve);
+            if (res.status >= 400 && res.status < 500) { reject(new Error('http ' + res.status)); return; }
+            throw new Error('http ' + res.status);
+          }).catch(function () {
+            setTimeout(ask, wait);
+            wait = Math.min(wait * 2, 5000);
+          });
+        })();
+      });
+    }
+
+    /* Дочитати журнал поверх знімка — у кожен зі станів targets. */
+    function loadOps(since, targets) {
+      return rpcSure('share_board_ops', { p_token: token, p_since: since })
         .then(function (rows) {
           (rows || []).forEach(function (r) {
             if (r.id > after) after = r.id;
-            if (r.author === 'student' && !core().studentAllowed(r.op, ownerIn(board))) return;
-            core().apply(board, r.op);
+            targets.forEach(function (st) {
+              if (r.author === 'student' && !core().studentAllowed(r.op, ownerIn(st))) return;
+              core().apply(st, r.op);
+            });
           });
         });
     }
 
+    /* Новий стан збираємо окремо й підміняємо дошку лише готовим. Досі
+       слайди мінялись одразу, і якщо журнал не дочитався, наступна
+       відправка бачила «учень стер своє» — і стирала його на сервері. */
     function reload() {
-      return env.rpc('share_board', { p_token: token })
-        .then(function (res) { return res.ok ? res.json() : null; })
+      return rpcSure('share_board', { p_token: token })
         .then(function (rows) {
           var row = rows && rows[0];
           if (!row || !row.data) return;
-          var keepId = currentSlide() ? currentSlide().id : null;
-          board.slides = row.data.slides || [];
-          return loadOps(row.since).then(function () {
+          var next = { slides: row.data.slides || [] };
+          return loadOps(row.since, [next]).then(function () {
+            flushSend();                          // своє невідправлене — в чергу, до підміни
+            var keepId = currentSlide() ? currentSlide().id : null;
+            board.slides = next.slides;
             base = clone(board);
             var list = visible(), at = 0;
             list.forEach(function (s, i) { if (s.id === keepId) at = i; });
@@ -1074,8 +1105,12 @@
       }).observe(el('sb-body'));
     }
 
-    return loadOps(env.row.since).then(function () {
-      base = clone(board);
+    /* Що відомо серверу — знімок і журнал, без того, що учень устиг
+       написати, поки журнал дочитувався: воно має поїхати, а не вважатися
+       вже відомим. */
+    var known = clone(board);
+    return loadOps(env.row.since, [board, known]).then(function () {
+      base = known;
       var saved = null;
       try { saved = localStorage.getItem(SAVE_KEY); } catch (e) {}
       var at = 0;

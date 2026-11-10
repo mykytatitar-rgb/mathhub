@@ -749,14 +749,20 @@
   /* Номер версії рушія — його піднімає tools/bump.js разом із кабінетом.
      Без номера кожен файл брався окремо «мережа або кеш за 1,5 с», і на
      повільному інтернеті рушій складався з файлів різних версій. */
-  var ENGINE_V = 183;
+  var ENGINE_V = 184;
 
-  function loadScript(src) {
+  /* Файл рушія не завантажився — пробуємо ще двічі: один обрив звʼязку на
+     телефоні не має відправляти учня на стару сторінку без живої дошки. */
+  function loadScript(src, tries) {
     return new Promise(function (resolve, reject) {
       var s = document.createElement('script');
       s.src = src;
       s.onload = resolve;
-      s.onerror = function () { reject(new Error('не завантажився ' + src)); };
+      s.onerror = function () {
+        s.remove();
+        if ((tries || 0) >= 2) { reject(new Error('не завантажився ' + src)); return; }
+        setTimeout(function () { loadScript(src, (tries || 0) + 1).then(resolve, reject); }, 800);
+      };
       document.head.appendChild(s);
     });
   }
@@ -790,6 +796,7 @@
       var root = document.createElement('div');
       root.style.height = '100%';
       document.body.appendChild(root);
+      liveRoot = root;
       pinchLock(true);
 
       var started = window.StudentBoard.start({
@@ -841,18 +848,37 @@
       });
   }
 
-  rpc('share_board', { p_token: token })
-    .then(function (res) { return res.ok ? res.json() : null; })
-    .catch(function () { return null; })
-    .then(function (rows) {
-      var row = rows && rows[0];
-      if (!row || !row.data) return startLegacy();
-      return startLive(row).catch(function (e) {
-        // жива дошка не піднялась — учень однаково має побачити урок
-        console.warn('Жива дошка не запустилась:', e && e.message);
-        return startLegacy();
+  /* Чи є в уроку жива дошка — каже лише відповідь сервера. Збій запиту
+     (обрив звʼязку, 5xx) — не відповідь: досі після нього учень мовчки
+     потрапляв на стару сторінку-копію, де немає написаного ним на живій
+     дошці, а написане там ішло окремим шляхом. Тепер питаємо, доки сервер
+     не відповість. Відмова (4xx) — посилання недійсне чи база без живої
+     дошки: тоді, як і було, стара сторінка сама скаже, що не так. */
+  var liveRoot = null;
+  function askBoard(wait) {
+    return rpc('share_board', { p_token: token }).then(function (res) {
+      if (res.ok) return res.json();
+      if (res.status >= 400 && res.status < 500) return null;
+      throw new Error('http ' + res.status);
+    }).catch(function () {
+      p.textContent = 'Немає звʼязку — пробую ще раз…';
+      return new Promise(function (resolve) {
+        setTimeout(function () { resolve(askBoard(Math.min((wait || 600) * 2, 5000))); }, wait || 600);
       });
     });
+  }
+
+  askBoard().then(function (rows) {
+    var row = rows && rows[0];
+    if (!row || !row.data) return startLegacy();
+    return startLive(row).catch(function (e) {
+      // жива дошка не піднялась — учень однаково має побачити урок
+      console.warn('Жива дошка не запустилась:', e && e.message);
+      if (liveRoot) { liveRoot.remove(); liveRoot = null; pinchLock(false); }
+      msg.style.display = '';
+      return startLegacy();
+    });
+  });
 
   /* ============================================================
      Портал: розклад і матеріали

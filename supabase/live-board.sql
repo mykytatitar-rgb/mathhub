@@ -235,7 +235,10 @@ begin
 
       /* Обʼєкт із номером репетиторового підмінив би його при застосуванні.
          Тому номер не має збігатися ні з обʼєктом у знімку дошки, ні з
-         обʼєктом, який репетитор додав уже після знімка. */
+         обʼєктом, який репетитор ДОДАВ (i+) уже після знімка. Саме додав:
+         якщо репетитор лише посунув чи перефарбував учнівський штрих (i~),
+         штрих лишається учнівським — досі після цього учень уже не міг
+         його змінити, і зміна мовчки відкидалась. */
       if exists (
         select 1
           from jsonb_array_elements(coalesce(bdata->'slides', '[]'::jsonb)) as sl,
@@ -244,7 +247,7 @@ begin
       ) or exists (
         select 1 from public.board_ops x
          where x.owner = s.owner and x.board = s.lesson_id and x.author = 'tutor'
-           and x.op->'it'->>'id' = item_id
+           and x.op->>'t' = 'i+' and x.op->'it'->>'id' = item_id
       ) then
         raise exception 'Можна змінювати лише своє';
       end if;

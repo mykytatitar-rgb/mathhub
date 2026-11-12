@@ -478,6 +478,22 @@
      Запити
      ============================================================ */
 
+  /* Запит не може чекати вічно. Телефон згорнули чи ноутбук заснув посеред
+     запиту — і відповідь не приходить ніколи: ні успіхом, ні помилкою. Обмін
+     записів і дошок чекає на попередній запит, тож після такого він мовчки
+     стояв до перезапуску застосунку, а пристрої розходились. Тепер запит без
+     відповіді за 45 с (файл — за 5 хв) закінчується відмовою, і обмін
+     пробує знову, як після звичайного збою мережі. */
+  var REQ_MS = 45000, FILE_MS = 300000;
+  function timedFetch(url, init, ms) {
+    if (typeof AbortController === 'undefined') return fetch(url, init);
+    var ac = new AbortController();
+    var t = setTimeout(function () { ac.abort(); }, ms);
+    init.signal = ac.signal;
+    function done() { clearTimeout(t); }
+    return fetch(url, init).then(function (res) { done(); return res; }, function (e) { done(); throw e; });
+  }
+
   function authFetch(path, opts) {
     opts = opts || {};
     var headers = opts.headers || {};
@@ -490,11 +506,11 @@
     if (s && s.access_token) {
       headers['Authorization'] = 'Bearer ' + s.access_token;
     }
-    return fetch(cfg.url.replace(/\/+$/, '') + path, {
+    return timedFetch(cfg.url.replace(/\/+$/, '') + path, {
       method: opts.method || 'GET',
       headers: headers,
       body: opts.body
-    });
+    }, opts.body instanceof Blob ? FILE_MS : REQ_MS);
   }
 
   /* Токен живе близько години. Замість того щоб стежити за часом,
@@ -908,11 +924,11 @@
       }
       if (now.refresh_token !== used.refresh_token) return now;
 
-      return fetch(cfg.url.replace(/\/+$/, '') + '/auth/v1/token?grant_type=refresh_token', {
+      return timedFetch(cfg.url.replace(/\/+$/, '') + '/auth/v1/token?grant_type=refresh_token', {
         method: 'POST',
         headers: { apikey: cfg.anonKey, 'Content-Type': 'application/json' },
         body: JSON.stringify({ refresh_token: now.refresh_token })
-      }).then(function (res) {
+      }, REQ_MS).then(function (res) {
         if (!res.ok) {
           /* Відмова може бути й хибною тривогою: інша вкладка без замка
              (старий код) встигла поновити раніше. Перевіряємо сховище ще раз

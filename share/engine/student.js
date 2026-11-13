@@ -838,6 +838,8 @@
        матеріали й адреси картинок. */
     env.live.onMessage = function (event, data) {
       if (pres && pres.message(event, data)) return;   // «я тут» репетитора
+      // указка репетитора: показує місце на слайді й сама згасає
+      if (event === 'lz') { if (engine.showLaser) engine.showLaser(data); return; }
       if (event === 'ops' && data.ops) {
         applyRemote(data.ops.map(function (op) { return { op: op, author: 'tutor' }; }));
       } else if (event === 'ops' && data.from === 'student') {

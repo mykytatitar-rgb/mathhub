@@ -35,6 +35,8 @@
     { id: 'plane',   icon: 'axes',       label: 'Координатна площина (K)', opts: 'stroke', group: 'alg' },
     { id: 'numline', icon: 'ruler',      label: 'Числова вісь (N)', opts: 'stroke', group: 'alg' },
 
+    // показати, а не написати: точка з хвостиком, що згасає; учень бачить її в себе
+    { id: 'laser',   icon: 'laser',      label: 'Указка — показати учневі (Z)' },
     { id: 'hand',    icon: 'hand',       label: 'Рука — рух по полотну (H)' }
   ];
 
@@ -333,6 +335,14 @@
       onToolChange: function (t) {
         syncToolButtons(t); renderOpts();
         if (t === 'arc') hint('Дуга: натисніть у центрі й ведіть до початку дуги, далі — ведіть по колу');
+      },
+      /* Указка — учневі, тим самим живим каналом уроку. На прихованому
+         слайді нікуди не їде: учень його не бачить. */
+      onLaser: function (m) {
+        if (!cur || !cur.live) return;
+        var s = cur.board.slides[cur.index];
+        if (!s || s.hidden || s.id !== m.sl) return;
+        cur.live.send('lz', m, true);
       },
       // перший рух дуги закінчено — підказати другий, тихо, внизу дошки
       onArcStage: function (n) {
@@ -4034,7 +4044,7 @@
 
     var map = { v: 'select', p: 'pen', e: 'eraser', t: 'text', s: 'shape',
                 l: 'line', a: 'arrow', n: 'numline', k: 'plane', j: 'solid', o: 'point', c: 'link', h: 'hand',
-                u: 'arc' };
+                u: 'arc', z: 'laser' };
     var kk = e.key.toLowerCase();
     if (map[kk]) { e.preventDefault(); setTool(map[kk]); return; }
     if (kk === 'r') { e.preventDefault(); eng.setShape('rect'); renderOpts(); return; }

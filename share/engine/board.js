@@ -2578,6 +2578,8 @@
     this.canvas.removeEventListener('contextmenu', this._onCtx);
     this.canvas.removeEventListener('pointerleave', this._onLeave);
     if (this._peersEl) { this._peersEl.remove(); this._peersEl = null; }
+    if (this._lzCv && this._lzCv.remove) { this._lzCv.remove(); this._lzCv = null; }
+    if (this._lzSend) clearTimeout(this._lzSend);
     for (var pid in (this.peers || {})) { if (this.peers[pid].timer) clearTimeout(this.peers[pid].timer); }
     this.peers = {};
     window.removeEventListener('resize', this._onResize);
@@ -2618,6 +2620,7 @@
     else if (this._gscale) touched = idsOf(this._gscale.items);
     else if (this._erasing) touched = (this._erasedIds || []).slice();
     this._drag = this._resize = this._gscale = null;
+    this._lzOn = null;
     this._erasing = false;
     this._erasedIds = null;
     svFit = null;
@@ -3726,6 +3729,14 @@
        _pointerUp), а не тут: запамʼятати слайд — це перевести його весь у
        текст, на списаному слайді — мілісекунди саме в ту мить, коли перо
        торкнулось, і початок літери відставав. */
+    // указка нічого не пише — лише веде слід (і працює на дошці «лише дивитися»)
+    if (this.tool === 'laser') {
+      this._lzOn = e.pointerId;
+      this._lzHead = { x: w.x, y: w.y };
+      this._laserMove(w, true);
+      return;
+    }
+
     if (this.tool === 'pen') {
       this.draft = { t: 'p', c: this.color, w: this.width, d: [round(w.x), round(w.y)] };
       this._draftBy = e.pointerId;
@@ -4223,6 +4234,138 @@
     };
   };
 
+  /* ---------- Лазерна указка ----------
+     Показати, а не написати: червона точка, за якою тягнеться хвостик і за
+     секунду-дві згасає сам. На слайд нічого не лягає, «крок назад» про
+     указку не знає. Малюється на окремому прозорому полотні поверх дошки,
+     тож слайд заради неї не перемальовується. Слід їде й іншим (onLaser →
+     showLaser): учень бачить, куди показує репетитор.
+     Точка: { x, y (світ), t — коли поставлена, b — початок нового сліду }. */
+
+  var LASER_MS = 1400;        // скільки живе хвостик
+  var LASER_SEND_MS = 60;     // слід їде іншим пачками, а не кожною точкою
+
+  Board.prototype._laserAdd = function (list, x, y, t, brk) {
+    if (!(typeof x === 'number' && isFinite(x) && typeof y === 'number' && isFinite(y))) return;
+    list.push({ x: x, y: y, t: t, b: brk ? 1 : 0 });
+    if (list.length > 600) list.splice(0, list.length - 600);
+  };
+
+  /** Свій рух указкою: w — точка світу, brk — щойно натиснули. */
+  Board.prototype._laserMove = function (w, brk) {
+    this._lz = this._lz || [];
+    this._laserAdd(this._lz, round(w.x), round(w.y), Date.now(), brk);
+    this._lzOut = this._lzOut || [];
+    this._lzOut.push(round(w.x), round(w.y));
+    if (brk) this._lzOutNew = true;
+    var self = this;
+    if (!this._lzSend) this._lzSend = setTimeout(function () { self._laserFlush(); }, LASER_SEND_MS);
+    this._laserRun();
+  };
+
+  Board.prototype._laserFlush = function () {
+    if (this._lzSend) { clearTimeout(this._lzSend); this._lzSend = null; }
+    var p = this._lzOut || [];
+    this._lzOut = [];
+    if (!p.length || !this.opts.onLaser || !this.slide) return;
+    var m = { sl: this.slide.id, p: p };
+    if (this._lzOutNew) m.n = 1;
+    this._lzOutNew = false;
+    try { this.opts.onLaser(m); } catch (e) {}
+  };
+
+  /** Чужа указка з каналу: { sl, p: [x, y, …], n — новий слід }. Сміття ігноруємо. */
+  Board.prototype.showLaser = function (m) {
+    if (!m || !this.slide || m.sl !== this.slide.id || !Array.isArray(m.p)) return;
+    this._lzR = this._lzR || [];
+    var now = Date.now(), n = Math.min(m.p.length, 400) >> 1;
+    // точки пачки розтягуємо на час, за який їх зібрали, — інакше хвостик згас би весь одразу
+    for (var i = 0; i < n; i++) {
+      this._laserAdd(this._lzR, m.p[i * 2], m.p[i * 2 + 1], now - LASER_SEND_MS + (i + 1) * LASER_SEND_MS / n, !!m.n && i === 0);
+    }
+    this._laserRun();
+  };
+
+  /** Що з указки ще видно в мить now: свої й чужі точки, старіші за LASER_MS — геть. */
+  Board.prototype.laserTrail = function (now) {
+    function alive(list) { return (list || []).filter(function (q) { return now - q.t < LASER_MS; }); }
+    return alive(this._lz).concat(alive(this._lzR));
+  };
+
+  Board.prototype._laserCanvas = function () {
+    var cv = this.canvas, host = cv && cv.parentElement;
+    if (!host || typeof document === 'undefined' || !document.createElement) return null;
+    var c = this._lzCv;
+    if (!c) {
+      try {
+        c = document.createElement('canvas');
+        if (!c || !c.getContext) return null;
+        c.style.cssText = 'position:absolute;pointer-events:none;z-index:5';
+        host.appendChild(c);
+        this._lzCv = c;
+      } catch (e) { return null; }
+    }
+    var w = Math.round(this.cssW * this.dpr), h = Math.round(this.cssH * this.dpr);
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+    c.style.left = (cv.offsetLeft || 0) + 'px';
+    c.style.top = (cv.offsetTop || 0) + 'px';
+    c.style.width = this.cssW + 'px';
+    c.style.height = this.cssH + 'px';
+    return c;
+  };
+
+  Board.prototype._laserRun = function () {
+    var self = this;
+    if (this._lzRaf) return;
+    this._lzRaf = requestAnimationFrame(function () { self._lzRaf = null; self._laserFrame(); });
+  };
+
+  Board.prototype._laserFrame = function () {
+    var now = Date.now();
+    var keep = function (q) { return now - q.t < LASER_MS; };
+    this._lz = (this._lz || []).filter(keep);
+    this._lzR = (this._lzR || []).filter(keep);
+    var c = this._laserCanvas();
+    if (!c) return;
+    var ctx = c.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, c.width, c.height);
+    // указку тримають на місці — точка лишається, доки не відпустять
+    var held = this._lzOn != null && this._lzHead;
+    if (!this._lz.length && !this._lzR.length && !held) return;
+
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    var me = this;
+    function trail(list) {
+      for (var i = 1; i < list.length; i++) {
+        var a = list[i - 1], b = list[i];
+        if (b.b) continue;
+        var k = 1 - (now - b.t) / LASER_MS;                  // 1 — щойно, 0 — згасло
+        var p = me.toScreen(a.x, a.y), q = me.toScreen(b.x, b.y);
+        ctx.strokeStyle = 'rgba(255,45,60,' + (0.85 * k).toFixed(3) + ')';
+        ctx.lineWidth = 1.5 + 5 * k;
+        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
+      }
+    }
+    function head(q, k) {
+      var s = me.toScreen(q.x, q.y);
+      ctx.fillStyle = 'rgba(255,45,60,' + (0.22 * k).toFixed(3) + ')';
+      ctx.beginPath(); ctx.arc(s.x, s.y, 11, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,45,60,' + k.toFixed(3) + ')';
+      ctx.beginPath(); ctx.arc(s.x, s.y, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,' + (0.9 * k).toFixed(3) + ')';
+      ctx.beginPath(); ctx.arc(s.x, s.y, 1.8, 0, Math.PI * 2); ctx.fill();
+    }
+    trail(this._lz);
+    trail(this._lzR);
+    if (held) head(this._lzHead, 1);
+    else if (this._lz.length) { var l = this._lz[this._lz.length - 1]; head(l, Math.max(0, 1 - (now - l.t) / LASER_MS)); }
+    if (this._lzR.length) { var r = this._lzR[this._lzR.length - 1]; head(r, Math.max(0, 1 - (now - r.t) / LASER_MS)); }
+    this._laserRun();
+  };
+
   /** Скасувати недомальовану дугу (Escape, інший інструмент, інший слайд). */
   Board.prototype.cancelArc = function () {
     if (!this._arcArm && !(this.draft && this.draft.t === 'q')) return false;
@@ -4369,6 +4512,12 @@
     var w = this.toWorld(p.x, p.y);
     if (this.opts.onCursor && this.slide) { try { this.opts.onCursor(w, this.slide.id); } catch (err) {} }
 
+    if (this._lzOn != null && this._lzOn === e.pointerId) {
+      this._lzHead = { x: w.x, y: w.y };
+      this._laserMove(w, false);
+      return;
+    }
+
     if (this.placing) { this.placing.at = w; this.render(); return; }
 
     // гумка пальцем: перший рух — і стирає звідти, де торкнулась
@@ -4507,6 +4656,13 @@
          Відлік беремо від них, інакше полотно стрибнуло б на різницю. */
       var la = this._pointers[left[0]], lb = this._pointers[left[1]];
       this._pinch = { dist: Math.hypot(la.x - lb.x, la.y - lb.y), mx: (la.x + lb.x) / 2, my: (la.y + lb.y) / 2 };
+    }
+
+    if (this._lzOn != null && this._lzOn === e.pointerId) {
+      this._lzOn = null;
+      this._laserFlush();
+      this._laserRun();
+      return;
     }
 
     /* Дотик без руху й без другого пальця — тепер саме час поставити точку,

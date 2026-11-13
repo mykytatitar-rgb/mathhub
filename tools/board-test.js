@@ -1244,5 +1244,44 @@ scenario('Долоня поверх незакритого жесту, коли 
   ok(!threw, 'перо торкнулось без помилки' + (threw ? ': ' + threw.message : ''));
 });
 
+/* ---------- Лазерна указка ---------- */
+
+scenario('Указка: показує, а не пише — на слайді й в історії нічого, слід згасає', function () {
+  var sent = [];
+  var e = engine({ dom: true });
+  var b = e.b;
+  b.opts.onLaser = function (m) { sent.push(JSON.parse(JSON.stringify(m))); };
+  stroke(b, 50, 50);
+  var items = b.items().length, steps = b.history.length;
+  b.setTool('laser');
+  pid++;
+  b._pointerDown(ev(100, 100));
+  b._pointerMove(ev(140, 120));
+  b._pointerMove(ev(180, 110));
+  ok(b.laserTrail(Date.now()).length >= 3, 'поки ведуть — слід є');
+  b._pointerUp(ev(180, 110));
+  same(b.items().length, items, 'на слайді нічого не додалось');
+  same(b.history.length, steps, '«крок назад» указку не памʼятає');
+  var pts = [].concat.apply([], sent.map(function (m) { return m.p; }));
+  same(pts.slice(0, 2).join(','), '100,100', 'слід поїхав учневі — від місця, де натиснули');
+  same(pts.slice(-2).join(','), '180,110', '…до місця, де відпустили');
+  same(sent[sent.length - 1].sl, 'sl1', 'із номером слайда');
+  ok(b.laserTrail(Date.now() + 500).length > 0, 'за пів секунди слід ще видно');
+  same(b.laserTrail(Date.now() + 5000).length, 0, 'за кілька секунд зник сам');
+});
+
+scenario('Указка репетитора на сторінці учня: той самий слайд — видно, інший — ні', function () {
+  var b = engine({ dom: true }).b;
+  b.showLaser({ sl: 'sl1', p: [10, 10, 20, 20, 30, 25] });
+  same(b.laserTrail(Date.now()).length, 3, 'слід репетитора показано');
+  same(b.laserTrail(Date.now() + 5000).length, 0, 'і він згасає');
+  b = engine({ dom: true }).b;                 // свіжа дошка — без попереднього сліду
+  b.showLaser({ sl: 'інший', p: [10, 10, 20, 20] });
+  same(b.laserTrail(Date.now()).length, 0, 'указка з іншого слайда тут не малюється');
+  var threw = false;
+  try { b.showLaser({ sl: 'sl1', p: ['x', {}, 1] }); b.showLaser(null); } catch (err) { threw = true; }
+  ok(!threw && b.laserTrail(Date.now()).length === 0, 'сміття з каналу нічого не ламає й не малює');
+});
+
 console.log('\n' + passes + ' пройдено, ' + fails + ' не пройдено');
 process.exit(fails ? 1 : 0);

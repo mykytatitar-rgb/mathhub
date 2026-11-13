@@ -18,7 +18,7 @@ var fails = 0, passes = 0;
 function ok(cond, msg) { if (cond) { passes++; console.log('  ✓ ' + msg); } else { fails++; console.log('  ✗ ' + msg); } }
 
 /* Годинник у руках сценарію: таймери спрацьовують, коли час «минув». */
-function cabinet() {
+function cabinet(server) {
   var ls = { 'mathhub.auth': JSON.stringify({ access_token: 'a.b.c', refresh_token: 'r', email: 'x@y' }) };
   var timers = [], now = 0, calls = [];
   var ctx = {
@@ -44,6 +44,7 @@ function cabinet() {
     // сервер, що не відповідає: обіцянка чекає вічно, хіба що запит скасують
     fetch: function (url, opts) {
       calls.push(url);
+      if (server) return Promise.resolve(server(url, opts));
       return new Promise(function (resolve, reject) {
         var sig = opts && opts.signal;
         if (sig) sig.addEventListener('abort', function () { reject(new Error('aborted')); });
@@ -80,6 +81,26 @@ settle().then(function () {
   return settle();
 }).then(function () {
   ok(state === 'відмова', 'дві хвилини без відповіді — відмова: обмін може спробувати знову (є: ' + state + ')');
+  console.log('\n• Поновлення входу: тимчасова відмова сервера — це не «вийти з кабінету»');
+  return refreshCase(503, true, 'сервер входу тимчасово відмовив (503) — вхід лишається, обмін спробує пізніше');
+}).then(function () {
+  return refreshCase(429, true, 'забагато запитів (429) — вхід лишається');
+}).then(function () {
+  return refreshCase(400, false, 'ключ поновлення справді недійсний (400) — вхід знято, кабінет попросить увійти');
+}).then(function () {
   console.log('\n' + passes + ' пройдено, ' + fails + ' не пройдено');
   process.exit(fails ? 1 : 0);
 });
+
+/* Ключ доступу сплив (401), кабінет іде по новий — а сервер входу відповідає status. */
+function refreshCase(status, staysIn, msg) {
+  function res(st) {
+    return { ok: st >= 200 && st < 300, status: st,
+             json: function () { return Promise.resolve({}); }, text: function () { return Promise.resolve(''); } };
+  }
+  var k = cabinet(function (url) { return /\/auth\/v1\/token/.test(url) ? res(status) : res(401); });
+  return k.Cloud.request('/rest/v1/records?select=id', { method: 'GET' })
+    .then(function () {}, function () {}).then(settle).then(function () {
+      ok(k.Cloud.signedIn() === staysIn, msg + ' (увійшли: ' + k.Cloud.signedIn() + ')');
+    });
+}

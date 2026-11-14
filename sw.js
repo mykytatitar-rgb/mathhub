@@ -7,7 +7,7 @@
 
    Версію треба піднімати щоразу, коли змінюється склад файлів. */
 
-var VERSION = 'vektor-v187';
+var VERSION = 'vektor-v188';
 
 /* Банк задач — окремий кеш: він не залежить від версії кабінету й не
    чиститься з кожним оновленням. Кожен файл банку приходить з відбитком
@@ -32,6 +32,7 @@ var PAGES = [
 ];
 
 var CODE = [
+  './assets/js/sharejump.js',
   './assets/css/app.css',
   './assets/css/board.css',
   './assets/js/icons.js',
@@ -145,11 +146,15 @@ self.addEventListener('fetch', function (e) {
      не переадресацію. */
   if (req.mode === 'navigate' || url.pathname.endsWith('.html') ||
       url.pathname.endsWith('/assets/bank/manifest.json')) {
+    /* Запасний кабінет — лише для самого кабінету. Сторінка уроку (/share)
+       без власної копії чекає мережу: інакше учень на повільному інтернеті
+       отримував кабінет репетитора з вікном входу замість дошки. */
+    var cabinet = /\/(index\.html)?$/.test(url.pathname);
     e.respondWith(new Promise(function (resolve) {
       var done = false;
       function fromCache() {
         caches.match(req)
-          .then(function (r) { return r || (req.mode === 'navigate' ? caches.match('./') : null); })
+          .then(function (r) { return r || (req.mode === 'navigate' && cabinet ? caches.match('./') : null); })
           .then(function (r) { if (!done) { done = true; resolve(r || fetch(req)); } });
       }
       var timer = setTimeout(fromCache, 2500);

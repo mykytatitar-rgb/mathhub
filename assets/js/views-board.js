@@ -3083,6 +3083,33 @@
 
   function holdSelBar() { barHold = Date.now(); }
 
+  /* Колір виділеного. Кольори пера живуть у панелі інструмента, а при
+     «Виділенні» її не видно — перефарбувати написане було нічим. Кнопка
+     розкриває рядок кольорів просто в панелі над виділеним. Колір пера
+     вона не чіпає: перефарбували формулу — і пишемо далі тим, чим писали. */
+  var selColors = false;
+
+  function selColorBtns(sel) {
+    var colored = sel.filter(function (i) { return i.t !== 'i'; });
+    if (!colored.length) return '';
+    var c0 = colored[0].c;
+    var same = colored.every(function (i) { return i.c === c0; }) ? c0 : null;
+    var html =
+      '<button class="sel-bar__btn' + (selColors ? ' is-on' : '') +
+        '" data-act="board-sel-colors" title="Колір виділеного">' +
+        '<i class="sel-bar__swatch" style="background:' +
+          U.esc(same || 'conic-gradient(#E5484D,#F79009,#17B26A,#4B3FDB,#DD2590,#E5484D)') +
+        '"></i></button>';
+    if (selColors) {
+      html += PEN_COLORS.map(function (c) {
+        return '<button class="sel-bar__btn' + (c === same ? ' is-on' : '') +
+          '" data-act="board-sel-color" data-arg="' + c + '" title="' + c + '">' +
+          '<i class="sel-bar__swatch" style="background:' + c + '"></i></button>';
+      }).join('');
+    }
+    return html + '<span class="sel-bar__sep"></span>';
+  }
+
   function updateSelBar() {
     if (!cur) return;
     var bar = document.querySelector('[data-sel-bar]');
@@ -3090,7 +3117,7 @@
     var e = cur.engine;
     var n = e.selection.length;
 
-    if (!n || e.band) { bar.hidden = true; return; }
+    if (!n || e.band) { bar.hidden = true; selColors = false; return; }
 
     var b = e.selectionBounds();
     if (!b) { bar.hidden = true; return; }
@@ -3230,6 +3257,7 @@
       (narrow ? delBtn + '<span class="sel-bar__sep"></span>' : '') +
       sizeBtns +
       rotBtns +
+      selColorBtns(e.selection) +
       extra +
       typesetBtns +
       '<button class="sel-bar__btn" data-act="board-copy" title="Копіювати (Ctrl+C)">' +
@@ -4883,6 +4911,18 @@
       if (!cur || !(k > 0)) return;
       holdSelBar();                        // панель лишається під пальцем між натисканнями
       cur.engine.scaleSelection(k);
+    },
+    'board-sel-colors': function () {
+      if (!cur) return;
+      holdSelBar();
+      selColors = !selColors;
+      updateSelBar();
+    },
+    'board-sel-color': function (arg) {
+      if (!cur || PEN_COLORS.indexOf(arg) < 0) return;
+      holdSelBar();
+      applyToSelection({ c: arg });
+      updateSelBar();
     },
     'board-transfer': function () { transferDialog(); },
     'board-place-cancel': function () { if (cur) cur.engine.cancelPlacing(); },

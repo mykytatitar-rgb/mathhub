@@ -605,6 +605,11 @@
 @media (hover: hover) { .sel-bar__btn:hover { background: var(--blue-50); color: var(--blue-700); } }
 @media (hover: hover) { .sel-bar__btn--danger:hover { background: var(--red-bg); color: var(--red); } }
 .sel-bar__btn.is-on { background: var(--violet-bg); color: #5B3FD6; }
+/* кружечок кольору виділеного: і сама кнопка, і рядок кольорів поруч */
+.sel-bar__swatch {
+  display: block; width: 16px; height: 16px; border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.12);
+}
 /* «Друкований вигляд»: логотип TeX, як його пишуть у LaTeX — E опущене */
 .sel-bar__btn--tex { width: auto; padding: 0 7px; color: #3333B3; }
 .sel-bar__btn--tex b { font-family: Georgia, 'Times New Roman', serif; font-size: 14px; font-weight: 700; letter-spacing: -.5px; }

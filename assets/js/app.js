@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v191';
+  App.BUILD = 'v192';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -1856,7 +1856,17 @@
   }
 
   function maybeReload() {
-    if (reloadWanted && quietMoment()) { reloadWanted = false; reloadNow(); }
+    if (!reloadWanted || !quietMoment()) return;
+    reloadWanted = false;
+    /* Третє самочинне перезавантаження за 10 хвилин — це вже коло (на
+       телефоні кабінет так і крутився, непридатний). Тоді працюємо на тому,
+       що є: свіжий код підхопиться з наступним відкриттям. */
+    if (window.BootGuard && !BootGuard.mayAutoReload()) {
+      console.warn('Самочинне перезавантаження пропущено: їх уже було забагато поспіль');
+      return;
+    }
+    if (window.BootGuard) BootGuard.noteAutoReload();
+    reloadNow();
   }
 
   /** Перезавантажити на свіжий код у першу тиху мить. hard — повз кеш. */

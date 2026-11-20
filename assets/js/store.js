@@ -1298,6 +1298,37 @@
     if (rate > 0) S.update(name, id, { rate: rate });
   };
 
+  /**
+   * Дописати курс у старі записи, яким його бракує. Повертає, скільком.
+   *
+   * Курс заморожується в мить, коли гроші стають фактом, — але лише якщо
+   * справжній курс того дня вже відомий. Оплата, внесена раніше, ніж
+   * приїхав архів НБУ, лишалась без курсу назавжди, і кожен пристрій
+   * рахував її своїм: дохід на телефоні й ноутбуці розходився (на 9 ₴).
+   * Тепер перший пристрій, що знає курс дня, записує його в запис, а
+   * обмін везе запис на решту — і рахують усі однаково.
+   */
+  S.freezeMissingRates = function () {
+    var n = 0, touched = [];
+    function fix(name, rec, cur) {
+      if (!rec || !cur || cur === 'UAH' || rec.rate > 0) return;
+      var rate = S.exactRate(rec, cur);
+      if (!(rate > 0)) return;
+      rec.rate = rate;
+      touched.push([name, rec.id]);
+      n++;
+    }
+    (db.payments || []).forEach(function (p) { fix('payments', p, S.paymentCur(p)); });
+    (db.lessons || []).forEach(function (l) {
+      if (l.status === 'done') fix('lessons', l, S.lessonCur(l));
+    });
+    if (n) {
+      S.save();
+      if (window.RecSync) touched.forEach(function (t) { RecSync.mark(t[0], t[1]); });
+    }
+    return n;
+  };
+
   /** Дошка уроку або null, якщо її ще не створювали. */
   S.getBoard = function (lessonId) {
     return db.boards.find(function (b) { return b.lessonId === lessonId; }) || null;

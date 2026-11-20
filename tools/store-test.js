@@ -460,5 +460,37 @@ scenario('Нова ціна учня — лише урокам зі старою
     'знижка, оплачений наперед і минулий — не чіпаються');
 });
 
+/* Дохід на телефоні й ноутбуці відрізнявся на 9 ₴. Оплата, внесена, поки
+   архівного курсу того дня ще не було, лишалась без курсу назавжди — і
+   кожен пристрій рахував її своїм курсом. Тепер, щойно курс дня відомий,
+   перший пристрій записує його в сам запис, і запис їде на решту. */
+scenario('Курс дописується в старі оплати й уроки, щойно справжній курс дня відомий', function () {
+  var t = freshStore();
+  var S = t.S;
+  S.freezeMissingRates();                       // приклади в стартовій базі — окремо від перевірки
+  var st = S.add('students', { name: 'Дозамороз', grade: '11 клас', price: 40, currency: 'USD', schedule: [] });
+  var pay = S.add('payments', { studentId: st.id, date: isoIn(-10, '00:00').slice(0, 10), amount: 80, currency: 'USD' });
+  var done = S.add('lessons', { studentId: st.id, date: isoIn(-9, '10:00'), status: 'done', price: 40, currency: 'USD' });
+  var plan = S.add('lessons', { studentId: st.id, date: isoIn(3, '10:00'), status: 'planned', price: 40, currency: 'USD' });
+  var own = S.add('payments', { studentId: st.id, date: isoIn(-8, '00:00').slice(0, 10), amount: 40, currency: 'USD', rate: 39 });
+  var uah = S.add('payments', { studentId: st.id, date: isoIn(-7, '00:00').slice(0, 10), amount: 500, currency: 'UAH' });
+  Object.keys(t.marks).forEach(function (k) { delete t.marks[k]; });
+
+  same(S.freezeMissingRates(), 2, 'дописано двом записам: оплаті й проведеному уроку');
+  same(S.get('payments', pay.id).rate, USD, 'оплата — з курсом свого дня');
+  same(S.get('lessons', done.id).rate, USD, 'проведений урок — теж');
+  ok(!(S.get('lessons', plan.id).rate > 0), 'запланований урок — без курсу: гроші ще не факт');
+  same(S.get('payments', own.id).rate, 39, 'уже записаний курс не чіпаємо');
+  ok(!(S.get('payments', uah.id).rate > 0), 'гривнева оплата — без курсу');
+  ok(t.marks['payments/' + pay.id] === 'mark', 'запис позначено до відправлення — курс поїде на інші пристрої');
+  same(S.freezeMissingRates(), 0, 'вдруге — нічого');
+
+  var t2 = freshStore({ historic: function () { return false; } });    // курсу дня ще немає
+  var st2 = t2.S.add('students', { name: 'Чекає', grade: '11 клас', price: 40, currency: 'USD', schedule: [] });
+  var p2 = t2.S.add('payments', { studentId: st2.id, date: isoIn(-10, '00:00').slice(0, 10), amount: 80, currency: 'USD' });
+  same(t2.S.freezeMissingRates(), 0, 'без справжнього курсу дня нічого не вигадуємо');
+  ok(!(t2.S.get('payments', p2.id).rate > 0), 'оплата чекає справжнього курсу');
+});
+
 console.log('\n' + passes + ' пройдено, ' + fails + ' не пройдено');
 process.exit(fails ? 1 : 0);

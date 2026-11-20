@@ -78,9 +78,17 @@
     if (redraw) clearTimeout(redraw);
     redraw = setTimeout(function () {
       redraw = null;
+      freezeKnown();
       if (window.App && App.render) App.render();
     }, 250);
   }
+
+  /* Приїхав курс — дописати його в записи, яким його бракувало (див.
+     S.freezeMissingRates): тоді всі пристрої рахують дохід однаково. */
+  function freezeKnown() {
+    try { if (window.S && S.freezeMissingRates) S.freezeMissingRates(); } catch (e) {}
+  }
+  R.freezeKnown = freezeKnown;
 
   function fetchHist(code, key) {
     var k = code + '|' + key;
@@ -215,6 +223,7 @@
         state.source = 'nbu';
         state.loading = false;
         save();
+        freezeKnown();
         return true;
       })
       .catch(function (e) {

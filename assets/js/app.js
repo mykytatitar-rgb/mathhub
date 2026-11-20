@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v192';
+  App.BUILD = 'v193';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -1884,6 +1884,14 @@
   };
 
   setInterval(maybeReload, 5000);
+
+  /* Курс у записах, яким його бракує: на старті (архівні курси вже в
+     памʼяті браузера) і далі зрідка — записи з інших пристроїв приходять
+     обміном. Решту робить rates.js, коли курс приїжджає. */
+  if (window.Rates && Rates.freezeKnown) {
+    setTimeout(Rates.freezeKnown, 8000);
+    setInterval(Rates.freezeKnown, 10 * 60000);
+  }
   document.addEventListener('visibilitychange', maybeReload);
 
   if (navigator.serviceWorker) {

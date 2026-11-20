@@ -263,7 +263,8 @@
     /* ---------- Рушій ---------- */
 
     Board.imageSource = function (key, item) {
-      if (item && item.src) return item.src;
+      // src — адреса обкладинки; самого відео (it.m) вона не стосується
+      if (item && item.src && key === item.k) return item.src;
       if (localSrc[key]) return localSrc[key];
       if (meta.images && meta.images[key]) return meta.images[key];
       return env.API + '/storage/v1/object/public/shares/' + encodeURIComponent(env.uid) + '/' +
@@ -840,6 +841,8 @@
       if (pres && pres.message(event, data)) return;   // «я тут» репетитора
       // указка репетитора: показує місце на слайді й сама згасає
       if (event === 'lz') { if (engine.showLaser) engine.showLaser(data); return; }
+      // відео чи GIF на дошці: відкрили, пустили, зупинили, закрили — так само в учня
+      if (event === 'md') { if (engine.showMedia) engine.showMedia(data); return; }
       if (event === 'ops' && data.ops) {
         applyRemote(data.ops.map(function (op) { return { op: op, author: 'tutor' }; }));
       } else if (event === 'ops' && data.from === 'student') {

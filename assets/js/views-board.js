@@ -233,7 +233,7 @@
         '<div class="sel-bar" data-sel-bar hidden></div>' +
 
         // multiple — інакше кілька картинок за раз просто не позначити
-        '<input type="file" accept="image/*" multiple data-img-input hidden>' +
+        '<input type="file" accept="image/*,video/*" multiple data-img-input hidden>' +
         '<input type="file" accept="image/*" multiple data-multi-input hidden>' +
         // телефон: «Сфотографувати» відкриває камеру одразу, без вибору джерела
         '<input type="file" accept="image/*" capture="environment" data-cam-input hidden>' +
@@ -343,6 +343,14 @@
         var s = cur.board.slides[cur.index];
         if (!s || s.hidden || s.id !== m.sl) return;
         cur.live.send('lz', m, true);
+      },
+      // відео чи GIF: учень бачить те саме (не з прихованого слайда)
+      onMedia: function (m) {
+        if (!cur || !cur.live) return;
+        var s = cur.board.slides[cur.index];
+        if (!s || s.hidden || s.id !== m.sl) return;
+        cur.live.send('md', m, true);
+        updateSelBar();
       },
       // перший рух дуги закінчено — підказати другий, тихо, внизу дошки
       onArcStage: function (n) {
@@ -3242,6 +3250,18 @@
         '<span class="sel-bar__sep"></span>'
       : '';
 
+    // відео чи GIF: пустити поверх обкладинки або закрити (учень бачить те саме)
+    var mediaIt = n === 1 && e.selection[0].t === 'i' && e.selection[0].m ? e.selection[0] : null;
+    var playing = mediaIt && e.mediaOpen && e.mediaOpen(mediaIt.id);
+    var mediaBtn = mediaIt
+      ? '<button class="sel-bar__btn' + (playing ? ' is-on' : '') + '" data-act="board-media" title="' +
+          (playing ? 'Закрити відео' : 'Відтворити') + '">' +
+          (playing
+            ? svg('<rect x="5" y="5" width="10" height="10" rx="1.5" fill="currentColor"/>')
+            : svg('<path d="M7 4.5v11l8.5-5.5z" fill="currentColor"/>')) + '</button>' +
+        '<span class="sel-bar__sep"></span>'
+      : '';
+
     // фото з телефона часто лягає боком — поворот на чверть в обидва боки
     var rotBtns = e.selection.some(function (i) { return i.t === 'i'; })
       ? '<button class="sel-bar__btn" data-act="board-rotate" data-arg="-1" title="Повернути ліворуч на 90°">' +
@@ -3280,6 +3300,7 @@
     var barHtml =
       '<span class="sel-bar__count">' + U.pl(n, 'об’єкт', 'об’єкти', 'об’єктів') + '</span>' +
       (narrow ? delBtn + '<span class="sel-bar__sep"></span>' : '') +
+      mediaBtn +
       sizeBtns +
       tidyBtns +
       rotBtns +
@@ -3859,11 +3880,14 @@
       return;
     }
 
-    var list = Array.prototype.slice.call(files || [])
-      .filter(function (f) { return f && /^image\//.test(f.type || ''); });
+    var all = Array.prototype.slice.call(files || []);
+    // відео й GIF — окремою дорогою: на слайд лягає обкладинка, а файл грає поверх неї
+    var media = all.filter(function (f) { return f && (/^video\//.test(f.type || '') || f.type === 'image/gif'); });
+    if (media.length) insertMediaFiles(media, at);
+    var list = all.filter(function (f) { return f && /^image\//.test(f.type || '') && f.type !== 'image/gif'; });
 
     if (!list.length) {
-      U.toast('Це не картинка — підійдуть PNG, JPG, WebP', 'err');
+      if (!media.length) U.toast('Це не картинка — підійдуть PNG, JPG, WebP, GIF чи відео', 'err');
       return;
     }
 
@@ -3907,6 +3931,80 @@
         U.toast('Не вдалося додати ' + U.pl(failed, 'файл', 'файли', 'файлів') +
           ' — можливо, це не картинки', 'err');
       }
+    });
+  }
+
+  /* Відео чи GIF на дошку. Сам файл кладемо як є (it.m), а на слайд —
+     кадр-обкладинку звичайною картинкою (it.k): так його можна рухати,
+     масштабувати, і він їде учневі так само, як фото. Пустити — кнопкою
+     «Відтворити» на панелі над виділеним. */
+  var MEDIA_BIG = 50 * 1048576;
+
+  function posterOf(file) {
+    if (file.type === 'image/gif') return Promise.resolve(file);   // перший кадр GIF дасть сам ingest
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var v = document.createElement('video');
+      var done = false;
+      function finish(ok) {
+        if (done) return;
+        done = true;
+        if (!ok) { URL.revokeObjectURL(url); reject(new Error('кадр не взявся')); return; }
+        var c = document.createElement('canvas');
+        c.width = v.videoWidth || 640; c.height = v.videoHeight || 360;
+        try { c.getContext('2d').drawImage(v, 0, 0, c.width, c.height); } catch (e) {}
+        URL.revokeObjectURL(url);
+        c.toBlob(function (b) {
+          if (!b) { reject(new Error('кадр не взявся')); return; }
+          var f;
+          try { f = new File([b], 'poster.jpg', { type: 'image/jpeg' }); } catch (e) { f = b; }
+          resolve(f);
+        }, 'image/jpeg', 0.85);
+      }
+      v.muted = true; v.playsInline = true; v.preload = 'auto';
+      v.onloadeddata = function () {
+        try { v.currentTime = Math.min(0.5, (v.duration || 1) / 3); } catch (e) { finish(true); }
+      };
+      v.onseeked = function () { finish(true); };
+      v.onerror = function () { finish(false); };
+      setTimeout(function () { finish(v.readyState >= 2); }, 8000);
+      v.src = url;
+    });
+  }
+
+  function insertMediaFiles(files, at) {
+    var spot = at || (cur.engine.lastPointer ? { x: cur.engine.lastPointer.x, y: cur.engine.lastPointer.y } : null);
+    if (files.some(function (f) { return f.size > MEDIA_BIG; })) {
+      U.toast('Файл понад 50 МБ сервер може не прийняти — тоді він буде лише на цьому пристрої', 'err');
+    }
+    var chain = Promise.resolve();
+    files.forEach(function (file, i) {
+      chain = chain.then(function () {
+        var key = 'med_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        return window.ImgStore.put(key, file)
+          .then(function () { return posterOf(file); })
+          .then(function (poster) { return window.ImgStore.ingest(poster); })
+          .then(function (meta) {
+            if (!cur) return;
+            var at2 = spot ? { x: spot.x + i * 28, y: spot.y + i * 28 } : null;
+            var item = cur.engine.addImage(meta, at2);
+            if (!item) return;
+            item.m = key;
+            item.mt = file.type || 'video/mp4';
+            cur.engine.changed();
+            cur.engine.render();
+          })
+          .catch(function (e) {
+            console.warn('Відео не додалося:', file.name, e && e.message);
+            U.toast('Не вдалося додати ' + file.name, 'err');
+          });
+      });
+    });
+    chain.then(function () {
+      if (!cur) return;
+      flushSave();
+      renderRail();
+      updateSelBar();
     });
   }
 
@@ -4947,6 +5045,19 @@
       if (!cur || (arg !== 'x' && arg !== 'y')) return;
       holdSelBar();
       cur.engine.distributeSelection(arg);
+    },
+    'board-media': function () {
+      if (!cur) return;
+      var e = cur.engine, it = e.selection[0];
+      if (!it || !it.m) return;
+      holdSelBar();
+      if (e.mediaOpen(it.id)) e.closeMedia(it.id);
+      else {
+        var el = e.openMedia(it.id);
+        // відео — одразу пустити (дотик людини дозволяє звук)
+        if (el && el.play) { var pr = el.play(); if (pr && pr.catch) pr.catch(function () {}); }
+      }
+      updateSelBar();
     },
     'board-align': function (arg) {
       if (!cur || (arg !== 'top' && arg !== 'middle')) return;

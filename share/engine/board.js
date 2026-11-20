@@ -1761,6 +1761,8 @@
     (slides || []).forEach(function (s) {
       (s.items || []).forEach(function (it) {
         if (it.t === 'i' && it.k && keys.indexOf(it.k) < 0) keys.push(it.k);
+        // відео чи GIF: сам файл їде разом з обкладинкою
+        if (it.t === 'i' && it.m && keys.indexOf(it.m) < 0) keys.push(it.m);
       });
     });
     return keys;
@@ -2417,7 +2419,7 @@
       w = Math.abs(it.a[2] - it.a[0]); h = Math.abs(it.a[3] - it.a[1]);
       var e = imgCache[it.k];
       if (e && e.state === 'ok') {
-        if (!it.q) { ctx.drawImage(e.img, x, y, w, h); return; }
+        if (!it.q) { ctx.drawImage(e.img, x, y, w, h); if (it.m) drawPlayBadge(ctx, x, y, w, h, it.mt); return; }
         /* Повернута на q чвертей: рамка вже рівна й помінялась сторонами,
            тож малюємо навколо її центра з розмірами «до повороту». */
         var odd = it.q % 2, dw = odd ? h : w, dh = odd ? w : h;
@@ -2426,6 +2428,7 @@
         ctx.rotate(it.q * Math.PI / 2);
         ctx.drawImage(e.img, -dw / 2, -dh / 2, dw, dh);
         ctx.restore();
+        if (it.m) drawPlayBadge(ctx, x, y, w, h, it.mt);
         return;
       }
       ctx.save();
@@ -2443,6 +2446,29 @@
       ctx.fillText(e && e.state === 'fail' ? 'картинку не знайдено' : 'завантаження…', x + w / 2, y + h / 2);
       ctx.restore();
     }
+  }
+
+  /* Значок на обкладинці відео чи GIF: видно, що це не просто фото, а
+     його можна пустити. */
+  function drawPlayBadge(ctx, x, y, w, h, mt) {
+    var r = Math.max(10, Math.min(w, h) * 0.13);
+    var cx = x + w / 2, cy = y + h / 2;
+    ctx.save();
+    ctx.fillStyle = 'rgba(23,22,58,.62)';
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    if (/gif/.test(mt || '')) {
+      ctx.font = '700 ' + Math.round(r * 0.62) + 'px Manrope, "Segoe UI", sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('GIF', cx, cy + 1);
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.32, cy - r * 0.45);
+      ctx.lineTo(cx + r * 0.5, cy);
+      ctx.lineTo(cx - r * 0.32, cy + r * 0.45);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
   }
 
   function drawBackground(ctx, bg, cam, scale, w, h) {
@@ -2580,6 +2606,8 @@
     if (this._peersEl) { this._peersEl.remove(); this._peersEl = null; }
     if (this._lzCv && this._lzCv.remove) { this._lzCv.remove(); this._lzCv = null; }
     if (this._lzSend) clearTimeout(this._lzSend);
+    this._closeAllMedia();
+    if (this._mediaEl && this._mediaEl.remove) { this._mediaEl.remove(); this._mediaEl = null; }
     for (var pid in (this.peers || {})) { if (this.peers[pid].timer) clearTimeout(this.peers[pid].timer); }
     this.peers = {};
     window.removeEventListener('resize', this._onResize);
@@ -2687,6 +2715,8 @@
 
   Board.prototype.setSlide = function (slide, keepView) {
     if (this.slide && slide && this.slide.id !== slide.id && this.cancelArc) this.cancelArc();
+    // інший слайд — відкриті відео цього слайда закриваються
+    if (this.slide && slide && this.slide.id !== slide.id && this._media) this._closeAllMedia();
     // ідемо з цього слайда — закріплюємо, яким він був після останньої власної дії
     if (this.slide && this.slide !== slide && this.history) this._closeTop();
 
@@ -4353,6 +4383,142 @@
     try { this.opts.onLaser(m); } catch (e) {}
   };
 
+  /* ============================================================
+     Відео й GIF
+     ============================================================
+
+     На слайді лежить кадр-обкладинка — звичайна картинка (it.k), яку вже
+     вміють рухати, масштабувати, синхронізувати й показувати учневі. Сам
+     файл (it.m, тип it.mt) грає поверх неї окремим елементом сторінки,
+     коли його відкрили: canvas не вміє ні звуку, ні керування відео, а
+     GIF на ньому застигає на першому кадрі. Відкрили, пустили, зупинили,
+     перемотали — те саме бачить учень (opts.onMedia → канал уроку →
+     showMedia на його боці). */
+
+  function mediaItem(board, id) {
+    var list = (board.slide && board.slide.items) || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].id === id && list[i].t === 'i' && list[i].m) return list[i];
+    }
+    return null;
+  }
+
+  Board.prototype._mediaLayer = function () {
+    var cv = this.canvas, host = cv && cv.parentElement;
+    if (!host || typeof document === 'undefined' || !document.createElement) return null;
+    if (!this._mediaEl) {
+      var d = document.createElement('div');
+      d.style.cssText = 'position:absolute;pointer-events:none;z-index:4;overflow:hidden';
+      host.appendChild(d);
+      this._mediaEl = d;
+    }
+    var s = this._mediaEl.style;
+    s.left = (cv.offsetLeft || 0) + 'px';
+    s.top = (cv.offsetTop || 0) + 'px';
+    s.width = this.cssW + 'px';
+    s.height = this.cssH + 'px';
+    return this._mediaEl;
+  };
+
+  Board.prototype._mediaSend = function (op, id, el) {
+    if (!this.opts.onMedia || !this.slide) return;
+    var m = { sl: this.slide.id, id: id, op: op };
+    if (el && isFinite(el.currentTime)) m.t = Math.round(el.currentTime * 10) / 10;
+    try { this.opts.onMedia(m); } catch (e) {}
+  };
+
+  /** Відкрити відео чи GIF обʼєкта id поверх його обкладинки. remote — команда з каналу. */
+  Board.prototype.openMedia = function (id, remote) {
+    var it = mediaItem(this, id);
+    var layer = it && this._mediaLayer();
+    if (!layer) return null;
+    this._media = this._media || {};
+    if (this._media[id]) return this._media[id].el;
+    var video = /^video\//.test(it.mt || '');
+    var el = document.createElement(video ? 'video' : 'img');
+    el.style.cssText = 'position:absolute;pointer-events:auto;background:#000;object-fit:contain;border-radius:6px';
+    var rec = this._media[id] = { el: el, url: null };
+    var self = this;
+    if (video) {
+      try { el.controls = true; el.playsInline = true; el.preload = 'auto'; } catch (e) {}
+      if (el.setAttribute) el.setAttribute('playsinline', '');
+      ['play', 'pause', 'seeked'].forEach(function (ev) {
+        el.addEventListener(ev, function () {
+          if (el._quietUntil && Date.now() < el._quietUntil) return;   // це ми самі виконали чужу команду
+          self._mediaSend(ev === 'seeked' ? (el.paused ? 'pause' : 'play') : ev, id, el);
+        });
+      });
+    }
+    var src = sourceOf(it.m, it);
+    if (typeof src === 'string') el.src = src;
+    else if (src) {
+      Promise.resolve(src).then(function (got) {
+        if (!got || !self._media || self._media[id] !== rec) return;
+        if (typeof got === 'string') { el.src = got; return; }
+        rec.url = URL.createObjectURL(got);
+        el.src = rec.url;
+      }).catch(function () {});
+    }
+    layer.appendChild(el);
+    this._placeMedia();
+    if (!remote) this._mediaSend('open', id);
+    return el;
+  };
+
+  Board.prototype.closeMedia = function (id, remote) {
+    var rec = this._media && this._media[id];
+    if (!rec) return;
+    delete this._media[id];
+    try { if (rec.el.pause) rec.el.pause(); } catch (e) {}
+    if (rec.el.remove) rec.el.remove();
+    if (rec.url) { try { URL.revokeObjectURL(rec.url); } catch (e) {} }
+    if (!remote) this._mediaSend('close', id);
+  };
+
+  Board.prototype.mediaOpen = function (id) { return !!(this._media && this._media[id]); };
+
+  /** Усе відкрите — закрити мовчки (інший слайд, вихід із дошки). */
+  Board.prototype._closeAllMedia = function () {
+    var self = this;
+    Object.keys(this._media || {}).forEach(function (id) { self.closeMedia(id, true); });
+  };
+
+  /** Програвачі — на місце своїх обкладинок (рух полотна, масштаб, перетягування). */
+  Board.prototype._placeMedia = function () {
+    var ids = Object.keys(this._media || {});
+    if (!ids.length) return;
+    this._mediaLayer();
+    for (var i = 0; i < ids.length; i++) {
+      var it = mediaItem(this, ids[i]);
+      if (!it) { this.closeMedia(ids[i], true); continue; }       // обʼєкт прибрали чи слайд інший
+      var p1 = this.toScreen(Math.min(it.a[0], it.a[2]), Math.min(it.a[1], it.a[3]));
+      var p2 = this.toScreen(Math.max(it.a[0], it.a[2]), Math.max(it.a[1], it.a[3]));
+      var s = this._media[ids[i]].el.style;
+      s.left = Math.round(p1.x) + 'px';
+      s.top = Math.round(p1.y) + 'px';
+      s.width = Math.round(p2.x - p1.x) + 'px';
+      s.height = Math.round(p2.y - p1.y) + 'px';
+    }
+  };
+
+  /** Команда з каналу: { sl, id, op: open | play | pause | close, t }. Сміття ігноруємо. */
+  Board.prototype.showMedia = function (m) {
+    if (!m || !this.slide || m.sl !== this.slide.id || typeof m.id !== 'string') return;
+    if (m.op === 'close') { this.closeMedia(m.id, true); return; }
+    var el = this.openMedia(m.id, true);
+    if (!el || m.op === 'open' || !el.play) return;
+    el._quietUntil = Date.now() + 800;
+    if (typeof m.t === 'number' && isFinite(m.t) && Math.abs((el.currentTime || 0) - m.t) > 0.3) {
+      try { el.currentTime = m.t; } catch (e) {}
+    }
+    if (m.op === 'pause') { el.pause(); return; }
+    if (m.op === 'play') {
+      var pr = el.play();
+      // браузер учня не дав запустити зі звуком без його дотику — тоді без звуку
+      if (pr && pr.catch) pr.catch(function () { try { el.muted = true; el.play(); } catch (e) {} });
+    }
+  };
+
   /** Чужа указка з каналу: { sl, p: [x, y, …], n — новий слід }. Сміття ігноруємо. */
   Board.prototype.showLaser = function (m) {
     if (!m || !this.slide || m.sl !== this.slide.id || !Array.isArray(m.p)) return;
@@ -5671,10 +5837,12 @@
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.drawImage(this._ink, 0, 0);
       this._drawOver(ctx);
+      this._placeMedia();
       return;
     }
     this._overDrawn = this._draw();
     this._placePeers();
+    this._placeMedia();
     this._inkSoon();
   };
 

@@ -1884,7 +1884,7 @@
     function add(k) { if (k && keys.indexOf(k) < 0) keys.push(k); }
     db.boards.forEach(function (b) {
       (b.slides || []).forEach(function (s) {
-        (s.items || []).forEach(function (it) { if (it.t === 'i') add(it.k); });
+        (s.items || []).forEach(function (it) { if (it.t === 'i') { add(it.k); add(it.m); } });   // m — відео чи GIF
       });
     });
     db.homeworks.forEach(function (h) {

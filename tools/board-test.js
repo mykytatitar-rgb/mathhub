@@ -67,7 +67,13 @@ function fakeEl() {
       if (p) { var i = p.children.indexOf(this); if (i >= 0) p.children.splice(i, 1); }
       this.parentNode = null;
     },
-    querySelector: function (q) { return q === 'path' ? path : span; }
+    querySelector: function (q) { return q === 'path' ? path : span; },
+    // відео: play/pause і події (для програвача на дошці)
+    on: {}, playing: false, currentTime: 0,
+    addEventListener: function (ev, fn) { (this.on[ev] = this.on[ev] || []).push(fn); },
+    emit: function (ev) { (this.on[ev] || []).forEach(function (fn) { fn(); }); },
+    play: function () { this.playing = true; return Promise.resolve(); },
+    pause: function () { this.playing = false; }
   };
 }
 
@@ -96,7 +102,7 @@ function engine(o) {
     requestAnimationFrame: function () { return 1; }, cancelAnimationFrame: function () {},
     addEventListener: function () {}, removeEventListener: function () {},
     // div — шар курсорів інших (присутність); решта — полотна
-    document: { createElement: function (tag) { return tag === 'div' ? fakeEl() : makeCanvas(); } }
+    document: { createElement: function (tag) { if (tag === 'canvas') return makeCanvas(); var e = fakeEl(); e.tag = tag; return e; } }
   };
   if (o.touch) ctx.matchMedia = function (q) { return { matches: /coarse/.test(q) }; };
   ctx.window = ctx;
@@ -107,7 +113,8 @@ function engine(o) {
   var changes = 0;
   var cv = makeCanvas(size);
   if (o.dom) cv.parentElement = fakeEl();
-  var b = new ctx.Board(cv, { onChange: function () { changes++; }, onTextPlace: o.onTextPlace, onCursor: o.onCursor });
+  var b = new ctx.Board(cv, { onChange: function () { changes++; }, onTextPlace: o.onTextPlace, onCursor: o.onCursor, onMedia: o.onMedia });
+  if (o.imageSource) ctx.Board.imageSource = o.imageSource;
   b.setSlide({ id: 'sl1', items: [], bg: 'grid' });
   b.scale = 1; b.cam = { x: 0, y: 0 };
   return { b: b, Board: ctx.Board, size: size, canvas: cv };
@@ -1352,6 +1359,74 @@ scenario('Вирівняти по центру: середини по верти
   b.alignSelection('middle');   // група 0…300 → середина 150
   same(its.map(function (it) { var q = box(it); return (q.y1 + q.y2) / 2; }).join(','), '150,150,150',
        'середини всіх на 150');
+});
+
+/* Відео й GIF на дошці: на слайді лежить кадр-обкладинка (звичайна
+   картинка — її вже вміють рухати, масштабувати, синхронізувати), а
+   сам файл (it.m) грає поверх неї, коли його відкрили. Учень бачить
+   те саме: відкрили, пустили, зупинили, перемотали. */
+function mediaBoard(sent) {
+  var b = engine({ dom: true, onMedia: function (m) { sent.push(m); },
+                   imageSource: function (k) { return 'https://files/' + k; } }).b;
+  var v = { id: 'vid1', t: 'i', k: 'poster', m: 'movie', mt: 'video/mp4', a: [100, 100, 300, 200] };
+  var g = { id: 'gif1', t: 'i', k: 'gpost', m: 'anim', mt: 'image/gif', a: [400, 100, 500, 200] };
+  var p = { id: 'pic1', t: 'i', k: 'photo', a: [0, 300, 100, 400] };
+  b.items().push(v, g, p);
+  return { b: b, v: v, g: g, p: p };
+}
+function mediaEls(b) { return (b._mediaEl ? b._mediaEl.children : []); }
+
+scenario('Відео на дошці: відкривається поверх свого місця й іде учневі', function () {
+  var sent = [];
+  var t = mediaBoard(sent);
+  t.b.openMedia('vid1');
+  var el = mediaEls(t.b)[0];
+  ok(el && el.tag === 'video', 'поверх слайда — програвач відео');
+  same(el && [el.style.left, el.style.top, el.style.width, el.style.height].join(' '), '100px 100px 200px 100px',
+       'стоїть рівно на місці обкладинки');
+  same(sent[0] && sent[0].op + ' ' + sent[0].id + ' ' + sent[0].sl, 'open vid1 sl1', 'учневі: «відкрили» з номером слайда');
+  t.b.scale = 2; t.b._frame();
+  same(el.style.left + ' ' + el.style.width, '200px 400px', 'наблизили — програвач росте разом зі слайдом');
+  el.currentTime = 7; el.emit('pause');
+  same(sent[sent.length - 1].op + ' ' + sent[sent.length - 1].t, 'pause 7', 'пауза з місцем у відео — учневі');
+  t.b.closeMedia('vid1');
+  same(mediaEls(t.b).length, 0, 'закрили — програвача немає');
+  same(sent[sent.length - 1].op, 'close', 'і учневі — «закрили»');
+});
+
+scenario('GIF грає поверх свого кадру; звичайне фото — не програвач', function () {
+  var t = mediaBoard([]);
+  t.b.openMedia('gif1');
+  var el = mediaEls(t.b)[0];
+  ok(el && el.tag === 'img' && /anim/.test(el.src || ''), 'GIF — живою картинкою з самого файлу');
+  t.b.openMedia('pic1');
+  same(mediaEls(t.b).length, 1, 'фото без файлу-відео нічого не відкриває');
+});
+
+scenario('Учень: відео з каналу — те саме, що в репетитора, без відлуння назад', function () {
+  var sent = [];
+  var t = mediaBoard(sent);
+  t.b.showMedia({ sl: 'sl1', id: 'vid1', op: 'open' });
+  var el = mediaEls(t.b)[0];
+  ok(el && el.tag === 'video', 'відкрилось і в учня');
+  t.b.showMedia({ sl: 'sl1', id: 'vid1', op: 'play', t: 12 });
+  ok(el.playing && el.currentTime === 12, 'пустили з 12-ї секунди');
+  el.emit('play');
+  same(sent.length, 0, 'чуже не повертається відлунням назад');
+  t.b.showMedia({ sl: 'інший', id: 'vid1', op: 'close' });
+  same(mediaEls(t.b).length, 1, 'команда з іншого слайда нічого не робить');
+  var threw = false;
+  try { t.b.showMedia(null); t.b.showMedia({ sl: 'sl1', id: 'нема', op: 'open' }); t.b.showMedia({ sl: 'sl1', id: 'vid1', op: 'play', t: 'x' }); }
+  catch (err) { threw = true; }
+  ok(!threw, 'сміття з каналу нічого не ламає');
+  t.b.showMedia({ sl: 'sl1', id: 'vid1', op: 'close' });
+  same(mediaEls(t.b).length, 0, 'закрили в репетитора — закрилось і в учня');
+});
+
+scenario('Файл відео їде разом з уроком: його ключ серед файлів слайдів', function () {
+  var B = engine().Board;
+  var keys = B.imageKeysIn([{ items: [{ t: 'i', k: 'poster', m: 'movie' }] }]);
+  ok(keys.indexOf('poster') >= 0 && keys.indexOf('movie') >= 0, 'і обкладинка, і саме відео (є: ' + keys.join(',') + ')');
 });
 
 console.log('\n' + passes + ' пройдено, ' + fails + ' не пройдено');

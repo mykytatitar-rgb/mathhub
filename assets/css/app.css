@@ -2267,6 +2267,8 @@ body:has(.ag-fab) .toast-root { bottom: calc(84px + env(safe-area-inset-bottom))
 }
 @media (hover: hover) { .mat-pick__r:hover { background: var(--blue-50, #f0f5ff); } }
 .mat-pick__r input { accent-color: var(--blue-600, #1358f5); cursor: pointer; }
+/* пошук ховає рядки атрибутом hidden — display:flex вище його перебив би */
+.mat-pick [hidden] { display: none; }
 
 /* Матеріал, у якому ні файлу, ні посилання — учневі відкривати нічого */
 .mat-pick__r.is-empty span { color: var(--muted); }

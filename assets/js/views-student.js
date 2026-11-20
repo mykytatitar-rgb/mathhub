@@ -228,6 +228,40 @@
               icon('chevronR', 16, 'style="color:var(--muted-2)"') + '</button>';
           }).join('') + '</div></div>' : '') +
 
+        /* Розділ матеріалів учня. Матеріал один на всю бібліотеку
+           (#/materials), тут лише ті, що прив'язані до учня: позначили для
+           його уроку чи порталу — і він тут сам. «Прикріпити» — пошук по
+           всій бібліотеці. */
+        (function () {
+          var mine = S.db().materials.filter(function (m) { return (m.students || []).indexOf(st.id) > -1; });
+          return '<div class="card card--pad0">' +
+            '<div class="card-head" style="padding:22px 24px 12px;margin:0">' +
+              '<div><h2 class="card-title">Матеріали</h2>' +
+              '<div class="card-sub">' + (mine.length
+                ? U.pl(mine.length, 'матеріал', 'матеріали', 'матеріалів') + ' цього учня'
+                : 'Ще нічого не прикріплено') + '</div></div>' +
+              '<button class="btn btn--ghost btn--sm spacer" data-act="stu-mat-attach" data-arg="' + st.id + '">' +
+                icon('plus', 15) + 'Прикріпити</button>' +
+            '</div>' +
+            (mine.length ? '<div class="list">' + mine.map(function (m) {
+              var n = (m.files || []).length;
+              return '<div class="list__item">' +
+                '<button class="list__item--btn" style="flex:1;min-width:0;display:flex;gap:12px;align-items:center;' +
+                  'background:none;border:0;padding:0;text-align:left;cursor:pointer" data-act="mat-edit" data-arg="' + m.id + '">' +
+                  '<div style="width:34px;height:34px;border-radius:11px;background:var(--blue-50,#f0f5ff);' +
+                    'color:var(--blue-600,#1358f5);display:grid;place-items:center;flex:0 0 auto">' + icon('folder', 17) + '</div>' +
+                  '<div style="flex:1;min-width:0"><div style="font-weight:650;font-size:13.5px" class="truncate">' +
+                    U.esc(m.title || 'Без назви') + '</div>' +
+                  '<div class="small muted truncate">' + U.esc(m.topic || 'Загальне') +
+                    (n ? ' · ' + U.pl(n, 'файл', 'файли', 'файлів') : m.url ? ' · посилання' : '') + '</div></div>' +
+                '</button>' +
+                '<button class="icon-btn" title="Відкріпити від учня (у бібліотеці лишиться)" ' +
+                  'data-act="stu-mat-unlink" data-arg="' + st.id + '|' + m.id + '">' + icon('x', 15) + '</button>' +
+              '</div>';
+            }).join('') + '</div>' : '') +
+          '</div>';
+        })() +
+
         (strong.length ? '<div class="card">' +
           '<div class="card-head"><div><h2 class="card-title">Сильні теми</h2></div></div>' +
           strong.map(function (p) {
@@ -704,7 +738,7 @@
           '<span>Відкривати учневі дошки уроків</span></label>' +
           '<div class="field__hint">' + boardsHint(st) + '</div></div>' +
 
-          (window.V.materialPicker ? window.V.materialPicker(chosen) : '') +
+          (window.V.materialPicker ? window.V.materialPicker(chosen, st.id) : '') +
 
           /* Перевірка очима учня. Без неї переконатися, що портал справді
              працює і що в ньому немає зайвого, можна лише відкривши
@@ -736,7 +770,7 @@
           onClick: function (root, close) {
             var pinEl = root.querySelector('[data-portal-pin]');
             var pin = pinEl ? pinEl.value.trim() : '';
-            var mats = window.V.readPickedMaterials ? window.V.readPickedMaterials(root) : [];
+            var mats = window.V.readPickedMaterials ? window.V.readPickedMaterials(root, st.id) : [];
             var boardsEl = root.querySelector('[data-portal-boards]');
             var boards = boardsEl ? boardsEl.checked : true;
 

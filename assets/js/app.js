@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v196';
+  App.BUILD = 'v197';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -974,6 +974,39 @@
     'mat-add': function () { F.material(null); },
     'mat-add-theory': function () { F.importSheets(); },
     'mat-edit': function (arg) { F.material(arg); },
+    /* Прикріпити матеріали з бібліотеки до учня — той самий список із
+       пошуком, що й «Матеріали для учня» на дошці. */
+    'stu-mat-attach': function (sid) {
+      var st = S.get('students', sid);
+      if (!st || !V.materialPicker) return;
+      var mine = S.db().materials.filter(function (m) { return (m.students || []).indexOf(sid) > -1; })
+        .map(function (m) { return m.id; });
+      C.modal({
+        title: 'Матеріали ' + st.name,
+        sub: 'Позначене зʼявиться в розділі учня; у бібліотеці воно й так є',
+        body: V.materialPicker(mine, sid).replace('<details class="sync-more mt-2"', '<details class="sync-more mt-2" open'),
+        buttons: [
+          { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+          { label: 'Зберегти', kind: 'btn--primary', act: 'save',
+            onClick: function (root, close) {
+              var picked = V.readPickedMaterials(root, sid);
+              // зняті галочки — відкріпити (з бібліотеки нічого не зникає)
+              mine.forEach(function (id) {
+                if (picked.indexOf(id) > -1) return;
+                var m = S.get('materials', id);
+                if (m) S.update('materials', id, { students: (m.students || []).filter(function (x) { return x !== sid; }) });
+              });
+              App.render();             // вікно закриється саме (C.modal)
+            } }
+        ]
+      });
+    },
+    'stu-mat-unlink': function (arg) {
+      var p = String(arg || '').split('|'), m = S.get('materials', p[1]);
+      if (!m) return;
+      S.update('materials', m.id, { students: (m.students || []).filter(function (x) { return x !== p[0]; }) });
+      App.render();
+    },
 
     'contacts': function (arg) { V.contactsModal(arg); },
     'student-portal': function (arg) { V.portalModal(arg); },

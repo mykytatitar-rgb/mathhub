@@ -6049,21 +6049,32 @@
   /* Вибір матеріалів, які поїдуть учневі разом з уроком.
      Бібліотека — робоча кухня репетитора, тому відкриваємо тільки те,
      що він позначив сам, і для кожного уроку окремо. */
-  function materialPicker(chosen) {
+  /* Матеріали цього учня — ті, що вже прив'язані до нього (m.students).
+     Ідуть першими: їх і шукають найчастіше. Прив'язка ставиться сама, коли
+     матеріал позначають для учня (readPicked), і видно її в картці учня. */
+  function linkedTo(m, studentId) {
+    return !!studentId && (m.students || []).indexOf(studentId) > -1;
+  }
+
+  function materialPicker(chosen, studentId) {
     var all = S.db().materials;
     if (!all.length) {
       return '<div class="field__hint mt-2">Матеріалів у бібліотеці ще немає.</div>';
     }
+    var OWN = '\u0001';                       // ключ групи «Матеріали учня» — завжди перша
     var byTopic = {};
     all.forEach(function (m) {
-      var t = m.topic || 'Загальне';
+      var t = linkedTo(m, studentId) ? OWN : (m.topic || 'Загальне');
       (byTopic[t] = byTopic[t] || []).push(m);
     });
     return '<details class="sync-more mt-2"' + (chosen.length ? ' open' : '') + '>' +
       '<summary>Матеріали для учня' + (chosen.length ? ' · ' + chosen.length : '') + '</summary>' +
+      // пошук: матеріалів бувають сотні, гортати їх — довго
+      '<input class="input mt-2" type="search" data-mat-q placeholder="Пошук матеріалу — назва чи тема">' +
       '<div class="mat-pick">' +
+      '<div class="small muted" data-mat-none hidden style="padding:10px 4px">Нічого не знайшлося</div>' +
       Object.keys(byTopic).sort(function (a, b) { return a.localeCompare(b, 'uk'); }).map(function (t) {
-        return '<div class="mat-pick__h">' + U.esc(t) + '</div>' +
+        return '<div class="mat-pick__h" data-mat-h>' + (t === OWN ? 'Матеріали учня' : U.esc(t)) + '</div>' +
           byTopic[t].map(function (m) {
             var n = (m.files || []).length;
             var nr = (m.type === 'theory' && (m.rules || []).length) || 0;
@@ -6077,7 +6088,8 @@
                 ? ' <span class="muted">· ' + U.pl(n, 'файл', 'файли', 'файлів') + '</span>'
                 : m.url ? ' <span class="muted">· посилання</span>'
                         : ' <span class="mat-pick__empty">· порожній</span>';
-            return '<label class="mat-pick__r' + (empty ? ' is-empty' : '') + '"' +
+            var find = ((m.title || '') + ' ' + (m.topic || '') + ' ' + (m.note || '')).toLowerCase();
+            return '<label class="mat-pick__r' + (empty ? ' is-empty' : '') + '" data-find="' + U.esc(find) + '"' +
               (empty ? ' title="Ні файлу, ні посилання — учневі нічого відкривати"' : '') + '>' +
               '<input type="checkbox" data-mat="' + m.id + '"' +
               (chosen.indexOf(m.id) > -1 ? ' checked' : '') + '>' +
@@ -6090,10 +6102,46 @@
       '</details>';
   }
 
-  function readPicked(root) {
-    return U.$$('[data-mat]', root).filter(function (el) { return el.checked; })
+  /** Позначені матеріали. З учнем — ще й прив'язати їх до нього (його розділ). */
+  function readPicked(root, studentId) {
+    var ids = U.$$('[data-mat]', root).filter(function (el) { return el.checked; })
       .map(function (el) { return el.dataset.mat; });
+    if (studentId) linkMaterials(studentId, ids);
+    return ids;
   }
+
+  function linkMaterials(studentId, ids) {
+    ids.forEach(function (id) {
+      var m = S.get('materials', id);
+      if (!m || linkedTo(m, studentId)) return;
+      S.update('materials', id, { students: (m.students || []).concat(studentId) });
+    });
+  }
+  V.linkMaterials = linkMaterials;
+
+  /* Пошук у списку матеріалів: рядки, що не підходять, ховаються разом
+     із порожніми заголовками тем. Слухач один на всю сторінку — список
+     малюється в різних вікнах. */
+  document.addEventListener('input', function (e) {
+    var q = e.target;
+    if (!q || !q.matches || !q.matches('[data-mat-q]')) return;
+    var box = q.parentNode && q.parentNode.querySelector('.mat-pick');
+    if (!box) return;
+    var words = q.value.toLowerCase().split(/\s+/).filter(Boolean);
+    var shown = 0, head = null, inHead = 0;
+    function closeHead() { if (head) head.hidden = !inHead; }
+    Array.prototype.forEach.call(box.children, function (el) {
+      if (el.hasAttribute('data-mat-h')) { closeHead(); head = el; inHead = 0; return; }
+      if (!el.hasAttribute('data-find')) return;
+      var hay = el.getAttribute('data-find');
+      var ok = words.every(function (w) { return hay.indexOf(w) >= 0; });
+      el.hidden = !ok;
+      if (ok) { inHead++; shown++; }
+    });
+    closeHead();
+    var none = box.querySelector('[data-mat-none]');
+    if (none) none.hidden = shown > 0;
+  });
 
   /* Той самий вибір матеріалів потрібен і в порталі учня — щоб репетитор
      не вчився двом різним спискам, віддаємо його назовні. */
@@ -6214,7 +6262,7 @@
   function publishShare(l, st, token, isUpdate, root) {
     if (root) {
       cur.board.share = cur.board.share || { token: token, at: new Date().toISOString() };
-      cur.board.share.materials = readPicked(root);
+      cur.board.share.materials = readPicked(root, st && st.id);
     }
     U.toast(isUpdate ? 'Оновлюю урок…' : 'Готую урок для учня…');
     return publishLesson(cur.board, l, st, token).then(function (url) {
@@ -6307,7 +6355,7 @@
           'приблизно раз на хвилину, і одразу коли ви виходите з дошки. ' +
           'Кнопка «Оновити» потрібна лише якщо хочете не чекати.</div>' +
           facts +
-          materialPicker((share && share.materials) || []),
+          materialPicker((share && share.materials) || [], st && st.id),
         buttons: [
           { label: 'Закрити', kind: 'btn--ghost', act: 'cancel' },
           { label: 'Відкликати', kind: 'btn--danger', act: 'revoke',
@@ -6363,7 +6411,7 @@
         'тільки цей урок: слайди, теорію та домашнє завдання. Ні входу, ні паролів, ' +
         'ні доступу до решти ваших даних.</p>' +
         facts +
-        materialPicker([]) +
+        materialPicker([], st && st.id) +
         '<div class="field__hint mt-2">Код у посиланні випадковий, підібрати його неможливо. ' +
         'Доступ можна відкликати будь-коли — тоді сторінка перестане відкриватися.</div>',
       buttons: [

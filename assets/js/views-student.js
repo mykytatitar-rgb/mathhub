@@ -510,8 +510,16 @@
   }
 
   /** Матеріали в тому вигляді, у якому їх побачить учень. */
+  /* Портал перебудовується після кожного збереження бази. Досі він щоразу
+     діставав кожен файл матеріалів цілим — на телефоні завантажуючи з
+     сервера книжки по 90 МБ, усі разом і по колу, — і вкладка падала
+     («Aw, Snap!»). Тепер файл, що вже лежить на сервері, не читається
+     зовсім (Cloud.ensureShareFile), відсутній береться лише з цього
+     пристрою, і по одному. */
   function portalMaterials(ids, token) {
-    var jobs = [];
+    var IS = window.ImgStore;
+    var readLocal = function (k) { return (IS.getLocal || IS.get).call(IS, k); };
+    var chain = Promise.resolve();
     var out = (ids || []).map(function (mid) {
       var m = S.get('materials', mid);
       if (!m) return null;
@@ -520,20 +528,15 @@
         var file = { name: f.name || 'файл', size: f.size || 0, url: '' };
         row.files.push(file);
         // вкладення кладемо в те саме публічне сховище, що й файли уроків
-        jobs.push(
-          window.ImgStore.get(f.key)
-            .then(function (blob) {
-              if (!blob) return null;
-              return window.Cloud.publishShareImage(token, f.key, blob, 'mat');
-            })
-            .then(function (url) { if (url) file.url = url; })
-            .catch(function () { /* один файл, що не доїхав, не має валити портал */ })
-        );
+        chain = chain.then(function () {
+          return window.Cloud.ensureShareFile(token, f.key, 'mat', readLocal)
+            .then(function (url) { if (url) file.url = url; });
+        });
       });
       return row;
     }).filter(Boolean);
 
-    return Promise.all(jobs).then(function () {
+    return chain.then(function () {
       // посилання, які так і не завантажились, учневі показувати нема сенсу
       out.forEach(function (r) {
         r.files = r.files.filter(function (f) { return f.url; });

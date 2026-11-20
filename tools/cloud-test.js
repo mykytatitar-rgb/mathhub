@@ -106,11 +106,37 @@ settle().then(function () {
     return h.Cloud.shareHas('tok', 'nope', 'mat');
   }).then(function (none) {
     ok(none === false, 'файлу немає — ні');
+    return ensureCases();
   });
 }).then(function () {
   console.log('\n' + passes + ' пройдено, ' + fails + ' не пройдено');
   process.exit(fails ? 1 : 0);
 });
+
+/* Портал учня оновлювався після КОЖНОГО збереження бази й діставав кожен
+   файл матеріалів цілим — на телефоні завантажуючи з сервера книжки по
+   90 МБ, усі разом і по колу. Вкладка падала («Aw, Snap!»). */
+function ensureCases() {
+  console.log('\n• Файл для учня: на сервері — не читаємо; лише тут — відправляємо; ніде — не тягнемо');
+  var reads = [], posts = 0;
+  var k = cabinet(function (url, opts) {
+    var m = (opts && opts.method) || 'GET';
+    if (m === 'POST') posts++;
+    var there = /onserver/.test(url);
+    return { ok: m === 'POST' || there, status: m === 'POST' || there ? 200 : 404,
+             json: function () { return Promise.resolve({}); }, text: function () { return Promise.resolve(''); } };
+  });
+  function local(key) { reads.push(key); return Promise.resolve(/here/.test(key) ? { size: 9, type: 'application/pdf' } : null); }
+  return k.Cloud.ensureShareFile('tok', 'onserver', 'mat', local).then(function (url) {
+    ok(!!url && reads.length === 0, 'вже на сервері — адреса є, файл не читали');
+    return k.Cloud.ensureShareFile('tok', 'here', 'mat', local);
+  }).then(function (url) {
+    ok(!!url && posts === 1, 'є лише на цьому пристрої — відправили (є відправок: ' + posts + ')');
+    return k.Cloud.ensureShareFile('tok', 'absent', 'mat', local);
+  }).then(function (url) {
+    ok(url === null && posts === 1, 'ні тут, ні на сервері — нічого не тягнемо й не шлемо');
+  });
+}
 
 /* Ключ доступу сплив (401), кабінет іде по новий — а сервер входу відповідає status. */
 function refreshCase(status, staysIn, msg) {

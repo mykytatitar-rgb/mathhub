@@ -6611,13 +6611,14 @@
        телефоні, де його не було, ще й завантажували, — і лише тоді
        зʼясовували, що він уже відправлений. Книжки матеріалів по 90 МБ,
        та ще всі разом, валили вкладку («Aw, Snap!»). */
+    var IS = window.ImgStore;
     function one(k, folder) {
-      return window.Cloud.shareHas(token, k, folder).then(function (has) {
-        if (has) return window.Cloud.shareImageUrl(token, k, folder);
-        return window.ImgStore.get(k).then(function (blob) {
-          return blob ? window.Cloud.publishShareImage(token, k, blob, folder) : null;
-        });
-      }).catch(function () { return null; });   // одна невдала картинка не має валити публікацію
+      /* Картинку дошки, якої тут немає, можна й завантажити — вона мала.
+         Файл матеріалу — лише з цього пристрою: книжку не тягнемо. */
+      var read = folder === 'mat'
+        ? function (key) { return (IS.getLocal || IS.get).call(IS, key); }
+        : function (key) { return IS.get(key); };
+      return window.Cloud.ensureShareFile(token, k, folder, read);
     }
     var jobs = built.keys.map(function (k) {
       return one(k, 'img').then(function (url) { if (url) built.payload.images[k] = url; });

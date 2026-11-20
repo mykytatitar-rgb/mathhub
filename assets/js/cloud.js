@@ -678,6 +678,22 @@
       }, function () { return false; });
   };
 
+  /**
+   * Файл для учня — адреса на сервері або null. Вже лежить там — файл не
+   * читаємо зовсім; ні — беремо через read(key) і відправляємо. read —
+   * звідки брати: для матеріалів лише з цього пристрою (ImgStore.getLocal),
+   * бо завантажувати книжку з сервера лише для того, щоб відправити її ще
+   * раз, — саме це й валило вкладку на телефоні.
+   */
+  Cloud.ensureShareFile = function (token, key, folder, read) {
+    return Cloud.shareHas(token, key, folder).then(function (has) {
+      if (has) return Cloud.shareImageUrl(token, key, folder);
+      return Promise.resolve(read(key)).then(function (blob) {
+        return blob ? Cloud.publishShareImage(token, key, blob, folder) : null;
+      });
+    }).catch(function () { return null; });
+  };
+
   Cloud.publishShareImage = function (token, key, blob, folder) {
     folder = folder || 'img';
     var url = Cloud.shareImageUrl(token, key, folder);

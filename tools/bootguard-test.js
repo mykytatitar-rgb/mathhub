@@ -34,6 +34,7 @@ function page(ls, opts) {
       setItem: function (k, v) { ls[k] = String(v); }
     },
     setTimeout: function (fn) { timers.push(fn); },
+    setInterval: function () { return 0; },
     addEventListener: function (ev, fn) { (listeners[ev] = listeners[ev] || []).push(fn); },
     document: {
       readyState: 'complete',
@@ -94,7 +95,7 @@ s1.G.note('довге завдання 4200 мс');
 // вкладка впала: pagehide не настав
 var s2 = page(box, { drawn: true });
 var crash = s2.G.lastCrash();
-ok(crash && crash.length === 2, 'минулий запуск не закрився чисто — журнал його є');
+ok(crash && crash.length >= 2, 'минулий запуск не закрився чисто — журнал його є');
 ok(crash && /93 МБ/.test(crash.join('\n')), 'у журналі — що відбувалося перед падінням');
 s2.wait();
 ok(s2.shown() && /Минулого разу/.test(s2.shown().innerHTML), 'показано пояснення з журналом');
@@ -103,6 +104,23 @@ var s3 = page(box, { drawn: true });
 ok(!s3.G.lastCrash(), 'після чистого закриття — жодних пояснень');
 s3.wait();
 ok(!s3.shown(), 'і нічого не показано');
+
+/* На телефоні вкладка падала без жодного великого файлу й без довгого
+   завдання, яке встигло б закінчитись, — і журнал лишався порожнім, панель
+   не зʼявлялась. Тепер у журналі завжди є старт, сторінки й дотики. */
+console.log('\n• Падіння без нічого важкого: журнал однаково розповідає, де людина була й що натиснула');
+var box2 = {};
+var q1 = page(box2);
+q1.fire('hashchange');
+q1.fire('click', { target: { closest: function (s) { return /data-act/.test(s) ? { getAttribute: function () { return 'board-open'; }, textContent: 'Розклад' } : null; } } });
+var q2 = page(box2, { drawn: true });
+var c2 = q2.G.lastCrash();
+var text = c2 ? c2.join('\n') : '';
+ok(/старт/.test(text), 'у журналі — старт сторінки');
+ok(/сторінка/.test(text), '— перехід на іншу сторінку');
+ok(/Розклад/.test(text), '— і що саме натиснули');
+q2.wait();
+ok(q2.shown() && /Минулого разу/.test(q2.shown().innerHTML), 'панель зʼявляється й без важкого');
 
 console.log('\n' + passes + ' пройдено, ' + fails + ' не пройдено');
 process.exit(fails ? 1 : 0);

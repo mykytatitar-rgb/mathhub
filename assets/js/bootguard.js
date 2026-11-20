@@ -41,7 +41,13 @@
   var SESS = 'vektor.session';
   var prev = null;
   try { prev = JSON.parse(localStorage.getItem(SESS) || 'null'); } catch (e) { prev = null; }
-  var crashed = prev && prev.clean === false && prev.log && prev.log.length ? prev.log : null;
+  var crashed = prev && prev.clean === false && prev.log && prev.log.length ? prev.log.slice() : null;
+  // останній пульс: коли сторінка ще жила й скільки памʼяті займала
+  if (crashed && prev.beat) {
+    var bd = new Date(prev.beat);
+    crashed.push('останній пульс ' + ('0' + bd.getHours()).slice(-2) + ':' + ('0' + bd.getMinutes()).slice(-2) + ':' +
+      ('0' + bd.getSeconds()).slice(-2) + (prev.mem ? ', памʼять ' + prev.mem : ''));
+  }
   var sess = { clean: false, log: [] };
   function saveSess() { try { localStorage.setItem(SESS, JSON.stringify(sess)); } catch (e) {} }
   saveSess();
@@ -54,6 +60,37 @@
     if (sess.log.length > 30) sess.log.shift();
     saveSess();
   };
+  /* Сліди: старт (з версією), сторінки, дотики, а раз на 2 с — пульс із
+     памʼяттю. На телефоні вкладка падала без жодного великого файлу, і
+     журнал лишався порожнім; тепер після падіння видно, що натиснули
+     останнім і скільки памʼяті було зайнято. */
+  function where() {
+    var h = (window.location && window.location.hash) || '#/';
+    return h.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, '…').slice(0, 40);   // без довгих кодів
+  }
+  function ver() {
+    var s = typeof document !== 'undefined' && document.currentScript && document.currentScript.src;
+    return (String(s || '').match(/v=(\d+)/) || [])[1] || '?';
+  }
+  G.note('старт v' + ver() + ' ' + where());
+  window.addEventListener('hashchange', function () { G.note('сторінка ' + where()); });
+  window.addEventListener('click', function (e) {
+    var t = e && e.target && e.target.closest && e.target.closest('[data-act], .m-tab, a, button');
+    if (!t) return;
+    var label = String(t.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 30);
+    var act = t.getAttribute ? (t.getAttribute('data-act') || '') : '';
+    G.note('дотик: ' + (label || act || 'кнопка') + (act && label ? ' (' + act + ')' : ''));
+  }, true);
+  function mem() {
+    var m = typeof performance !== 'undefined' && performance.memory;
+    return m ? Math.round(m.usedJSHeapSize / 1048576) + ' МБ' : '';
+  }
+  setInterval(function () {
+    sess.beat = Date.now();
+    sess.mem = mem();
+    saveSess();
+  }, 2000);
+
   // згорнули чи закрили — це не падіння; повернулись — знову «живий»
   window.addEventListener('pagehide', function () { sess.clean = true; saveSess(); });
   document.addEventListener('visibilitychange', function () {

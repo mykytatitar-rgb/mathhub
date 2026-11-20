@@ -1283,5 +1283,57 @@ scenario('Указка репетитора на сторінці учня: то
   ok(!threw && b.laserTrail(Date.now()).length === 0, 'сміття з каналу нічого не ламає й не малює');
 });
 
+/* Кілька фото навмання різного розміру й навмання розкидані — як на
+   скріншоті репетитора: зробити однаковими й поставити рівно. */
+function photos(b, boxes) {
+  var its = boxes.map(function (a, n) { return { id: 'ph' + n, t: 'i', src: 'x', a: a.slice() }; });
+  its.forEach(function (it) { b.items().push(it); });
+  b.setSelection(its.slice());
+  return its;
+}
+function box(it) { return { x1: it.a[0], y1: it.a[1], x2: it.a[2], y2: it.a[3], w: it.a[2] - it.a[0], h: it.a[3] - it.a[1] }; }
+
+scenario('Кілька фото: однаковий розмір — висота найбільшого, пропорції свої, лівий верхній кут на місці', function () {
+  var b = engine().b;
+  var its = photos(b, [[0, 0, 150, 200], [200, 10, 300, 150], [400, 20, 500, 130]]);
+  var steps = b.history.length;
+  b.equalizeSelection();
+  its.forEach(function (it, n) { same(Math.round(box(it).h), 200, 'фото ' + n + ' — висотою 200'); });
+  same(Math.round(box(its[1]).w), 143, 'ширина росте разом із висотою — фото не сплющене');
+  same(its[2].a[0] + ',' + its[2].a[1], '400,20', 'лівий верхній кут лишився, де був');
+  same(b.history.length, steps + 1, 'один крок «назад»');
+  b.undo();
+  same(b.items().filter(function (i) { return i.id === 'ph1'; })[0].a.join(','), '200,10,300,150', '«назад» повертає розмір');
+});
+
+scenario('Кілька фото: рівні проміжки по горизонталі — крайній лівий на місці, порядок той самий', function () {
+  var b = engine().b;
+  var its = photos(b, [[0, 0, 100, 100], [130, 50, 230, 150], [300, 5, 400, 105], [410, 0, 510, 100]]);
+  b.distributeSelection('x');
+  var bs = its.map(box);
+  var gaps = [bs[1].x1 - bs[0].x2, bs[2].x1 - bs[1].x2, bs[3].x1 - bs[2].x2];
+  ok(gaps[0] === gaps[1] && gaps[1] === gaps[2], 'проміжки рівні (є ' + gaps.join(', ') + ')');
+  same(bs[0].x1, 0, 'крайнє ліве не рухалось');
+  same(bs[1].y1 + ',' + bs[2].y1, '50,5', 'по вертикалі нічого не зсунулось');
+});
+
+scenario('Рівні проміжки: фото, що налізли одне на одне, розходяться, а не злипаються', function () {
+  var b = engine().b;
+  var its = photos(b, [[0, 0, 200, 100], [150, 0, 350, 100], [300, 0, 500, 100]]);
+  b.distributeSelection('x');
+  var bs = its.map(box);
+  ok(bs[1].x1 - bs[0].x2 > 0 && bs[1].x1 - bs[0].x2 === bs[2].x1 - bs[1].x2,
+     'проміжок додатний і однаковий (є ' + (bs[1].x1 - bs[0].x2) + ', ' + (bs[2].x1 - bs[1].x2) + ')');
+});
+
+scenario('Рівні проміжки по вертикалі — стовпчиком', function () {
+  var b = engine().b;
+  var its = photos(b, [[0, 0, 100, 100], [20, 140, 120, 240], [0, 400, 100, 500]]);
+  b.distributeSelection('y');
+  var bs = its.map(box);
+  same(bs[1].y1 - bs[0].y2, bs[2].y1 - bs[1].y2, 'проміжки зверху вниз рівні');
+  same(bs[1].x1, 20, 'по горизонталі нічого не зсунулось');
+});
+
 console.log('\n' + passes + ' пройдено, ' + fails + ' не пройдено');
 process.exit(fails ? 1 : 0);

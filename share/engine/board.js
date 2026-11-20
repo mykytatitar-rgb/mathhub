@@ -3162,6 +3162,61 @@
   };
 
   /**
+   * Однаковий розмір усього виділеного — висота найбільшого. Пропорції в
+   * кожного свої (фото не сплющується), лівий верхній кут лишається на
+   * місці. Для кількох фото зошита на одному слайді: їх кладуть як прийшли,
+   * і кожне свого розміру.
+   */
+  Board.prototype.equalizeSelection = function () {
+    if (this.readOnly || this.selection.length < 2) return;
+    this.syncConstructions();
+    var list = this.selection.map(function (it) { return { it: it, b: itemBounds(it) }; })
+      .filter(function (e) { return e.b && e.b.y2 - e.b.y1 >= 1 && !NO_SCALE[e.it.t]; });
+    if (list.length < 2) return;
+    var H = Math.max.apply(null, list.map(function (e) { return e.b.y2 - e.b.y1; }));
+    this.snapshot();
+    list.forEach(function (e) {
+      scaleItemFrom(e.it, geomOf(e.it), H / (e.b.y2 - e.b.y1), e.b.x1, e.b.y1);
+    });
+    this.syncConstructions();
+    this.changed();
+    if (this.opts.onSelect) this.opts.onSelect(this.selection);
+  };
+
+  /**
+   * Рівні проміжки між виділеним: axis 'x' — у рядок зліва направо, 'y' —
+   * стовпчиком згори вниз. Перше (крайнє) лишається на місці, порядок той
+   * самий, по іншій осі нічого не зсувається. Проміжок — середній із
+   * теперішніх; якщо обʼєкти налізли одне на одне — невеликий сталий,
+   * щоб вони розійшлися, а не злиплись.
+   */
+  var DIST_GAP = 24;
+  Board.prototype.distributeSelection = function (axis) {
+    if (this.readOnly || this.selection.length < 2) return;
+    this.syncConstructions();
+    var lo = axis === 'y' ? 'y1' : 'x1', hi = axis === 'y' ? 'y2' : 'x2';
+    var list = this.selection.map(function (it) { return { it: it, b: itemBounds(it) }; })
+      .filter(function (e) { return e.b && !NO_SCALE[e.it.t]; })
+      .sort(function (p, q) { return p.b[lo] - q.b[lo]; });
+    if (list.length < 2) return;
+    var size = 0;
+    list.forEach(function (e) { size += e.b[hi] - e.b[lo]; });
+    var span = Math.max.apply(null, list.map(function (e) { return e.b[hi]; })) - list[0].b[lo];
+    var gap = Math.round((span - size) / (list.length - 1));
+    if (!(gap > 0)) gap = DIST_GAP;
+    this.snapshot();
+    var at = list[0].b[hi] + gap;
+    for (var n = 1; n < list.length; n++) {
+      var e = list[n], d = at - e.b[lo];
+      moveItem(e.it, axis === 'y' ? 0 : d, axis === 'y' ? d : 0);
+      at += (e.b[hi] - e.b[lo]) + gap;
+    }
+    this.syncConstructions();
+    this.changed();
+    if (this.opts.onSelect) this.opts.onSelect(this.selection);
+  };
+
+  /**
    * Повернути виділені картинки на чверть оберту: dir = 1 — за годинниковою
    * стрілкою, −1 — проти. Фото з телефона часто лягає боком. Рамка лишається
    * рівною — її сторони міняються місцями навколо центра, а it.q (0…3)

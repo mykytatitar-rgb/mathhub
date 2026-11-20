@@ -3217,6 +3217,25 @@
         '<span class="sel-bar__sep"></span>'
       : '';
 
+    /* Кілька обʼєктів (фото з зошита, що прийшли кожне свого розміру):
+       однаковий розмір і рівні проміжки — у рядок чи стовпчиком. */
+    var svg = function (d) {
+      return '<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>';
+    };
+    var tidyBtns = n >= 2
+      ? '<button class="sel-bar__btn" data-act="board-equalize" title="Однаковий розмір">' +
+          svg('<rect x="2" y="5" width="6" height="10" rx="1"/><rect x="12" y="5" width="6" height="10" rx="1"/>' +
+              '<path d="M10 2v16" stroke-dasharray="1.5 2"/>') + '</button>' +
+        '<button class="sel-bar__btn" data-act="board-distribute" data-arg="x" title="Рівні проміжки по горизонталі">' +
+          svg('<rect x="1.5" y="6" width="4" height="8" rx="1"/><rect x="8" y="6" width="4" height="8" rx="1"/>' +
+              '<rect x="14.5" y="6" width="4" height="8" rx="1"/><path d="M5.5 17h2.5M12 17h2.5"/>') + '</button>' +
+        '<button class="sel-bar__btn" data-act="board-distribute" data-arg="y" title="Рівні проміжки по вертикалі">' +
+          svg('<rect x="6" y="1.5" width="8" height="4" rx="1"/><rect x="6" y="8" width="8" height="4" rx="1"/>' +
+              '<rect x="6" y="14.5" width="8" height="4" rx="1"/><path d="M17 5.5v2.5M17 12v2.5"/>') + '</button>' +
+        '<span class="sel-bar__sep"></span>'
+      : '';
+
     // фото з телефона часто лягає боком — поворот на чверть в обидва боки
     var rotBtns = e.selection.some(function (i) { return i.t === 'i'; })
       ? '<button class="sel-bar__btn" data-act="board-rotate" data-arg="-1" title="Повернути ліворуч на 90°">' +
@@ -3256,6 +3275,7 @@
       '<span class="sel-bar__count">' + U.pl(n, 'об’єкт', 'об’єкти', 'об’єктів') + '</span>' +
       (narrow ? delBtn + '<span class="sel-bar__sep"></span>' : '') +
       sizeBtns +
+      tidyBtns +
       rotBtns +
       selColorBtns(e.selection) +
       extra +
@@ -4911,6 +4931,16 @@
       if (!cur || !(k > 0)) return;
       holdSelBar();                        // панель лишається під пальцем між натисканнями
       cur.engine.scaleSelection(k);
+    },
+    'board-equalize': function () {
+      if (!cur) return;
+      holdSelBar();
+      cur.engine.equalizeSelection();
+    },
+    'board-distribute': function (arg) {
+      if (!cur || (arg !== 'x' && arg !== 'y')) return;
+      holdSelBar();
+      cur.engine.distributeSelection(arg);
     },
     'board-sel-colors': function () {
       if (!cur) return;

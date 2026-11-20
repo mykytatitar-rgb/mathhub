@@ -3184,6 +3184,30 @@
   };
 
   /**
+   * Вирівняти виділене в рядок: 'top' — верхні краї по найвищому,
+   * 'middle' — середини по вертикалі на середину всієї групи. По
+   * горизонталі нічого не зсувається, розміри ті самі.
+   */
+  Board.prototype.alignSelection = function (mode) {
+    if (this.readOnly || this.selection.length < 2) return;
+    if (mode !== 'top' && mode !== 'middle') return;
+    this.syncConstructions();
+    var list = this.selection.map(function (it) { return { it: it, b: itemBounds(it) }; })
+      .filter(function (e) { return e.b && !NO_SCALE[e.it.t]; });
+    if (list.length < 2) return;
+    var top = Math.min.apply(null, list.map(function (e) { return e.b.y1; }));
+    var mid = (top + Math.max.apply(null, list.map(function (e) { return e.b.y2; }))) / 2;
+    this.snapshot();
+    list.forEach(function (e) {
+      var dy = mode === 'top' ? top - e.b.y1 : mid - (e.b.y1 + e.b.y2) / 2;
+      if (dy) moveItem(e.it, 0, dy);
+    });
+    this.syncConstructions();
+    this.changed();
+    if (this.opts.onSelect) this.opts.onSelect(this.selection);
+  };
+
+  /**
    * Рівні проміжки між виділеним: axis 'x' — у рядок зліва направо, 'y' —
    * стовпчиком згори вниз. Перше (крайнє) лишається на місці, порядок той
    * самий, по іншій осі нічого не зсувається. Проміжок — середній із

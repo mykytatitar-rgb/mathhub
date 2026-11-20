@@ -1335,5 +1335,24 @@ scenario('Рівні проміжки по вертикалі — стовпчи
   same(bs[1].x1, 20, 'по горизонталі нічого не зсунулось');
 });
 
+scenario('Вирівняти по верху: верхні краї — по найвищому, по горизонталі нічого не зсувається', function () {
+  var b = engine().b;
+  var its = photos(b, [[0, 80, 100, 200], [150, 100, 250, 160], [300, 90, 400, 300]]);
+  var steps = b.history.length;
+  b.alignSelection('top');
+  same(its.map(function (it) { return box(it).y1; }).join(','), '80,80,80', 'усі верхні краї на 80');
+  same(its.map(function (it) { return box(it).h; }).join(','), '120,60,210', 'розміри ті самі');
+  same(its[1].a[0], 150, 'по горизонталі на місці');
+  same(b.history.length, steps + 1, 'один крок «назад»');
+});
+
+scenario('Вирівняти по центру: середини по вертикалі — на середині групи', function () {
+  var b = engine().b;
+  var its = photos(b, [[0, 0, 100, 100], [150, 150, 250, 210], [300, 20, 400, 300]]);
+  b.alignSelection('middle');   // група 0…300 → середина 150
+  same(its.map(function (it) { var q = box(it); return (q.y1 + q.y2) / 2; }).join(','), '150,150,150',
+       'середини всіх на 150');
+});
+
 console.log('\n' + passes + ' пройдено, ' + fails + ' не пройдено');
 process.exit(fails ? 1 : 0);

@@ -3233,6 +3233,12 @@
         '<button class="sel-bar__btn" data-act="board-distribute" data-arg="y" title="Рівні проміжки по вертикалі">' +
           svg('<rect x="6" y="1.5" width="8" height="4" rx="1"/><rect x="6" y="8" width="8" height="4" rx="1"/>' +
               '<rect x="6" y="14.5" width="8" height="4" rx="1"/><path d="M17 5.5v2.5M17 12v2.5"/>') + '</button>' +
+        '<button class="sel-bar__btn" data-act="board-align" data-arg="top" title="Вирівняти по верху">' +
+          svg('<path d="M2 3h16"/><rect x="4" y="6" width="4" height="11" rx="1"/><rect x="12" y="6" width="4" height="7" rx="1"/>') +
+          '</button>' +
+        '<button class="sel-bar__btn" data-act="board-align" data-arg="middle" title="Вирівняти по центру">' +
+          svg('<path d="M2 10h16" stroke-dasharray="1.5 2"/><rect x="4" y="3" width="4" height="14" rx="1"/>' +
+              '<rect x="12" y="6" width="4" height="8" rx="1"/>') + '</button>' +
         '<span class="sel-bar__sep"></span>'
       : '';
 
@@ -4941,6 +4947,11 @@
       if (!cur || (arg !== 'x' && arg !== 'y')) return;
       holdSelBar();
       cur.engine.distributeSelection(arg);
+    },
+    'board-align': function (arg) {
+      if (!cur || (arg !== 'top' && arg !== 'middle')) return;
+      holdSelBar();
+      cur.engine.alignSelection(arg);
     },
     'board-sel-colors': function () {
       if (!cur) return;

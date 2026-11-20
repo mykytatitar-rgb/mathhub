@@ -97,15 +97,21 @@
     if (busy || !queue.length || !ready() || !navigator.onLine) return;
     busy = true;
     var key = queue.shift();
+    var failed = false;
     uploadOne(key)
       .catch(function (e) {
         // не вдалося — повертаємо в кінець черги, спробуємо пізніше
         console.warn('Картинка не поїхала (' + key + '):', e.message);
         if (queue.indexOf(key) < 0) queue.push(key);
+        failed = true;
       })
       .then(function () {
         busy = false;
-        if (queue.length) setTimeout(drain, 300);   // по одній, щоб не забивати канал
+        /* По одній, щоб не забивати канал. Після невдачі — пауза в хвилину:
+           досі файл, що не відправився, пробували знову через 0,3 с, і
+           книжка на 90 МБ читалась і слалась по колу без кінця — на
+           телефоні це забирало всю памʼять. */
+        if (queue.length) setTimeout(drain, failed ? 60000 : 300);
       });
   }
 

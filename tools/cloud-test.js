@@ -88,6 +88,26 @@ settle().then(function () {
 }).then(function () {
   return refreshCase(400, false, 'ключ поновлення справді недійсний (400) — вхід знято, кабінет попросить увійти');
 }).then(function () {
+  /* Перевидання уроку з телефона тягнуло кожну книжку матеріалів (90 МБ)
+     у памʼять лише для того, щоб дізнатися, що вона вже на сервері. */
+  console.log('\n• Файл уроку вже на сервері — дізнаємося без завантаження самого файлу');
+  var methods = [];
+  var h = cabinet(function (url, opts) {
+    methods.push((opts && opts.method) || 'GET');
+    return { ok: /book/.test(url), status: /book/.test(url) ? 200 : 404,
+             json: function () { return Promise.resolve({}); }, text: function () { return Promise.resolve(''); } };
+  });
+  return h.Cloud.shareHas('tok', 'book', 'mat').then(function (has) {
+    ok(has === true, 'файл на сервері — так');
+    ok(methods.length === 1 && methods[0] === 'HEAD', 'спитали лише заголовок, без самого файлу (є: ' + methods.join(',') + ')');
+    return h.Cloud.shareHas('tok', 'book', 'mat');
+  }).then(function (again) {
+    ok(again === true && methods.length === 1, 'вдруге — з памʼяті, без запиту');
+    return h.Cloud.shareHas('tok', 'nope', 'mat');
+  }).then(function (none) {
+    ok(none === false, 'файлу немає — ні');
+  });
+}).then(function () {
   console.log('\n' + passes + ' пройдено, ' + fails + ' не пройдено');
   process.exit(fails ? 1 : 0);
 });

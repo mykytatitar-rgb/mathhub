@@ -657,6 +657,27 @@
       .catch(function () { return false; });
   };
 
+  /**
+   * Чи файл уроку вже лежить на сервері — без завантаження самого файлу.
+   *
+   * Памʼять «що вже відправлено» — своя в кожного пристрою. Перевидання
+   * уроку з телефона не знало, що ноутбук давно вивантажив книжки
+   * матеріалів, і тягнуло кожну (по 90 МБ) у памʼять лише для того, щоб
+   * відправити ще раз, — вкладка падала. Тепер спершу питаємо сервер
+   * заголовком (HEAD): кілька байтів замість файлу.
+   */
+  Cloud.shareHas = function (token, key, folder) {
+    folder = folder || 'img';
+    var mark = folder + '/' + key;
+    var m = sentImages();
+    if (m[token] && m[token][mark]) return Promise.resolve(true);
+    return timedFetch(Cloud.shareImageUrl(token, key, folder), { method: 'HEAD' }, REQ_MS)
+      .then(function (res) {
+        if (res && res.ok) { rememberImage(token, mark); return true; }
+        return false;
+      }, function () { return false; });
+  };
+
   Cloud.publishShareImage = function (token, key, blob, folder) {
     folder = folder || 'img';
     var url = Cloud.shareImageUrl(token, key, folder);

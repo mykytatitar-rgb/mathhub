@@ -25,7 +25,8 @@ function page(ls, opts) {
   var shown = null;
   var body = { appendChild: function (el) { shown = el; } };
   var ctx = {
-    Date: { now: function () { return now; } }, JSON: JSON, Math: Math, String: String, Array: Array,
+    Date: (function () { function D(t) { return new Date(t == null ? now : t); } D.now = function () { return now; }; return D; })(),
+    JSON: JSON, Math: Math, String: String, Array: Array,
     console: { warn: function () {}, error: function () {} },
     navigator: { userAgent: 'test-phone' },
     localStorage: {
@@ -84,6 +85,24 @@ ok(el && /data-bg-reset/.test(el.innerHTML), 'є кнопка скинути к�
 var fine = page({}, { drawn: true });
 fine.wait();
 ok(!fine.shown(), 'кабінет намалювався — нічого зайвого не показуємо');
+
+console.log('\n• «Чорна скринька»: сторінка впала («Aw, Snap!») — наступний запуск знає, що було перед тим');
+var box = {};
+var s1 = page(box);
+s1.G.note('завантаження файлу 93 МБ');
+s1.G.note('довге завдання 4200 мс');
+// вкладка впала: pagehide не настав
+var s2 = page(box, { drawn: true });
+var crash = s2.G.lastCrash();
+ok(crash && crash.length === 2, 'минулий запуск не закрився чисто — журнал його є');
+ok(crash && /93 МБ/.test(crash.join('\n')), 'у журналі — що відбувалося перед падінням');
+s2.wait();
+ok(s2.shown() && /Минулого разу/.test(s2.shown().innerHTML), 'показано пояснення з журналом');
+s2.fire('pagehide');
+var s3 = page(box, { drawn: true });
+ok(!s3.G.lastCrash(), 'після чистого закриття — жодних пояснень');
+s3.wait();
+ok(!s3.shown(), 'і нічого не показано');
 
 console.log('\n' + passes + ' пройдено, ' + fails + ' не пройдено');
 process.exit(fails ? 1 : 0);

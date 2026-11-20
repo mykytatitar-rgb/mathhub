@@ -6495,21 +6495,28 @@
     built.payload.token = token;
 
     var matUrls = {};
-    var jobs = built.keys.map(function (k) {
-      return window.ImgStore.get(k).then(function (blob) {
-        if (!blob) return null;
-        return window.Cloud.publishShareImage(token, k, blob).then(function (url) {
-          built.payload.images[k] = url;
+    /* Файл, що вже лежить на сервері, не читаємо зовсім (Cloud.shareHas —
+       лише заголовок). Досі кожен файл спершу діставали цілим — а на
+       телефоні, де його не було, ще й завантажували, — і лише тоді
+       зʼясовували, що він уже відправлений. Книжки матеріалів по 90 МБ,
+       та ще всі разом, валили вкладку («Aw, Snap!»). */
+    function one(k, folder) {
+      return window.Cloud.shareHas(token, k, folder).then(function (has) {
+        if (has) return window.Cloud.shareImageUrl(token, k, folder);
+        return window.ImgStore.get(k).then(function (blob) {
+          return blob ? window.Cloud.publishShareImage(token, k, blob, folder) : null;
         });
       }).catch(function () { return null; });   // одна невдала картинка не має валити публікацію
-    }).concat(built.matKeys.map(function (k) {
-      return window.ImgStore.get(k).then(function (blob) {
-        if (!blob) return null;
-        return window.Cloud.publishShareImage(token, k, blob, 'mat').then(function (url) {
-          matUrls[k] = url;
-        });
-      }).catch(function () { return null; });
-    }));
+    }
+    var jobs = built.keys.map(function (k) {
+      return one(k, 'img').then(function (url) { if (url) built.payload.images[k] = url; });
+    });
+    // матеріали — по одному: два великі файли разом у памʼяті телефону вже забагато
+    jobs.push(built.matKeys.reduce(function (chain, k) {
+      return chain.then(function () {
+        return one(k, 'mat').then(function (url) { if (url) matUrls[k] = url; });
+      });
+    }, Promise.resolve()));
 
     return Promise.all(jobs).then(function () {
       built.payload.materials.forEach(function (m) {

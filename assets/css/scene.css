@@ -1,0 +1,25 @@
+/* Сцена «Візуалізувати» — вікно поверх дошки (scene.html). */
+html, body { margin: 0; height: 100%; overflow: hidden; background: #fff;
+  font: 13px/1.4 Manrope, "Segoe UI", system-ui, sans-serif; color: #17163A; }
+#sc-root { position: absolute; inset: 0; }
+#sc-root canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.sc-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.sc-label { position: absolute; transform: translate(-50%, -120%); white-space: nowrap;
+  font-weight: 650; font-size: 13px; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
+.sc-caption { position: absolute; left: 10px; top: 8px; right: 10px; pointer-events: none;
+  font-weight: 650; font-size: 14px; text-shadow: 0 0 4px #fff; }
+.sc-panel { position: absolute; left: 8px; right: 8px; bottom: 8px; display: flex; flex-wrap: wrap;
+  gap: 6px 14px; align-items: center; padding: 6px 10px; border-radius: 12px;
+  background: rgba(255,255,255,.88); box-shadow: 0 2px 12px rgba(23,22,58,.14); }
+.sc-panel:empty { display: none; }
+.sc-slider { display: flex; align-items: center; gap: 6px; min-width: 150px; flex: 1 1 150px; }
+.sc-slider input { flex: 1; accent-color: #4B3FDB; }
+.sc-slider b { min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+.sc-btn { border: 0; border-radius: 9px; padding: 5px 10px; background: #EEEDFD; color: #4B3FDB;
+  font: 650 13px Manrope, "Segoe UI", system-ui, sans-serif; cursor: pointer; }
+.sc-btn[disabled] { opacity: .4; cursor: default; }
+.sc-steps { display: flex; align-items: center; gap: 6px; }
+.sc-follow { position: absolute; right: 10px; top: 8px; }
+.sc-error { position: absolute; inset: 0; padding: 14px; background: #FFF5F5; color: #A11;
+  white-space: pre-wrap; font: 12.5px/1.45 ui-monospace, Consolas, monospace; overflow: auto; }
+[hidden] { display: none !important; }

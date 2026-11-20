@@ -13,14 +13,14 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=()
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://kcxqienzhopnsqmykhqv.supabase.co wss://kcxqienzhopnsqmykhqv.supabase.co https://bank.gov.ua https://script.google.com https://script.googleusercontent.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://kcxqienzhopnsqmykhqv.supabase.co wss://kcxqienzhopnsqmykhqv.supabase.co https://bank.gov.ua https://script.google.com https://script.googleusercontent.com; worker-src 'self'; manifest-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 
 /index.html
   Cache-Control: no-cache
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=()
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://kcxqienzhopnsqmykhqv.supabase.co wss://kcxqienzhopnsqmykhqv.supabase.co https://bank.gov.ua https://script.google.com https://script.googleusercontent.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://kcxqienzhopnsqmykhqv.supabase.co wss://kcxqienzhopnsqmykhqv.supabase.co https://bank.gov.ua https://script.google.com https://script.googleusercontent.com; worker-src 'self'; manifest-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 
 # Сторінка уроку для учня — так само завжди свіжа. Її код вбудований у саму
 # сторінку, тож суворе правило для скриптів тут не підходить; лишаємо те,
@@ -36,6 +36,16 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Content-Security-Policy: frame-ancestors 'none'; object-src 'none'; base-uri 'self'
+
+# Сцена «Візуалізувати»: код від Claude виконується тут, у вікні без
+# allow-same-origin (своє «ніяке» походження: ні бази, ні входу кабінету).
+# Мережі немає зовсім (connect-src 'none'); скрипти — лише з цього сайту
+# (походження назване явно: 'self' у такому вікні нічого б не означав) і
+# eval — бо код сцени приходить текстом. Вставляти — лише в цей сайт.
+/scene
+  Cache-Control: no-cache
+  X-Content-Type-Options: nosniff
+  Content-Security-Policy: default-src 'none'; script-src https://mathhub-7dw.pages.dev 'unsafe-eval'; style-src https://mathhub-7dw.pages.dev 'unsafe-inline'; img-src data: blob:; font-src https://mathhub-7dw.pages.dev; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors https://mathhub-7dw.pages.dev
 
 /sw.js
   Cache-Control: no-cache

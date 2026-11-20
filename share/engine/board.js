@@ -2419,7 +2419,7 @@
       w = Math.abs(it.a[2] - it.a[0]); h = Math.abs(it.a[3] - it.a[1]);
       var e = imgCache[it.k];
       if (e && e.state === 'ok') {
-        if (!it.q) { ctx.drawImage(e.img, x, y, w, h); if (it.m) drawPlayBadge(ctx, x, y, w, h, it.mt); return; }
+        if (!it.q) { ctx.drawImage(e.img, x, y, w, h); if (it.m || it.sc) drawPlayBadge(ctx, x, y, w, h, it.sc ? 'scene' : it.mt); return; }
         /* Повернута на q чвертей: рамка вже рівна й помінялась сторонами,
            тож малюємо навколо її центра з розмірами «до повороту». */
         var odd = it.q % 2, dw = odd ? h : w, dh = odd ? w : h;
@@ -2428,7 +2428,7 @@
         ctx.rotate(it.q * Math.PI / 2);
         ctx.drawImage(e.img, -dw / 2, -dh / 2, dw, dh);
         ctx.restore();
-        if (it.m) drawPlayBadge(ctx, x, y, w, h, it.mt);
+        if (it.m || it.sc) drawPlayBadge(ctx, x, y, w, h, it.sc ? 'scene' : it.mt);
         return;
       }
       ctx.save();
@@ -2457,10 +2457,10 @@
     ctx.fillStyle = 'rgba(23,22,58,.62)';
     ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#fff';
-    if (/gif/.test(mt || '')) {
+    if (/gif|scene/.test(mt || '')) {
       ctx.font = '700 ' + Math.round(r * 0.62) + 'px Manrope, "Segoe UI", sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('GIF', cx, cy + 1);
+      ctx.fillText(mt === 'scene' ? '3D' : 'GIF', cx, cy + 1);
     } else {
       ctx.beginPath();
       ctx.moveTo(cx - r * 0.32, cy - r * 0.45);
@@ -2608,6 +2608,7 @@
     if (this._lzSend) clearTimeout(this._lzSend);
     this._closeAllMedia();
     if (this._mediaEl && this._mediaEl.remove) { this._mediaEl.remove(); this._mediaEl = null; }
+    if (this._onSceneMsg) { window.removeEventListener('message', this._onSceneMsg); this._onSceneMsg = null; }
     for (var pid in (this.peers || {})) { if (this.peers[pid].timer) clearTimeout(this.peers[pid].timer); }
     this.peers = {};
     window.removeEventListener('resize', this._onResize);
@@ -4398,7 +4399,7 @@
   function mediaItem(board, id) {
     var list = (board.slide && board.slide.items) || [];
     for (var i = 0; i < list.length; i++) {
-      if (list[i] && list[i].id === id && list[i].t === 'i' && list[i].m) return list[i];
+      if (list[i] && list[i].id === id && list[i].t === 'i' && (list[i].m || list[i].sc)) return list[i];
     }
     return null;
   }
@@ -4420,9 +4421,10 @@
     return this._mediaEl;
   };
 
-  Board.prototype._mediaSend = function (op, id, el) {
+  Board.prototype._mediaSend = function (op, id, el, extra) {
     if (!this.opts.onMedia || !this.slide) return;
     var m = { sl: this.slide.id, id: id, op: op };
+    if (extra) for (var k in extra) m[k] = extra[k];
     if (el && isFinite(el.currentTime)) m.t = Math.round(el.currentTime * 10) / 10;
     try { this.opts.onMedia(m); } catch (e) {}
   };
@@ -4434,6 +4436,7 @@
     if (!layer) return null;
     this._media = this._media || {};
     if (this._media[id]) return this._media[id].el;
+    if (it.sc) return this._openScene(it, layer, remote);
     var video = /^video\//.test(it.mt || '');
     var el = document.createElement(video ? 'video' : 'img');
     el.style.cssText = 'position:absolute;pointer-events:auto;background:#000;object-fit:contain;border-radius:6px';
@@ -4475,6 +4478,58 @@
     if (!remote) this._mediaSend('close', id);
   };
 
+  /* ---------- Сцена «Візуалізувати» ----------
+
+     Код сцени (it.sc) виконується у вікні scene.html без allow-same-origin:
+     у нього своє «ніяке» походження — ні бази, ні входу кабінету, а CSP
+     сцени закриває мережу. Звʼязок — лише postMessage, і приймаємо його
+     тільки від свого вікна (e.source). */
+  Board.sceneUrl = 'scene';
+
+  Board.prototype._openScene = function (it, layer, remote) {
+    var el = document.createElement('iframe');
+    if (el.setAttribute) el.setAttribute('sandbox', 'allow-scripts');
+    el.style.cssText = 'position:absolute;pointer-events:auto;border:0;background:#fff;border-radius:6px;' +
+      'box-shadow:0 0 0 1px rgba(23,22,58,.12)';
+    this._media[it.id] = { el: el, url: null, scene: true };
+    el.src = Board.sceneUrl;
+    if (!this._onSceneMsg && typeof window !== 'undefined' && window.addEventListener) {
+      this._onSceneMsg = this._sceneMessage.bind(this);
+      window.addEventListener('message', this._onSceneMsg);
+    }
+    layer.appendChild(el);
+    this._placeMedia();
+    if (!remote) this._mediaSend('open', it.id);
+    return el;
+  };
+
+  /** Повідомлення від вікна сцени. Чуже (не з наших вікон) — ігнорується. */
+  Board.prototype._sceneMessage = function (e) {
+    var ids = Object.keys(this._media || {}), id = null;
+    for (var i = 0; i < ids.length; i++) {
+      var r = this._media[ids[i]];
+      if (r.scene && r.el.contentWindow && e && e.source === r.el.contentWindow) { id = ids[i]; break; }
+    }
+    if (!id) return;
+    var d = (e.data && typeof e.data === 'object') ? e.data : {};
+    var win = this._media[id].el.contentWindow;
+    var it = mediaItem(this, id);
+    this._sceneLast = this._sceneLast || {};
+    var role = this.opts.sceneRole === 'student' ? 'student' : 'tutor';
+    if (d.type === 'ready' && it) {
+      win.postMessage({ type: 'load', code: String(it.sc || ''), role: role, state: this._sceneLast[id] || null }, '*');
+    } else if (d.type === 'state' && role === 'tutor' && d.state && typeof d.state === 'object') {
+      this._sceneLast[id] = d.state;
+      this._mediaSend('scene', id, null, { s: d.state });
+    } else if (d.type === 'follow') {
+      if (this._sceneLast[id]) win.postMessage({ type: 'apply', state: this._sceneLast[id] }, '*');
+    } else if (d.type === 'poster' && typeof d.url === 'string' && /^data:image\/(jpeg|png);base64,/.test(d.url)) {
+      if (this.opts.onScenePoster) { try { this.opts.onScenePoster(id, d.url); } catch (er) {} }
+    } else if (d.type === 'error' && this.opts.onSceneError) {
+      try { this.opts.onSceneError(id, String(d.message || '').slice(0, 500)); } catch (er) {}
+    }
+  };
+
   Board.prototype.mediaOpen = function (id) { return !!(this._media && this._media[id]); };
 
   /** Усе відкрите — закрити мовчки (інший слайд, вихід із дошки). */
@@ -4505,6 +4560,15 @@
   Board.prototype.showMedia = function (m) {
     if (!m || !this.slide || m.sl !== this.slide.id || typeof m.id !== 'string') return;
     if (m.op === 'close') { this.closeMedia(m.id, true); return; }
+    // стан сцени від репетитора: запамʼятати, а відкрите вікно — одразу оновити
+    if (m.op === 'scene') {
+      if (!m.s || typeof m.s !== 'object') return;
+      this._sceneLast = this._sceneLast || {};
+      this._sceneLast[m.id] = m.s;
+      var rec = this._media && this._media[m.id];
+      if (rec && rec.scene && rec.el.contentWindow) rec.el.contentWindow.postMessage({ type: 'apply', state: m.s }, '*');
+      return;
+    }
     var el = this.openMedia(m.id, true);
     if (!el || m.op === 'open' || !el.play) return;
     el._quietUntil = Date.now() + 800;

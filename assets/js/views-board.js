@@ -183,6 +183,9 @@
             : '') +
           '<button class="btn btn--ghost btn--sm" data-act="board-mats" ' +
             'title="Файли й посилання з бібліотеки матеріалів">' + icon('folder', 15) + 'Матеріали</button>' +
+          '<button class="btn btn--ghost btn--sm" data-act="board-visualize" ' +
+            'title="Візуалізувати задачу: Claude будує 3D-модель, графік чи анімацію">' +
+            '<b style="font-size:12px;letter-spacing:-.3px">3D</b>Візуалізувати</button>' +
           '<button class="btn btn--ghost btn--sm" data-act="board-png" title="Зберегти слайд картинкою">' + icon('image', 15) + 'PNG</button>' +
           (lesson
             ? '<button class="btn btn--primary btn--sm" data-act="board-share" title="Надіслати учню">' +
@@ -350,8 +353,11 @@
         var s = cur.board.slides[cur.index];
         if (!s || s.hidden || s.id !== m.sl) return;
         cur.live.send('md', m, true);
-        updateSelBar();
+        if (m.op !== 'scene') updateSelBar();
       },
+      // сцена намалювала перший кадр — на обкладинку; не побудувалась — запамʼятати чому
+      onScenePoster: function (id, url) { scenePoster(id, url); },
+      onSceneError: function (id, msg) { sceneErr[id] = msg; updateSelBar(); },
       // перший рух дуги закінчено — підказати другий, тихо, внизу дошки
       onArcStage: function (n) {
         if (n === 2) hint('Тепер ведіть по колу — дуга піде за рукою; біля 90°, 180° і ліній прилипає');
@@ -3251,14 +3257,26 @@
       : '';
 
     // відео чи GIF: пустити поверх обкладинки або закрити (учень бачить те саме)
-    var mediaIt = n === 1 && e.selection[0].t === 'i' && e.selection[0].m ? e.selection[0] : null;
+    var mediaIt = n === 1 && e.selection[0].t === 'i' && (e.selection[0].m || e.selection[0].sc) ? e.selection[0] : null;
     var playing = mediaIt && e.mediaOpen && e.mediaOpen(mediaIt.id);
+    var isScene = mediaIt && mediaIt.sc;
     var mediaBtn = mediaIt
       ? '<button class="sel-bar__btn' + (playing ? ' is-on' : '') + '" data-act="board-media" title="' +
-          (playing ? 'Закрити відео' : 'Відтворити') + '">' +
+          (playing ? (isScene ? 'Закрити сцену' : 'Закрити відео') : (isScene ? 'Відкрити сцену' : 'Відтворити')) + '">' +
           (playing
             ? svg('<rect x="5" y="5" width="10" height="10" rx="1.5" fill="currentColor"/>')
             : svg('<path d="M7 4.5v11l8.5-5.5z" fill="currentColor"/>')) + '</button>' +
+        (isScene
+          ? (sceneErr[mediaIt.id]
+              ? '<button class="sel-bar__btn sel-bar__btn--tex" data-act="board-scene-fix" title="Сцена не побудувалась — Claude виправить">' +
+                  '<b style="font-size:12px;color:#E5484D">Виправити</b></button>'
+              : '') +
+            '<button class="sel-bar__btn sel-bar__btn--tex' + (sceneBusy ? ' is-busy' : '') + '" data-act="board-scene-text" ' +
+              'title="Змінити сцену словами"' + (sceneBusy ? ' disabled' : '') + '>' +
+              (sceneBusy ? '<span class="sel-bar__spin"></span>' : '<b style="font-size:12px">Змінити</b>') + '</button>' +
+            '<button class="sel-bar__btn" data-act="board-scene-code" title="Код сцени — правити вручну">' +
+              svg('<path d="M7 6l-4 4 4 4M13 6l4 4-4 4"/>') + '</button>'
+          : '') +
         '<span class="sel-bar__sep"></span>'
       : '';
 
@@ -3449,6 +3467,198 @@
        браузера, тож і «404» ми не бачимо — лише обірване зʼєднання. */
     'unreachable': 'Розпізнавання не відповідає — перевірте, що функцію board-latex розгорнуто в Supabase.'
   };
+
+  /* ============================================================
+     «Візуалізувати»: задача → інтерактивна сцена
+     ============================================================
+
+     Умову пишуть словами або виділяють на дошці (виділене їде картинкою).
+     Claude (функція board-latex, режим scene) повертає код сцени; на слайд
+     лягає обкладинка з кодом (it.sc), сцена одразу відкривається поверх
+     неї в ізольованому вікні (scene.html). Що не так — «Змінити словами»,
+     «Виправити» (Claude бачить помилку) або «Код» (вручну). */
+
+  var sceneBusy = false;
+  var sceneErr = {};                       // id сцени → текст помилки, якщо не побудувалась
+
+  function sceneRequest(body) {
+    return Cloud.request('/functions/v1/board-latex', {
+      method: 'POST',
+      body: JSON.stringify(Object.assign({ mode: 'scene' }, body))
+    }).then(function (res) {
+      if (res.ok) return res.json();
+      return res.json().catch(function () { return {}; }).then(function (j) {
+        var er = new Error(res.status === 404 ? 'not-deployed' : (j && j.error) || 'net');
+        er.detail = j && j.detail;
+        throw er;
+      });
+    }, function () { throw new Error(navigator.onLine === false ? 'net' : 'unreachable'); })
+      .then(function (r) {
+        if (!r || typeof r.code !== 'string' || !r.code.trim()) throw new Error('empty');
+        return r;
+      });
+  }
+
+  function sceneFail(err) {
+    var code = err && err.message;
+    var msg = code === 'empty' ? 'Claude не повернув сцену — спробуйте описати задачу інакше.'
+      : (TYPESET_ERRORS[code] || 'Не вдалося побудувати сцену: ' + (code || 'невідома помилка'));
+    if (code === 'not-deployed' || code === 'unreachable') {
+      msg = 'Сцени ще не підключені: функцію board-latex у Supabase треба перевикласти з новим кодом.';
+    }
+    if (err && err.detail) msg += ' (' + String(err.detail).slice(0, 160) + ')';
+    U.toast(msg, 'err');
+    console.warn('scene', err);
+  }
+
+  /** Тимчасова обкладинка, поки сцена не намалювала свій перший кадр. */
+  function scenePlaceholder(title) {
+    var c = document.createElement('canvas');
+    c.width = 960; c.height = 600;
+    var g = c.getContext('2d');
+    g.fillStyle = '#F4F3FE'; g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = '#4B3FDB'; g.font = '700 64px Manrope, "Segoe UI", sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('3D', c.width / 2, c.height / 2 - 60);
+    g.fillStyle = '#17163A'; g.font = '600 34px Manrope, "Segoe UI", sans-serif';
+    g.fillText(String(title || 'Сцена').slice(0, 48), c.width / 2, c.height / 2 + 40);
+    return new Promise(function (res) { c.toBlob(res, 'image/png'); });
+  }
+
+  function visualizeDialog() {
+    if (!cur) return;
+    if (!window.Cloud || !Cloud.signedIn()) { U.toast('Щоб візуалізувати, увійдіть у кабінет', 'err'); return; }
+    var e = cur.engine;
+    var sel = e.selection.slice();
+    C.modal({
+      title: 'Візуалізувати задачу',
+      sub: sel.length ? 'Виділене на дошці піде картинкою — можна дописати, що саме показати' : '',
+      body:
+        '<textarea class="input" data-scene-prompt rows="5" style="width:100%;resize:vertical" placeholder="' +
+          (sel.length ? 'Наприклад: покажи переріз площиною через A, C і середину ребра SB'
+                      : 'Умова задачі або що показати: «конус, вписаний у кулю радіуса R, з повзунком висоти»') +
+        '"></textarea>' +
+        '<div class="field__hint mt-2">Claude напише сцену: 3D-модель, графік, кроки розвʼязання чи анімацію — ' +
+        'з повзунками, які можна тягнути. Учень бачить те саме, що й ви.</div>',
+      buttons: [
+        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+        { label: 'Візуалізувати', kind: 'btn--primary', act: 'go',
+          onClick: function (root) {
+            var prompt = (root.querySelector('[data-scene-prompt]').value || '').trim();
+            if (!prompt && !sel.length) { U.toast('Опишіть задачу або виділіть її на дошці', 'err'); return false; }
+            var image = '';
+            if (sel.length) image = Board.renderToCanvas({ items: sel }, 1400).toDataURL('image/png').split(',')[1];
+            var b = sel.length ? e.selectionBounds() : null;
+            makeScene(prompt, image, b);
+          } }
+      ]
+    });
+  }
+
+  function makeScene(prompt, image, near) {
+    if (sceneBusy) return;
+    sceneBusy = true;
+    var slideRef = cur.engine.slide;
+    U.toast('Claude будує сцену — це хвилина-дві…');
+    sceneRequest({ prompt: prompt, image: image }).then(function (r) {
+      return scenePlaceholder(r.title).then(function (blob) { return ImgStore.ingest(blob); }).then(function (meta) {
+        if (!cur || cur.engine.slide !== slideRef) throw new Error('moved');
+        var e = cur.engine;
+        var at = near ? { x: near.x2 + 40 + 240, y: (near.y1 + near.y2) / 2 } : null;
+        var item = e.addImage(meta, at);
+        if (!item) return;
+        item.sc = r.code;
+        item.tt = r.title;
+        e.changed();
+        e.render();
+        flushSave();
+        e.openMedia(item.id);
+        updateSelBar();
+      });
+    }).catch(function (err) {
+      if (err && err.message === 'moved') return;
+      sceneFail(err);
+    }).then(function () { sceneBusy = false; updateSelBar(); });
+  }
+
+  /** Переписати сцену: словами (prompt) або виправити помилку (error). */
+  function reworkScene(item, prompt, error) {
+    if (sceneBusy || !item) return;
+    sceneBusy = true;
+    updateSelBar();
+    U.toast(error ? 'Claude виправляє сцену…' : 'Claude змінює сцену…');
+    sceneRequest({ prompt: prompt || '', code: item.sc, error: error || '' }).then(function (r) {
+      applySceneCode(item, r.code, r.title);
+    }).catch(sceneFail).then(function () { sceneBusy = false; updateSelBar(); });
+  }
+
+  function applySceneCode(item, code, title) {
+    if (!cur) return;
+    var e = cur.engine;
+    e.snapshot();
+    item.sc = code;
+    if (title) item.tt = title;
+    delete sceneErr[item.id];
+    e.changed();
+    flushSave();
+    // відкрите вікно — наново з новим кодом
+    if (e.mediaOpen(item.id)) e.closeMedia(item.id);
+    e.openMedia(item.id);
+    updateSelBar();
+  }
+
+  function sceneTextDialog(item) {
+    C.modal({
+      title: 'Змінити сцену',
+      body: '<textarea class="input" data-scene-prompt rows="4" style="width:100%" ' +
+        'placeholder="Наприклад: додай висоту з вершини S і підпиши її довжину"></textarea>',
+      buttons: [
+        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+        { label: 'Змінити', kind: 'btn--primary', act: 'go', onClick: function (root) {
+          var p = (root.querySelector('[data-scene-prompt]').value || '').trim();
+          if (!p) return false;
+          reworkScene(item, p, '');
+        } }
+      ]
+    });
+  }
+
+  function sceneCodeDialog(item) {
+    C.modal({
+      title: 'Код сцени',
+      sub: 'Команди S (див. assets/js/scene-runtime.js) і THREE',
+      body: '<textarea class="input" data-scene-code rows="18" spellcheck="false" ' +
+        'style="width:100%;font:12.5px/1.45 ui-monospace,Consolas,monospace;white-space:pre">' +
+        U.esc(item.sc || '') + '</textarea>',
+      buttons: [
+        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+        { label: 'Застосувати', kind: 'btn--primary', act: 'go', onClick: function (root) {
+          applySceneCode(item, root.querySelector('[data-scene-code]').value, '');
+        } }
+      ]
+    });
+  }
+
+  /* Перший кадр сцени — на обкладинку (на мініатюрі й у PNG видно саму
+     сцену, а не заглушку). Лише раз на код: наступні кадри не потрібні. */
+  function scenePoster(id, url) {
+    if (!cur) return;
+    var it = cur.engine.items().filter(function (x) { return x.id === id; })[0];
+    if (!it || !it.sc || it.posterOf === it.sc.length + ':' + it.sc.slice(0, 40)) return;
+    // data: — не через fetch: захист кабінету (CSP) таких запитів не пускає
+    var bin = atob(url.split(',')[1] || ''), bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    Promise.resolve(new Blob([bytes], { type: /png/.test(url.slice(0, 20)) ? 'image/png' : 'image/jpeg' }))
+      .then(function (blob) { return ImgStore.ingest(blob); })
+      .then(function (meta) {
+        if (!cur) return;
+        it.k = meta.key;
+        it.posterOf = it.sc.length + ':' + it.sc.slice(0, 40);
+        cur.engine.changed();
+        cur.engine.render();
+        flushSave();
+      }).catch(function () {});
+  }
 
   function typesetSelection() {
     if (!cur || typesetBusy) return;
@@ -4913,6 +5123,7 @@
       sheetRow('board-bg', 'grid', 'Фон слайда') +
       sheetRow('board-measures', 'checklist', 'Розміри сторін і кутів') +
       sheetRow('board-save-view', 'target', 'Запамʼятати цей вигляд слайда') +
+      sheetRow('board-visualize', 'target', 'Візуалізувати (3D)') +
       sheetRow('board-png', 'download', 'Слайд картинкою') +
       sheetRow('board-history', 'refresh', 'Попередні версії') +
       sheetRow('board-clear', 'trash', 'Очистити слайд'));
@@ -5046,10 +5257,17 @@
       holdSelBar();
       cur.engine.distributeSelection(arg);
     },
+    'board-visualize': function () { visualizeDialog(); },
+    'board-scene-text': function () { if (cur && cur.engine.selection[0]) sceneTextDialog(cur.engine.selection[0]); },
+    'board-scene-code': function () { if (cur && cur.engine.selection[0]) sceneCodeDialog(cur.engine.selection[0]); },
+    'board-scene-fix': function () {
+      var it = cur && cur.engine.selection[0];
+      if (it && it.sc) reworkScene(it, '', sceneErr[it.id] || 'сцена не побудувалась');
+    },
     'board-media': function () {
       if (!cur) return;
       var e = cur.engine, it = e.selection[0];
-      if (!it || !it.m) return;
+      if (!it || !(it.m || it.sc)) return;
       holdSelBar();
       if (e.mediaOpen(it.id)) e.closeMedia(it.id);
       else {

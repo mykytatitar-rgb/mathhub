@@ -1423,6 +1423,64 @@ scenario('Учень: відео з каналу — те саме, що в ре
   same(mediaEls(t.b).length, 0, 'закрили в репетитора — закрилось і в учня');
 });
 
+/* Сцена «Візуалізувати»: на слайді обкладинка, поверх — ізольоване вікно
+   scene.html. Код сцени (it.sc) їде вікну, коли воно готове; що крутить
+   репетитор — учневі; учень, що відчепився, просить «До вчителя». */
+function sceneBoard(sent, opts) {
+  opts = opts || {};
+  var t = engine({ dom: true, onMedia: function (m) { sent.push(m); } });
+  var b = t.b;
+  if (opts.student) b.opts.sceneRole = 'student';
+  b.opts.onScenePoster = function (id, url) { (b._posters = b._posters || []).push(id + ':' + url); };
+  var sc = { id: 'sc1', t: 'i', k: 'scposter', sc: 'S.axes(3);', a: [0, 0, 400, 300] };
+  b.items().push(sc);
+  return b;
+}
+function frameOf(b) {
+  var el = mediaEls(b)[0];
+  if (el && !el.contentWindow) {
+    el.contentWindow = { got: [], postMessage: function (m) { this.got.push(m); } };
+  }
+  return el;
+}
+
+scenario('Сцена: ізольоване вікно поверх обкладинки, код — коли вікно готове', function () {
+  var sent = [];
+  var b = sceneBoard(sent);
+  b.openMedia('sc1');
+  var el = frameOf(b);
+  ok(el && el.tag === 'iframe', 'поверх слайда — вікно сцени');
+  same(el && el.attrs.sandbox, 'allow-scripts', 'ізольоване: без доступу до кабінету (без allow-same-origin)');
+  ok(/scene/.test(el.src || ''), 'сторінка сцени');
+  b._sceneMessage({ source: el.contentWindow, data: { type: 'ready' } });
+  var load = el.contentWindow.got[0];
+  ok(load && load.type === 'load' && load.code === 'S.axes(3);' && load.role === 'tutor', 'готове — отримало код, роль «репетитор»');
+  b._sceneMessage({ source: el.contentWindow, data: { type: 'state', state: { step: 2 } } });
+  var last = sent[sent.length - 1];
+  ok(last && last.op === 'scene' && last.s && last.s.step === 2, 'покрутив репетитор — стан іде учневі');
+  b._sceneMessage({ source: { чуже: 1 }, data: { type: 'state', state: { step: 9 } } });
+  same(sent[sent.length - 1].s.step, 2, 'повідомлення не з цього вікна — ігнорується');
+  b._sceneMessage({ source: el.contentWindow, data: { type: 'poster', url: 'data:image/jpeg;base64,AAA' } });
+  ok(b._posters && b._posters[0] === 'sc1:data:image/jpeg;base64,AAA', 'кадр сцени — на обкладинку');
+});
+
+scenario('Сцена в учня: роль «учень», стан репетитора, «До вчителя»', function () {
+  var b = sceneBoard([], { student: true });
+  b.showMedia({ sl: 'sl1', id: 'sc1', op: 'open' });
+  var el = frameOf(b);
+  ok(el && el.tag === 'iframe', 'відкрилось і в учня');
+  b.showMedia({ sl: 'sl1', id: 'sc1', op: 'scene', s: { step: 1 } });
+  b._sceneMessage({ source: el.contentWindow, data: { type: 'ready' } });
+  var load = el.contentWindow.got.filter(function (m) { return m.type === 'load'; })[0];
+  ok(load && load.role === 'student' && load.state && load.state.step === 1, 'вікно готове — код, роль «учень» і останній стан репетитора');
+  b.showMedia({ sl: 'sl1', id: 'sc1', op: 'scene', s: { step: 2 } });
+  var ap = el.contentWindow.got[el.contentWindow.got.length - 1];
+  ok(ap.type === 'apply' && ap.state.step === 2, 'новий стан репетитора — одразу у вікно');
+  b._sceneMessage({ source: el.contentWindow, data: { type: 'follow' } });
+  ap = el.contentWindow.got[el.contentWindow.got.length - 1];
+  ok(ap.type === 'apply' && ap.state.step === 2, '«До вчителя» — останній стан репетитора ще раз');
+});
+
 scenario('Файл відео їде разом з уроком: його ключ серед файлів слайдів', function () {
   var B = engine().Board;
   var keys = B.imageKeysIn([{ items: [{ t: 'i', k: 'poster', m: 'movie' }] }]);

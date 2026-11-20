@@ -208,6 +208,113 @@ async function viaGemini(image: string, key: string): Promise<string> {
   throw new RecognizerError("api", 502, detail);
 }
 
+/* ============================================================
+   Режим scene — «Візуалізувати»: задача → код інтерактивної сцени.
+
+   Кабінет надсилає умову словами (prompt) і/або картинку виділеного на
+   дошці (image), а для правки — ще й попередній код (code) і помилку,
+   якщо сцена не побудувалась (error). Відповідь — { title, code }: код
+   виконується в ізольованому вікні сцени (scene.html) з командами S.
+   Лише Claude: Gemini такого коду надійно не пише.
+   ============================================================ */
+
+const SCENE_SYSTEM = `You write short JavaScript programs that visualise a school or olympiad maths problem for a Ukrainian maths tutor's live lesson. The tutor and the student both see the scene; the tutor rotates it, moves sliders and steps through it while explaining.
+
+Your code runs inside a sandboxed page with two globals: S (the scene API below) and THREE (three.js r159). There is no network, no DOM access except through S, no imports. Do not use fetch, XMLHttpRequest, import, require, eval, localStorage, alert, document or window.
+
+Coordinate system: right-handed, z axis points UP in 3D (like a school textbook). Units are the problem's own units.
+
+API (all points are arrays [x, y, z]; z may be omitted in 2D):
+- S.view3d({ camera: [x, y, z], target: [x, y, z] })   3D view, orbiting camera. Default camera [7, 6, 5].
+- S.view2d({ x: [xmin, xmax], y: [ymin, ymax] })        flat 2D view (pan/zoom, no rotation). Use for plane geometry and graphs of y = f(x).
+- S.caption(text)                                       one short line at the top (Ukrainian).
+- S.param(name, { min, max, value, step, label })      a slider; returns its initial value. Declare all params before S.build.
+- S.steps([title1, title2, ...])                        step-by-step explanation; p.step is the 0-based current step. Titles are short Ukrainian phrases.
+- S.animate(true | 'play')                              enables time; p.t is seconds since start ('play' starts it immediately).
+- S.build(function (p) { ... })                         draws the scene. Called again after every slider/step/time change, so build everything inside it. p.<param>, p.step, p.t.
+Inside build:
+- S.axes(size, { names: ['x','y','z'], labels: true })  axes from -size to size.
+- S.grid(size, { step })                                grid in the plane z = 0.
+- S.point(p, { color, label, size })
+- S.line(a, b, { color, dashed })                       dashed for hidden or auxiliary lines.
+- S.polyline(points, { color, dashed })
+- S.vector(a, b, { color, label })                      arrow from a to b.
+- S.curve(function (t) { return [x, y, z]; }, { t: [a, b], n, color, dashed })
+- S.graph(function (x) { return y; }, { x: [a, b], color, dashed })   2D graph in the plane z = 0, breaks at discontinuities.
+- S.surface(function (x, y) { return z; }, { x: [a, b], y: [a, b], n, color, opacity, wire })
+- S.parametric(function (u, v) { return [x, y, z]; }, { u: [a, b], v: [a, b], n, color, opacity })
+- S.polygon(points, { color, opacity, edges, edgeColor })
+- S.polyhedron(vertices, faces, { color, opacity, labels: ['A', 'B', ...] })   faces are arrays of vertex indices; semi-transparent by default so hidden edges stay visible.
+- S.sphere(center, r, { color, opacity })
+- S.label(text, p, { color, size })                    text anchored at a point (use for vertex names, values, angles).
+- S.add(object3D)                                       any custom three.js object if the API lacks something.
+
+Colours: main #4B3FDB, accent #E5484D, green #17B26A, orange #F79009, ink #17163A, grey #7E90AE.
+
+How to make a good scene:
+- Show exactly what the problem is about: the solid, section, graph, locus, transformation or construction. Mathematically correct coordinates — compute them in code (Math.sqrt, Math.cos...), never eyeball.
+- If the problem has a parameter or a moving element, make it a slider. If the solution has natural stages (given → construction → key idea → answer), use S.steps and reveal objects step by step inside build (if (p.step >= 1) ...).
+- Do NOT write the full solution text or the final numeric answer in labels unless the request asks for it; the tutor explains. Name points as in the problem.
+- All visible text (caption, labels, step titles, slider labels) in Ukrainian, short.
+- Keep the code under about 150 lines, plain ES5-style JavaScript (var, function).
+
+Answer format, exactly:
+TITLE: <short Ukrainian title of the scene, max 60 characters>
+\`\`\`javascript
+<the code>
+\`\`\``;
+
+function parseScene(text: string): { title: string; code: string } | null {
+  const t = text.match(/TITLE:\s*(.+)/);
+  const c = text.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/);
+  if (!c || !c[1].trim()) return null;
+  return { title: (t ? t[1] : "Сцена").trim().slice(0, 80), code: c[1].trim() };
+}
+
+async function sceneViaClaude(prompt: string, image: string, code: string, error: string): Promise<string> {
+  const client = new Anthropic();
+  // deno-lint-ignore no-explicit-any
+  const content: any[] = [];
+  if (image) content.push({ type: "image", source: { type: "base64", media_type: "image/png", data: image } });
+  let ask = "";
+  if (code) {
+    ask += "Here is the current scene code:\n```javascript\n" + code + "\n```\n";
+    if (error) ask += "It failed with this error: " + error + "\nFix it.\n";
+    ask += prompt ? "Change it as the tutor asks: " + prompt : "Return the corrected code.";
+  } else {
+    ask += image
+      ? "Visualise the problem from this picture of the whiteboard." + (prompt ? " Tutor's note: " + prompt : "")
+      : "Visualise this problem: " + prompt;
+  }
+  content.push({ type: "text", text: ask });
+  try {
+    const response = await client.beta.messages.create({
+      model: "claude-opus-5",
+      max_tokens: 12000,
+      betas: ["server-side-fallback-2026-06-01"],
+      fallbacks: [{ model: "claude-opus-4-8" }],
+      // сцену чекають посеред уроку: точність геометрії важить, але не хвилина роздумів
+      output_config: { effort: "medium" },
+      system: SCENE_SYSTEM,
+      messages: [{ role: "user", content }],
+    });
+    if (response.stop_reason === "refusal") throw new RecognizerError("refusal", 422);
+    return response.content
+      .filter((b) => b.type === "text")
+      .map((b) => (b as { text: string }).text)
+      .join("\n");
+  } catch (err) {
+    if (err instanceof RecognizerError) throw err;
+    if (err instanceof Anthropic.AuthenticationError) throw new RecognizerError("bad-key", 503, "Claude");
+    if (err instanceof Anthropic.RateLimitError) throw new RecognizerError("busy", 429, "Claude");
+    if (err instanceof Anthropic.APIError) {
+      console.error("anthropic scene", err.status, err.message);
+      throw new RecognizerError("api", 502, `Claude ${err.status}: ${err.message}`.slice(0, 300));
+    }
+    throw err;
+  }
+}
+
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors(origin) });
@@ -226,11 +333,36 @@ Deno.serve(async (req) => {
   if (!anthropicKey && !geminiKey) return json({ error: "no-key" }, 503, origin);
 
   let image = "";
+  // deno-lint-ignore no-explicit-any
+  let body: any = {};
   try {
-    const body = await req.json();
+    body = await req.json();
     image = String(body.image || "");
   } catch {
     return json({ error: "body" }, 400, origin);
+  }
+
+  // «Візуалізувати»: окрема гілка, лише Claude
+  if (body.mode === "scene") {
+    if (!anthropicKey) return json({ error: "no-key" }, 503, origin);
+    const prompt = String(body.prompt || "").slice(0, 4000);
+    const code = String(body.code || "").slice(0, 40000);
+    const error = String(body.error || "").slice(0, 1000);
+    if (image && (image.length > 8_000_000 || !/^[A-Za-z0-9+/=]+$/.test(image))) {
+      return json({ error: "image" }, 400, origin);
+    }
+    if (!prompt && !image && !code) return json({ error: "empty" }, 400, origin);
+    try {
+      const scene = parseScene(await sceneViaClaude(prompt, image, code, error));
+      if (!scene) return json({ error: "empty" }, 422, origin);
+      return json(scene, 200, origin);
+    } catch (err) {
+      if (err instanceof RecognizerError) {
+        return json({ error: err.code, detail: err.detail || undefined }, err.status, origin);
+      }
+      console.error(err);
+      return json({ error: "server", detail: String(err).slice(0, 240) }, 500, origin);
+    }
   }
   // PNG у base64 без префікса data:, не більше ~6 МБ
   if (!image || image.length > 8_000_000 || !/^[A-Za-z0-9+/=]+$/.test(image)) {

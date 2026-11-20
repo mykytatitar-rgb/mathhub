@@ -433,6 +433,7 @@
     cur.pullTimer = setInterval(function () {
       pullContributions();
       pullOps();
+      pollManim();                           // відео Manim у черзі — чи вже готове
       // картинки, що не завантажились, — ще раз: інший пристрій міг довантажити їх на сервер
       if (cur && window.Board && Board.retryFailedImages && Board.retryFailedImages(20000)) {
         cur.engine.ensureImages();
@@ -3542,6 +3543,16 @@
         'з повзунками, які можна тягнути. Учень бачить те саме, що й ви.</div>',
       buttons: [
         { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+        /* Відео Manim — красиве пояснення-анімація; рендериться на ноутбуці
+           репетитора (tools/manim-worker) за чергою, тож замовити можна й з
+           телефона. Сцена — інтерактивна й одразу. */
+        { label: 'Відео Manim', kind: 'btn--ghost', act: 'manim',
+          onClick: function (root) {
+            var prompt = (root.querySelector('[data-scene-prompt]').value || '').trim();
+            if (!prompt && !sel.length) { U.toast('Опишіть задачу або виділіть її на дошці', 'err'); return false; }
+            var image = sel.length ? Board.renderToCanvas({ items: sel }, 1400).toDataURL('image/png').split(',')[1] : '';
+            makeManim(prompt, image, sel.length ? e.selectionBounds() : null);
+          } },
         { label: 'Візуалізувати', kind: 'btn--primary', act: 'go',
           onClick: function (root) {
             var prompt = (root.querySelector('[data-scene-prompt]').value || '').trim();
@@ -3579,6 +3590,108 @@
       if (err && err.message === 'moved') return;
       sceneFail(err);
     }).then(function () { sceneBusy = false; updateSelBar(); });
+  }
+
+  /* ---------- Відео Manim за чергою ----------
+
+     Claude пише сцену Manim (режим manim), кабінет кладе її в таблицю
+     manim_jobs, а на слайд — обкладинку «рендериться» з номером завдання
+     (it.mj). Програма на ноутбуці (tools/manim-worker) рендерить і кладе
+     відео в сховище; кабінет, поки дошка відкрита, раз на 15 с питає
+     чергу й, щойно готово, робить з обкладинки відео (it.m). */
+
+  function manimPlaceholder(title, text) {
+    var c = document.createElement('canvas');
+    c.width = 960; c.height = 540;
+    var g = c.getContext('2d');
+    g.fillStyle = '#17163A'; g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = '700 40px Manrope, "Segoe UI", sans-serif';
+    g.fillText(String(title || 'Відео Manim').slice(0, 44), c.width / 2, c.height / 2 - 30);
+    g.fillStyle = '#B9B4FF'; g.font = '600 26px Manrope, "Segoe UI", sans-serif';
+    g.fillText(text, c.width / 2, c.height / 2 + 30);
+    return new Promise(function (res) { c.toBlob(res, 'image/png'); });
+  }
+
+  function makeManim(prompt, image, near) {
+    if (sceneBusy) return;
+    sceneBusy = true;
+    var slideRef = cur.engine.slide;
+    U.toast('Claude пише відео Manim…');
+    sceneRequest({ mode: 'manim', prompt: prompt, image: image }).then(function (r) {
+      return Cloud.request('/rest/v1/manim_jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
+        body: JSON.stringify({ title: r.title || '', code: r.code, quality: 'm' })
+      }).then(function (res) {
+        if (res.status === 404) throw new Error('no-queue');
+        if (!res.ok) throw new Error('queue');
+        return res.json();
+      }).then(function (rows) {
+        var job = rows && rows[0];
+        if (!job) throw new Error('queue');
+        return manimPlaceholder(r.title, 'рендериться на ноутбуці…').then(function (b) { return ImgStore.ingest(b); })
+          .then(function (meta) {
+            if (!cur || cur.engine.slide !== slideRef) throw new Error('moved');
+            var e = cur.engine;
+            var item = e.addImage(meta, near ? { x: near.x2 + 40 + 240, y: (near.y1 + near.y2) / 2 } : null);
+            if (!item) return;
+            item.mj = job.id;
+            item.tt = r.title || '';
+            e.changed(); e.render(); flushSave();
+            U.toast('Відео в черзі — зʼявиться тут, щойно ноутбук його відрендерить', 'ok');
+          });
+      });
+    }).catch(function (err) {
+      var code = err && err.message;
+      if (code === 'moved') return;
+      if (code === 'no-queue') { U.toast('Черги Manim ще немає: треба виконати SQL із supabase/manim.sql', 'err'); return; }
+      if (code === 'queue') { U.toast('Не вдалося поставити відео в чергу', 'err'); return; }
+      sceneFail(err);
+    }).then(function () { sceneBusy = false; updateSelBar(); });
+  }
+
+  var manimAsked = 0;
+  function pollManim() {
+    if (!cur || !window.Cloud || !Cloud.signedIn() || Date.now() - manimAsked < 14000) return;
+    var waiting = cur.engine.items().filter(function (it) { return it.t === 'i' && it.mj; });
+    if (!waiting.length) return;
+    manimAsked = Date.now();
+    var ids = waiting.map(function (it) { return it.mj; }).filter(function (x) { return /^[0-9a-f-]{36}$/.test(x); });
+    if (!ids.length) return;
+    Cloud.request('/rest/v1/manim_jobs?select=id,status,video_key,error&id=in.(' + ids.join(',') + ')', { method: 'GET' })
+      .then(function (res) { return res.ok ? res.json() : []; })
+      .then(function (rows) {
+        (rows || []).forEach(function (j) {
+          var it = waiting.filter(function (x) { return x.mj === j.id; })[0];
+          if (!it || !cur) return;
+          if (j.status === 'done' && j.video_key) finishManim(it, j.video_key);
+          else if (j.status === 'error' && !it.mjErr) {
+            it.mjErr = String(j.error || '').slice(0, 300);
+            console.warn('Manim:', j.error);
+            manimPlaceholder(it.tt, 'не відрендерилось — див. журнал на ноутбуці').then(function (b) { return ImgStore.ingest(b); })
+              .then(function (meta) { if (!cur) return; it.k = meta.key; cur.engine.changed(); cur.engine.render(); flushSave(); });
+          }
+        });
+      }).catch(function () {});
+  }
+
+  function finishManim(it, key) {
+    ImgStore.get(key).then(function (blob) {
+      if (!blob || !cur) return null;
+      var file;
+      try { file = new File([blob], 'manim.mp4', { type: 'video/mp4' }); } catch (e) { file = blob; }
+      return posterOf(file).then(function (p) { return ImgStore.ingest(p); });
+    }).then(function (meta) {
+      if (!cur || !it.mj) return;
+      cur.engine.snapshot();
+      if (meta) it.k = meta.key;
+      it.m = key;
+      it.mt = 'video/mp4';
+      delete it.mj; delete it.mjErr;
+      cur.engine.changed(); cur.engine.render(); flushSave();
+      updateSelBar();
+    }).catch(function (e) { console.warn('Manim: відео не підвантажилось', e); });
   }
 
   /** Переписати сцену: словами (prompt) або виправити помилку (error). */

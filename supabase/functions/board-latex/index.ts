@@ -264,21 +264,37 @@ TITLE: <short Ukrainian title of the scene, max 60 characters>
 <the code>
 \`\`\``;
 
+const MANIM_SYSTEM = `You write one Manim Community Edition (v0.19+) scene that explains a school or olympiad maths problem for a Ukrainian maths tutor. It is rendered offline on the tutor's Windows laptop (Python 3.12, MiKTeX LaTeX) and played on the lesson whiteboard.
+
+Rules:
+- Exactly one scene class named Main. Use ThreeDScene for solids/surfaces, otherwise Scene (or MovingCameraScene).
+- from manim import * ; numpy as np allowed; nothing else, no files, no network, no images.
+- Ukrainian text: Text(..., font="Segoe UI"). Formulas: MathTex/Tex (LaTeX available). Never put Cyrillic inside MathTex.
+- Mathematically exact: compute coordinates in code. Dark background is fine (Manim default).
+- Structure the video like a good explainer: the problem, the key construction or idea step by step with self.play and short self.wait, then the conclusion. Do not just show the final answer.
+- Length 20-60 seconds. Keep the code under about 200 lines.
+
+Answer format, exactly:
+TITLE: <short Ukrainian title, max 60 characters>
+\`\`\`python
+<the code>
+\`\`\``;
+
 function parseScene(text: string): { title: string; code: string } | null {
   const t = text.match(/TITLE:\s*(.+)/);
-  const c = text.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/);
+  const c = text.match(/```(?:javascript|js|python|py)?\s*\n([\s\S]*?)```/);
   if (!c || !c[1].trim()) return null;
   return { title: (t ? t[1] : "Сцена").trim().slice(0, 80), code: c[1].trim() };
 }
 
-async function sceneViaClaude(prompt: string, image: string, code: string, error: string): Promise<string> {
+async function sceneViaClaude(prompt: string, image: string, code: string, error: string, system = SCENE_SYSTEM): Promise<string> {
   const client = new Anthropic();
   // deno-lint-ignore no-explicit-any
   const content: any[] = [];
   if (image) content.push({ type: "image", source: { type: "base64", media_type: "image/png", data: image } });
   let ask = "";
   if (code) {
-    ask += "Here is the current scene code:\n```javascript\n" + code + "\n```\n";
+    ask += "Here is the current scene code:\n```\n" + code + "\n```\n";
     if (error) ask += "It failed with this error: " + error + "\nFix it.\n";
     ask += prompt ? "Change it as the tutor asks: " + prompt : "Return the corrected code.";
   } else {
@@ -295,7 +311,7 @@ async function sceneViaClaude(prompt: string, image: string, code: string, error
       fallbacks: [{ model: "claude-opus-4-8" }],
       // сцену чекають посеред уроку: точність геометрії важить, але не хвилина роздумів
       output_config: { effort: "medium" },
-      system: SCENE_SYSTEM,
+      system,
       messages: [{ role: "user", content }],
     });
     if (response.stop_reason === "refusal") throw new RecognizerError("refusal", 422);
@@ -343,7 +359,7 @@ Deno.serve(async (req) => {
   }
 
   // «Візуалізувати»: окрема гілка, лише Claude
-  if (body.mode === "scene") {
+  if (body.mode === "scene" || body.mode === "manim") {
     if (!anthropicKey) return json({ error: "no-key" }, 503, origin);
     const prompt = String(body.prompt || "").slice(0, 4000);
     const code = String(body.code || "").slice(0, 40000);
@@ -353,7 +369,8 @@ Deno.serve(async (req) => {
     }
     if (!prompt && !image && !code) return json({ error: "empty" }, 400, origin);
     try {
-      const scene = parseScene(await sceneViaClaude(prompt, image, code, error));
+      const scene = parseScene(await sceneViaClaude(prompt, image, code, error,
+        body.mode === "manim" ? MANIM_SYSTEM : SCENE_SYSTEM));
       if (!scene) return json({ error: "empty" }, 422, origin);
       return json(scene, 200, origin);
     } catch (err) {

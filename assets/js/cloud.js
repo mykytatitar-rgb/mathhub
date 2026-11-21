@@ -485,6 +485,9 @@
      відповіді за 45 с (файл — за 5 хв) закінчується відмовою, і обмін
      пробує знову, як після звичайного збою мережі. */
   var REQ_MS = 45000, FILE_MS = 300000;
+  /* Функції Supabase з Claude (TeX, сцени, Manim) думають хвилину-дві;
+     45 с їх обривали — і кабінет писав «розпізнавання не відповідає». */
+  var FUNC_MS = 240000;
   function timedFetch(url, init, ms) {
     if (typeof AbortController === 'undefined') return fetch(url, init);
     var ac = new AbortController();
@@ -510,7 +513,7 @@
       method: opts.method || 'GET',
       headers: headers,
       body: opts.body
-    }, opts.body instanceof Blob ? FILE_MS : REQ_MS);
+    }, opts.body instanceof Blob ? FILE_MS : /^\/functions\//.test(path) ? FUNC_MS : REQ_MS);
   }
 
   /* Токен живе близько години. Замість того щоб стежити за часом,

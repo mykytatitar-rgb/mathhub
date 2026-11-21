@@ -492,5 +492,25 @@ scenario('Курс дописується в старі оплати й урок
   ok(!(t2.S.get('payments', p2.id).rate > 0), 'оплата чекає справжнього курсу');
 });
 
+/* Телефон падав («Aw, Snap!») щоразу на старті: щоденна страхова копія
+   складала в один рядок усю базу з дошками — 82 МБ тексту з відступами
+   на 50 МБ дошок — і памʼяті не вистачало. Дошки бережуться окремо
+   (журнал на сервері, історія дошки), тож у щоденну копію їм не треба. */
+scenario('Щоденна страхова копія — без дошок і без відступів', function () {
+  var t = freshStore();
+  var S = t.S;
+  var st = S.add('students', { name: 'Копія', grade: '9 клас', price: 500, schedule: [] });
+  var l = S.add('lessons', { studentId: st.id, date: isoIn(1, '10:00'), status: 'planned', price: 500 });
+  var b = S.ensureBoard(l.id);
+  b.slides[0].items.push({ id: 'x1', t: 'p', d: new Array(2000).fill(1) });
+  var copy = S.safetyJSON();
+  var back = JSON.parse(copy);
+  ok(!back.boards, 'дошок у копії немає');
+  ok(back.students && back.students.some(function (s) { return s.id === st.id; }), 'учні — є');
+  ok(back.lessons && back.lessons.some(function (x) { return x.id === l.id; }), 'уроки — є');
+  ok(copy.indexOf('\n  ') < 0, 'без відступів — удвічі менше тексту');
+  ok(S.exportJSON().indexOf('\n  ') < 0, 'і файл резервної копії теж без відступів');
+});
+
 console.log('\n' + passes + ' пройдено, ' + fails + ' не пройдено');
 process.exit(fails ? 1 : 0);

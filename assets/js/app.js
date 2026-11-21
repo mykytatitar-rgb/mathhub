@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v202';
+  App.BUILD = 'v203';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -1796,7 +1796,10 @@
       var DAILY = 'mathhub.vault.daily';
       var today = new Date().toISOString().slice(0, 10);
       if (localStorage.getItem(DAILY) !== today) {
-        Vault.put('щоденна копія', S.exportJSON()).then(function () {
+        /* Позначку — ДО запису: якщо запис уб'є вкладку, наступне відкриття
+           не повторить його по колу. Копія — без дошок (S.safetyJSON). */
+        try { localStorage.setItem(DAILY, today); } catch (e) {}
+        Vault.put('щоденна копія', S.safetyJSON()).then(function () {
           try { localStorage.setItem(DAILY, today); } catch (e) {}
         });
       }

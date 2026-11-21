@@ -137,7 +137,10 @@
     return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
   }
 
+  var crashShown = false;
   function showCrash() {
+    if (crashShown || !document.body) return;
+    crashShown = true;
     var el = document.createElement('div');
     el.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:99999;background:#fff;' +
       'color:#17163A;font:14px/1.45 system-ui,sans-serif;padding:16px;border-radius:16px;' +
@@ -190,4 +193,7 @@
   }
 
   setTimeout(check, 12000);
+  /* Падіння минулого разу — показати одразу: якщо причина повторюється на
+     старті, за 12 с вкладка могла впасти знову, і панелі ніхто б не побачив. */
+  if (crashed) setTimeout(showCrash, 1500);
 })();

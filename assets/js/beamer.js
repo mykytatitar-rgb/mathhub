@@ -42,10 +42,17 @@
   var LH = Math.round(FS * 1.5);   // найменша висота рядка
   var SERIF = "Georgia, 'Times New Roman', 'Noto Serif', serif";
 
+  /* Шрифт тексту. У слайді Beamer — шрифт із засічками; у «каліграфії»
+     (renderInk) — охайний рукописний (Segoe Print є на Windows; немає —
+     той самий шрифт із засічками). Картинку набирає пристрій репетитора,
+     тож учень бачить те саме незалежно від своїх шрифтів. */
+  var HAND = "'Segoe Print', 'Segoe Script', 'Bradley Hand', 'Noteworthy', Georgia, serif";
+  var FONT = SERIF;
+
   var measureCtx = null;
   function textWidth(s, size, italic) {
     if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d');
-    measureCtx.font = (italic ? 'italic ' : '') + size + 'px ' + SERIF;
+    measureCtx.font = (italic ? 'italic ' : '') + size + 'px ' + FONT;
     return measureCtx.measureText(s).width;
   }
 
@@ -135,7 +142,7 @@
       ln.forEach(function (t) {
         if (t.m) svg += '<g color="' + color + '">' + placeMath(t.m, t.x, base - t.m.asc) + '</g>';
         else svg += '<text x="' + t.x.toFixed(1) + '" y="' + base.toFixed(1) + '" font-size="' + size +
-          '" font-family="' + esc(SERIF) + '"' + (italic ? ' font-style="italic"' : '') +
+          '" font-family="' + esc(FONT) + '"' + (italic ? ' font-style="italic"' : '') +
           ' fill="' + color + '">' + esc(t.word) + '</text>';
       });
       y += h;
@@ -232,6 +239,77 @@
           }, 'image/png');
         };
         img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Не вдалося намалювати слайд')); };
+        img.src = url;
+      });
+    });
+  };
+
+  /* ---------- Каліграфія: розбірливий напис замість почерку ----------
+     Той самий зміст, що й для слайда, але без кадру: прозоре тло, колір
+     рукопису, рядки зліва, як були написані, — і лягає на місце
+     написаного. Ширина — за найширшим рядком. */
+  function inkSvg(slide, color) {
+    FONT = HAND;
+    try {
+      var size = FS, maxX = 1600, PADI = 8, y = PADI + 4, body = '', right = 0;
+      var parts = (slide.title ? [{ kind: 'text', tex: slide.title }] : []).concat(slide.blocks || []);
+      parts.forEach(function (b) {
+        if (b.kind === 'figure') return;                       // малюнок лишається рукописом
+        var src = b.kind === 'math' ? null : (b.kind === 'item' ? '• ' + b.tex : b.tex);
+        if (b.kind === 'math') {
+          var m = math(b.tex, size * 1.05, true);
+          if (m) {
+            var sc = Math.min(1, maxX / m.w);
+            body += '<g color="' + color + '">' + placeMath(m, PADI, y, sc) + '</g>';
+            right = Math.max(right, m.w * sc);
+            y += (m.asc + m.desc) * sc + size * 0.35;
+            return;
+          }
+          src = b.tex;
+        }
+        var f = flow(src, PADI, maxX, y, size, color);
+        body += f.svg;
+        right = Math.max(right, lineWidth(src, size));   // ширина набраного рядка
+        y = f.bottom + 4;
+      });
+      var w = Math.max(40, Math.ceil(Math.min(maxX, right) + PADI * 2 + 4)), h = Math.max(30, Math.ceil(y + PADI));
+      return {
+        w: w, h: h,
+        svg: '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="' + w +
+          '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' + body + '</svg>'
+      };
+    } finally {
+      FONT = SERIF;
+    }
+  }
+
+  // ширина рядка без переносу: слова й формули підряд
+  function lineWidth(src, size) {
+    var toks = tokens(src, size), space = textWidth(' ', size), x = 0;
+    toks.forEach(function (t, i) { x += (i && toks[i - 1].space ? space : 0) + t.w; });
+    return x;
+  }
+
+  /** Рукопис → розбірливий напис: PNG із прозорим тлом, { blob, w, h }. */
+  B.renderInk = function (slide, color) {
+    return B.ready().then(function () {
+      var fr = inkSvg(slide, color || '#17163A');
+      return new Promise(function (resolve, reject) {
+        var url = URL.createObjectURL(new Blob([fr.svg], { type: 'image/svg+xml' }));
+        var img = new Image();
+        img.onload = function () {
+          var k = 2;                                     // чіткість: напис часто наближають
+          var cv = document.createElement('canvas');
+          cv.width = Math.round(fr.w * k);
+          cv.height = Math.round(fr.h * k);
+          cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+          URL.revokeObjectURL(url);
+          cv.toBlob(function (blob) {
+            if (blob) resolve({ blob: blob, w: fr.w, h: fr.h });
+            else reject(new Error('Не вдалося зберегти напис'));
+          }, 'image/png');
+        };
+        img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Не вдалося намалювати напис')); };
         img.src = url;
       });
     });

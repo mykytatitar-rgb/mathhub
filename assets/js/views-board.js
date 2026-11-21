@@ -3295,6 +3295,12 @@
     var hasInk = e.selection.some(function (i) { return i.t === 'p'; });
     var hasTx = e.selection.some(function (i) { return i.t === 'i' && i.tx; });
     var typesetBtns =
+      // каліграфія: рукопис → охайний напис кольором рукопису, на тому самому місці
+      (hasInk && !typesetBusy
+        ? '<button class="sel-bar__btn sel-bar__btn--tex" data-act="board-calligraphy" ' +
+            'title="Каліграфія — переписати розбірливо й охайно">' +
+            '<b style="font-family:\'Segoe Print\',\'Segoe Script\',cursive;font-size:13px;font-weight:600">Аа</b></button>'
+        : '') +
       (hasInk
         ? '<button class="sel-bar__btn sel-bar__btn--tex' + (typesetBusy ? ' is-busy' : '') +
           '" data-act="board-typeset" title="Друкований вигляд — слайд LaTeX Beamer"' +
@@ -3773,7 +3779,9 @@
       }).catch(function () {});
   }
 
-  function typesetSelection() {
+  /* mode 'ink' — каліграфія: той самий розпізнаний зміст, але не слайд
+     Beamer, а охайний напис кольором рукопису на місці написаного. */
+  function typesetSelection(mode) {
     if (!cur || typesetBusy) return;
     var e = cur.engine;
     var sel = e.selection.slice();
@@ -3811,6 +3819,14 @@
 
     Promise.all([recognized, engine]).then(function (r) {
       var slide = r[0];
+      if (mode === 'ink') {
+        return window.Beamer.renderInk(slide, inkColor(strokes)).then(function (out) {
+          return ImgStore.ingest(out.blob).then(function (meta) {
+            if (!cur || cur.engine.slide !== slideRef) throw new Error('moved');
+            placeInk(meta, out, slide, strokes, b);
+          });
+        });
+      }
       return window.Beamer.render(slide).then(function (blob) {
         return ImgStore.ingest(blob);
       }).then(function (meta) {
@@ -3829,6 +3845,43 @@
       typesetBusy = false;
       updateSelBar();
     });
+  }
+
+  /** Колір, яким написано найбільше, — ним і буде охайний напис. */
+  function inkColor(strokes) {
+    var n = {}, best = '#17163A', top = 0;
+    strokes.forEach(function (it) {
+      var c = it.c || '#17163A', len = (it.d && it.d.length) || 1;
+      n[c] = (n[c] || 0) + len;
+      if (n[c] > top) { top = n[c]; best = c; }
+    });
+    return best;
+  }
+
+  /* Охайний напис лягає на місце рукопису: висота — як у написаного, але
+     не ширший за нього більше ніж у півтора раза. Рукопис прибирається
+     одним кроком (Ctrl+Z повертає); малюнок серед написаного — лишаємо
+     рукопис, напис ставимо поруч. */
+  function placeInk(meta, out, slide, strokes, b) {
+    var e = cur.engine;
+    var selW = b.x2 - b.x1, selH = b.y2 - b.y1;
+    var ratio = out.w / out.h;
+    var h = Math.max(30, selH), w = h * ratio;
+    if (w > selW * 1.5) { w = selW * 1.5; h = w / ratio; }
+    var keep = !!slide.drawings;
+    var box = keep ? { x: b.x2 + 30, y: b.y1, w: w, h: h } : { x: b.x1, y: b.y1 + (selH - h) / 2, w: w, h: h };
+    e.snapshot();
+    if (!keep) e.slide.items = e.items().filter(function (it) { return strokes.indexOf(it) < 0; });
+    var item = e.placeImage(meta, box);
+    if (!item) return;
+    item.tx = { title: slide.title || '', blocks: slide.blocks || [], lang: slide.lang || 'uk' };
+    e.setTool('select');
+    e.setSelection([item]);
+    e.changed();
+    e.render();
+    flushSave();
+    renderRail();
+    if (keep) U.toast('На виділеному є малюнок — рукопис лишився, напис поруч', 'ok');
   }
 
   function placeTypeset(meta, slide, strokes, b) {
@@ -5349,6 +5402,7 @@
       }
     },
     'board-typeset': function () { typesetSelection(); },
+    'board-calligraphy': function () { typesetSelection('ink'); },
     'board-tex': function () { downloadTex(); },
     'board-duplicate': function () { cur.engine.duplicateSelection(); },
     'board-delete': function () { cur.engine.deleteSelection(); },

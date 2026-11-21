@@ -3796,7 +3796,7 @@
     var slideRef = e.slide;
 
     // картинка виділеного — те, що бачить розпізнавач
-    var image = Board.renderToCanvas({ items: sel }, 1600).toDataURL('image/png').split(',')[1];
+    var image = Board.renderToCanvas({ items: sel }, 1000).toDataURL('image/png').split(',')[1];
 
     typesetBusy = true;
     updateSelBar();

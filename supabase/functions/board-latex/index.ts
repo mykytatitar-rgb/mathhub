@@ -107,14 +107,15 @@ async function viaClaude(image: string): Promise<string> {
   const client = new Anthropic(); // ANTHROPIC_API_KEY — із секретів функції
   try {
     const response = await client.beta.messages.create({
-      model: "claude-opus-5",
-      max_tokens: 16000,
-      // відмову безпеки (дуже малоймовірну тут) сервер переграє на запасній моделі
+      /* Переписати рукопис (TeX, каліграфія) — не задача на роздуми, а
+         посеред уроку чекати не можна: Opus із середніми міркуваннями
+         відповідав по хвилині. Sonnet із короткими — за секунди; Opus —
+         запасний, якщо Sonnet недоступний. */
+      model: "claude-sonnet-5-5",
+      max_tokens: 4000,
       betas: ["server-side-fallback-2026-06-01"],
-      fallbacks: [{ model: "claude-opus-4-8" }],
-      // посеред уроку чекати хвилину не можна: для переписування рукопису
-      // середнього рівня міркувань досить
-      output_config: { effort: "medium" },
+      fallbacks: [{ model: "claude-opus-5" }],
+      output_config: { effort: "low" },
       system: SYSTEM,
       messages: [{
         role: "user",

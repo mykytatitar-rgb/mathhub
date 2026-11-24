@@ -3819,6 +3819,11 @@
 
     Promise.all([recognized, engine]).then(function (r) {
       var slide = r[0];
+      /* Хто розпізнав і за скільки — у журнал; а якщо Claude збився і
+         виручав запасний Gemini, — сказати чому: інакше «довго й криво»
+         не відрізнити від звичайної роботи. */
+      console.info('розпізнавання:', slide.via || '?', slide.ms ? Math.round(slide.ms / 1000) + ' с' : '');
+      if (slide.fallback) U.toast('Claude не відповів (' + String(slide.fallback).slice(0, 120) + ') — розпізнав запасний Gemini', 'err');
       if (mode === 'ink') {
         return window.Beamer.renderInk(slide, inkColor(strokes)).then(function (out) {
           return ImgStore.ingest(out.blob).then(function (meta) {

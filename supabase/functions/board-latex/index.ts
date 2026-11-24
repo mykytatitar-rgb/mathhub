@@ -48,6 +48,8 @@ Transcribe faithfully:
 - Keep the original language, wording, order and line structure. Do not translate, summarise, solve, complete or correct anything — if the handwriting contains a mistake, keep the mistake.
 - Write every formula in standard LaTeX that MathJax understands (amsmath, amssymb). Use Ukrainian school notation as written (tg, ctg, lg): write \\tg, \\ctg, \\lg.
 - If a symbol is truly illegible, write your best reading; never invent extra content.
+- Letters: Ukrainian school mathematics writes variables and coefficients with LATIN letters (a, b, c, k, m, n, p, q, x, y, z). Handwritten cursive a, b, c, k often look like α, β, γ, κ — read them as Latin a, b, c, k. Use a Greek letter only when the glyph is unmistakably Greek (α with a crossing tail, β with a long descender, π, φ, Δ, Σ, ω) or the context demands it (an angle named α, π in trigonometry). Typical patterns: ax^2 + bx + c, y = kx + b, D = b^2 - 4ac.
+- When two readings are possible, choose the one that makes standard mathematical sense.
 
 Return only a JSON object, no prose and no code fences, with this shape:
 {
@@ -388,21 +390,31 @@ Deno.serve(async (req) => {
   }
 
   try {
+    /* Хто розпізнав і за скільки — кабінету: «довго й криво» буває тоді,
+       коли Claude збився і виручав Gemini, а звідси цього не видно. */
+    const started = Date.now();
     let text: string;
+    let via = "claude";
+    let fallback = "";
     if (anthropicKey) {
       try {
         text = await viaClaude(image);
       } catch (error) {
         if (!geminiKey) throw error;
         console.error("claude failed, trying gemini", error);
+        fallback = error instanceof RecognizerError
+          ? `${error.code}${error.detail ? ": " + error.detail : ""}`
+          : String(error).slice(0, 200);
+        via = "gemini";
         text = await viaGemini(image, geminiKey);
       }
     } else {
+      via = "gemini";
       text = await viaGemini(image, geminiKey!);
     }
     const slide = parseSlide(text);
     if (!slide || !slide.blocks.length) return json({ error: "empty" }, 422, origin);
-    return json(slide, 200, origin);
+    return json({ ...slide, via, ms: Date.now() - started, fallback: fallback || undefined }, 200, origin);
   } catch (error) {
     if (error instanceof RecognizerError) {
       return json({ error: error.code, detail: error.detail || undefined }, error.status, origin);

@@ -3307,6 +3307,11 @@
           (typesetBusy ? ' disabled' : '') + '>' +
           (typesetBusy ? '<span class="sel-bar__spin"></span>' : '<b>T<sub>E</sub>X</b>') + '</button>'
         : '') +
+      // готовий напис чи слайд — поправити вручну
+      (hasTx && e.selection.length === 1
+        ? '<button class="sel-bar__btn" data-act="board-tx-edit" title="Поправити напис">' +
+          icon('edit', 16) + '</button>'
+        : '') +
       (hasTx
         ? '<button class="sel-bar__btn" data-act="board-tex" title="Завантажити файл Beamer (.tex)">' +
           icon('download', 16) + '</button>'
@@ -3880,6 +3885,7 @@
     var item = e.placeImage(meta, box);
     if (!item) return;
     item.tx = { title: slide.title || '', blocks: slide.blocks || [], lang: slide.lang || 'uk' };
+    item.tx.ink = inkColor(strokes);                // це напис, а не слайд, — для правки
     e.setTool('select');
     e.setSelection([item]);
     e.changed();
@@ -3887,6 +3893,97 @@
     flushSave();
     renderRail();
     if (keep) U.toast('На виділеному є малюнок — рукопис лишився, напис поруч', 'ok');
+  }
+
+  /* Ручна правка готового напису чи слайда: зміст рядками, поруч — живий
+     перегляд; «Готово» перемальовує на тому самому місці й у тому самому
+     масштабі. Напис до v208 не знав свого кольору — беремо його з картинки. */
+  function inkOf(item) {
+    if (item.tx.ink) return Promise.resolve(item.tx.ink);
+    return ImgStore.get(item.k).then(function (blob) {
+      return blob ? createImageBitmap(blob) : null;
+    }).then(function (bmp) {
+      if (!bmp) return null;
+      var cv = document.createElement('canvas');
+      cv.width = bmp.width; cv.height = bmp.height;
+      var ctx = cv.getContext('2d');
+      ctx.drawImage(bmp, 0, 0);
+      var d = ctx.getImageData(0, 0, cv.width, cv.height).data;
+      if (d[3] > 0) return null;                    // непрозорий кут — слайд
+      for (var i = 3; i < d.length; i += 4) {
+        if (d[i] > 250) return '#' + [d[i - 3], d[i - 2], d[i - 1]].map(function (v) {
+          return (v < 16 ? '0' : '') + v.toString(16);
+        }).join('');
+      }
+      return '#17163A';
+    });
+  }
+
+  function editTx(item) {
+    if (!cur || !item || !item.tx) return;
+    var e = cur.engine, slideRef = e.slide;
+    Promise.all([App.need('beamer').then(function () { return window.Beamer.ready(); }), inkOf(item)])
+      .then(function (r) {
+        var color = r[1], B = window.Beamer, timer = 0;
+        C.modal({
+          title: color ? 'Поправити напис' : 'Поправити слайд',
+          sub: 'Рядок — блок: $$ формула $$, - пункт, # заголовок, решта — текст із $…$',
+          wide: true,
+          body: '<textarea class="input" data-tx-src rows="7" spellcheck="false" ' +
+              'style="width:100%;font:13px/1.5 ui-monospace,Consolas,monospace">' +
+              U.esc(B.toLines(item.tx)) + '</textarea>' +
+            '<div data-tx-view style="margin-top:12px;padding:10px;border:1px solid var(--line,#e4e4ee);' +
+              'border-radius:10px;background:#fff;overflow:auto;max-height:42vh"></div>',
+          buttons: [
+            { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+            { label: 'Готово', kind: 'btn--primary', act: 'go', onClick: function (root) {
+              var tx = B.fromLines(root.querySelector('[data-tx-src]').value, item.tx);
+              if (!tx.blocks.length && !tx.title) return false;
+              applyTx(item, tx, color, slideRef);
+            } }
+          ]
+        });
+        var root = document.getElementById('modal-root').lastElementChild;
+        var src = root.querySelector('[data-tx-src]'), view = root.querySelector('[data-tx-view]');
+        function show() {
+          try {
+            var svg = B.previewSvg(B.fromLines(src.value, item.tx), color);
+            var was = view.querySelector('img');
+            if (was) URL.revokeObjectURL(was.src);
+            view.innerHTML = '<img alt="" style="max-width:100%;display:block;margin:auto" src="' +
+              URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' })) + '">';
+          } catch (err) { /* недописана формула — лишаємо попередній вигляд */ }
+        }
+        src.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(show, 250); });
+        show();
+        src.focus();
+      }, function () { U.toast('Немає звʼязку — правка не відкрилась', 'err'); });
+  }
+
+  function applyTx(item, tx, color, slideRef) {
+    var B = window.Beamer;
+    var made = color
+      ? B.renderInk(tx, color).then(function (out) { return out.blob; })
+      : B.render(tx);
+    Promise.all([made.then(function (blob) { return ImgStore.ingest(blob); }),
+                 ImgStore.get(item.k).then(function (b) { return b ? createImageBitmap(b) : null; })])
+      .then(function (r) {
+        var meta = r[0], old = r[1];
+        if (!cur || cur.engine.slide !== slideRef) return;
+        var e = cur.engine, a = item.a;
+        // той самий масштаб: висота росте чи меншає разом зі змістом
+        var h = (a[3] - a[1]) * (old ? meta.h / old.height : 1), w = h * meta.w / meta.h;
+        e.snapshot();
+        item.k = meta.key;
+        item.r = meta.w / meta.h;
+        item.a = [a[0], a[1], Math.round(a[0] + w), Math.round(a[1] + h)];
+        item.tx = tx;
+        if (color) item.tx.ink = color;
+        e.changed(); e.render(); flushSave(); renderRail(); updateSelBar();
+      }).catch(function (err) {
+        console.warn('tx-edit', err);
+        U.toast('Не вдалося перемалювати напис', 'err');
+      });
   }
 
   function placeTypeset(meta, slide, strokes, b) {
@@ -5408,6 +5505,7 @@
     },
     'board-typeset': function () { typesetSelection(); },
     'board-calligraphy': function () { typesetSelection('ink'); },
+    'board-tx-edit': function () { if (cur) editTx(cur.engine.selection[0]); },
     'board-tex': function () { downloadTex(); },
     'board-duplicate': function () { cur.engine.duplicateSelection(); },
     'board-delete': function () { cur.engine.deleteSelection(); },

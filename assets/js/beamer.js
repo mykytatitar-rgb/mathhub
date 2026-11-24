@@ -385,5 +385,40 @@
     return out.join('\n');
   };
 
+  /* ---------- Ручна правка ----------
+     Зміст у полі — рядок на блок: «# заголовок», «$$ формула $$»,
+     «- пункт», «(рисунок: …)», решта — текст із $…$ усередині. */
+  var FIG = /^\(рисунок:\s*([\s\S]*)\)$/;
+
+  B.toLines = function (tx) {
+    var out = tx.title ? ['# ' + tx.title] : [];
+    (tx.blocks || []).forEach(function (b) {
+      if (b.kind === 'math') out.push('$$ ' + b.tex + ' $$');
+      else if (b.kind === 'item') out.push('- ' + b.tex);
+      else if (b.kind === 'figure') out.push('(рисунок: ' + b.tex + ')');
+      else out.push(b.tex);
+    });
+    return out.join('\n');
+  };
+
+  B.fromLines = function (text, old) {
+    var tx = { title: '', blocks: [], lang: (old && old.lang) || 'uk' }, m;
+    String(text).split('\n').forEach(function (line, i) {
+      var s = line.trim();
+      if (!s) return;
+      if (i === 0 && /^#\s/.test(s)) tx.title = s.slice(2).trim();
+      else if ((m = /^\$\$([\s\S]*)\$\$$/.exec(s))) tx.blocks.push({ kind: 'math', tex: m[1].trim() });
+      else if (/^-\s/.test(s)) tx.blocks.push({ kind: 'item', tex: s.slice(2).trim() });
+      else if ((m = FIG.exec(s))) tx.blocks.push({ kind: 'figure', tex: m[1].trim() });
+      else tx.blocks.push({ kind: 'text', tex: s });
+    });
+    return tx;
+  };
+
+  /** Те саме, що піде на дошку, але одразу SVG — для живого перегляду. */
+  B.previewSvg = function (tx, color) {
+    return (color ? inkSvg(tx, color) : frameSvg(tx)).svg;
+  };
+
   window.Beamer = B;
 })();

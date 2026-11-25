@@ -55,7 +55,7 @@ function cabinet(server) {
   vm.createContext(ctx);
   vm.runInContext(src('assets/js/cloud.js'), ctx, { filename: 'cloud.js' });
   return {
-    Cloud: ctx.Cloud, calls: calls,
+    Cloud: ctx.Cloud, calls: calls, ls: ls, ctx: ctx,
     pass: function (ms) {
       now += ms;
       timers.forEach(function (t) { if (t.fn && t.at <= now) { var f = t.fn; t.fn = null; f(); } });
@@ -126,6 +126,20 @@ settle().then(function () {
     ok(none === false, 'файлу немає — ні');
     return ensureCases();
   });
+}).then(function () {
+  /* Стан обміну питають на кожну зміну — і щоразу розбирали всі три
+     страхові копії бази (на телефоні мегабайти на старті, кілька разів). */
+  console.log('\n• Стан обміну не розбирає страхові копії щоразу');
+  var k = cabinet();
+  k.ls['mathhub.before-sync'] = JSON.stringify([{ at: '2026-11-01', reason: 'r', data: JSON.stringify({ students: [{ id: 1 }] }) }]);
+  var big = 0;
+  k.ctx.JSON = { stringify: JSON.stringify, parse: function (s) { if (String(s).length > 40) big++; return JSON.parse(s); } };
+  var first = k.Cloud.status().backups;
+  k.Cloud.status(); k.Cloud.status();
+  ok(first === 1, 'копію видно (є: ' + first + ')');
+  ok(big <= 2, 'три запити стану — копії розібрано один раз (розборів: ' + big + ')');
+  k.ls['mathhub.before-sync'] = '[]';
+  ok(k.Cloud.status().backups === 0, 'копії змінились — стан свіжий');
 }).then(function () {
   console.log('\n' + passes + ' пройдено, ' + fails + ' не пройдено');
   process.exit(fails ? 1 : 0);

@@ -165,6 +165,16 @@
     return false;
   };
 
+  /**
+   * Те саме, але для записів (учні, уроки, оплати): 'doc' — база тут не
+   * прочиталась, 'version' — код застарів (лише читати), false — можна все.
+   * Непрочитані дошки записам не заважають: вони лежать окремо.
+   */
+  Cloud.recordsBlocked = function () {
+    if (window.S && S.readFailed && S.readFailed().doc) return 'doc';
+    return blocked ? 'version' : false;
+  };
+
   Cloud.blockedDetail = function () {
     if (!blocked && window.S && S.readFailed) {
       var f = S.readFailed();
@@ -365,9 +375,18 @@
     return n;
   }
 
+  /* Стан обміну питають на кожну його зміну, і щоразу тут розбирались усі
+     страхові копії бази — на телефоні це мегабайти кілька разів за старт.
+     Тепер — лише коли самі копії змінились. */
+  var backupsRaw = null, backupsList = [];
   Cloud.backups = function () {
+    var raw = diskGet(BACKUP) || '[]';
+    if (raw !== backupsRaw) { backupsList = readBackups(raw); backupsRaw = raw; }
+    return backupsList.map(function (b) { return Object.assign({}, b); });
+  };
+  function readBackups(raw) {
     try {
-      return JSON.parse(diskGet(BACKUP) || '[]').map(function (b, i) {
+      return JSON.parse(raw).map(function (b, i) {
         var students = 0, archived = 0, total = 0;
         try {
           var parsed = JSON.parse(b.data);

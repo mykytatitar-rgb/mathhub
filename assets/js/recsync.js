@@ -131,9 +131,20 @@
     }, 1000);
   }
 
+  /* Що заважає обміну записами: 'doc' — сама база тут не прочиталась
+     (порожнеча не має ні їхати, ні змішуватись із серверним), 'version' —
+     код старіший за сервер (писати не можна, читати можна). Дошки, що не
+     прочиталися, записів не стосуються: досі вони зупиняли обмін усім, і
+     телефон, якому 50 МБ дошок не встигали прочитатися, глух в обидва боки. */
+  function block() {
+    if (Cloud.recordsBlocked) return Cloud.recordsBlocked();
+    return Cloud.writesBlocked && Cloud.writesBlocked() ? 'doc' : false;
+  }
+  function canRead() {
+    return !!(window.Cloud && Cloud.available() && Cloud.signedIn() && block() !== 'doc');
+  }
   function ready() {
-    return !!(window.Cloud && Cloud.available() && Cloud.signedIn() &&
-      !(Cloud.writesBlocked && Cloud.writesBlocked()));
+    return canRead() && !block();
   }
 
   function device() {
@@ -386,7 +397,7 @@
    * перекрилася б старішою серверною, і виглядало б це як втрата.
    */
   R.pull = function (full) {
-    if (!ready()) return Promise.resolve(0);
+    if (!canRead()) return Promise.resolve(0);
     if (pulling) return pulling;
 
     var path = '/rest/v1/records?select=kind,id,data,rev,deleted,updated_at&order=updated_at.asc,kind.asc,id.asc';
@@ -725,7 +736,7 @@
     var tick = function () {
       pullTimer = setTimeout(function () {
         pullTimer = null;
-        if (document.visibilityState !== 'hidden' && navigator.onLine && ready()) {
+        if (document.visibilityState !== 'hidden' && navigator.onLine && canRead()) {
           R.pull().then(tick, tick);
         } else {
           tick();
@@ -739,7 +750,7 @@
     loadState();
     if (started) return;
     // запускаємось лише з входом, інакше вхід без перезавантаження нічого б не ввімкнув
-    if (!ready()) return;
+    if (!canRead()) return;
     started = true;
 
     if (hashes === null) R.scan();

@@ -33,6 +33,29 @@
   var PREFIXES = ['mathhub.board:'];
   var MOVED_FLAG = 'mathhub.disk.moved';      // перенесення вже було — localStorage більше не джерело
 
+  /* Давні повні копії всіх дошок: спільний запис до поділу й копія
+     «відомого серверу» до того, як вона переїхала в саму дошку. Їх ніхто не
+     стирає, і досі кожен старт тягнув їх у памʼять — на телефоні це десятки
+     мегабайтів зайвого поверх самих дошок (і «Aw, Snap!» на старті).
+     Читаємо їх, лише коли без них справді не обійтись. */
+  var LAZY = ['mathhub.boards.v1', 'mathhub.ops.base'];
+  var BOARD_ORDER = 'mathhub.boards.order';
+
+  function lazyNeeded(key, pairs) {
+    var order = null;
+    pairs.forEach(function (p) { if (p[0] === BOARD_ORDER) order = p[1]; });
+    var boards = Object.keys(mem).filter(function (k) { return k.indexOf(PREFIXES[0]) === 0 && mem[k] != null; });
+    if (key === 'mathhub.boards.v1') {
+      if (order == null) return true;                     // нового формату ще немає
+      try {
+        // у списку є дошка, якої немає окремим записом, — вона лише в давньому
+        return JSON.parse(order).some(function (id) { return mem[PREFIXES[0] + id] == null; });
+      } catch (e) { return true; }
+    }
+    // дошка без власної копії «відомого серверу» бере її з давньої
+    return !boards.length || boards.some(function (k) { return mem[k].indexOf('"_sync"') < 0; });
+  }
+
   var mem = {};           // ключ → рядок (null — запису немає)
   var ready = false;
   var fallback = false;   // IndexedDB недоступний — працюємо по-старому
@@ -194,8 +217,18 @@
 
   /* ---------- старт ---------- */
 
+  var started = Date.now();
   function finish() {
     ready = true;
+    // у «чорну скриньку»: скільки читали й скільки підняли в памʼять
+    try {
+      if (window.BootGuard && BootGuard.note) {
+        var chars = 0;
+        Object.keys(mem).forEach(function (k) { if (mem[k]) chars += mem[k].length; });
+        BootGuard.note('сховище ' + (Date.now() - started) + ' мс, ' + Math.round(chars / 1048576) + ' МБ' +
+          (broken ? ' — дошки не прочиталися' : fallback ? ' — без IndexedDB' : ''));
+      }
+    } catch (e) {}
     var list = waiters;
     waiters = [];
     list.forEach(function (fn) { try { fn(); } catch (e) { console.error(e); } });
@@ -237,14 +270,18 @@
 
     open().then(function (db) {
       idb = db;
-      return Promise.all(BIG.map(function (key) {
-        return idbGet(key).then(function (v) { return [key, v]; });
-      })).then(function (pairs) {
+      function read(keys) {
+        return Promise.all(keys.map(function (key) {
+          return idbGet(key).then(function (v) { return [key, v]; });
+        }));
+      }
+      return read(BIG.filter(function (k) { return LAZY.indexOf(k) < 0; })).then(function (pairs) {
         return Promise.all(PREFIXES.map(idbPrefix)).then(function (lists) {
           lists.forEach(function (list) {
             list.forEach(function (kv) { mem[kv[0]] = kv[1] == null ? null : String(kv[1]); });
           });
-          return pairs;
+          var want = LAZY.filter(function (k) { return lazyNeeded(k, pairs); });
+          return read(want).then(function (more) { return pairs.concat(more); });
         });
       });
     }).then(function (pairs) {

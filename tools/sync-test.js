@@ -554,6 +554,57 @@ scenario('Посилання для учня, створене на одному
   });
 });
 
+/* На телефоні дошки (50 МБ) не встигали прочитатися за 8 с — і разом із
+   записом дошок зупинявся обмін УСІМ: урок, позначений на телефоні, не
+   доходив на ноутбук, а скасований на ноутбуці — на телефон. Розклад і
+   оплати від дошок не залежать. */
+scenario('Записи: дошки не прочиталися — уроки однаково ходять в обидва боки', function () {
+  var srv = new Server(), A = new Device('A', srv), B = new Device('B', srv);
+  A.ctx.Cloud.writesBlocked = function () { return true; };      // дошки на A не прочиталися
+  A.ctx.Cloud.recordsBlocked = function () { return false; };    // а база прочиталась
+  var RA = A.ctx.RecSync, RB = B.ctx.RecSync;
+  RA.start(); RB.start();
+  return wait(50).then(function () {
+    A.db.lessons.push({ id: 'l1', status: 'done' });
+    A.ctx.S.save(); RA.scan();
+    B.db.lessons.push({ id: 'l2', status: 'cancelled' });
+    B.ctx.S.save(); RB.scan();
+    return Promise.all([RA.flush(), RB.flush()]);
+  }).then(function () { return Promise.all([RA.pull(), RB.pull()]); })
+  .then(function () {
+    same(B.db.lessons.map(function (l) { return l.id; }).sort().join(), 'l1,l2', 'урок із A дійшов на B');
+    same(A.db.lessons.map(function (l) { return l.id; }).sort().join(), 'l1,l2', 'урок із B дійшов на A');
+  });
+});
+
+/* Вкладка зі старим кодом не пише на сервер (версійний замок), але читати
+   їй ніщо не заважає: досі вона глухла в обидва боки, поки не
+   перезавантажиться, — а на телефоні перезавантаження буває пропущене. */
+scenario('Записи: стара вкладка не пише, але чуже бачить; своє відправить після оновлення', function () {
+  var srv = new Server(), A = new Device('A', srv), B = new Device('B', srv);
+  var lock = 'version';
+  A.ctx.Cloud.writesBlocked = function () { return !!lock; };
+  A.ctx.Cloud.recordsBlocked = function () { return lock; };
+  var RA = A.ctx.RecSync, RB = B.ctx.RecSync;
+  RA.start(); RB.start();
+  return wait(50).then(function () {
+    B.db.lessons.push({ id: 'l2', status: 'cancelled' });
+    B.ctx.S.save(); RB.scan();
+    A.db.lessons.push({ id: 'l1', status: 'done' });
+    A.ctx.S.save(); RA.scan();
+    return Promise.all([RA.flush(), RB.flush()]);
+  }).then(function () { return RA.pull(); })
+  .then(function () {
+    same(A.db.lessons.map(function (l) { return l.id; }).sort().join(), 'l1,l2', 'стара вкладка бачить урок з B');
+    ok(!srv.records['lessons/l1'], 'але свого на сервер не пише');
+    lock = false;                                    // перезавантажились на свіжий код
+    return RA.flush();
+  }).then(function () { return RB.pull(); })
+  .then(function () {
+    same(B.db.lessons.map(function (l) { return l.id; }).sort().join(), 'l1,l2', 'після оновлення своє доїхало');
+  });
+});
+
 scenario('Записи: різні учні з двох пристроїв, той самий — пізніший, видалення доходить', function () {
   var srv = new Server(), A = new Device('A', srv), B = new Device('B', srv);
   var RA = A.ctx.RecSync, RB = B.ctx.RecSync;

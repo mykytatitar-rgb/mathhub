@@ -1172,6 +1172,7 @@
         return lost + found;
       });
     }).then(function (n) {
+      noteVerified(boardId);
       if (n && O.view && O.view.id === boardId && O.view.refresh) {
         try { O.view.refresh(); } catch (e) { console.warn('refresh:', e); }
       }
@@ -1185,15 +1186,32 @@
   /* Звірка всіх дошок, що мінялися останнім часом, — у фоні, по одній і
      не частіше ніж раз на добу кожну. Так розбіжність лікується й на
      дошці, яку зараз ніхто не відкриває. */
+  /* Звірка тягне з сервера цілу дошку. Досі — щодня кожну дошку за 45 днів
+     на кожному пристрої й ще при кожному відкритті дошки: десятки МБ на
+     день лише на перевірку, і Supabase заблокував проєкт за трафік.
+     Розбіжність — рідкість (звичайне читання йде журналом), тож звіряємо
+     кожну дошку раз на тиждень, і лише ті, що мінялися за два тижні. */
   var VERIFIED = 'mathhub.boards.verified';
+  var VERIFY_EVERY = 7 * 86400000;
+  function verifiedMap() {
+    try { return JSON.parse(localStorage.getItem(VERIFIED) || '{}') || {}; } catch (e) { return {}; }
+  }
+  function noteVerified(id) {
+    var done = verifiedMap();
+    done[id] = new Date().toISOString().slice(0, 10);
+    try { localStorage.setItem(VERIFIED, JSON.stringify(done)); } catch (e) {}
+  }
+  /** Чи пора звіряти дошку з сервером (востаннє — понад тиждень тому). */
+  O.verifyDue = function (id) {
+    var at = Date.parse(verifiedMap()[id] || '') || 0;
+    return Date.now() - at >= VERIFY_EVERY;
+  };
+
   O.verifySweep = function (days) {
     if (!ready()) return Promise.resolve(0);
-    var done = {};
-    try { done = JSON.parse(localStorage.getItem(VERIFIED) || '{}') || {}; } catch (e) { done = {}; }
-    var since = Date.now() - (days || 45) * 86400000;
-    var today = new Date().toISOString().slice(0, 10);
+    var since = Date.now() - (days || 14) * 86400000;
     var ids = (S.db().boards || []).filter(function (b) {
-      if (!b || !b.lessonId || !established(b) || done[b.lessonId] === today) return false;
+      if (!b || !b.lessonId || !established(b) || !O.verifyDue(b.lessonId)) return false;
       return !b.updatedAt || Date.parse(b.updatedAt) >= since;
     }).map(function (b) { return b.lessonId; });
 
@@ -1203,8 +1221,6 @@
         if (!ready()) return;
         return O.verify(id).then(function (n) {
           fixed += n;
-          done[id] = today;
-          try { localStorage.setItem(VERIFIED, JSON.stringify(done)); } catch (e) {}
           return new Promise(function (r) { setTimeout(r, 1200); });
         });
       });

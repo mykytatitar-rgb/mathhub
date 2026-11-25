@@ -639,6 +639,25 @@ scenario('Трафік: свій же знімок дошки вдруге не 
   });
 });
 
+scenario('Трафік: звірка дошки — раз на тиждень, а не щодня й на кожне відкриття', function () {
+  var srv = new Server(), A = new Device('A', srv), O = A.ctx.BoardOps;
+  A.newBoard('L1'); A.draw('L1', 0, 'a1');
+  return A.sync('L1').then(function () { return O.leave('L1'); })
+  .then(function () {
+    A.board('L1').updatedAt = new Date().toISOString();
+    ok(O.verifyDue('L1') === false, 'щойно звірено — наступна не скоро');
+    var week = new Date(Date.now() - 8 * 86400000).toISOString().slice(0, 10);
+    A.ls['mathhub.boards.verified'] = JSON.stringify({ L1: week });
+    ok(O.verifyDue('L1') === true, 'понад тиждень тому — пора');
+    var days3 = new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10);
+    A.ls['mathhub.boards.verified'] = JSON.stringify({ L1: days3 });
+    srv.dataReads = 0;
+    return O.verifySweep();
+  }).then(function () {
+    same(srv.dataReads, 0, 'звірена 3 дні тому — фонова звірка її не тягне');
+  });
+});
+
 scenario('Записи: пристрій знає, коли востаннє бачив чуже і чому ні', function () {
   var srv = new Server(), A = new Device('A', srv), RA = A.ctx.RecSync;
   RA.start();

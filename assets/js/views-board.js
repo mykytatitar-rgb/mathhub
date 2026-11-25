@@ -411,7 +411,9 @@
        своє доїжджає на сервер, пропущене приходить сюди. */
     if (window.BoardOps) {
       BoardOps.pull(lessonId, cur.board).then(function () {
-        if (cur && cur.lessonId === lessonId && BoardOps.verify) return BoardOps.verify(lessonId);
+        // звірка тягне цілу дошку з сервера — не на кожне відкриття, а раз на тиждень
+        if (cur && cur.lessonId === lessonId && BoardOps.verify &&
+            (!BoardOps.verifyDue || BoardOps.verifyDue(lessonId))) return BoardOps.verify(lessonId);
       });
     }
 

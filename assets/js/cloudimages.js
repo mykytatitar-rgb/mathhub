@@ -62,6 +62,10 @@
          пристрої слайд ДЗ лишався без фото. */
       if (!blob) { absent[key] = Date.now(); return; }
       delete absent[key];
+      /* Більше за стелю сервера — навіть не пробуємо. Підручник на 94 МБ
+         слався по колу й щоразу читався в памʼять цілий, а сервер усе одно
+         відмовив би: це й валило сторінку. */
+      if (blob.size > SERVER_MAX) { markTooBig(key, blob.size); return; }
       return Cloud.request(objectPath(key), {
         method: 'POST',
         headers: { 'Content-Type': blob.type || 'application/octet-stream', 'x-upsert': 'true' },
@@ -73,15 +77,26 @@
         /* 413 — сервер відмовився через розмір. Це не збій мережі й не
            мине саме собою, тож повторювати нескінченно нема сенсу: файл
            лишається лише тут, і про це має бути сказано вголос. */
-        if (res.status === 413) {
-          tooBig[key] = blob.size || 1;
-          saveTooBig();
-          console.warn('Файл завеликий для сервера:', key);
-          return;
+        if (res.status === 413) { markTooBig(key, blob.size); return; }
+        // Supabase часто каже «завеликий» кодом 400, а 413 — лише в тілі відповіді
+        if (res.status === 400 && res.text) {
+          return res.text().then(function (t) {
+            if (/413|too large|maximum allowed size/i.test(t || '')) { markTooBig(key, blob.size); return; }
+            throw new Error('Сервер відповів 400');
+          });
         }
         throw new Error('Сервер відповів ' + res.status);
       });
     });
+  }
+
+  /* Стеля одного файлу в сховищі Supabase на безкоштовному тарифі — 50 МБ. */
+  var SERVER_MAX = 50 * 1048576;
+
+  function markTooBig(key, size) {
+    tooBig[key] = size || 1;
+    saveTooBig();
+    console.warn('Файл завеликий для сервера:', key);
   }
 
   /* Список того, що сервер не бере. Тримаємо між запусками: інакше кожне
@@ -93,25 +108,34 @@
     try { localStorage.setItem(TOOBIG, JSON.stringify(tooBig)); } catch (e) {}
   }
 
+  /* Пауза після невдачі: 1 хв, 2, 4… до години; вдала відправка скидає.
+     Пауза — момент часу, який перевіряє сам drain, а не таймер: досі
+     щоденна перевірка кожні 20 с запускала drain повз паузу, а кожна
+     невдача додавала ще один ланцюжок таймерів — спроби множилися (402
+     від сервера давав тисячу спроб за пів години). */
+  var FAIL_MIN = 60000, FAIL_MAX = 3600000;
+  var failPause = 0, nextTry = 0, waking = false;
+
   function drain() {
     if (busy || !queue.length || !ready() || !navigator.onLine) return;
+    if (Date.now() < nextTry) return;
     busy = true;
     var key = queue.shift();
-    var failed = false;
     uploadOne(key)
-      .catch(function (e) {
-        // не вдалося — повертаємо в кінець черги, спробуємо пізніше
-        console.warn('Картинка не поїхала (' + key + '):', e.message);
-        if (queue.indexOf(key) < 0) queue.push(key);
-        failed = true;
-      })
+      .then(function () { failPause = 0; nextTry = 0; },
+            function (e) {
+              // не вдалося — повертаємо в кінець черги, спробуємо пізніше
+              console.warn('Картинка не поїхала (' + key + '):', e.message);
+              if (queue.indexOf(key) < 0) queue.push(key);
+              failPause = Math.min(failPause ? failPause * 2 : FAIL_MIN, FAIL_MAX);
+              nextTry = Date.now() + failPause;
+            })
       .then(function () {
         busy = false;
-        /* По одній, щоб не забивати канал. Після невдачі — пауза в хвилину:
-           досі файл, що не відправився, пробували знову через 0,3 с, і
-           книжка на 90 МБ читалась і слалась по колу без кінця — на
-           телефоні це забирало всю памʼять. */
-        if (queue.length) setTimeout(drain, failed ? 60000 : 300);
+        // по одній, щоб не забивати канал; один таймер на всіх
+        if (!queue.length || waking) return;
+        waking = true;
+        setTimeout(function () { waking = false; drain(); }, Math.max(300, nextTry - Date.now()));
       });
   }
 

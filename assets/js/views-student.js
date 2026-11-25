@@ -262,6 +262,8 @@
           '</div>';
         })() +
 
+        visitsCard(st) +
+
         (strong.length ? '<div class="card">' +
           '<div class="card-head"><div><h2 class="card-title">Сильні теми</h2></div></div>' +
           strong.map(function (p) {
@@ -541,6 +543,93 @@
         .then(function (u) { row.url = u || ''; })
         .catch(function () { /* один урок, що не опублікувався, не має валити портал */ });
     })).then(function () { return rows; });
+  }
+
+  /* ---------- Відвідування дошки ----------
+     Коли учень і ви заходили на дошки його уроків і скільки пробули. Дані
+     пише share/engine/visits.js; читати їх може лише репетитор (RLS).
+     Читаємо не частіше ніж раз на хвилину — картку перемальовують часто,
+     а трафік на безкоштовному Supabase обмежений. */
+  var visitsCache = { at: 0, rows: null, err: null, p: null };
+
+  function loadVisits() {
+    if (visitsCache.p) return visitsCache.p;
+    if (Date.now() - visitsCache.at < 60000 && (visitsCache.rows || visitsCache.err)) return Promise.resolve();
+    visitsCache.p = Cloud.request('/rest/v1/board_visits?select=lesson_id,who,device,started_at,last_at' +
+        '&order=started_at.desc&limit=500', { method: 'GET' })
+      .then(function (res) {
+        if (res.status === 404) throw new Error('setup');
+        if (!res.ok) throw new Error('Сервер відповів ' + res.status);
+        return res.json();
+      })
+      .then(function (rows) { visitsCache.rows = rows || []; visitsCache.err = null; },
+            function (e) { visitsCache.err = (e && e.message) || 'помилка'; })
+      .then(function () { visitsCache.at = Date.now(); visitsCache.p = null; });
+    return visitsCache.p;
+  }
+
+  function hm(iso) {
+    var d = new Date(iso);
+    return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+  }
+  function dur(min) {
+    return min >= 60 ? Math.floor(min / 60) + ' год' + (min % 60 ? ' ' + (min % 60) + ' хв' : '') : min + ' хв';
+  }
+
+  function fillVisits(stId) {
+    var el = document.querySelector('[data-visits="' + stId + '"]');
+    if (!el || !window.Visits) return;
+    if (visitsCache.err) {
+      el.innerHTML = '<div class="small muted" style="padding:0 24px 20px">' + (visitsCache.err === 'setup'
+        ? 'На сервері ще немає таблиці відвідувань — запустіть supabase/board-visits.sql.'
+        : 'Не вдалося прочитати: ' + U.esc(visitsCache.err) + '.') + '</div>';
+      return;
+    }
+    var lessons = S.db().lessons.filter(function (l) { return l.studentId === stId; });
+    var byId = {};
+    lessons.forEach(function (l) { byId[l.id] = l; });
+    var s = Visits.summary(visitsCache.rows, Object.keys(byId), Date.now());
+    var head = el.closest('.card') && el.closest('.card').querySelector('[data-visits-sub]');
+    if (head) {
+      head.textContent = s.month.studentVisits
+        ? 'за 30 днів: учень ' + dur(s.month.student) + ' (' + U.pl(s.month.studentVisits, 'візит', 'візити', 'візитів') + ')' +
+          (s.month.tutorVisits ? ' · ви ' + dur(s.month.tutor) : '')
+        : 'за 30 днів учень на дошку не заходив';
+    }
+    if (!s.lessons.length) {
+      el.innerHTML = '<div class="small muted" style="padding:0 24px 20px">Відвідувань ще не записано. ' +
+        'Облік іде з того дня, як його ввімкнули.</div>';
+      return;
+    }
+    el.innerHTML = '<div class="list">' + s.lessons.slice(0, 8).map(function (g) {
+      var l = byId[g.id] || {};
+      return '<div class="list__item" style="display:block">' +
+        '<div style="font-weight:650;font-size:13.5px" class="truncate">' + U.fmtDate(l.date) +
+          (l.time ? ', ' + U.esc(l.time) : '') + ' · ' + U.esc(l.topic || 'Без теми') + '</div>' +
+        g.visits.map(function (v) {
+          return '<div class="small" style="margin-top:4px;display:flex;gap:8px">' +
+            '<span style="min-width:52px;font-weight:600;color:' + (v.who === 'student' ? 'var(--violet)' : 'var(--muted)') + '">' +
+              (v.who === 'student' ? 'Учень' : 'Ви') + '</span>' +
+            '<span>' + hm(v.start) + '–' + hm(v.end) + '</span>' +
+            '<span class="bold">' + dur(v.min) + '</span>' +
+            '<span class="muted">' + U.esc(v.device) + '</span></div>';
+        }).join('') + '</div>';
+    }).join('') + '</div>';
+  }
+
+  function visitsCard(st) {
+    if (!window.Visits || !window.Cloud || !Cloud.signedIn()) return '';
+    setTimeout(function () {
+      if (visitsCache.rows || visitsCache.err) fillVisits(st.id);
+      loadVisits().then(function () { fillVisits(st.id); });
+    }, 0);
+    return '<div class="card card--pad0">' +
+      '<div class="card-head" style="padding:22px 24px 12px;margin:0">' +
+        '<div><h2 class="card-title">Відвідування дошки</h2>' +
+        '<div class="card-sub" data-visits-sub>коли заходили й скільки пробули · бачите лише ви</div></div>' +
+      '</div>' +
+      '<div data-visits="' + U.esc(st.id) + '"><div class="small muted" style="padding:0 24px 20px">Завантажую…</div></div>' +
+    '</div>';
   }
 
   /** Матеріали в тому вигляді, у якому їх побачить учень. */

@@ -431,6 +431,16 @@
     paintSaved();
     joinLive();
 
+    /* Облік відвідувань: коли ви заходили на дошку уроку й скільки пробули
+       (видно в картці учня). Лише для уроків, і лише з входом. */
+    if (window.Visits && S.get('lessons', lessonId) && window.Cloud && Cloud.signedIn()) {
+      cur.visitStop = Visits.track(function (id, device) {
+        return Cloud.request('/rest/v1/rpc/visit_beat', {
+          method: 'POST', body: JSON.stringify({ p_visit: id, p_lesson: lessonId, p_device: device })
+        });
+      });
+    }
+
     // поки дошка відкрита — забираємо те, що пише учень за посиланням
     cur.pullTimer = setInterval(function () {
       pullContributions();
@@ -918,6 +928,7 @@
     if (cur.saveTimer) clearTimeout(cur.saveTimer);
     if (cur.thumbTimer) clearTimeout(cur.thumbTimer);
     if (cur.pullTimer) clearInterval(cur.pullTimer);
+    if (cur.visitStop) { cur.visitStop(); cur.visitStop = null; }
     if (cur.savedOff) { cur.savedOff(); cur.savedOff = null; }
     if (cur.pres) { cur.pres.stop(); cur.pres = null; }     // «бувай» — до виходу з каналу
     if (cur.live) { cur.live.leave(); cur.live = null; }

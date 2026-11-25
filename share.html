@@ -749,7 +749,7 @@
   /* Номер версії рушія — його піднімає tools/bump.js разом із кабінетом.
      Без номера кожен файл брався окремо «мережа або кеш за 1,5 с», і на
      повільному інтернеті рушій складався з файлів різних версій. */
-  var ENGINE_V = 212;
+  var ENGINE_V = 213;
 
   /* Файл рушія не завантажився — пробуємо ще двічі: один обрив звʼязку на
      телефоні не має відправляти учня на стару сторінку без живої дошки. */
@@ -868,7 +868,19 @@
     });
   }
 
+  /* Облік відвідувань: коли учень зайшов на дошку й скільки пробув. Бачить
+     лише репетитор у картці учня; збій тут уроку не заважає. */
+  function trackVisit() {
+    loadScript('share/engine/visits.js?v=' + ENGINE_V).then(function () {
+      if (!window.Visits) return;
+      window.Visits.track(function (id, device) {
+        return rpc('visit_beat', { p_visit: id, p_token: token, p_device: device });
+      });
+    }, function () {});
+  }
+
   askBoard().then(function (rows) {
+    trackVisit();
     var row = rows && rows[0];
     if (!row || !row.data) return startLegacy();
     return startLive(row).catch(function (e) {

@@ -2056,6 +2056,27 @@
             ' на відправку', 'Черга не порожніє з ' + hhmm(waitFrom) + '. Найчастіше — немає інтернету; ' +
             'поїде саме.');
         }
+        // і в інший бік: чи бачить цей пристрій зміни з інших
+        var rd = window.RecSync && RecSync.readState ? RecSync.readState() : null;
+        if (rd && (!rd.canRead || !rd.started || rd.err || !rd.at || Date.now() - rd.at > 3 * 60000)) {
+          trouble = true;
+          out += healthRow('off', 'Зміни з інших пристроїв сюди не доходять',
+            (rd.err ? 'Остання спроба о ' + hhmm(rd.err.at) + ': ' + U.esc(rd.err.msg) + '. ' : '') +
+            (rd.at ? 'Востаннє прочитано о ' + hhmm(rd.at) + '. ' : 'Ще жодного разу не прочитано. ') +
+            (rd.blocked === 'doc' ? 'База на цьому пристрої не прочиталась. ' :
+              rd.blocked === 'version' ? 'Сторінка на старій версії. ' : '') +
+            (!rd.started ? 'Обмін не запустився. ' : '') +
+            'Зробіть скріншот цього рядка й надішліть.');
+        } else if (rd) {
+          out += healthRow('on', 'Зміни з інших пристроїв доходять', 'Востаннє прочитано о ' + hhmm(rd.at) + '.');
+        }
+        if (rd && !rd.canWrite) {
+          trouble = true;
+          out += healthRow('off', 'Зміни звідси не відправляються',
+            (rd.blocked === 'version' ? 'Сторінка на старій версії — перезавантажте її.' :
+              rd.blocked === 'doc' ? 'База на цьому пристрої не прочиталась.' : 'Обмін вимкнено.') +
+            ' Зробіть скріншот і надішліть.');
+        }
         if (!trouble) {
           var s = Cloud.status();
           out += healthRow('on', 'Усе на сервері',

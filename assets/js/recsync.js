@@ -370,6 +370,15 @@
 
   var pulling = null;
 
+  /* Для «Чи все ціле»: коли востаннє вдалося прочитати чуже і чому ні.
+     Досі збій читання йшов лише в консоль, і пристрій міг годинами не
+     бачити змін з інших, а панель казала «усе на сервері». */
+  var readAt = null, readErr = null;
+  R.readState = function () {
+    var b = window.Cloud && Cloud.recordsBlocked ? Cloud.recordsBlocked() : false;
+    return { at: readAt, err: readErr, started: started, blocked: b, canRead: canRead(), canWrite: ready() };
+  };
+
   /* Дії, яким потрібне свіже з сервера, а не те, з чим пристрій
      прокинувся. Насамперед — заповнення розкладу наперед: пристрій, що
      тиждень лежав, досі створював уроки за старими даними раніше, ніж
@@ -441,6 +450,7 @@
       return page(null, []);
     }).then(function (rows) {
       ok = true;
+      readAt = Date.now(); readErr = null;
 
       var changed = 0;
       var newest = since;
@@ -488,6 +498,7 @@
       return changed;
     }).catch(function (e) {
       console.warn('Записи не вдалося прочитати:', e && e.message);
+      readErr = { at: Date.now(), msg: (e && e.message) || 'помилка' };
       return 0;
     }).then(function (n) {
       pulling = null;

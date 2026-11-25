@@ -605,6 +605,22 @@ scenario('Записи: стара вкладка не пише, але чуже
   });
 });
 
+scenario('Записи: пристрій знає, коли востаннє бачив чуже і чому ні', function () {
+  var srv = new Server(), A = new Device('A', srv), RA = A.ctx.RecSync;
+  RA.start();
+  return wait(50).then(function () {
+    ok(RA.readState().at > 0 && !RA.readState().err, 'прочитано, без помилки');
+    A.setOnline(false);
+    return RA.pull();
+  }).then(function () {
+    ok(!!RA.readState().err, 'збій читання видно, а не лише в консолі');
+    A.setOnline(true);
+    return RA.pull();
+  }).then(function () {
+    ok(!RA.readState().err, 'прочиталось знову — збою більше немає');
+  });
+});
+
 scenario('Записи: різні учні з двох пристроїв, той самий — пізніший, видалення доходить', function () {
   var srv = new Server(), A = new Device('A', srv), B = new Device('B', srv);
   var RA = A.ctx.RecSync, RB = B.ctx.RecSync;

@@ -42,7 +42,10 @@
   var PENDING = 'mathhub.boards.pending'; // {boardId: 1} — можливо, щось не поїхало
 
   var BATCH = 150;            // дій за один запис
-  var SNAP_MS = 20000;        // знімок дошки — не частіше ніж раз на 20 с
+  /* Знімок дошки — не частіше ніж раз на 2 хв. Правда — у журналі, знімок
+     лише скорочує читання для нового пристрою; а дошка, відкрита на двох
+     пристроях, при 20 с щоразу тягнула чужий знімок цілим (трафік). */
+  var SNAP_MS = 120000;
   var OVERLAP_MS = 20000;     // дочитуємо трохи назад: дії, що зʼявились у базі із запізненням
   var RECENT = 1500;          // скільки номерів прочитаних дій памʼятати для цього
   var RETRY_MS = 15000;
@@ -457,9 +460,37 @@
      Мережа
      ============================================================ */
 
+  /* Знімок, який цей пристрій уже бачив або сам записав, — у памʼяті.
+     Знімок пишеться щохвилі, і досі перед кожним записом (і кожною звіркою)
+     пристрій завантажував увесь попередній — найчастіше той самий, що сам
+     щойно записав. Дошка на кілька МБ давала сотні МБ трафіку за урок:
+     13 ГБ за місяць, і Supabase заблокував проєкт. Тепер спершу питаємо
+     лише номер версії (байти), а цілу дошку тягнемо, тільки коли знімок
+     записав хтось інший. Памʼятаємо дві останні дошки — більше на телефоні
+     тримати не варто. */
+  var snapCache = {}, snapOrder = [];
+  function rememberSnap(id, rev, data, at) {
+    snapCache[id] = { rev: rev, data: data, updated_at: at };
+    snapOrder = snapOrder.filter(function (x) { return x !== id; }).concat(id);
+    while (snapOrder.length > 2) delete snapCache[snapOrder.shift()];
+  }
+
   function fetchSnapshot(id) {
-    return req('/rest/v1/boards?select=rev,data,updated_at&board_id=eq.' + enc(id))
-      .then(function (rows) { return rows && rows[0] ? rows[0] : null; });
+    function full() {
+      return req('/rest/v1/boards?select=rev,data,updated_at&board_id=eq.' + enc(id))
+        .then(function (rows) {
+          var r = rows && rows[0] ? rows[0] : null;
+          if (r && r.data) rememberSnap(id, r.rev, r.data, r.updated_at);
+          return r;
+        });
+    }
+    var c = snapCache[id];
+    if (!c) return full();
+    return req('/rest/v1/boards?select=rev,updated_at&board_id=eq.' + enc(id)).then(function (rows) {
+      var r = rows && rows[0];
+      if (r && r.rev === c.rev) return { rev: c.rev, data: c.data, updated_at: c.updated_at };
+      return full();
+    });
   }
 
   /**
@@ -925,6 +956,7 @@
         rev = Number(rev);
         if (rev === -1) return retried ? false : writeSnapshot(board, true);   // хтось записав між читанням і записом
         if (rev > 0) {
+          rememberSnap(board.lessonId, rev, data, null);   // наступного разу — без завантаження
           s.snapRev = rev;
           s.snapSeen = data._seen;
           s.snapAt = Date.now();

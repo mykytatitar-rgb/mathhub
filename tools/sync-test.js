@@ -147,7 +147,7 @@ Server.prototype.handle = function (who, url, opts) {
       var b = self.boards[id];
       var row = { board_id: id, rev: b.rev, updated_at: b.updated_at };
       if (sel.indexOf('data->_seen') >= 0) row.seen = b.data._seen;
-      else if (sel.indexOf('data') >= 0) row.data = JSON.parse(JSON.stringify(b.data));
+      else if (sel.indexOf('data') >= 0) { row.data = JSON.parse(JSON.stringify(b.data)); self.dataReads = (self.dataReads || 0) + 1; }
       return row;
     });
   }
@@ -602,6 +602,40 @@ scenario('Записи: стара вкладка не пише, але чуже
   }).then(function () { return RB.pull(); })
   .then(function () {
     same(B.db.lessons.map(function (l) { return l.id; }).sort().join(), 'l1,l2', 'після оновлення своє доїхало');
+  });
+});
+
+/* Трафік: знімок дошки пишеться щохвилі, і перед кожним записом пристрій
+   завантажував із сервера ВЕСЬ попередній знімок — той, що сам щойно
+   записав. Дошка на кілька МБ давала сотні МБ за урок (13 ГБ за місяць,
+   Supabase заблокував проєкт). */
+scenario('Трафік: свій же знімок дошки вдруге не завантажується', function () {
+  var srv = new Server(), A = new Device('A', srv), B = new Device('B', srv);
+  A.newBoard('L1'); A.draw('L1', 0, 'a1');
+  return A.sync('L1').then(function () { return A.ctx.BoardOps.leave('L1'); })
+  .then(function () {
+    ok(!!srv.boards.L1, 'знімок на сервері є');
+    srv.dataReads = 0;
+    A.draw('L1', 0, 'a2');
+    return A.sync('L1');
+  }).then(function () { return A.ctx.BoardOps.leave('L1'); })
+  .then(function () {
+    same(srv.dataReads, 0, 'другий знімок — без завантаження цілої дошки');
+    same(JSON.stringify(srv.boards.L1.data.slides[0].items.map(function (i) { return i.id; })), '["a1","a2"]',
+      'а знімок однаково повний');
+    // чужий новіший знімок — завантажується, як і належить
+    return B.ctx.BoardOps.fetchMissing();
+  }).then(function () { return B.pull('L1'); })
+  .then(function () {
+    B.draw('L1', 0, 'b1');
+    return B.sync('L1');
+  }).then(function () { return B.ctx.BoardOps.leave('L1'); })
+  .then(function () { srv.dataReads = 0; A.draw('L1', 0, 'a3'); return A.sync('L1'); })
+  .then(function () { return A.ctx.BoardOps.leave('L1'); })
+  .then(function () {
+    ok(srv.dataReads >= 1, 'знімок записав інший пристрій — його завантажено');
+    same(JSON.stringify(srv.boards.L1.data.slides[0].items.map(function (i) { return i.id; }).sort()), '["a1","a2","a3","b1"]',
+      'знімок містить і своє, і чуже');
   });
 });
 

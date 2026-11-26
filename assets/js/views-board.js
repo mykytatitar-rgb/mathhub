@@ -4491,17 +4491,16 @@
       return each.then(function () {
         if (cur !== host || cur.engine.slide !== slideRef || !metas.length) return;
         var e = cur.engine;
-        // висота сторінки — 70 % екрана; полотно без розміру (сховане) дало б невидимі сторінки нульового розміру
-        var H = (e.cssH > 0 ? e.cssH : 800) * 0.7 / e.scale;
-        var boxes = PdfPages.layout(metas, spot, H, H * 0.05);
+        var H = PdfPages.PAGE_H;
+        var boxes = PdfPages.place(metas, spot);
         e.snapshot();
         var items = metas.map(function (m, i) { return e.placeImage(m, boxes[i]); }).filter(Boolean);
         e.setTool('select');
         e.setSelection(items);
         e.changed();
-        // увесь рядок у кадрі: віддаляємо, якщо не вліз, але не наближаємо
+        // увесь рядок у кадрі: віддаляємо, якщо не вліз; наближаємо не далі 100 %
         var last = boxes[boxes.length - 1];
-        e.showBounds({ x1: boxes[0].x, y1: boxes[0].y, x2: last.x + last.w, y2: last.y + last.h }, true);
+        e.showBounds({ x1: boxes[0].x, y1: boxes[0].y, x2: last.x + last.w, y2: last.y + last.h }, 1);
         e.render();
         flushSave();
         renderRail();

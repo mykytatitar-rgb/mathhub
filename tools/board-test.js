@@ -807,6 +807,46 @@ scenario('«Вмістити все»: на компʼютері поля ті �
   ok(p.scale > (375 - 120) / 1000 + 0.05, 'телефон: креслення займає більше ширини');
 });
 
+scenario('Рамка виділення біля краю екрана — дошка їде сама й виділяє далі (як у Miro)', function () {
+  var d = engine().b;                                     // екран 1000×700, видно x 0..1000
+  d.slide.items.push({ id: 'near', t: 'l', c: '#000', w: 3, a: [100, 100, 200, 200] });
+  d.slide.items.push({ id: 'far', t: 'l', c: '#000', w: 3, a: [1500, 100, 1600, 200] });
+  d.setTool('select');
+  pid++;
+  d._pointerDown(ev(50, 50));
+  d._pointerMove(ev(500, 250));
+  ok(d._autoPan == null, 'посеред екрана — дошка стоїть');
+  d._pointerMove(ev(995, 250));                           // упритул до правого краю
+  for (var i = 0; i < 120; i++) d._autoPanStep(16);
+  ok(d.cam.x > 500, 'дошка поїхала праворуч (cam.x = ' + Math.round(d.cam.x) + ')');
+  ok(Math.abs(d.cam.y) < 1e-9, 'лише туди, куди край, — не вниз');
+  var ids = d.selection.map(function (x) { return x.id; }).sort().join(',');
+  same(ids, 'far,near', 'рамка дотягнулась до того, чого не було видно');
+  d._pointerMove(ev(500, 250));
+  var cx = d.cam.x;
+  d._autoPanStep(16);
+  ok(d.cam.x === cx, 'повернули курсор усередину — зупинилась');
+  d._pointerUp(ev(500, 250));
+});
+
+scenario('Перетягування обʼєкта до краю — дошка їде, обʼєкт лишається під курсором', function () {
+  var d = engine().b;
+  d.slide.items.push({ id: 'a', t: 'l', c: '#000', w: 3, a: [400, 300, 500, 300] });
+  d.setTool('select');
+  pid++;
+  d._pointerDown(ev(450, 300));
+  d._pointerMove(ev(700, 300));
+  d._pointerMove(ev(5, 300));                             // до лівого краю
+  for (var i = 0; i < 60; i++) d._autoPanStep(16);
+  var it = d.items()[0], w = d.toWorld(5, 300);
+  ok(d.cam.x < -200, 'дошка поїхала ліворуч');
+  ok(Math.abs((it.a[0] + it.a[2]) / 2 - w.x) < 1, 'обʼєкт їде разом із курсором');
+  d._pointerUp(ev(5, 300));
+  var cx = d.cam.x;
+  d._autoPanStep(16);
+  ok(d.cam.x === cx && d._autoPan == null, 'відпустили — стоп');
+});
+
 scenario('Показати вставлений рядок: з 2 % наближає, але не далі заданої межі', function () {
   var d = engine().b;
   d.scale = 0.02;

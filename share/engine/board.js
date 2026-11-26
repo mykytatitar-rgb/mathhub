@@ -4776,6 +4776,75 @@
     return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',.15)';
   }
 
+  Board.prototype._dragTo = function (w) {
+    /* Зсув — округлений так само, як координати (до 0,1), а решта лишається
+       на наступний рух: інакше округлення губилося на кожному кроці, і
+       обʼєкт відставав від курсора тим більше, чим довше його тягли. */
+    var dx = round(w.x - this._drag.x), dy = round(w.y - this._drag.y);
+    this._drag.items.forEach(function (it) { moveItem(it, dx, dy); });
+    this._drag.x += dx; this._drag.y += dy;
+    this.render();
+    if (this.opts.onSelect) this.opts.onSelect(this.selection);
+  };
+
+  Board.prototype._bandTo = function (w) {
+    this.band.x1 = w.x; this.band.y1 = w.y;
+    var found = this._itemsInRect(this.band);
+    this.selection = this.band.add
+      ? this.selection.filter(function (x) { return found.indexOf(x) < 0; }).concat(found)
+      : found;
+    if (this.opts.onSelect) this.opts.onSelect(this.selection);
+    this.render();
+  };
+
+  /* ---------- Автопрокрутка біля краю, як у Miro ----------
+
+     Тягнуть рамку виділення чи обʼєкти, і курсор підійшов до краю
+     полотна (або вийшов за нього) — дошка сама їде в той бік, а рамка
+     чи обʼєкт — разом із курсором. Що глибше в край, то швидше. */
+  var EDGE = 36;          // px від краю, де починає їхати
+  var PAN_PX = 9;         // px екрана за кадр (16 мс) на глибині одного EDGE
+
+  function edgeAxis(v, size) {
+    if (size < EDGE * 4) return 0;                 // крихітне полотно — без автопрокрутки
+    if (v < EDGE) return -Math.min(2, (EDGE - v) / EDGE);
+    if (v > size - EDGE) return Math.min(2, (v - (size - EDGE)) / EDGE);
+    return 0;
+  }
+
+  Board.prototype._edgePan = function (p) {
+    var vx = edgeAxis(p.x, this.cssW) * PAN_PX, vy = edgeAxis(p.y, this.cssH) * PAN_PX;
+    if (!vx && !vy) { this._autoPan = null; return; }
+    var start = !this._autoPan;
+    this._autoPan = { vx: vx, vy: vy, p: { x: p.x, y: p.y } };
+    if (start) this._autoPanLoop();
+  };
+
+  Board.prototype._autoPanLoop = function () {
+    var self = this, last = null;
+    function frame(t) {
+      if (!self._autoPan) return;
+      var dt = last == null ? 16 : Math.max(0, Math.min(50, t - last));
+      last = t;
+      self._autoPanStep(dt);
+      if (self._autoPan) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  };
+
+  /** Один крок автопрокрутки за dt мс. */
+  Board.prototype._autoPanStep = function (dt) {
+    var a = this._autoPan;
+    if (!a) return;
+    if (!this._drag && !this.band) { this._autoPan = null; return; }
+    var k = dt / 16;
+    this.cam.x += a.vx * k / this.scale;
+    this.cam.y += a.vy * k / this.scale;
+    var w = this.toWorld(a.p.x, a.p.y);
+    if (this._drag) this._dragTo(w); else this._bandTo(w);
+    if (this.opts.onViewChange) this.opts.onViewChange();
+  };
+
   Board.prototype._pointerMove = function (e) {
     if (!this.slide) return;
     // дотик, відкинутий як долоня, нічого не рухає й не пише
@@ -4867,25 +4936,9 @@
       return;
     }
 
-    if (this._drag) {
-      var dx = w.x - this._drag.x, dy = w.y - this._drag.y;
-      this._drag.items.forEach(function (it) { moveItem(it, dx, dy); });
-      this._drag.x = w.x; this._drag.y = w.y;
-      this.render();
-      if (this.opts.onSelect) this.opts.onSelect(this.selection);
-      return;
-    }
+    if (this._drag) { this._dragTo(w); this._edgePan(p); return; }
 
-    if (this.band) {
-      this.band.x1 = w.x; this.band.y1 = w.y;
-      var found = this._itemsInRect(this.band);
-      this.selection = this.band.add
-        ? this.selection.filter(function (x) { return found.indexOf(x) < 0; }).concat(found)
-        : found;
-      if (this.opts.onSelect) this.opts.onSelect(this.selection);
-      this.render();
-      return;
-    }
+    if (this.band) { this._bandTo(w); this._edgePan(p); return; }
 
     if (!this.draft) {
       if (this.tool === 'select' && !this.readOnly) {
@@ -4957,6 +5010,7 @@
     // дотик, відкинутий як долоня (у _pointers його немає), нічого не закінчує
     if (!this._pointers[e.pointerId] && e.pointerType === 'touch') return;
     var upKind = this._kinds[e.pointerId] || e.pointerType || 'mouse';
+    this._autoPan = null;                          // відпустили — дошка більше не їде
     delete this._pointers[e.pointerId];
     delete this._kinds[e.pointerId];
     var left = Object.keys(this._pointers);

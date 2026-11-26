@@ -3262,6 +3262,13 @@
         '<button class="sel-bar__btn" data-act="board-distribute" data-arg="y" title="Рівні проміжки по вертикалі">' +
           svg('<rect x="6" y="1.5" width="8" height="4" rx="1"/><rect x="6" y="8" width="8" height="4" rx="1"/>' +
               '<rect x="6" y="14.5" width="8" height="4" rx="1"/><path d="M17 5.5v2.5M17 12v2.5"/>') + '</button>' +
+        // відстані між обʼєктами (а не їхній розмір): зсунути й розсунути, рівно
+        '<button class="sel-bar__btn" data-act="board-space" data-arg="-1" title="Зсунути ближче одне до одного">' +
+          svg('<rect x="1.5" y="6" width="4" height="8" rx="1"/><rect x="14.5" y="6" width="4" height="8" rx="1"/>' +
+              '<path d="M7 10h2.2M8 8.5 9.5 10 8 11.5M13 10h-2.2M12 8.5 10.5 10 12 11.5"/>') + '</button>' +
+        '<button class="sel-bar__btn" data-act="board-space" data-arg="1" title="Розсунути далі одне від одного">' +
+          svg('<rect x="7" y="6" width="2.5" height="8" rx="1"/><rect x="10.5" y="6" width="2.5" height="8" rx="1"/>' +
+              '<path d="M5 10H1.5M3 8.5 1.5 10 3 11.5M15 10h3.5M17 8.5l1.5 1.5-1.5 1.5"/>') + '</button>' +
         '<button class="sel-bar__btn" data-act="board-align" data-arg="top" title="Вирівняти по верху">' +
           svg('<path d="M2 3h16"/><rect x="4" y="6" width="4" height="11" rx="1"/><rect x="12" y="6" width="4" height="7" rx="1"/>') +
           '</button>' +
@@ -4432,8 +4439,9 @@
   /* PDF на дошку: кожна сторінка — окрема картинка, усі в один рядок
      праворуч від точки вставки, однакової висоти й одразу виділені —
      можна тягнути цілим рядком або розставляти поштучно. Кілька PDF —
-     кожен своїм рядком нижче. Понад PdfPages.MANY сторінок — спершу
-     питаємо, які саме (підручник цілим — це хвилини й сотні мегабайт). */
+     кожен своїм рядком нижче. Спершу питаємо, які сторінки; з довгого
+     файлу типово лише перші PdfPages.MANY (підручник цілим — це хвилини
+     й сотні мегабайт). */
   var pdfBusy = false;
 
   function insertPdfFiles(files, at) {
@@ -4448,13 +4456,15 @@
           .then(function () { return PdfPages.open(file); })
           .then(function (doc) {
             var n = doc.numPages;
-            if (n <= PdfPages.MANY) return placePdf(doc, PdfPages.parseRange('', n), file);
+            /* Питаємо завжди: часто з файлу треба лише кілька сторінок.
+               Типово — усі (а з довгого — перші PdfPages.MANY). */
             return new Promise(function (resolve) {
               C.modal({
                 title: 'Які сторінки додати?',
                 sub: (file.name || 'PDF') + ' · ' + U.pl(n, 'сторінка', 'сторінки', 'сторінок'),
-                body: '<input class="input" data-pdf-range value="1-' + PdfPages.MANY + '" style="width:100%">' +
-                  '<div class="field__hint mt-2">Наприклад: 12-18 або 3, 5, 40-42</div>',
+                body: '<input class="input" data-pdf-range value="' + (n === 1 ? '1' : '1-' + Math.min(n, PdfPages.MANY)) +
+                  '" style="width:100%" inputmode="numeric">' +
+                  '<div class="field__hint mt-2">Наприклад: 12-18 або 3, 5, 40-42 · Enter — додати</div>',
                 buttons: [
                   { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
                   { label: 'Додати', kind: 'btn--primary', act: 'go', onClick: function (root) {
@@ -4464,6 +4474,17 @@
                     } }
                 ]
               });
+              // одразу друкувати: поле вже виділене, Enter — «Додати»
+              var fld = document.querySelector('[data-pdf-range]');
+              if (fld) {
+                fld.focus(); fld.select();
+                fld.addEventListener('keydown', function (ev) {
+                  if (ev.key !== 'Enter') return;
+                  ev.preventDefault();
+                  var go = fld.closest('.modal').querySelector('[data-mb="go"]');
+                  if (go) go.click();
+                });
+              }
             });
           })
           .catch(function (err) {
@@ -5625,6 +5646,11 @@
       if (!cur || (arg !== 'x' && arg !== 'y')) return;
       holdSelBar();
       cur.engine.distributeSelection(arg);
+    },
+    'board-space': function (arg) {
+      if (!cur) return;
+      holdSelBar();                        // тиснуть кілька разів поспіль — панель лишається
+      cur.engine.spaceSelection(Number(arg));
     },
     'board-visualize': function () { visualizeDialog(); },
     'board-scene-text': function () { if (cur && cur.engine.selection[0]) sceneTextDialog(cur.engine.selection[0]); },

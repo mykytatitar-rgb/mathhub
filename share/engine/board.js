@@ -3251,29 +3251,63 @@
    * щоб вони розійшлися, а не злиплись.
    */
   var DIST_GAP = 24;
-  Board.prototype.distributeSelection = function (axis) {
-    if (this.readOnly || this.selection.length < 2) return;
-    this.syncConstructions();
+
+  /** Виділене вздовж осі: впорядковане, з розміром і середнім проміжком (налізлі — 0). */
+  function rowOf(sel, axis) {
     var lo = axis === 'y' ? 'y1' : 'x1', hi = axis === 'y' ? 'y2' : 'x2';
-    var list = this.selection.map(function (it) { return { it: it, b: itemBounds(it) }; })
+    var list = sel.map(function (it) { return { it: it, b: itemBounds(it) }; })
       .filter(function (e) { return e.b && !NO_SCALE[e.it.t]; })
       .sort(function (p, q) { return p.b[lo] - q.b[lo]; });
-    if (list.length < 2) return;
+    if (list.length < 2) return null;
     var size = 0;
     list.forEach(function (e) { size += e.b[hi] - e.b[lo]; });
     var span = Math.max.apply(null, list.map(function (e) { return e.b[hi]; })) - list[0].b[lo];
-    var gap = Math.round((span - size) / (list.length - 1));
-    if (!(gap > 0)) gap = DIST_GAP;
+    return { list: list, lo: lo, hi: hi, axis: axis, size: size,
+             gap: Math.max(0, (span - size) / (list.length - 1)) };
+  }
+
+  /** Перше лишається на місці, далі — підряд із проміжком gap. */
+  Board.prototype._layRow = function (row, gap) {
     this.snapshot();
-    var at = list[0].b[hi] + gap;
-    for (var n = 1; n < list.length; n++) {
-      var e = list[n], d = at - e.b[lo];
-      moveItem(e.it, axis === 'y' ? 0 : d, axis === 'y' ? d : 0);
-      at += (e.b[hi] - e.b[lo]) + gap;
+    var at = row.list[0].b[row.hi] + gap;
+    for (var n = 1; n < row.list.length; n++) {
+      var e = row.list[n], d = round(at - e.b[row.lo]);
+      if (d) moveItem(e.it, row.axis === 'y' ? 0 : d, row.axis === 'y' ? d : 0);
+      at += (e.b[row.hi] - e.b[row.lo]) + gap;
     }
     this.syncConstructions();
     this.changed();
     if (this.opts.onSelect) this.opts.onSelect(this.selection);
+  };
+
+  Board.prototype.distributeSelection = function (axis) {
+    if (this.readOnly || this.selection.length < 2) return;
+    this.syncConstructions();
+    var row = rowOf(this.selection, axis);
+    if (!row) return;
+    var gap = Math.round(row.gap);
+    this._layRow(row, gap > 0 ? gap : DIST_GAP);
+  };
+
+  /**
+   * Розсунути (dir = 1) чи зсунути (−1) виділене на крок, лишивши проміжки
+   * рівними: як «більше / менше», але не розміру, а відстаней. Вісь —
+   * та, уздовж якої обʼєкти розкладені (рядок — вбік, стовпчик — униз);
+   * крок — десята частина середнього розміру; зсуваються щонайбільше
+   * впритул, не внахлест.
+   */
+  Board.prototype.spaceSelection = function (dir) {
+    if (this.readOnly || this.selection.length < 2) return;
+    this.syncConstructions();
+    var cs = this.selection.map(itemBounds).filter(Boolean);
+    function spread(k1, k2) {
+      var c = cs.map(function (b) { return (b[k1] + b[k2]) / 2; });
+      return Math.max.apply(null, c) - Math.min.apply(null, c);
+    }
+    var row = rowOf(this.selection, spread('y1', 'y2') > spread('x1', 'x2') ? 'y' : 'x');
+    if (!row) return;
+    var step = Math.max(4, row.size / row.list.length * 0.1);
+    this._layRow(row, Math.max(0, round(row.gap + (dir < 0 ? -step : step))));
   };
 
   /**
@@ -4801,9 +4835,12 @@
 
      Тягнуть рамку виділення чи обʼєкти, і курсор підійшов до краю
      полотна (або вийшов за нього) — дошка сама їде в той бік, а рамка
-     чи обʼєкт — разом із курсором. Що глибше в край, то швидше. */
+     чи обʼєкт — разом із курсором. Що глибше в край, то швидше; що довше
+     тримаєш — то швидше (до ×3 за дві секунди): 9 px за кадр повзли так,
+     що до сусідньої сторінки PDF не дочекатися. */
   var EDGE = 36;          // px від краю, де починає їхати
-  var PAN_PX = 9;         // px екрана за кадр (16 мс) на глибині одного EDGE
+  var PAN_PX = 22;        // px екрана за кадр (16 мс) на глибині одного EDGE, на старті
+  var PAN_RAMP_MS = 1000; // за стільки швидкість додає ще одну стартову, до ×3
 
   function edgeAxis(v, size) {
     if (size < EDGE * 4) return 0;                 // крихітне полотно — без автопрокрутки
@@ -4816,7 +4853,7 @@
     var vx = edgeAxis(p.x, this.cssW) * PAN_PX, vy = edgeAxis(p.y, this.cssH) * PAN_PX;
     if (!vx && !vy) { this._autoPan = null; return; }
     var start = !this._autoPan;
-    this._autoPan = { vx: vx, vy: vy, p: { x: p.x, y: p.y } };
+    this._autoPan = { vx: vx, vy: vy, p: { x: p.x, y: p.y }, held: start ? 0 : this._autoPan.held };
     if (start) this._autoPanLoop();
   };
 
@@ -4837,7 +4874,8 @@
     var a = this._autoPan;
     if (!a) return;
     if (!this._drag && !this.band) { this._autoPan = null; return; }
-    var k = dt / 16;
+    a.held += dt;
+    var k = dt / 16 * (1 + Math.min(2, a.held / PAN_RAMP_MS));
     this.cam.x += a.vx * k / this.scale;
     this.cam.y += a.vy * k / this.scale;
     var w = this.toWorld(a.p.x, a.p.y);

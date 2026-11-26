@@ -817,8 +817,11 @@ scenario('Рамка виділення біля краю екрана — до�
   d._pointerMove(ev(500, 250));
   ok(d._autoPan == null, 'посеред екрана — дошка стоїть');
   d._pointerMove(ev(995, 250));                           // упритул до правого краю
-  for (var i = 0; i < 120; i++) d._autoPanStep(16);
-  ok(d.cam.x > 500, 'дошка поїхала праворуч (cam.x = ' + Math.round(d.cam.x) + ')');
+  for (var i = 0; i < 60; i++) d._autoPanStep(16);        // одна секунда
+  ok(d.cam.x > 1000, 'за секунду — понад екран праворуч, а не повзком (cam.x = ' + Math.round(d.cam.x) + ')');
+  var c1 = d.cam.x;
+  for (i = 0; i < 60; i++) d._autoPanStep(16);
+  ok(d.cam.x - c1 > c1 * 1.5, 'тримаєш довше — розганяється (' + Math.round(c1) + ' → ' + Math.round(d.cam.x - c1) + ' за другу секунду)');
   ok(Math.abs(d.cam.y) < 1e-9, 'лише туди, куди край, — не вниз');
   var ids = d.selection.map(function (x) { return x.id; }).sort().join(',');
   same(ids, 'far,near', 'рамка дотягнулась до того, чого не було видно');
@@ -845,6 +848,33 @@ scenario('Перетягування обʼєкта до краю — дошка
   var cx = d.cam.x;
   d._autoPanStep(16);
   ok(d.cam.x === cx && d._autoPan == null, 'відпустили — стоп');
+});
+
+scenario('Проміжки між виділеним: розсунути й зсунути, рівно, перше на місці', function () {
+  var d = engine().b;
+  // рядок сторінок 100 завширшки з нерівними проміжками 20 і 40
+  [[0, 0, 100, 140], [120, 0, 220, 140], [260, 0, 360, 140]].forEach(function (a, i) {
+    d.slide.items.push({ id: 'p' + i, t: 'l', c: '#000', w: 3, a: a.slice() });
+  });
+  d.setSelection(d.items().slice());
+  function xs() { return d.items().map(function (x) { return x.a[0]; }).join(','); }
+  d.spaceSelection(1);
+  var a = d.items().map(function (x) { return x.a; });
+  var g1 = a[1][0] - a[0][2], g2 = a[2][0] - a[1][2];
+  ok(Math.abs(g1 - g2) < 0.2, 'проміжки рівні (' + g1 + ', ' + g2 + ')');
+  ok(g1 > 30, 'розсунуло — більше за середній 30 (' + g1 + ')');
+  same(a[0][0], 0, 'перша сторінка на місці');
+  ok(a[0][1] === 0 && a[2][1] === 0, 'по вертикалі нічого не зсунулось');
+  for (var i = 0; i < 30; i++) d.spaceSelection(-1);
+  a = d.items().map(function (x) { return x.a; });
+  same(a[1][0] - a[0][2], 0, 'зсувати можна до впритул, але не внахлест');
+  same(xs(), '0,100,200', 'порядок той самий');
+  // стовпчик — сам здогадується, що вниз
+  var c = engine().b;
+  [[0, 0, 100, 50], [0, 80, 100, 130]].forEach(function (a2, i) { c.slide.items.push({ id: 'c' + i, t: 'l', c: '#000', w: 3, a: a2 }); });
+  c.setSelection(c.items().slice());
+  c.spaceSelection(1);
+  ok(c.items()[1].a[1] > 80 && c.items()[1].a[0] === 0, 'стовпчик розсувається вниз, а не вбік');
 });
 
 scenario('Показати вставлений рядок: з 2 % наближає, але не далі заданої межі', function () {

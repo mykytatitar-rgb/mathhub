@@ -3560,7 +3560,12 @@
 
   function visualizeDialog() {
     if (!cur) return;
-    if (!window.Cloud || !Cloud.signedIn()) { U.toast('Щоб візуалізувати, увійдіть у кабінет', 'err'); return; }
+    // Claude — лише з входом; «Дроби» малюються тут же, без мережі
+    function signed() {
+      if (window.Cloud && Cloud.signedIn()) return true;
+      U.toast('Щоб Claude побудував сцену, увійдіть у кабінет', 'err');
+      return false;
+    }
     var e = cur.engine;
     var sel = e.selection.slice();
     C.modal({
@@ -3575,11 +3580,15 @@
         'з повзунками, які можна тягнути. Учень бачить те саме, що й ви.</div>',
       buttons: [
         { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+        // множення й ділення дробів предметами — готова сцена, без Claude
+        { label: 'Дроби', kind: 'btn--ghost', act: 'frac',
+          onClick: function () { setTimeout(function () { fracDialog(sel.length ? e.selectionBounds() : null); }, 0); } },
         /* Відео Manim — красиве пояснення-анімація; рендериться на ноутбуці
            репетитора (tools/manim-worker) за чергою, тож замовити можна й з
            телефона. Сцена — інтерактивна й одразу. */
         { label: 'Відео Manim', kind: 'btn--ghost', act: 'manim',
           onClick: function (root) {
+            if (!signed()) return false;
             var prompt = (root.querySelector('[data-scene-prompt]').value || '').trim();
             if (!prompt && !sel.length) { U.toast('Опишіть задачу або виділіть її на дошці', 'err'); return false; }
             var image = sel.length ? Board.renderToCanvas({ items: sel }, 1400).toDataURL('image/png').split(',')[1] : '';
@@ -3587,6 +3596,7 @@
           } },
         { label: 'Візуалізувати', kind: 'btn--primary', act: 'go',
           onClick: function (root) {
+            if (!signed()) return false;
             var prompt = (root.querySelector('[data-scene-prompt]').value || '').trim();
             if (!prompt && !sel.length) { U.toast('Опишіть задачу або виділіть її на дошці', 'err'); return false; }
             var image = '';
@@ -3604,24 +3614,73 @@
     var slideRef = cur.engine.slide;
     U.toast('Claude будує сцену — це хвилина-дві…');
     sceneRequest({ prompt: prompt, image: image }).then(function (r) {
-      return scenePlaceholder(r.title).then(function (blob) { return ImgStore.ingest(blob); }).then(function (meta) {
-        if (!cur || cur.engine.slide !== slideRef) throw new Error('moved');
-        var e = cur.engine;
-        var at = near ? { x: near.x2 + 40 + 240, y: (near.y1 + near.y2) / 2 } : null;
-        var item = e.addImage(meta, at);
-        if (!item) return;
-        item.sc = r.code;
-        item.tt = r.title;
-        e.changed();
-        e.render();
-        flushSave();
-        e.openMedia(item.id);
-        updateSelBar();
-      });
+      return placeScene(r.code, r.title, near, slideRef);
     }).catch(function (err) {
       if (err && err.message === 'moved') return;
       sceneFail(err);
     }).then(function () { sceneBusy = false; updateSelBar(); });
+  }
+
+  /** Готова сцена — на слайд обкладинкою (it.sc — її код) і одразу відкрита. */
+  function placeScene(code, title, near, slideRef) {
+    return scenePlaceholder(title).then(function (blob) { return ImgStore.ingest(blob); }).then(function (meta) {
+      if (!cur || cur.engine.slide !== slideRef) throw new Error('moved');
+      var e = cur.engine;
+      var at = near ? { x: near.x2 + 40 + 240, y: (near.y1 + near.y2) / 2 } : null;
+      var item = e.addImage(meta, at);
+      if (!item) return;
+      item.sc = code;
+      item.tt = title;
+      e.changed();
+      e.render();
+      flushSave();
+      e.openMedia(item.id);
+      updateSelBar();
+    });
+  }
+
+  /* ---------- Дроби предметами (assets/js/fracviz.js) ----------
+     Без Claude й мережі: план і сцену складає FracViz, а показує те саме
+     вікно сцени, що й решту — учень бачить кроки разом із репетитором. */
+  var fracLast = { a: '6', op: ':', b: '0,36', skin: 'melon' };
+
+  function fracDialog(near) {
+    if (!cur || !window.FracViz) return;
+    var slideRef = cur.engine.slide;
+    var skins = Object.keys(FracViz.SKINS).map(function (k) {
+      return '<option value="' + k + '"' + (k === fracLast.skin ? ' selected' : '') + '>' +
+        FracViz.SKINS[k].emoji + ' ' + U.esc(FracViz.SKINS[k].label) + '</option>';
+    }).join('');
+    C.modal({
+      title: 'Дроби предметами',
+      sub: 'Множення й ділення — кроками, як на уроці',
+      body:
+        '<div class="row" style="gap:8px;align-items:center">' +
+          '<input class="input" data-fr-a value="' + U.esc(fracLast.a) + '" style="flex:1;min-width:0" inputmode="decimal">' +
+          '<select class="input" data-fr-op style="width:64px">' +
+            '<option value=":"' + (fracLast.op === ':' ? ' selected' : '') + '>:</option>' +
+            '<option value="×"' + (fracLast.op === '×' ? ' selected' : '') + '>×</option>' +
+          '</select>' +
+          '<input class="input" data-fr-b value="' + U.esc(fracLast.b) + '" style="flex:1;min-width:0" inputmode="decimal">' +
+        '</div>' +
+        '<label class="field mt-3"><span class="field__label">Чим показувати</span>' +
+          '<select class="input" data-fr-skin>' + skins + '</select></label>' +
+        '<div class="field__hint mt-2">Числа: 6, 0,36, 2/3 або 1 1/2. Ділення — «скільки порцій по другому числу в першому».</div>',
+      buttons: [
+        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+        { label: 'Показати', kind: 'btn--primary', act: 'go', onClick: function (root) {
+            var v = {
+              a: root.querySelector('[data-fr-a]').value, op: root.querySelector('[data-fr-op]').value,
+              b: root.querySelector('[data-fr-b]').value, skin: root.querySelector('[data-fr-skin]').value
+            };
+            var plan = FracViz.plan(v.a, v.op, v.b);
+            if (plan.error) { U.toast(plan.error, 'err'); return false; }
+            fracLast = v;
+            placeScene(FracViz.code(plan, v.skin), FracViz.title(plan), near, slideRef)
+              .catch(function (err) { if (!err || err.message !== 'moved') U.toast('Не вдалося поставити сцену', 'err'); });
+          } }
+      ]
+    });
   }
 
   /* ---------- Відео Manim за чергою ----------

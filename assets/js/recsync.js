@@ -26,7 +26,7 @@
      інші налаштування; id рядка — назва поля в базі. Дошки тут не згадані:
      у них власний журнал дій (boardops.js). */
   R.KINDS = ['students', 'lessons', 'payments', 'homeworks', 'progress',
-             'roadmap', 'desk', 'materials', 'notes', 'mathmap', 'stumap', 'meta'];
+             'roadmap', 'desk', 'materials', 'notes', 'mathmap', 'stumap', 'tginbox', 'meta'];
 
   var NOT_META = { boards: 1, version: 1 };
 

@@ -139,6 +139,7 @@
       stumap: [],     // карта учня: {id: учень~тема, studentId, topic, s: 0..3, note, at}
       materials: [],
       notes: [],
+      tginbox: [],    // завдання з Telegram: {id: tg+update_id, photo, text, tag, at, used} (tginbox.js)
       boards: []      // {id, lessonId, slides:[{id,title,bg,items:[]}], updatedAt}
     };
   }

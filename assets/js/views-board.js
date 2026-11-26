@@ -183,6 +183,9 @@
             : '') +
           '<button class="btn btn--ghost btn--sm" data-act="board-mats" ' +
             'title="Файли й посилання з бібліотеки матеріалів">' + icon('folder', 15) + 'Матеріали</button>' +
+          '<button class="btn btn--ghost btn--sm" data-act="board-tg" ' +
+            'title="Завдання, переслані в Telegram, — рівною сіткою на дошку">' + icon('send', 15) +
+            'Telegram<span data-tg-count></span></button>' +
           '<button class="btn btn--ghost btn--sm" data-act="board-visualize" ' +
             'title="Візуалізувати задачу: Claude будує 3D-модель, графік чи анімацію">' +
             '<b style="font-size:12px;letter-spacing:-.3px">3D</b>Візуалізувати</button>' +
@@ -419,6 +422,7 @@
     }
 
     updateHwCount();
+    updateTgCount();
 
     healStudentImages();
 
@@ -5565,6 +5569,7 @@
         : '') +
       (lesson ? sheetRow('board-hw', 'note', 'Домашнє завдання' + (hwN ? ' · ' + hwN : '')) : '') +
       sheetRow('board-mats', 'folder', 'Матеріали') +
+      sheetRow('board-tg', 'send', 'Завдання з Telegram') +
       sheetRow('board-image', 'image', 'Вставити картинку') +
       sheetRow('board-rename', 'edit', 'Назва слайда') +
       sheetRow('board-bg', 'grid', 'Фон слайда') +
@@ -5805,6 +5810,7 @@
     'board-png': function () { exportPNG(); },
     'board-hw': function () { homeworkDialog(); },
     'board-mats': function () { materialsDialog(); },
+    'board-tg': function () { tgDialog(); },
     'board-hw-edit': function (hwId) {
       F.homework(hwId, {}, function () { afterHomeworkChange(); homeworkDialog(); });
     },
@@ -6433,6 +6439,180 @@
     if (!el) return;
     var n = lessonHomework().length;
     el.textContent = n ? ' ' + n : '';
+  }
+
+  /* ============ Завдання з Telegram (tginbox.js) ============
+
+     Переслане боту лежить у скриньці; тут його позначають і кладуть на
+     дошку рівною сіткою — однакова ширина, однакові проміжки, верхи
+     рядків на одній лінії. Завдання з тегом цього учня (#Софія) стоять
+     першими й уже позначені. */
+  var TG_W = 560, TG_GAP = 40, TG_SHOW = 60;
+
+  function updateTgCount() {
+    var el = document.querySelector('[data-tg-count]');
+    if (!el || !window.TgInbox) return;
+    var n = TgInbox.enabled() ? TgInbox.fresh(TgInbox.list()) : 0;
+    el.textContent = n ? ' ' + n : '';
+  }
+  window.addEventListener('tginbox', updateTgCount);
+
+  // для кого ця дошка: учень уроку, а у власної справи — її назва й мітка
+  function boardNames() {
+    if (!cur) return [];
+    var l = S.get('lessons', cur.lessonId);
+    if (l) { var st = S.get('students', l.studentId); return st ? [st.name] : []; }
+    var d = S.get('desk', cur.lessonId);
+    return d ? [d.title, d.tag].filter(Boolean) : [];
+  }
+
+  function tgSetupDialog(then) {
+    var on = TgInbox.enabled(), st = TgInbox.state();
+    C.modal({
+      title: 'Завдання з Telegram',
+      sub: on ? 'Підключено бота @' + TgInbox.bot() : 'Підключити бота — один раз',
+      body:
+        (on && st.ok === false ? '<div class="field__hint tg-err">Останнє читання не вдалося: ' + U.esc(st.err) + '</div>' : '') +
+        '<ol class="gcal-steps">' +
+          '<li>У Telegram відкрийте <b>@BotFather</b>, надішліть <b>/newbot</b> і придумайте назву — ' +
+            'він відповість токеном (рядок на кшталт <b>123456789:AA…</b>).</li>' +
+          '<li>Вставте токен сюди й натисніть «Підключити». Він лишається лише у ваших налаштуваннях.</li>' +
+          '<li>Напишіть боту будь-що першим — після цього він прийматиме повідомлення лише від вас.</li>' +
+          '<li>Пересилайте завдання боту. Або створіть канал, додайте бота адміністратором і пересилайте туди.</li>' +
+          '<li>Перший рядок підпису <b>#Імʼя</b> (наприклад, #Софія) — і на дошці цього учня завдання буде першим і вже позначеним.</li>' +
+        '</ol>' +
+        '<input class="input mt-2" data-tg-token placeholder="' + (on ? 'Новий токен, якщо треба замінити' : '123456789:AA…') +
+          '" autocomplete="off" spellcheck="false" style="width:100%">',
+      buttons: [
+        on ? { label: 'Відключити бота', act: 'del', onClick: function () {
+          TgInbox.disconnect(); updateTgCount(); U.toast('Бота відключено');
+        } } : null,
+        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+        { label: 'Підключити', kind: 'btn--primary', act: 'go', onClick: function (root, close) {
+          var btn = root.querySelector('[data-mb="go"]');
+          btn.disabled = true;
+          TgInbox.connect(root.querySelector('[data-tg-token]').value).then(function (me) {
+            close();
+            U.toast('Підключено: @' + me.username, 'ok');
+            updateTgCount();
+            if (then) then();
+          }, function (e) {
+            btn.disabled = false;
+            U.toast(e.code === 401 ? 'Telegram не впізнав цей токен' : (e.message || 'Немає звʼязку з Telegram'), 'err');
+          });
+          return false;
+        } }
+      ]
+    });
+  }
+
+  function tgDialog() {
+    if (!window.TgInbox || !cur) return;
+    if (!TgInbox.enabled()) { tgSetupDialog(tgDialog); return; }
+    var host = cur;
+    var spot = cur.engine.dropPoint(null);          // точку світу фіксуємо зараз
+    var names = boardNames();
+    // свіже — одразу, але вікно не чекає Telegram довше за дві секунди
+    Promise.race([TgInbox.poll(), new Promise(function (r) { setTimeout(r, 2000); })])
+      .then(function () { if (cur === host) tgPick(host, spot, names); });
+  }
+
+  function tgPick(host, spot, names) {
+    var bot = TgInbox.bot(), st = TgInbox.state();
+    var items = TgInbox.order(TgInbox.list(), names).slice(0, TG_SHOW);
+    var picked = TgInbox.preselect(items, names);
+
+    function row(it) {
+      var own = it.tag && TgInbox.matches(it.tag, names);
+      var text = it.text ? (it.text.length > 180 ? it.text.slice(0, 180) + '…' : it.text) : 'Фото';
+      return '<label class="tg-item' + (it.used ? ' is-used' : '') + '">' +
+        '<input type="checkbox" data-tg-id="' + U.esc(it.id) + '"' + (picked.indexOf(it.id) >= 0 ? ' checked' : '') + '>' +
+        (it.photo ? '<span class="tg-thumb" data-tg-th="' + U.esc(it.id) + '"></span>' : '') +
+        '<span class="tg-body">' +
+          (it.tag ? '<b class="tg-tag' + (own ? ' is-own' : '') + '">#' + U.esc(it.tag) + '</b> ' : '') +
+          '<span class="tg-text">' + U.esc(text) + '</span>' +
+          '<span class="tg-when">' + U.esc(U.fmtDateTime(it.at)) + (it.used ? ' · уже вставлене' : '') + '</span>' +
+        '</span>' +
+      '</label>';
+    }
+
+    C.modal({
+      title: 'Завдання з Telegram',
+      sub: '@' + bot + (items.length ? ' · позначте, що покласти на дошку' : ''),
+      wide: true,
+      body:
+        (st.ok === false ? '<div class="field__hint tg-err">Telegram: ' + U.esc(st.err) + '</div>' : '') +
+        (items.length
+          ? '<div class="tg-list">' + items.map(row).join('') + '</div>'
+          : '<div class="tg-empty">Поки порожньо. Перешліть завдання боту @' + U.esc(bot) +
+            ' — і воно зʼявиться тут за хвилину.</div>'),
+      buttons: [
+        { label: 'Налаштування бота', act: 'conf', menu: true, icon: 'settings', onClick: function () {
+          setTimeout(function () { tgSetupDialog(); }, 0);
+        } },
+        { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+        items.length ? { label: 'Покласти на дошку', kind: 'btn--primary', act: 'go', onClick: function (root) {
+          var ids = U.$$('[data-tg-id]', root).filter(function (x) { return x.checked; })
+            .map(function (x) { return x.getAttribute('data-tg-id'); });
+          if (!ids.length) { U.toast('Позначте хоч одне завдання', 'err'); return false; }
+          placeTg(items.filter(function (it) { return ids.indexOf(it.id) >= 0; }), spot, host);
+        } } : null
+      ],
+      onMount: function (root) {
+        items.forEach(function (it) {
+          if (!it.photo) return;
+          TgInbox.thumbUrl(it).then(function (url) {
+            var el = root.querySelector('[data-tg-th="' + it.id + '"]');
+            if (el) el.innerHTML = '<img src="' + U.esc(url) + '" alt="">';
+          }, function () {});
+        });
+      }
+    });
+  }
+
+  var tgBusy = false;
+
+  function placeTg(list, spot, host) {
+    if (tgBusy) { U.toast('Попередні завдання ще кладуться', 'err'); return; }
+    tgBusy = true;
+    var slideRef = host.engine.slide;
+    if (list.length > 2) U.toast('Беру з Telegram ' + U.pl(list.length, 'завдання', 'завдання', 'завдань') + '…');
+    var metas = [], done = [], failed = 0;
+    var chain = Promise.resolve();
+    list.forEach(function (it) {
+      chain = chain.then(function () {
+        if (cur !== host) return;
+        return TgInbox.image(it)
+          .then(function (file) { return ImgStore.ingest(file); })
+          .then(function (meta) { metas.push(meta); done.push(it.id); })
+          .catch(function (e) { failed++; console.warn('Завдання з Telegram не лягло:', it.id, e && e.message); });
+      });
+    });
+    chain.then(function () {
+      tgBusy = false;
+      if (cur !== host || cur.engine.slide !== slideRef) return;
+      if (metas.length) {
+        var e = cur.engine;
+        var boxes = TgInbox.grid(metas, spot, TG_W, TG_GAP);
+        e.snapshot();
+        var placed = metas.map(function (m, i) { return e.placeImage(m, boxes[i]); }).filter(Boolean);
+        e.setTool('select');
+        e.setSelection(placed);
+        e.changed();
+        var b = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity };
+        boxes.forEach(function (x) {
+          b.x1 = Math.min(b.x1, x.x); b.y1 = Math.min(b.y1, x.y);
+          b.x2 = Math.max(b.x2, x.x + x.w); b.y2 = Math.max(b.y2, x.y + x.h);
+        });
+        e.showBounds(b, 1);                        // уся сітка в кадрі, не ближче 100 %
+        e.render();
+        flushSave();
+        renderRail();
+        updateSelBar();
+        TgInbox.markUsed(done);
+      }
+      if (failed) U.toast('Не вдалося взяти з Telegram ' + U.pl(failed, 'завдання', 'завдання', 'завдань'), 'err');
+    });
   }
 
   function homeworkDialog() {

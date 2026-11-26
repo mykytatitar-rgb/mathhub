@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v219';
+  App.BUILD = 'v220';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -1795,6 +1795,8 @@
     if (window.ICS && ICS.watch) ICS.watch();
     // Google Календар напряму: перенесений урок — у календарі за кілька секунд
     if (window.GCal && GCal.start) GCal.start();
+    // завдання, переслані в Telegram, — у скриньку (кнопка «Telegram» на дошці)
+    if (window.TgInbox) TgInbox.start();
 
     if (window.Vault && Vault.available()) {
       Vault.persist();

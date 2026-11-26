@@ -15,7 +15,7 @@
      Число підіймається разом із версією в sw.js. Панель «Чи все ціле»
      порівнює його з тим, що лежить на сервері, — і питання «я дивлюся на
      старе чи на нове» отримує відповідь на місці. */
-  App.BUILD = 'v214';
+  App.BUILD = 'v215';
   window.APP_BUILD = App.BUILD;
 
   /* Код, потрібний лише на дошці: сам рушій, побудови, графіки, тіла.
@@ -49,6 +49,11 @@
     beamer: [
       'assets/js/beamer.js',
       'assets/vendor/mathjax/tex-svg-full.js'
+    ],
+    // PDF на дошку сторінками: pdf.js (Mozilla) — лише коли PDF справді вставляють
+    pdf: [
+      'assets/vendor/pdfjs/pdf.min.js',
+      'assets/js/pdfpages.js'
     ],
     // англійський переклад бази — лише коли перемкнулись на ENG
     'formulas-en': [

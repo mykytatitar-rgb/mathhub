@@ -3106,14 +3106,20 @@
   Board.prototype.fit = function () {
     var b = unionBounds(this.items());
     if (!b) { this.resetView(); return; }
+    this.showBounds(b);
+  };
+
+  /** Показати рамку світу {x1,y1,x2,y2} цілою; noZoomIn — лише віддаляти, не наближати. */
+  Board.prototype.showBounds = function (b, noZoomIn) {
     /* Поля по краях на телефоні — від розміру екрана: 60 px з кожного боку
        зʼїдали третину ширини. На компʼютері — ті самі 60, що й були. */
     var pad = this.cssW < 700 || coarse()
       ? Math.max(12, Math.min(60, Math.min(this.cssW, this.cssH) * 0.06))
       : 60;
     var w = Math.max(1, b.x2 - b.x1), h = Math.max(1, b.y2 - b.y1);
-    this.scale = Math.max(MIN_SCALE, Math.min(2,
-      Math.min((this.cssW - pad * 2) / w, (this.cssH - pad * 2) / h)));
+    var s = Math.min((this.cssW - pad * 2) / w, (this.cssH - pad * 2) / h);
+    if (noZoomIn) s = Math.min(s, this.scale);
+    this.scale = Math.max(MIN_SCALE, Math.min(2, s));
     this.cam.x = (b.x1 + b.x2) / 2 - this.cssW / (2 * this.scale);
     this.cam.y = (b.y1 + b.y2) / 2 - this.cssH / (2 * this.scale);
     this.viewChanged();

@@ -216,7 +216,7 @@
 
         '<div class="board-tools">' + tools +
           '<div class="tool-sep"></div>' +
-          '<button class="tool-btn" data-act="board-image" title="Вставити картинку (Ctrl+V або перетягніть файл)">' +
+          '<button class="tool-btn" data-act="board-image" title="Вставити картинку чи PDF (Ctrl+V або перетягніть файл)">' +
             icon('image', 20) + '</button>' +
           '<button class="tool-btn" data-act="board-clear" title="Очистити слайд">' + icon('trash', 20) + '</button>' +
           '<div class="tool-sep"></div>' +
@@ -236,7 +236,8 @@
         '<div class="sel-bar" data-sel-bar hidden></div>' +
 
         // multiple — інакше кілька картинок за раз просто не позначити
-        '<input type="file" accept="image/*,video/*" multiple data-img-input hidden>' +
+        // PDF — теж сюди: розрізається на сторінки-картинки (insertPdfFiles)
+        '<input type="file" accept="image/*,video/*,application/pdf,.pdf" multiple data-img-input hidden>' +
         '<input type="file" accept="image/*" multiple data-multi-input hidden>' +
         // телефон: «Сфотографувати» відкриває камеру одразу, без вибору джерела
         '<input type="file" accept="image/*" capture="environment" data-cam-input hidden>' +
@@ -4372,13 +4373,16 @@
     }
 
     var all = Array.prototype.slice.call(files || []);
+    // PDF — сторінками-картинками в рядок
+    var pdfs = all.filter(function (f) { return f && (f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '')); });
+    if (pdfs.length) insertPdfFiles(pdfs, at);
     // відео й GIF — окремою дорогою: на слайд лягає обкладинка, а файл грає поверх неї
     var media = all.filter(function (f) { return f && (/^video\//.test(f.type || '') || f.type === 'image/gif'); });
     if (media.length) insertMediaFiles(media, at);
     var list = all.filter(function (f) { return f && /^image\//.test(f.type || '') && f.type !== 'image/gif'; });
 
     if (!list.length) {
-      if (!media.length) U.toast('Це не картинка — підійдуть PNG, JPG, WebP, GIF чи відео', 'err');
+      if (!media.length && !pdfs.length) U.toast('Це не картинка — підійдуть PNG, JPG, WebP, GIF, PDF чи відео', 'err');
       return;
     }
 
@@ -4423,6 +4427,89 @@
           ' — можливо, це не картинки', 'err');
       }
     });
+  }
+
+  /* PDF на дошку: кожна сторінка — окрема картинка, усі в один рядок
+     праворуч від точки вставки, однакової висоти й одразу виділені —
+     можна тягнути цілим рядком або розставляти поштучно. Кілька PDF —
+     кожен своїм рядком нижче. Понад PdfPages.MANY сторінок — спершу
+     питаємо, які саме (підручник цілим — це хвилини й сотні мегабайт). */
+  var pdfBusy = false;
+
+  function insertPdfFiles(files, at) {
+    if (pdfBusy) { U.toast('Попередній PDF ще розрізається', 'err'); return; }
+    var host = cur, slideRef = cur.engine.slide;
+    var spot = cur.engine.dropPoint(at);              // точку світу фіксуємо зараз
+    var chain = Promise.resolve();
+    files.forEach(function (file) {
+      chain = chain.then(function () {
+        if (cur !== host) return;
+        return App.need('pdf')
+          .then(function () { return PdfPages.open(file); })
+          .then(function (doc) {
+            var n = doc.numPages;
+            if (n <= PdfPages.MANY) return placePdf(doc, PdfPages.parseRange('', n), file);
+            return new Promise(function (resolve) {
+              C.modal({
+                title: 'Які сторінки додати?',
+                sub: (file.name || 'PDF') + ' · ' + U.pl(n, 'сторінка', 'сторінки', 'сторінок'),
+                body: '<input class="input" data-pdf-range value="1-' + PdfPages.MANY + '" style="width:100%">' +
+                  '<div class="field__hint mt-2">Наприклад: 12-18 або 3, 5, 40-42</div>',
+                buttons: [
+                  { label: 'Скасувати', kind: 'btn--ghost', act: 'cancel' },
+                  { label: 'Додати', kind: 'btn--primary', act: 'go', onClick: function (root) {
+                      var pages = PdfPages.parseRange(root.querySelector('[data-pdf-range]').value, n);
+                      if (!pages.length) { U.toast('Таких сторінок у файлі немає', 'err'); return false; }
+                      resolve(placePdf(doc, pages, file));
+                    } }
+                ]
+              });
+            });
+          })
+          .catch(function (err) {
+            console.warn('PDF не додався:', file.name, err);
+            U.toast(err && err.name === 'PasswordException'
+              ? '«' + file.name + '» захищений паролем'
+              : 'Не вдалося відкрити «' + file.name + '» як PDF', 'err');
+          });
+      });
+    });
+
+    function placePdf(doc, pages, file) {
+      pdfBusy = true;
+      if (pages.length > 3) U.toast('Розрізаю «' + (file.name || 'PDF') + '» на сторінки…');
+      var metas = [];
+      var each = Promise.resolve();
+      pages.forEach(function (num) {
+        each = each.then(function () {
+          if (cur !== host) return;
+          return PdfPages.pageImage(doc, num)
+            .then(function (img) { return ImgStore.ingest(img.file); })
+            .then(function (meta) { metas.push(meta); });
+        });
+      });
+      return each.then(function () {
+        if (cur !== host || cur.engine.slide !== slideRef || !metas.length) return;
+        var e = cur.engine;
+        // висота сторінки — 70 % екрана; полотно без розміру (сховане) дало б невидимі сторінки нульового розміру
+        var H = (e.cssH > 0 ? e.cssH : 800) * 0.7 / e.scale;
+        var boxes = PdfPages.layout(metas, spot, H, H * 0.05);
+        e.snapshot();
+        var items = metas.map(function (m, i) { return e.placeImage(m, boxes[i]); }).filter(Boolean);
+        e.setTool('select');
+        e.setSelection(items);
+        e.changed();
+        // увесь рядок у кадрі: віддаляємо, якщо не вліз, але не наближаємо
+        var last = boxes[boxes.length - 1];
+        e.showBounds({ x1: boxes[0].x, y1: boxes[0].y, x2: last.x + last.w, y2: last.y + last.h }, true);
+        e.render();
+        flushSave();
+        renderRail();
+        updateSelBar();
+        spot = { x: spot.x, y: spot.y + H * 1.15 };      // наступний PDF — рядком нижче
+      }).then(function () { pdfBusy = false; doc.destroy(); },
+              function (err) { pdfBusy = false; doc.destroy(); throw err; });
+    }
   }
 
   /* Відео чи GIF на дошку. Сам файл кладемо як є (it.m), а на слайд —
